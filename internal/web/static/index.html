@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<!--
+  DayZ Server Manager
+  Copyright (c) 2026 Aristarh Ucolov. All rights reserved.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DayZ Server Manager</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <div id="first-run" class="modal hidden">
+    <div class="modal-card">
+      <h2 data-i18n="firstRun.title"></h2>
+
+      <label data-i18n="firstRun.lang"></label>
+      <select id="fr-lang">
+        <option value="en">English</option>
+        <option value="ru">Русский</option>
+      </select>
+
+      <label data-i18n="firstRun.vanillaPath"></label>
+      <input id="fr-vanilla" type="text" placeholder="F:\SteamLibrary\steamapps\common\DayZ" />
+      <small class="hint" data-i18n="firstRun.vanillaPath.hint"></small>
+
+      <label data-i18n="firstRun.exposure"></label>
+      <div class="row">
+        <label><input type="radio" name="fr-exposure" value="local" checked /> <span data-i18n="firstRun.exposure.local"></span></label>
+        <label><input type="radio" name="fr-exposure" value="internet" /> <span data-i18n="firstRun.exposure.internet"></span></label>
+      </div>
+
+      <div class="actions">
+        <button id="fr-finish" class="primary" data-i18n="firstRun.finish"></button>
+      </div>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">DZ</span>
+      <div>
+        <div class="title" data-i18n="app.name"></div>
+        <div class="subtitle" data-i18n="app.author"></div>
+      </div>
+    </div>
+    <nav class="nav">
+      <a data-route="dashboard"  class="active" data-i18n="nav.dashboard"></a>
+      <a data-route="server"     data-i18n="nav.server"></a>
+      <a data-route="mods"       data-i18n="nav.mods"></a>
+      <a data-route="types"      data-i18n="nav.types"></a>
+      <a data-route="moded"      data-i18n="nav.modedTypes"></a>
+      <a data-route="files"      data-i18n="nav.files"></a>
+      <a data-route="validator"  data-i18n="nav.validator"></a>
+      <a data-route="settings"   data-i18n="nav.settings"></a>
+    </nav>
+    <div class="top-right">
+      <select id="lang-switch">
+        <option value="en">EN</option>
+        <option value="ru">RU</option>
+      </select>
+      <span id="server-indicator" class="chip stopped">
+        <span class="dot"></span>
+        <span id="server-indicator-text" data-i18n="status.stopped"></span>
+      </span>
+    </div>
+  </header>
+
+  <main id="view"></main>
+
+  <footer class="footer">
+    <span data-i18n="app.copyright"></span>
+  </footer>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

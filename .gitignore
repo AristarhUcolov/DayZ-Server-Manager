@@ -1,0 +1,29 @@
+# Compiled binaries
+*.exe
+*.test
+*.out
+dayz-manager
+dayz-manager-*
+
+# Manager runtime data (created at runtime inside any DayZ server this
+# exe is deployed to; should not be in the repo).
+.dayz-manager/
+
+# Go
+vendor/
+go.work
+go.work.sum
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/
+.DS_Store
+Thumbs.db
+
+# Local dev
+*.log
+*.tmp
+*.bak
