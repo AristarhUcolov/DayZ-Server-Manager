@@ -42,6 +42,29 @@ type Manager struct {
 	// Informational here — actually applied via CLI flag on startup — but we
 	// keep the user preference here so the UI can reflect it.
 	Exposure string `json:"exposure"` // "local" | "internet"
+
+	// Panel admin credentials. Password is PBKDF2-HMAC-SHA256 hex of salted.
+	// RequireAuth = false disables the login gate entirely (useful for
+	// local-only deployments). The first-run wizard sets this automatically:
+	// on "internet" it forces a password; on "local" it leaves auth off.
+	AdminUsername     string `json:"adminUsername"`
+	AdminPasswordHash string `json:"adminPasswordHash"`
+	AdminPasswordSalt string `json:"adminPasswordSalt"`
+	RequireAuth       bool   `json:"requireAuth"`
+
+	// BattlEye RCon settings. Port defaults to ServerPort+1 per DayZ
+	// convention. Password is cached here so the panel can re-connect after
+	// a server restart without asking the user.
+	RConPort     int    `json:"rconPort"`
+	RConPassword string `json:"rconPassword"`
+
+	// Scheduled daily restarts ("HH:MM" local time, 24h). Runs in addition
+	// to AutoRestartSeconds — both can be enabled.
+	ScheduledRestarts []string `json:"scheduledRestarts"`
+
+	// Minutes before a scheduled/auto restart to broadcast via RCon.
+	// Default [5, 3, 1]. Set empty to disable warnings.
+	RestartWarnMinutes []int `json:"restartWarnMinutes"`
 }
 
 func defaultManager() *Manager {
@@ -64,6 +87,10 @@ func defaultManager() *Manager {
 		AutoRestartSeconds: 14390,
 		AutoRestartEnabled: false,
 		Exposure:           "local",
+
+		AdminUsername:      "admin",
+		RequireAuth:        false,
+		RestartWarnMinutes: []int{5, 3, 1},
 	}
 }
 

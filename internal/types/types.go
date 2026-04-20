@@ -30,6 +30,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"dayzmanager/internal/util"
 )
 
 type Flags struct {
@@ -93,6 +95,7 @@ func (d *TypesDoc) Save(path string) error {
 		return err
 	}
 	buf.WriteByte('\n')
+	_ = util.BackupBeforeWrite(path)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, buf.Bytes(), 0o644); err != nil {
 		return err

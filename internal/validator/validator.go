@@ -87,12 +87,19 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 			}
 		}
 
+		// cfglimitsdefinition.xml — the whitelist of category/usage/value/tag
+		// names. Types referencing anything outside this list are silently
+		// dropped by DayZ at runtime, which makes for confusing loot bugs.
+		limitsPath := filepath.Join(dztypes.MissionDir(serverDir, missionTemplate), "db", "cfglimitsdefinition.xml")
+		limits, _ := loadLimits(limitsPath)
+
 		// Duplicate type names across types.xml + moded_types/*.xml.
 		seen := map[string]string{}
 		typesPath := filepath.Join(dztypes.MissionDir(serverDir, missionTemplate), "db", "types.xml")
 		if doc, err := dztypes.Load(typesPath); err == nil {
 			for _, t := range doc.Types {
 				seen[strings.ToLower(t.Name)] = typesPath
+				issues = append(issues, checkLimits(typesPath, &t, limits)...)
 			}
 		}
 		moded := dztypes.ModedDir(serverDir, missionTemplate)
@@ -117,6 +124,7 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 				} else {
 					seen[key] = p
 				}
+				issues = append(issues, checkLimits(p, &t, limits)...)
 			}
 		}
 	}
@@ -145,6 +153,97 @@ func validateXML(path string) *Issue {
 		}
 		return &Issue{File: path, Severity: SevError, Message: err.Error()}
 	}
+}
+
+// limits mirrors the small subset of cfglimitsdefinition.xml we care about:
+// the set of category/usage/value/tag names that DayZ will accept. Anything
+// referenced in types.xml that is not in these sets will be dropped silently
+// at runtime.
+type limits struct {
+	categories map[string]bool
+	usages     map[string]bool
+	values     map[string]bool
+	tags       map[string]bool
+	loaded     bool
+}
+
+func loadLimits(path string) (*limits, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return &limits{}, err
+	}
+	type named struct {
+		Name string `xml:"name,attr"`
+	}
+	type doc struct {
+		XMLName    xml.Name `xml:"lists"`
+		Categories struct {
+			Category []named `xml:"category"`
+		} `xml:"categories"`
+		Tags struct {
+			Tag []named `xml:"tag"`
+		} `xml:"tags"`
+		Usage struct {
+			Usage []named `xml:"usage"`
+		} `xml:"usageflags"`
+		Value struct {
+			Value []named `xml:"value"`
+		} `xml:"valueflags"`
+	}
+	var d doc
+	if err := xml.Unmarshal(data, &d); err != nil {
+		return &limits{}, err
+	}
+	l := &limits{
+		categories: map[string]bool{},
+		usages:     map[string]bool{},
+		values:     map[string]bool{},
+		tags:       map[string]bool{},
+		loaded:     true,
+	}
+	for _, n := range d.Categories.Category {
+		l.categories[strings.ToLower(n.Name)] = true
+	}
+	for _, n := range d.Usage.Usage {
+		l.usages[strings.ToLower(n.Name)] = true
+	}
+	for _, n := range d.Value.Value {
+		l.values[strings.ToLower(n.Name)] = true
+	}
+	for _, n := range d.Tags.Tag {
+		l.tags[strings.ToLower(n.Name)] = true
+	}
+	return l, nil
+}
+
+func checkLimits(path string, t *dztypes.Type, l *limits) []Issue {
+	if l == nil || !l.loaded {
+		return nil
+	}
+	var out []Issue
+	if t.Category != nil && t.Category.Name != "" && !l.categories[strings.ToLower(t.Category.Name)] {
+		out = append(out, Issue{
+			File: path, Severity: SevWarning,
+			Message: fmt.Sprintf("type %q uses unknown category %q — not in cfglimitsdefinition.xml", t.Name, t.Category.Name),
+		})
+	}
+	check := func(set map[string]bool, kind string, refs []dztypes.NamedRef) {
+		for _, r := range refs {
+			if r.Name == "" {
+				continue
+			}
+			if !set[strings.ToLower(r.Name)] {
+				out = append(out, Issue{
+					File: path, Severity: SevWarning,
+					Message: fmt.Sprintf("type %q uses unknown %s %q — not in cfglimitsdefinition.xml", t.Name, kind, r.Name),
+				})
+			}
+		}
+	}
+	check(l.usages, "usage", t.Usages)
+	check(l.values, "value", t.Values)
+	check(l.tags, "tag", t.Tags)
+	return out
 }
 
 func validateCFG(path string) *Issue {

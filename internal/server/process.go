@@ -18,6 +18,13 @@ import (
 	"dayzmanager/internal/config"
 )
 
+// Broadcaster is implemented by rcon.Manager — kept as an interface here so
+// the server package doesn't depend on rcon (which would cycle: rcon may
+// later want config, and everyone wants server).
+type Broadcaster interface {
+	Say(msg string) error
+}
+
 // Controller supervises the DayZServer_x64 process.
 type Controller struct {
 	serverDir string
@@ -32,6 +39,14 @@ type Controller struct {
 
 	// Auto-restart loop.
 	restartStop chan struct{}
+
+	// Optional RCon broadcaster — set by app wiring. Used to announce
+	// scheduled/auto restarts with a countdown.
+	Broadcast Broadcaster
+
+	// Crash-loop protection — track recent exits to detect a broken mod set.
+	recentExits []time.Time
+	loopPaused  atomic.Bool
 }
 
 func NewController(serverDir string, cfg *config.Manager, logger *log.Logger) *Controller {
@@ -100,6 +115,21 @@ func (c *Controller) wait(cmd *exec.Cmd, out *os.File) {
 	c.mu.Lock()
 	c.cmd = nil
 	c.running.Store(false)
+	// Rolling 5-minute window. Three exits inside that window = crash loop.
+	now := time.Now()
+	c.recentExits = append(c.recentExits, now)
+	cutoff := now.Add(-5 * time.Minute)
+	keep := c.recentExits[:0]
+	for _, t := range c.recentExits {
+		if t.After(cutoff) {
+			keep = append(keep, t)
+		}
+	}
+	c.recentExits = keep
+	if len(c.recentExits) >= 3 {
+		c.loopPaused.Store(true)
+		c.log.Printf("crash-loop detected: %d exits in 5m — auto-restart paused", len(c.recentExits))
+	}
 	c.mu.Unlock()
 	if out != nil {
 		_ = out.Close()
@@ -109,6 +139,17 @@ func (c *Controller) wait(cmd *exec.Cmd, out *os.File) {
 	} else {
 		c.log.Printf("server exited cleanly")
 	}
+}
+
+// LoopPaused reports whether auto-restart is suspended because of a crash loop.
+func (c *Controller) LoopPaused() bool { return c.loopPaused.Load() }
+
+// ClearLoopPause resets the crash-loop counter so auto-restart resumes.
+func (c *Controller) ClearLoopPause() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.loopPaused.Store(false)
+	c.recentExits = nil
 }
 
 // Stop terminates the process (forcefully on Windows via taskkill /F, the same
@@ -141,6 +182,50 @@ func (c *Controller) Restart() error {
 	return c.Start()
 }
 
+// restartWithCountdown broadcasts "restart in Nm" via RCon for each entry in
+// warnMinutes (largest first), sleeping between them, then restarts.
+// If Broadcast is nil or any announce fails, it proceeds silently.
+func (c *Controller) restartWithCountdown(warnMinutes []int) error {
+	if c.Broadcast != nil && len(warnMinutes) > 0 {
+		// sort descending
+		m := append([]int(nil), warnMinutes...)
+		for i := range m {
+			for j := i + 1; j < len(m); j++ {
+				if m[j] > m[i] {
+					m[i], m[j] = m[j], m[i]
+				}
+			}
+		}
+		prev := 0
+		// wait long enough BEFORE the first announcement so timing lines up
+		if m[0] > 0 {
+			announce := fmt.Sprintf("Server restart in %d minutes", m[0])
+			_ = c.Broadcast.Say(announce)
+			c.log.Printf("rcon broadcast: %s", announce)
+		}
+		for i, mins := range m {
+			if i == 0 {
+				prev = mins
+				continue
+			}
+			gap := prev - mins
+			if gap > 0 {
+				time.Sleep(time.Duration(gap) * time.Minute)
+			}
+			announce := fmt.Sprintf("Server restart in %d minute(s)", mins)
+			if c.Broadcast != nil {
+				_ = c.Broadcast.Say(announce)
+			}
+			c.log.Printf("rcon broadcast: %s", announce)
+			prev = mins
+		}
+		if prev > 0 {
+			time.Sleep(time.Duration(prev) * time.Minute)
+		}
+	}
+	return c.Restart()
+}
+
 // StartAutoRestartLoop starts a goroutine that restarts the server on the
 // configured interval. Mirrors the `timeout 14390 && taskkill && goto start`
 // behavior of the reference .bat.
@@ -154,9 +239,15 @@ func (c *Controller) StartAutoRestartLoop() {
 	c.restartStop = stop
 	c.mu.Unlock()
 
+	// Scheduled cron-style restarts: check every minute whether any of the
+	// cfg.ScheduledRestarts ("HH:MM") entries matches local time.
+	go c.scheduledRestartLoop(stop)
+
+	// Interval-based auto-restart (the classic .bat behavior).
 	go func() {
+		lastStart := time.Now()
 		for {
-			if !c.cfg.AutoRestartEnabled || c.cfg.AutoRestartSeconds <= 0 {
+			if !c.cfg.AutoRestartEnabled || c.cfg.AutoRestartSeconds <= 0 || c.loopPaused.Load() {
 				select {
 				case <-stop:
 					return
@@ -164,17 +255,66 @@ func (c *Controller) StartAutoRestartLoop() {
 					continue
 				}
 			}
+			elapsed := time.Since(lastStart)
+			remaining := time.Duration(c.cfg.AutoRestartSeconds)*time.Second - elapsed
+			if remaining <= 0 {
+				if c.IsRunning() {
+					c.log.Printf("auto-restart: cycling server")
+					_ = c.restartWithCountdown(c.cfg.RestartWarnMinutes)
+				}
+				lastStart = time.Now()
+				continue
+			}
+			// Subtract the countdown warning — restartWithCountdown sleeps
+			// for it internally, so we shouldn't double-wait.
+			warnTotal := 0
+			for _, m := range c.cfg.RestartWarnMinutes {
+				if m > warnTotal {
+					warnTotal = m
+				}
+			}
+			wait := remaining - time.Duration(warnTotal)*time.Minute
+			if wait < 100*time.Millisecond {
+				wait = 100 * time.Millisecond
+			}
 			select {
 			case <-stop:
 				return
-			case <-time.After(time.Duration(c.cfg.AutoRestartSeconds) * time.Second):
+			case <-time.After(wait):
 				if c.IsRunning() {
 					c.log.Printf("auto-restart: cycling server")
-					_ = c.Restart()
+					_ = c.restartWithCountdown(c.cfg.RestartWarnMinutes)
 				}
+				lastStart = time.Now()
 			}
 		}
 	}()
+}
+
+// scheduledRestartLoop wakes at the start of every minute and fires a
+// restart when the current HH:MM matches one of cfg.ScheduledRestarts.
+func (c *Controller) scheduledRestartLoop(stop <-chan struct{}) {
+	// Align roughly to the minute boundary.
+	for {
+		now := time.Now()
+		next := now.Truncate(time.Minute).Add(time.Minute)
+		select {
+		case <-stop:
+			return
+		case <-time.After(time.Until(next)):
+		}
+		if !c.IsRunning() || c.loopPaused.Load() {
+			continue
+		}
+		hhmm := time.Now().Format("15:04")
+		for _, t := range c.cfg.ScheduledRestarts {
+			if strings.TrimSpace(t) == hhmm {
+				c.log.Printf("scheduled restart at %s", hhmm)
+				go func() { _ = c.restartWithCountdown(c.cfg.RestartWarnMinutes) }()
+				break
+			}
+		}
+	}
 }
 
 func (c *Controller) StopAutoRestartLoop() {

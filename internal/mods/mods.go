@@ -18,12 +18,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"dayzmanager/internal/util"
 )
+
+// Logger is set by the app wiring so copy failures end up in manager.log
+// instead of silently disappearing. Nil is safe — callers fall back to
+// discard when it is unset.
+var Logger *log.Logger
 
 type Mod struct {
 	Name                string    `json:"name"` // "@CF"
@@ -36,6 +44,8 @@ type Mod struct {
 	ServerModifiedAt    time.Time `json:"serverModifiedAt,omitempty"`
 	WorkshopModifiedAt  time.Time `json:"workshopModifiedAt,omitempty"`
 	UpdateAvailable     bool      `json:"updateAvailable"`
+	DisplayName         string    `json:"displayName,omitempty"`
+	PublishedID         string    `json:"publishedId,omitempty"`
 }
 
 // List returns the union of mods found in the client Workshop folder and the
@@ -89,6 +99,14 @@ func List(serverDir, vanillaDayZPath string) ([]Mod, error) {
 		if m.InstalledInServer && m.AvailableInWorkshop {
 			m.UpdateAvailable = m.WorkshopModifiedAt.After(m.ServerModifiedAt.Add(2 * time.Second))
 		}
+		// meta.cpp lives in the mod root; prefer the workshop copy so the
+		// server-side mod folder can be stripped without losing metadata.
+		meta := readMeta(m.WorkshopPath)
+		if meta.Name == "" && meta.PublishedID == "" {
+			meta = readMeta(m.ServerPath)
+		}
+		m.DisplayName = meta.Name
+		m.PublishedID = meta.PublishedID
 		out = append(out, *m)
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
@@ -105,12 +123,35 @@ func Install(serverDir, vanillaDayZPath, modName string) error {
 	if st, err := os.Stat(src); err != nil || !st.IsDir() {
 		return fmt.Errorf("mod not found in Workshop: %s", src)
 	}
+	if err := checkDiskSpace(serverDir, src); err != nil {
+		return err
+	}
 	dst := filepath.Join(serverDir, modName)
 	if err := copyTree(src, dst); err != nil {
 		return fmt.Errorf("copy mod: %w", err)
 	}
 	if err := SyncKeys(serverDir, []string{modName}); err != nil {
 		return fmt.Errorf("sync keys: %w", err)
+	}
+	return nil
+}
+
+// checkDiskSpace fails fast if the target volume looks too small for a mod
+// copy. We require free space ≥ 1.2× the source size — a 20% headroom covers
+// filesystem overhead. Unknown disk info (non-Windows) is permissive.
+func checkDiskSpace(serverDir, src string) error {
+	size := dirSize(src)
+	if size <= 0 {
+		return nil
+	}
+	free, _ := util.DiskFree(serverDir)
+	if free == 0 {
+		return nil // unknown / non-Windows
+	}
+	required := uint64(float64(size) * 1.2)
+	if free < required {
+		return fmt.Errorf("not enough free space on target disk: need ~%d MB, have %d MB",
+			required/1024/1024, free/1024/1024)
 	}
 	return nil
 }
@@ -294,6 +335,9 @@ func newestMTime(dir string) time.Time {
 func copyTree(src, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			if Logger != nil {
+				Logger.Printf("copyTree: walk %s: %v", path, err)
+			}
 			return err
 		}
 		rel, _ := filepath.Rel(src, path)
@@ -301,7 +345,13 @@ func copyTree(src, dst string) error {
 		if info.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
-		return copyFile(path, target)
+		if err := copyFile(path, target); err != nil {
+			if Logger != nil {
+				Logger.Printf("copyTree: copy %s → %s: %v", path, target, err)
+			}
+			return err
+		}
+		return nil
 	})
 }
 
@@ -323,6 +373,50 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return nil
+}
+
+// readMeta parses a DayZ mod's meta.cpp for the human-readable name and
+// Workshop publishedid. The file is a tiny CPP-like KV file, e.g.:
+//
+//	protocol = 1;
+//	publishedid = 1559212036;
+//	name = "Community Framework";
+//	timestamp = 1695822543;
+//
+// Returns a zero ModMeta if meta.cpp is missing or unreadable — callers
+// treat that as "no metadata available".
+func readMeta(modDir string) modMeta {
+	if modDir == "" {
+		return modMeta{}
+	}
+	data, err := os.ReadFile(filepath.Join(modDir, "meta.cpp"))
+	if err != nil {
+		return modMeta{}
+	}
+	var m modMeta
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimSuffix(line, ";")
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		v = strings.Trim(v, `"`)
+		switch strings.ToLower(k) {
+		case "name":
+			m.Name = v
+		case "publishedid":
+			m.PublishedID = v
+		}
+	}
+	return m
+}
+
+type modMeta struct {
+	Name        string
+	PublishedID string
 }
 
 // ErrNoVanillaPath is returned when install/list is called without a

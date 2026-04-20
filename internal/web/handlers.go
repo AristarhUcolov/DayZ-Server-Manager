@@ -13,10 +13,14 @@ import (
 	"time"
 
 	"dayzmanager/internal/app"
+	"dayzmanager/internal/auth"
 	"dayzmanager/internal/config"
 	"dayzmanager/internal/i18n"
+	dzlogs "dayzmanager/internal/logs"
 	"dayzmanager/internal/mods"
 	dztypes "dayzmanager/internal/types"
+	"dayzmanager/internal/updater"
+	"dayzmanager/internal/util"
 	"dayzmanager/internal/validator"
 )
 
@@ -28,6 +32,11 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// Meta.
 	mux.HandleFunc("/api/info", methods(h.info, http.MethodGet))
 	mux.HandleFunc("/api/i18n", methods(h.i18nBundle, http.MethodGet))
+
+	// Auth.
+	mux.HandleFunc("/api/auth/status", methods(h.authStatus, http.MethodGet))
+	mux.HandleFunc("/api/auth/login", methods(h.authLogin, http.MethodPost))
+	mux.HandleFunc("/api/auth/logout", methods(h.authLogout, http.MethodPost))
 
 	// Manager config (language, vanilla path, launch params).
 	mux.HandleFunc("/api/config", methods(h.config, http.MethodGet, http.MethodPost, http.MethodPut))
@@ -43,6 +52,10 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/servercfg", methods(h.serverCfg, http.MethodGet, http.MethodPost, http.MethodPut))
 	mux.HandleFunc("/api/servercfg/mission", methods(h.serverCfgMission, http.MethodPost))
 
+	// Missions.
+	mux.HandleFunc("/api/missions", methods(h.missionsList, http.MethodGet))
+	mux.HandleFunc("/api/missions/duplicate", methods(h.missionsDuplicate, http.MethodPost))
+
 	// Mods.
 	mux.HandleFunc("/api/mods", methods(h.modsList, http.MethodGet))
 	mux.HandleFunc("/api/mods/install", methods(h.modsInstall, http.MethodPost))
@@ -51,6 +64,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/mods/update-all", methods(h.modsUpdateAll, http.MethodPost))
 	mux.HandleFunc("/api/mods/sync-keys", methods(h.modsSyncKeys, http.MethodPost))
 	mux.HandleFunc("/api/mods/enable", methods(h.modsEnable, http.MethodPost))
+	mux.HandleFunc("/api/mods/order", methods(h.modsOrder, http.MethodPost))
 
 	// Types.
 	mux.HandleFunc("/api/types", methods(h.typesList, http.MethodGet))
@@ -70,6 +84,25 @@ func (h *handlers) register(mux *http.ServeMux) {
 
 	// Validator.
 	mux.HandleFunc("/api/validate", methods(h.validate, http.MethodGet, http.MethodPost))
+
+	// Self-update check (GitHub Releases).
+	mux.HandleFunc("/api/update/check", methods(h.updateCheck, http.MethodGet))
+
+	// Events (events.xml zombie/vehicle/helicrash spawn tables).
+	mux.HandleFunc("/api/events", methods(h.eventsList, http.MethodGet))
+	mux.HandleFunc("/api/events/item", methods(h.eventsItem, http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete))
+
+	// Logs.
+	mux.HandleFunc("/api/logs/list", methods(h.logsList, http.MethodGet))
+	mux.HandleFunc("/api/logs/read", methods(h.logsRead, http.MethodGet))
+	mux.HandleFunc("/api/logs/stream", methods(h.logsStream, http.MethodGet))
+
+	// RCon.
+	mux.HandleFunc("/api/rcon/players", methods(h.rconPlayers, http.MethodGet))
+	mux.HandleFunc("/api/rcon/say", methods(h.rconSay, http.MethodPost))
+	mux.HandleFunc("/api/rcon/kick", methods(h.rconKick, http.MethodPost))
+	mux.HandleFunc("/api/rcon/ban", methods(h.rconBan, http.MethodPost))
+	mux.HandleFunc("/api/rcon/command", methods(h.rconCommand, http.MethodPost))
 }
 
 // methods rejects any verb not in allowed with 405 before calling handler.
@@ -132,6 +165,8 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 		Language        string `json:"language"`
 		VanillaDayZPath string `json:"vanillaDayZPath"`
 		Exposure        string `json:"exposure"`
+		AdminUsername   string `json:"adminUsername"`
+		AdminPassword   string `json:"adminPassword"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -140,9 +175,46 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 	if req.Language != "" {
 		h.app.Config.Language = req.Language
 	}
+	// Validate the vanilla DayZ path — the rest of the manager is useless
+	// without a working !Workshop folder to source mods from. Allowing
+	// the wizard to finish with a bogus path just pushes the confusing
+	// error into every mod list refresh.
+	if req.VanillaDayZPath != "" {
+		st, err := os.Stat(req.VanillaDayZPath)
+		if err != nil || !st.IsDir() {
+			http.Error(w, "vanilla DayZ path does not exist: "+req.VanillaDayZPath, http.StatusBadRequest)
+			return
+		}
+		ws := filepath.Join(req.VanillaDayZPath, "!Workshop")
+		if st, err := os.Stat(ws); err != nil || !st.IsDir() {
+			http.Error(w, "!Workshop folder not found inside "+req.VanillaDayZPath+" — is this the DayZ client install?", http.StatusBadRequest)
+			return
+		}
+	}
 	h.app.Config.VanillaDayZPath = req.VanillaDayZPath
 	if req.Exposure != "" {
 		h.app.Config.Exposure = req.Exposure
+	}
+	// Auth is required when binding outside localhost. On "internet" exposure
+	// we refuse to finish the wizard without a password — that's the whole
+	// point of the gate.
+	if req.Exposure == "internet" && strings.TrimSpace(req.AdminPassword) == "" {
+		http.Error(w, "password required for LAN/Internet exposure", http.StatusBadRequest)
+		return
+	}
+	if req.AdminPassword != "" {
+		hash, salt, err := auth.HashPassword(req.AdminPassword)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		h.app.Config.AdminUsername = strings.TrimSpace(req.AdminUsername)
+		if h.app.Config.AdminUsername == "" {
+			h.app.Config.AdminUsername = "admin"
+		}
+		h.app.Config.AdminPasswordHash = hash
+		h.app.Config.AdminPasswordSalt = salt
+		h.app.Config.RequireAuth = true
 	}
 	h.app.Config.FirstRunDone = true
 	if err := h.app.SaveConfig(); err != nil {
@@ -150,6 +222,61 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, h.app.Config)
+}
+
+// ---------------------------------------------------------------------------
+// Auth.
+
+func (h *handlers) authStatus(w http.ResponseWriter, r *http.Request) {
+	authed := false
+	if !h.app.Config.RequireAuth {
+		authed = true
+	} else if c, err := r.Cookie(auth.SessionCookieName); err == nil {
+		authed = h.app.Auth.Valid(c.Value)
+	}
+	writeJSON(w, map[string]interface{}{
+		"requireAuth":   h.app.Config.RequireAuth,
+		"authenticated": authed,
+		"username":      h.app.Config.AdminUsername,
+	})
+}
+
+func (h *handlers) authLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !h.app.Config.RequireAuth {
+		writeJSON(w, map[string]string{"status": "ok"})
+		return
+	}
+	if req.Username != h.app.Config.AdminUsername ||
+		!auth.VerifyPassword(req.Password, h.app.Config.AdminPasswordHash, h.app.Config.AdminPasswordSalt) {
+		// Constant-ish delay discourages online brute force. The cost of
+		// PBKDF2 verification is already ~50-100ms which helps too.
+		time.Sleep(300 * time.Millisecond)
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	tok, err := h.app.Auth.Create()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.SetCookie(w, auth.CookieFor(tok))
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (h *handlers) authLogout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(auth.SessionCookieName); err == nil {
+		h.app.Auth.Destroy(c.Value)
+	}
+	http.SetCookie(w, auth.ClearCookie())
+	writeJSON(w, map[string]string{"status": "ok"})
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +292,12 @@ func (h *handlers) serverStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) serverStart(w http.ResponseWriter, r *http.Request) {
-	if err := h.app.Server.Start(); err != nil {
+	// Take WriteMu while starting so we can't launch DayZServer mid-write.
+	// Holding it only across the exec.Start call keeps the window tiny.
+	h.app.WriteMu.Lock()
+	err := h.app.Server.Start()
+	h.app.WriteMu.Unlock()
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -206,9 +338,11 @@ func (h *handlers) serverCfg(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	var patch map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -235,9 +369,11 @@ func (h *handlers) serverCfg(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) serverCfgMission(w http.ResponseWriter, r *http.Request) {
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	var req struct {
 		Template string `json:"template"`
 	}
@@ -263,6 +399,107 @@ func (h *handlers) serverCfgMission(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
+// Missions.
+
+func (h *handlers) missionsList(w http.ResponseWriter, r *http.Request) {
+	dir := filepath.Join(h.app.ServerDir, "mpmissions")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	active, _ := h.missionTemplate()
+	type row struct {
+		Name   string `json:"name"`
+		Active bool   `json:"active"`
+	}
+	out := []row{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		out = append(out, row{Name: e.Name(), Active: strings.EqualFold(e.Name(), active)})
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	writeJSON(w, map[string]interface{}{"missions": out, "active": active})
+}
+
+func (h *handlers) missionsDuplicate(w http.ResponseWriter, r *http.Request) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
+		return
+	}
+	defer unlock()
+	var req struct {
+		Source string `json:"source"`
+		Target string `json:"target"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	src := strings.TrimSpace(req.Source)
+	dst := strings.TrimSpace(req.Target)
+	if src == "" || dst == "" {
+		http.Error(w, "source and target required", http.StatusBadRequest)
+		return
+	}
+	// Base() guards against `../foo` slipping into paths.
+	src = filepath.Base(src)
+	dst = filepath.Base(dst)
+	base := filepath.Join(h.app.ServerDir, "mpmissions")
+	srcDir := filepath.Join(base, src)
+	dstDir := filepath.Join(base, dst)
+	if st, err := os.Stat(srcDir); err != nil || !st.IsDir() {
+		http.Error(w, "source mission does not exist", http.StatusBadRequest)
+		return
+	}
+	if _, err := os.Stat(dstDir); err == nil {
+		http.Error(w, "target mission already exists", http.StatusConflict)
+		return
+	}
+	if err := copyDirTree(srcDir, dstDir); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "duplicated", "target": dst})
+}
+
+// copyDirTree recursively copies src into dst, creating dst and any
+// intermediate dirs. Existing files are overwritten. Used for mission
+// duplication — the caller has already verified dst doesn't exist.
+func copyDirTree(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode().Perm())
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		out, err := os.Create(target)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		_, err = io.Copy(out, in)
+		return err
+	})
+}
+
+// ---------------------------------------------------------------------------
 // Mods.
 
 func (h *handlers) modsList(w http.ResponseWriter, r *http.Request) {
@@ -280,9 +517,11 @@ func (h *handlers) modsList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) modsInstall(w http.ResponseWriter, r *http.Request) {
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	name, err := h.modName(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -300,9 +539,11 @@ func (h *handlers) modsInstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) modsUninstall(w http.ResponseWriter, r *http.Request) {
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	name, err := h.modName(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -320,9 +561,11 @@ func (h *handlers) modsUninstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) modsUpdate(w http.ResponseWriter, r *http.Request) {
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	name, err := h.modName(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -340,9 +583,11 @@ func (h *handlers) modsUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) modsUpdateAll(w http.ResponseWriter, r *http.Request) {
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	if h.app.Config.VanillaDayZPath == "" {
 		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
 		return
@@ -356,9 +601,11 @@ func (h *handlers) modsUpdateAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) modsSyncKeys(w http.ResponseWriter, r *http.Request) {
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	if err := mods.SyncKeys(h.app.ServerDir, nil); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -386,6 +633,49 @@ func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		*target = removeOnce(*target, req.Mod)
+	}
+	if err := h.app.SaveConfig(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"active": h.app.Config.Mods, "server": h.app.Config.ServerMods})
+}
+
+// modsOrder replaces the active mod list with a caller-supplied ordering.
+// Load order matters for DayZ mods (e.g. frameworks like @CF must precede
+// their consumers), so the UI exposes drag & drop that sends the new order
+// here. Unknown names are refused — otherwise a rename race could silently
+// reintroduce a uninstalled mod into the launch args.
+func (h *handlers) modsOrder(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Mods       []string `json:"mods"`
+		ServerSide bool     `json:"serverSide"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	known := map[string]bool{}
+	current := h.app.Config.Mods
+	if req.ServerSide {
+		current = h.app.Config.ServerMods
+	}
+	for _, m := range current {
+		known[m] = true
+	}
+	clean := make([]string, 0, len(req.Mods))
+	seen := map[string]bool{}
+	for _, m := range req.Mods {
+		if !known[m] || seen[m] {
+			continue
+		}
+		seen[m] = true
+		clean = append(clean, m)
+	}
+	if req.ServerSide {
+		h.app.Config.ServerMods = clean
+	} else {
+		h.app.Config.Mods = clean
 	}
 	if err := h.app.SaveConfig(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -453,9 +743,11 @@ func (h *handlers) typesItem(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, t)
 	case http.MethodPut, http.MethodPost:
-		if !h.requireStopped(w) {
+		unlock, ok := h.acquireWrite(w)
+		if !ok {
 			return
 		}
+		defer unlock()
 		var t dztypes.Type
 		if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -471,9 +763,11 @@ func (h *handlers) typesItem(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]string{"status": "saved", "name": t.Name})
 	case http.MethodDelete:
-		if !h.requireStopped(w) {
+		unlock, ok := h.acquireWrite(w)
+		if !ok {
 			return
 		}
+		defer unlock()
 		n := doc.Remove(name)
 		if n == 0 {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -492,9 +786,11 @@ func (h *handlers) typesPresets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) typesApplyPreset(w http.ResponseWriter, r *http.Request) {
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	var req struct {
 		File     string   `json:"file"`
 		Names    []string `json:"names"`
@@ -614,9 +910,11 @@ func (h *handlers) modedList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) modedCreate(w http.ResponseWriter, r *http.Request) {
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	var req struct {
 		FileName     string `json:"fileName"`
 		AutoRegister bool   `json:"autoRegister"`
@@ -661,9 +959,11 @@ func (h *handlers) modedCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) modedDelete(w http.ResponseWriter, r *http.Request) {
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	var req struct {
 		FileName string `json:"fileName"`
 	}
@@ -745,9 +1045,11 @@ func (h *handlers) filesRead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) filesWrite(w http.ResponseWriter, r *http.Request) {
-	if !h.requireStopped(w) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
 		return
 	}
+	defer unlock()
 	var req struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
@@ -761,6 +1063,7 @@ func (h *handlers) filesWrite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	_ = util.BackupBeforeWrite(full)
 	tmp := full + ".tmp"
 	if err := os.WriteFile(tmp, []byte(req.Content), 0o644); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -775,6 +1078,274 @@ func (h *handlers) filesWrite(w http.ResponseWriter, r *http.Request) {
 
 // ---------------------------------------------------------------------------
 // Validator.
+
+// ---------------------------------------------------------------------------
+// Logs.
+
+func (h *handlers) logsList(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, dzlogs.Discover(h.app.ServerDir, h.app.Config.ProfilesDir))
+}
+
+// logsRead returns a static snapshot — the last N bytes of a log file.
+// Handy for the initial scrollback on the Logs tab.
+func (h *handlers) logsRead(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	path := dzlogs.Resolve(h.app.ServerDir, h.app.Config.ProfilesDir, id)
+	if path == "" {
+		http.Error(w, "unknown log id", http.StatusBadRequest)
+		return
+	}
+	const maxBytes = 256 * 1024
+	f, err := os.Open(path)
+	if err != nil {
+		writeJSON(w, map[string]interface{}{"path": path, "content": ""})
+		return
+	}
+	defer f.Close()
+	st, _ := f.Stat()
+	offset := int64(0)
+	if st != nil && st.Size() > maxBytes {
+		offset = st.Size() - maxBytes
+	}
+	_, _ = f.Seek(offset, 0)
+	body, _ := io.ReadAll(f)
+	writeJSON(w, map[string]interface{}{"path": path, "content": string(body)})
+}
+
+// logsStream is a Server-Sent Events endpoint. EventSource on the client
+// keeps the socket open; the server writes "data: <chunk>\n\n" as it reads.
+func (h *handlers) logsStream(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	path := dzlogs.Resolve(h.app.ServerDir, h.app.Config.ProfilesDir, id)
+	if path == "" {
+		http.Error(w, "unknown log id", http.StatusBadRequest)
+		return
+	}
+	if _, err := os.Stat(path); err != nil {
+		http.Error(w, "log file not found (yet)", http.StatusNotFound)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	stop := make(chan struct{})
+	go func() {
+		<-r.Context().Done()
+		close(stop)
+	}()
+	_ = dzlogs.Tail(stop, path, 64*1024, func(chunk []byte) error {
+		// SSE escapes newlines into separate "data:" lines so we just
+		// send each line; a terminal line is still a valid event.
+		for _, line := range strings.Split(string(chunk), "\n") {
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", line); err != nil {
+				return err
+			}
+		}
+		flusher.Flush()
+		return nil
+	})
+}
+
+// ---------------------------------------------------------------------------
+// RCon.
+
+func (h *handlers) rconPlayers(w http.ResponseWriter, r *http.Request) {
+	h.app.ApplyRConConfig()
+	players, err := h.app.RCon.Players()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"players": players, "count": len(players)})
+}
+
+func (h *handlers) rconSay(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Message  string `json:"message"`
+		PlayerID *int   `json:"playerId,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Message == "" {
+		http.Error(w, "message required", http.StatusBadRequest)
+		return
+	}
+	h.app.ApplyRConConfig()
+	var err error
+	if req.PlayerID != nil {
+		err = h.app.RCon.SayTo(*req.PlayerID, req.Message)
+	} else {
+		err = h.app.RCon.Say(req.Message)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (h *handlers) rconKick(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PlayerID int    `json:"playerId"`
+		Reason   string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.app.ApplyRConConfig()
+	if err := h.app.RCon.Kick(req.PlayerID, req.Reason); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (h *handlers) rconBan(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PlayerID int    `json:"playerId"`
+		Minutes  int    `json:"minutes"`
+		Reason   string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	h.app.ApplyRConConfig()
+	if err := h.app.RCon.Ban(req.PlayerID, req.Minutes, req.Reason); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (h *handlers) rconCommand(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Command string `json:"command"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Command == "" {
+		http.Error(w, "command required", http.StatusBadRequest)
+		return
+	}
+	h.app.ApplyRConConfig()
+	out, err := h.app.RCon.Command(req.Command)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]string{"output": out})
+}
+
+// ---------------------------------------------------------------------------
+// events.xml editor.
+
+func (h *handlers) eventsList(w http.ResponseWriter, r *http.Request) {
+	doc, path, err := h.loadEventsFile()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	type row struct {
+		Name     string `json:"name"`
+		Nominal  *int   `json:"nominal,omitempty"`
+		Min      *int   `json:"min,omitempty"`
+		Max      *int   `json:"max,omitempty"`
+		Lifetime *int   `json:"lifetime,omitempty"`
+		Active   *int   `json:"active,omitempty"`
+		Children int    `json:"children"`
+	}
+	out := make([]row, 0, len(doc.Events))
+	for _, e := range doc.Events {
+		r := row{Name: e.Name, Nominal: e.Nominal, Min: e.Min, Max: e.Max, Lifetime: e.Lifetime, Active: e.Active}
+		if e.Children != nil {
+			r.Children = len(e.Children.Child)
+		}
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	writeJSON(w, map[string]interface{}{"file": path, "events": out, "count": len(out)})
+}
+
+func (h *handlers) eventsItem(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	doc, path, err := h.loadEventsFile()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		e := doc.Find(name)
+		if e == nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, e)
+	case http.MethodPut, http.MethodPost:
+		if !h.requireStopped(w) {
+			return
+		}
+		var e dztypes.Event
+		if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if e.Name == "" {
+			e.Name = name
+		}
+		if e.Name == "" {
+			http.Error(w, "event name required", http.StatusBadRequest)
+			return
+		}
+		doc.Upsert(e)
+		if err := doc.Save(path); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]string{"status": "saved", "name": e.Name})
+	case http.MethodDelete:
+		if !h.requireStopped(w) {
+			return
+		}
+		n := doc.Remove(name)
+		if n == 0 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if err := doc.Save(path); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]interface{}{"removed": n})
+	}
+}
+
+func (h *handlers) loadEventsFile() (*dztypes.EventsDoc, string, error) {
+	mission, err := h.missionTemplate()
+	if err != nil {
+		return nil, "", err
+	}
+	path := filepath.Join(dztypes.MissionDir(h.app.ServerDir, mission), "db", "events.xml")
+	doc, err := dztypes.LoadEvents(path)
+	if err != nil {
+		return nil, path, err
+	}
+	return doc, path, nil
+}
+
+// ---------------------------------------------------------------------------
+// Validator.
+
+func (h *handlers) updateCheck(w http.ResponseWriter, r *http.Request) {
+	res := updater.Check(r.Context(), h.app.Version)
+	writeJSON(w, res)
+}
 
 func (h *handlers) validate(w http.ResponseWriter, r *http.Request) {
 	mission, _ := h.missionTemplate()
@@ -814,15 +1385,37 @@ func (h *handlers) resolve(rel string) (string, error) {
 	return full, nil
 }
 
-// requireStopped writes a 409 and returns false if the DayZ server is running.
-// All write endpoints must call this — matches the user's rule that file edits
-// only happen while the server is off (DayZ locks its working set).
+// requireStopped is retained as the simple-path guard for write handlers.
+// Most handlers now call acquireWrite (which takes the cross-subsystem lock
+// before checking running), so this is kept for read paths that only need
+// the running check.
 func (h *handlers) requireStopped(w http.ResponseWriter) bool {
-	if h.app.ServerIsRunning() {
-		http.Error(w, "server is running — stop it before editing files", http.StatusConflict)
-		return false
+	if unlock, ok := h.acquireWrite(w); ok {
+		unlock()
+		return true
 	}
-	return true
+	return false
+}
+
+// acquireWrite serializes all state-mutating operations across subsystems
+// AND verifies the DayZ server is stopped — in a single atomic step. Without
+// this, a POST /api/server/start could race with a concurrent POST
+// /api/types/item that had already passed its requireStopped check, leaving
+// DayZ to boot against a half-written file.
+//
+// Caller pattern:
+//
+//	unlock, ok := h.acquireWrite(w)
+//	if !ok { return }
+//	defer unlock()
+func (h *handlers) acquireWrite(w http.ResponseWriter) (func(), bool) {
+	h.app.WriteMu.Lock()
+	if h.app.ServerIsRunning() {
+		h.app.WriteMu.Unlock()
+		http.Error(w, "server is running — stop it before editing files", http.StatusConflict)
+		return nil, false
+	}
+	return h.app.WriteMu.Unlock, true
 }
 
 func writeJSON(w http.ResponseWriter, v interface{}) {

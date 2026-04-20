@@ -100,6 +100,23 @@ GOOS=windows GOARCH=amd64 go build -o dayz-manager.exe ./cmd/manager
 | `-no-browser`  | `false`      | Не открывать браузер при запуске.           |
 | `-version`     | —            | Напечатать версию и выйти.                  |
 
+### Запуск как Windows Service (NSSM)
+
+Чтобы панель стартовала с системой и автоматически перезапускалась при
+падениях, удобнее всего использовать [NSSM](https://nssm.cc/):
+
+```bat
+nssm install DayZManager "C:\DayZServer\dayz-manager.exe"
+nssm set DayZManager AppDirectory "C:\DayZServer"
+nssm set DayZManager AppParameters "-bind 0.0.0.0 -no-browser"
+nssm set DayZManager Start SERVICE_AUTO_START
+nssm start DayZManager
+```
+
+После этого панель будет доступна по `http://<сервер>:8787/` сразу после
+загрузки Windows. Пароль админа обязателен — включи его в мастере первого
+запуска или в `manager.json` (`requireAuth: true`).
+
 ## Структура проекта
 
 ```
@@ -213,6 +230,24 @@ The resulting binary is fully self-contained — the web UI is embedded via
 | `-bind`        | `127.0.0.1`   | Bind address. Use `0.0.0.0` for LAN.      |
 | `-no-browser`  | `false`       | Don't auto-open the browser on start.     |
 | `-version`     | —             | Print version and exit.                   |
+
+### Running as a Windows Service (NSSM)
+
+For unattended hosting, run the panel as a service with
+[NSSM](https://nssm.cc/):
+
+```bat
+nssm install DayZManager "C:\DayZServer\dayz-manager.exe"
+nssm set DayZManager AppDirectory "C:\DayZServer"
+nssm set DayZManager AppParameters "-bind 0.0.0.0 -no-browser"
+nssm set DayZManager Start SERVICE_AUTO_START
+nssm start DayZManager
+```
+
+The panel will be reachable at `http://<server>:8787/` right after Windows
+boots. **Always enable password auth** when exposing to LAN/Internet —
+either through the first-run wizard or by setting `requireAuth: true`
+in `manager.json`.
 
 ## REST API (summary)
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"dayzmanager/internal/app"
+	"dayzmanager/internal/auth"
 )
 
 type Server struct {
@@ -25,11 +26,24 @@ func New(a *app.App, bind string, port int) *Server {
 	sub, _ := fs.Sub(staticFS, "static")
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 
+	// Auth gate — applied to /api/* only. Static assets stay public so the
+	// login page can load its own CSS/JS before the user authenticates.
+	// Exempt read-only endpoints that the login page itself calls.
+	authMW := auth.Middleware(
+		a.Auth,
+		func() bool { return a.Config.RequireAuth },
+		[]string{
+			"/api/info", "/api/i18n",
+			"/api/auth/login", "/api/auth/logout", "/api/auth/status",
+		},
+	)
+	apiHandler := authMW(bodyLimit(64<<20)(mux)) // 64 MB cap on request bodies
+
 	return &Server{
 		app: a,
 		http: &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bind, port),
-			Handler:           recoverer(noCache(mux)),
+			Handler:           recoverer(noCache(apiHandler)),
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 	}
@@ -58,6 +72,22 @@ func noCache(h http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		h.ServeHTTP(w, r)
 	})
+}
+
+// bodyLimit caps request bodies. A misbehaving or hostile client can't send
+// gigabytes to /api/files/write or /api/types/item. Applies to the whole API
+// surface — 64 MB is far more than any sane types.xml or custom file.
+func bodyLimit(max int64) func(http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.ContentLength > max {
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, max)
+			h.ServeHTTP(w, r)
+		})
+	}
 }
 
 func recoverer(h http.Handler) http.Handler {

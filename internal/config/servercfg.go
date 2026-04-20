@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"dayzmanager/internal/util"
 )
 
 type ServerCfgEntryKind int
@@ -236,6 +238,7 @@ func renderValue(val interface{}) string {
 }
 
 func atomicWrite(path string, data []byte) error {
+	_ = util.BackupBeforeWrite(path)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err

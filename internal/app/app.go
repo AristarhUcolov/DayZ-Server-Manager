@@ -8,7 +8,10 @@ import (
 	"path/filepath"
 	"sync"
 
+	"dayzmanager/internal/auth"
 	"dayzmanager/internal/config"
+	"dayzmanager/internal/mods"
+	"dayzmanager/internal/rcon"
 	"dayzmanager/internal/server"
 )
 
@@ -24,6 +27,13 @@ type App struct {
 	configPath  string
 
 	Server *server.Controller
+	Auth   *auth.Store
+	RCon   *rcon.Manager
+
+	// WriteMu serializes every state-mutating operation across subsystems
+	// (mods install/update/uninstall, types/cfg writes, moded create/delete).
+	// Prevents a second POST from racing with the requireStopped check.
+	WriteMu sync.Mutex
 }
 
 func New(serverDir, name, version, author string) (*App, error) {
@@ -40,6 +50,8 @@ func New(serverDir, name, version, author string) (*App, error) {
 		return nil, fmt.Errorf("open log: %w", err)
 	}
 	logger := log.New(newTee(os.Stdout, logFile), "", log.LstdFlags)
+	// Route the mods package's copy failures into the shared manager log.
+	mods.Logger = logger
 
 	cfgPath := filepath.Join(managerDir, "manager.json")
 	cfg, err := config.LoadManager(cfgPath)
@@ -48,6 +60,9 @@ func New(serverDir, name, version, author string) (*App, error) {
 	}
 
 	ctrl := server.NewController(serverDir, cfg, logger)
+	rc := rcon.NewManager()
+	// Wire the broadcaster so auto-restart can announce a countdown.
+	ctrl.Broadcast = rc
 
 	return &App{
 		Name:       name,
@@ -59,7 +74,19 @@ func New(serverDir, name, version, author string) (*App, error) {
 		Config:     cfg,
 		configPath: cfgPath,
 		Server:     ctrl,
+		Auth:       auth.NewStore(),
+		RCon:       rc,
 	}, nil
+}
+
+// ApplyRConConfig reconfigures the RCon manager from the current Config.
+// Call after any config update or server restart.
+func (a *App) ApplyRConConfig() {
+	port := a.Config.RConPort
+	if port == 0 {
+		port = a.Config.ServerPort + 1 // DayZ default
+	}
+	a.RCon.Configure("127.0.0.1", port, a.Config.RConPassword)
 }
 
 func (a *App) SaveConfig() error {
