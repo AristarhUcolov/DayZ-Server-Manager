@@ -153,6 +153,10 @@ func (c *ServerCfg) Set(key string, val interface{}) {
 }
 
 // SetMissionTemplate rewrites the template="..." line inside class Missions/class DayZ.
+// If the block does not exist yet (fresh serverDZ.cfg from a trimmed template),
+// we append a standards-shaped block so the server will actually pick up the
+// setting on next start. Returns true in all cases except when the class block
+// exists but is so malformed we cannot splice into it safely.
 func (c *ServerCfg) SetMissionTemplate(tmpl string) bool {
 	for i := range c.Entries {
 		if c.Entries[i].Kind != EntryClass {
@@ -163,13 +167,33 @@ func (c *ServerCfg) SetMissionTemplate(tmpl string) bool {
 			continue
 		}
 		re := regexp.MustCompile(`template\s*=\s*"[^"]*"`)
-		if !re.MatchString(raw) {
+		if re.MatchString(raw) {
+			c.Entries[i].Raw = re.ReplaceAllString(raw, fmt.Sprintf(`template="%s"`, tmpl))
+			return true
+		}
+		// class Missions exists but has no template line — inject one.
+		idx := strings.Index(raw, "class DayZ")
+		if idx < 0 {
 			return false
 		}
-		c.Entries[i].Raw = re.ReplaceAllString(raw, fmt.Sprintf(`template="%s"`, tmpl))
+		brace := strings.Index(raw[idx:], "{")
+		if brace < 0 {
+			return false
+		}
+		pos := idx + brace + 1
+		injected := fmt.Sprintf("\n\t\ttemplate=\"%s\";", tmpl)
+		c.Entries[i].Raw = raw[:pos] + injected + raw[pos:]
 		return true
 	}
-	return false
+	// No block at all — append a fresh one.
+	c.Entries = append(c.Entries, ServerCfgEntry{
+		Kind: EntryClass,
+		Raw: fmt.Sprintf(
+			"class Missions\n{\n\tclass DayZ\n\t{\n\t\ttemplate=\"%s\";\n\t};\n};\n",
+			tmpl,
+		),
+	})
+	return true
 }
 
 // MissionTemplate extracts the currently configured mission template.

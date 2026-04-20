@@ -3,7 +3,7 @@
   DayZ Server Manager
   Copyright (c) 2026 Aristarh Ucolov. All rights reserved.
 -->
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -77,10 +77,15 @@
       <a data-route="logs"       data-i18n="nav.logs"></a>
       <a data-route="rcon"       data-i18n="nav.rcon"></a>
       <a data-route="events"     data-i18n="nav.events"></a>
+      <a data-route="profiles"   data-i18n="nav.profiles"></a>
+      <a data-route="sync"       data-i18n="nav.sync"></a>
       <a data-route="validator"  data-i18n="nav.validator"></a>
       <a data-route="settings"   data-i18n="nav.settings"></a>
     </nav>
     <div class="top-right">
+      <button id="theme-toggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
+        <span class="theme-icon">◐</span>
+      </button>
       <select id="lang-switch">
         <option value="en">EN</option>
         <option value="ru">RU</option>
@@ -97,6 +102,10 @@
 
   <footer class="footer">
     <span data-i18n="app.copyright"></span>
+    <span class="footer-sep">·</span>
+    <a href="https://buymeacoffee.com/aristarh.ucolov" target="_blank" rel="noopener" class="donate-link">☕ <span data-i18n="support.coffee"></span></a>
+    <span class="footer-sep">·</span>
+    <a href="https://www.donationalerts.com/r/aristarh_ucolov" target="_blank" rel="noopener" class="donate-link">♥ <span data-i18n="support.donationalerts"></span></a>
   </footer>
 
   <div id="toast" class="toast"></div>

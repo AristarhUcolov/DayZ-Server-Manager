@@ -407,6 +407,15 @@ Views.mods = async (root) => {
       }));
     }
     if (m.installedInServer) {
+      actions.append(h('button', { i18n: 'modtypes.scan',
+        onclick: async () => {
+          try {
+            const s = await api.get('/api/mods/scan-types?mod=' + encodeURIComponent(m.name));
+            const files = s.files || [];
+            if (!files.length) { toast(t('modtypes.none')); return; }
+            await openModTypesDialog(m.name, files);
+          } catch (e) { handleErr(e); }
+        }}));
       actions.append(h('button', { class: 'danger', i18n: 'action.uninstall',
         onclick: async () => {
           if (!confirm(`Uninstall ${m.name}?`)) return;
@@ -790,7 +799,38 @@ Views.files = async (root) => {
   const tree = h('div', { class: 'tree' });
   const editor = h('textarea', { placeholder: 'Select a file' });
   const pathLabel = h('div', { class: 'hint' });
+  const backupList = h('div', { class: 'card', style: { marginTop: '12px' } });
   let currentPath = '';
+
+  async function refreshBackups() {
+    backupList.innerHTML = '';
+    if (!currentPath) return;
+    backupList.append(h('h3', { i18n: 'backup.title' }));
+    try {
+      const d = await api.get('/api/backups/list?path=' + encodeURIComponent(currentPath));
+      const baks = d.backups || [];
+      if (!baks.length) {
+        backupList.append(h('p', { class: 'hint', i18n: 'backup.none' }));
+        return;
+      }
+      for (const b of baks) {
+        const when = new Date(b.time * 1000).toLocaleString();
+        backupList.append(h('div', { class: 'row', style: { padding: '4px 0' } }, [
+          h('span', { style: { flex: '1' }, text: b.name }),
+          h('small', { class: 'hint', text: `${when} · ${bytes(b.size)}` }),
+          h('button', { i18n: 'backup.restore', onclick: async () => {
+            try {
+              await api.post('/api/backups/restore', { path: currentPath, backup: b.name });
+              const r = await api.get('/api/files/read?path=' + encodeURIComponent(currentPath));
+              editor.value = r.content;
+              toast(t('backup.restored'), 'ok');
+              refreshBackups();
+            } catch (e) { handleErr(e); }
+          }}),
+        ]));
+      }
+    } catch (e) { handleErr(e); }
+  }
 
   async function loadDir(path) {
     const d = await api.get(`/api/files/tree?path=${encodeURIComponent(path || '')}`);
@@ -800,6 +840,7 @@ Views.files = async (root) => {
         onclick: () => loadDir(path.split('/').slice(0, -1).join('/')) }));
     }
     for (const e of d.entries) {
+      if (/\.bak\.\d/.test(e.name)) continue; // hide .bak.* clutter from the tree
       const node = h('div', { class: `node ${e.isDir ? 'dir' : ''}`,
         text: `${e.isDir ? '📁' : '📄'} ${e.name}`,
       });
@@ -809,6 +850,7 @@ Views.files = async (root) => {
         currentPath = e.path;
         editor.value = r.content;
         pathLabel.textContent = e.path;
+        await refreshBackups();
       };
       tree.append(node);
     }
@@ -831,16 +873,50 @@ Views.files = async (root) => {
                 if (!currentPath) return;
                 try {
                   await api.post('/api/files/write', { path: currentPath, content: editor.value });
-                  toast('saved', 'ok');
+                  toast(t('files.save'), 'ok');
+                  await refreshBackups();
                 } catch (e) { handleErr(e); }
               }
             }),
           ]),
+          backupList,
         ]),
       ]),
     ])
   );
 };
+
+// Inline modal-ish dialog that lists candidate types.xml inside a mod and
+// lets the user install each one into the active mission with a chosen name.
+async function openModTypesDialog(mod, files) {
+  const dialog = h('div', { class: 'modal' });
+  const card = h('div', { class: 'modal-card', style: { maxWidth: '640px' } });
+  card.append(h('h2', { text: `${mod} — types` }));
+  for (const f of files) {
+    const nameInput = h('input', { type: 'text',
+      value: mod.replace(/^@/, '').replace(/\s+/g, '_') + '_' + f.rel.split('/').pop() });
+    const btn = h('button', { class: 'primary', i18n: 'modtypes.install', onclick: async () => {
+      try {
+        await api.post('/api/mods/install-types', { mod, rel: f.rel, fileName: nameInput.value });
+        toast(t('modtypes.installed'), 'ok');
+        btn.disabled = true;
+      } catch (e) { handleErr(e); }
+    }});
+    card.append(h('div', { class: 'card' }, [
+      h('div', {}, [
+        h('code', { text: f.rel }),
+        ' · ',
+        h('span', { class: 'hint', text: `${f.types} <type>` }),
+      ]),
+      h('div', { class: 'row' }, [nameInput, btn]),
+    ]));
+  }
+  card.append(h('div', { class: 'actions' }, [
+    h('button', { i18n: 'action.cancel', onclick: () => dialog.remove() }),
+  ]));
+  dialog.append(card);
+  document.body.append(dialog);
+}
 
 // --------------------------------------------------------------------- validator
 
@@ -1204,6 +1280,10 @@ Views.settings = async (root) => {
   const F = {
     language:        h('select', {}, [h('option', { value: 'en', text: 'English' }), h('option', { value: 'ru', text: 'Русский' })]),
     vanillaDayZPath: h('input',  { type: 'text', value: c.vanillaDayZPath || '' }),
+    exposure:        h('select', {}, [
+                       h('option', { value: 'local',    i18n: 'settings.exposure.local' }),
+                       h('option', { value: 'internet', i18n: 'settings.exposure.internet' }),
+                     ]),
     serverName:      h('input',  { type: 'text', value: c.serverName || '' }),
     serverPort:      h('input',  { type: 'number', value: c.serverPort }),
     serverCfg:       h('input',  { type: 'text', value: c.serverCfg }),
@@ -1219,19 +1299,49 @@ Views.settings = async (root) => {
     filePatching: h('input', { type: 'checkbox' }),
   };
   F.language.value = c.language;
+  F.exposure.value = c.exposure || 'local';
   for (const k of ['autoRestartEnabled','doLogs','adminLog','netLog','freezeCheck','filePatching']) {
     F[k].checked = !!c[k];
   }
 
+  const detectBtn = h('button', { i18n: 'settings.detectDayZ', onclick: async () => {
+    try {
+      const d = await api.get('/api/steam/detect');
+      const installs = d.installs || [];
+      if (!installs.length) { toast(t('settings.detectDayZ.none')); return; }
+      // Prefer an install that has !Workshop; fall back to the first hit.
+      const hit = installs.find(i => i.hasWorkshop) || installs[0];
+      F.vanillaDayZPath.value = hit.path;
+      toast(hit.path, 'ok');
+    } catch (e) { handleErr(e); }
+  }});
+
   const section = (title, rows) => h('div', { class: 'card' }, [h('h3', { i18n: title }), ...rows]);
   const row = (labelKey, el) => h('div', {}, [h('label', { i18n: labelKey }), el]);
+
+  const themeSel = h('select', {}, [
+    h('option', { value: 'dark',  i18n: 'settings.theme.dark' }),
+    h('option', { value: 'light', i18n: 'settings.theme.light' }),
+    h('option', { value: 'auto',  i18n: 'settings.theme.auto' }),
+  ]);
+  themeSel.value = localStorage.getItem('theme') || 'dark';
+  themeSel.onchange = () => setTheme(themeSel.value);
 
   root.append(
     h('div', { class: 'card' }, [h('h2', { i18n: 'settings.title' })]),
 
     section('settings.title', [
       row('settings.language', F.language),
-      row('settings.vanillaPath', F.vanillaDayZPath),
+      row('settings.theme', themeSel),
+      h('div', {}, [
+        h('label', { i18n: 'settings.vanillaPath' }),
+        h('div', { class: 'row' }, [F.vanillaDayZPath, detectBtn]),
+      ]),
+      h('div', {}, [
+        h('label', { i18n: 'settings.exposure' }),
+        F.exposure,
+        h('small', { class: 'hint', i18n: 'settings.exposure.hint' }),
+      ]),
     ]),
 
     section('nav.server', [
@@ -1277,18 +1387,176 @@ Views.settings = async (root) => {
               await loadI18n(next.language);
               document.getElementById('lang-switch').value = next.language;
             }
-            toast('saved', 'ok');
+            toast(t('action.save'), 'ok');
           } catch (e) { handleErr(e); }
         }
       }),
     ]),
+
+    donationCard(),
   );
+};
+
+function donationCard() {
+  return h('div', { class: 'donate-card' }, [
+    h('h3', { i18n: 'support.title' }),
+    h('p',  { i18n: 'support.text' }),
+    h('div', { class: 'donate-buttons' }, [
+      h('a', { href: 'https://buymeacoffee.com/aristarh.ucolov', target: '_blank', rel: 'noopener', class: 'coffee' }, [
+        '☕ ', h('span', { i18n: 'support.coffee' }),
+      ]),
+      h('a', { href: 'https://www.donationalerts.com/r/aristarh_ucolov', target: '_blank', rel: 'noopener', class: 'da' }, [
+        '♥ ', h('span', { i18n: 'support.donationalerts' }),
+      ]),
+    ]),
+  ]);
+}
+
+// --------------------------------------------------------------------- theme
+
+function setTheme(mode) {
+  localStorage.setItem('theme', mode);
+  let applied = mode;
+  if (mode === 'auto') {
+    applied = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  document.documentElement.setAttribute('data-theme', applied);
+  const btn = document.querySelector('#theme-toggle .theme-icon');
+  if (btn) btn.textContent = applied === 'light' ? '☀' : '☾';
+}
+
+// --------------------------------------------------------------------- sync / import
+
+Views.sync = async (root) => {
+  const src = h('input', { type: 'text', placeholder: 'F:\\SteamLibrary\\steamapps\\common\\DayZServer' });
+  const out = h('div');
+  const status = h('div', { class: 'hint' });
+
+  const runPreview = async () => {
+    out.innerHTML = '';
+    status.textContent = '';
+    if (!src.value.trim()) return;
+    try {
+      const p = await api.post('/api/import/preview', { sourceDir: src.value.trim() });
+      const copyMods = h('input', { type: 'checkbox', checked: true });
+      const copyCfg  = h('input', { type: 'checkbox' });
+      const missionSel = h('select', {}, [h('option', { value: '', text: '—' }),
+        ...(p.missions || []).map(m => h('option', { value: m, text: m }))]);
+      if (p.mission) missionSel.value = p.mission;
+      const modsList = (p.mods || []).length
+        ? h('ul', {}, (p.mods || []).map(m => h('li', { text: m })))
+        : h('p', { class: 'hint', text: '—' });
+      out.append(
+        h('div', { class: 'card' }, [
+          h('h3', { i18n: 'sync.preview' }),
+          h('div', {}, [h('label', { i18n: 'sync.mods' }), modsList]),
+          h('div', {}, [h('label', { i18n: 'sync.cfgMission' }), h('code', { text: p.mission || '—' })]),
+          h('div', {}, [h('label', {}, [copyMods, h('span', { i18n: 'sync.copyMods' })])]),
+          h('div', {}, [h('label', {}, [copyCfg,  h('span', { i18n: 'sync.copyCfg'  })])]),
+          h('div', {}, [h('label', { i18n: 'sync.mission' }), missionSel]),
+          h('div', { class: 'actions' }, [
+            h('button', { class: 'primary', i18n: 'sync.apply', onclick: async () => {
+              try {
+                const r = await api.post('/api/import/apply', {
+                  sourceDir: src.value.trim(),
+                  copyMods: copyMods.checked,
+                  copyCfg: copyCfg.checked,
+                  mission: missionSel.value,
+                });
+                status.textContent = t('sync.done') + ' ' + (r.copiedMods || []).join(', ');
+                State.config = await api.get('/api/config');
+              } catch (e) { handleErr(e); }
+            }}),
+          ]),
+        ]),
+      );
+    } catch (e) { handleErr(e); }
+  };
+
+  root.append(
+    h('div', { class: 'card' }, [
+      h('h2', { i18n: 'sync.title' }),
+      h('p', { class: 'hint', i18n: 'sync.hint' }),
+      h('label', { i18n: 'sync.source' }),
+      h('div', { class: 'row' }, [src, h('button', { i18n: 'sync.preview', onclick: runPreview })]),
+      status,
+    ]),
+    out,
+  );
+};
+
+// --------------------------------------------------------------------- mod profile configs
+
+Views.profiles = async (root) => {
+  const tree = h('div', { class: 'left' });
+  const editor = h('textarea', { style: { height: '60vh', fontFamily: 'monospace' }, placeholder: t('profiles.empty') });
+  const savedPath = { path: '' };
+  const savebtn = h('button', { class: 'primary', i18n: 'files.save', disabled: true, onclick: async () => {
+    if (!savedPath.path) return;
+    try {
+      await api.post('/api/profiles/write', { path: savedPath.path, content: editor.value });
+      toast(t('files.save'), 'ok');
+    } catch (e) { handleErr(e); }
+  }});
+
+  async function openFile(path) {
+    try {
+      const r = await api.get('/api/profiles/read?path=' + encodeURIComponent(path));
+      editor.value = r.content;
+      savedPath.path = path;
+      savebtn.disabled = false;
+    } catch (e) { handleErr(e); }
+  }
+
+  async function renderDir(rel) {
+    tree.innerHTML = '';
+    if (rel) {
+      const up = rel.split('/').slice(0, -1).join('/');
+      tree.appendChild(h('div', { class: 'tree-node dir', text: '../', onclick: () => renderDir(up) }));
+    }
+    try {
+      const r = await api.get('/api/profiles/tree?path=' + encodeURIComponent(rel));
+      if (!(r.entries || []).length) {
+        tree.appendChild(h('p', { class: 'hint', i18n: 'profiles.empty' }));
+      }
+      for (const e of (r.entries || [])) {
+        if (e.isDir) {
+          tree.appendChild(h('div', { class: 'tree-node dir', text: e.name + '/', onclick: () => renderDir(e.path) }));
+        } else {
+          tree.appendChild(h('div', { class: 'tree-node', text: e.name, onclick: () => openFile(e.path) }));
+        }
+      }
+    } catch (e) { handleErr(e); }
+  }
+
+  root.append(
+    h('div', { class: 'card' }, [
+      h('h2', { i18n: 'profiles.title' }),
+      h('p', { class: 'hint', i18n: 'profiles.hint' }),
+      h('div', { class: 'two-col' }, [
+        tree,
+        h('div', {}, [editor, h('div', { class: 'actions' }, [savebtn])]),
+      ]),
+    ]),
+  );
+  await renderDir('');
 };
 
 // --------------------------------------------------------------------- bootstrap
 
 async function main() {
   try {
+    // Apply theme as early as possible so the login/first-run modals don't
+    // flash dark-on-light. Reads the same key the Settings page writes to.
+    setTheme(localStorage.getItem('theme') || 'dark');
+    const themeBtn = document.getElementById('theme-toggle');
+    if (themeBtn) {
+      themeBtn.onclick = () => {
+        const cur = document.documentElement.getAttribute('data-theme');
+        setTheme(cur === 'light' ? 'dark' : 'light');
+      };
+    }
+
     State.info = await api.get('/api/info');
     // Check auth before anything else. If the panel requires auth and we
     // have no valid session, surface the login modal and bail out — the

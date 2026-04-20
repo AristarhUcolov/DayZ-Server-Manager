@@ -65,6 +65,10 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/mods/sync-keys", methods(h.modsSyncKeys, http.MethodPost))
 	mux.HandleFunc("/api/mods/enable", methods(h.modsEnable, http.MethodPost))
 	mux.HandleFunc("/api/mods/order", methods(h.modsOrder, http.MethodPost))
+	// Scan a mod folder for bundled types.xml so the user can merge them
+	// into the active mission with one click.
+	mux.HandleFunc("/api/mods/scan-types", methods(h.modsScanTypes, http.MethodGet))
+	mux.HandleFunc("/api/mods/install-types", methods(h.modsInstallTypes, http.MethodPost))
 
 	// Types.
 	mux.HandleFunc("/api/types", methods(h.typesList, http.MethodGet))
@@ -87,6 +91,22 @@ func (h *handlers) register(mux *http.ServeMux) {
 
 	// Self-update check (GitHub Releases).
 	mux.HandleFunc("/api/update/check", methods(h.updateCheck, http.MethodGet))
+
+	// Steam install detection (libraryfolders.vdf scan).
+	mux.HandleFunc("/api/steam/detect", methods(h.steamDetect, http.MethodGet))
+
+	// Import an existing configured DayZ server directory (sync).
+	mux.HandleFunc("/api/import/preview", methods(h.importPreview, http.MethodPost))
+	mux.HandleFunc("/api/import/apply", methods(h.importApply, http.MethodPost))
+
+	// Backups (timestamped .bak files created before every write).
+	mux.HandleFunc("/api/backups/list", methods(h.backupsList, http.MethodGet))
+	mux.HandleFunc("/api/backups/restore", methods(h.backupsRestore, http.MethodPost))
+
+	// Mod profile configs (profiles/*ExpansionMod*/Settings/*.json etc.).
+	mux.HandleFunc("/api/profiles/tree", methods(h.profilesTree, http.MethodGet))
+	mux.HandleFunc("/api/profiles/read", methods(h.profilesRead, http.MethodGet))
+	mux.HandleFunc("/api/profiles/write", methods(h.profilesWrite, http.MethodPost))
 
 	// Events (events.xml zombie/vehicle/helicrash spawn tables).
 	mux.HandleFunc("/api/events", methods(h.eventsList, http.MethodGet))
@@ -1355,6 +1375,453 @@ func (h *handlers) validate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]interface{}{"issues": issues, "count": len(issues)})
+}
+
+// ---------------------------------------------------------------------------
+// Steam detection.
+
+func (h *handlers) steamDetect(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]interface{}{"installs": util.FindDayZInstalls()})
+}
+
+// ---------------------------------------------------------------------------
+// Mod types.xml auto-install.
+//
+// scan walks @ModName/ and looks for XML files that parse as a <types> root —
+// the loot-table format DayZ expects under moded_types. install copies a
+// chosen file into the active mission's moded_types folder and registers it
+// in cfgeconomycore.xml so the server actually loads it on next start.
+
+func (h *handlers) modsScanTypes(w http.ResponseWriter, r *http.Request) {
+	name, err := h.modName(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	dir := filepath.Join(h.app.ServerDir, name)
+	type hit struct {
+		Path  string `json:"path"`  // absolute path
+		Rel   string `json:"rel"`   // relative to mod folder
+		Types int    `json:"types"` // how many <type> entries
+	}
+	var hits []hit
+	_ = filepath.Walk(dir, func(p string, info os.FileInfo, werr error) error {
+		if werr != nil || info == nil || info.IsDir() {
+			return nil
+		}
+		if !strings.EqualFold(filepath.Ext(info.Name()), ".xml") {
+			return nil
+		}
+		if info.Size() > 10*1024*1024 { // skip absurdly-large XML
+			return nil
+		}
+		doc, err := dztypes.Load(p)
+		if err != nil || len(doc.Types) == 0 {
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, p)
+		hits = append(hits, hit{Path: p, Rel: filepath.ToSlash(rel), Types: len(doc.Types)})
+		return nil
+	})
+	writeJSON(w, map[string]interface{}{"mod": name, "files": hits})
+}
+
+func (h *handlers) modsInstallTypes(w http.ResponseWriter, r *http.Request) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
+		return
+	}
+	defer unlock()
+	var req struct {
+		Mod  string `json:"mod"`
+		Rel  string `json:"rel"`      // path relative to the mod folder
+		Name string `json:"fileName"` // target name in moded_types/
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !strings.HasPrefix(req.Mod, "@") || strings.ContainsAny(req.Mod, `/\`) {
+		http.Error(w, "invalid mod name", http.StatusBadRequest)
+		return
+	}
+	if strings.Contains(req.Rel, "..") {
+		http.Error(w, "invalid relative path", http.StatusBadRequest)
+		return
+	}
+	src := filepath.Join(h.app.ServerDir, req.Mod, filepath.FromSlash(req.Rel))
+	if _, err := os.Stat(src); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	mission, err := h.missionTemplate()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Sanitize target name: alphanumerics/dashes/underscores + .xml.
+	target := strings.TrimSpace(req.Name)
+	if target == "" {
+		target = strings.ReplaceAll(strings.TrimPrefix(req.Mod, "@"), " ", "_") + "_types.xml"
+	}
+	target = filepath.Base(target)
+	if !strings.HasSuffix(strings.ToLower(target), ".xml") {
+		target += ".xml"
+	}
+	modedDir := dztypes.ModedDir(h.app.ServerDir, mission)
+	if err := os.MkdirAll(modedDir, 0o755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	dst := filepath.Join(modedDir, target)
+	data, err := os.ReadFile(src)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = util.BackupBeforeWrite(dst)
+	if err := os.WriteFile(dst, data, 0o644); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	ecoPath := filepath.Join(dztypes.MissionDir(h.app.ServerDir, mission), "cfgeconomycore.xml")
+	_ = dztypes.RegisterModedFile(ecoPath, target, "types")
+	writeJSON(w, map[string]string{"status": "installed", "file": target})
+}
+
+// ---------------------------------------------------------------------------
+// Import / sync from an existing DayZ server install.
+//
+// Preview reads the foreign serverDZ.cfg + launch artifacts and returns what
+// the manager *would* absorb: mission template, mod names detected in the
+// directory, key lines from the cfg. Apply copies selected mods into the
+// current server dir, merges the foreign cfg into ours, and updates
+// manager.json. This lets admins with a pre-existing server adopt the
+// manager without recreating everything by hand.
+
+type importReq struct {
+	SourceDir string `json:"sourceDir"`
+	CopyMods  bool   `json:"copyMods"`
+	CopyCfg   bool   `json:"copyCfg"`
+	Mission   string `json:"mission"`
+}
+
+func (h *handlers) importPreview(w http.ResponseWriter, r *http.Request) {
+	var req importReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	src := strings.TrimSpace(req.SourceDir)
+	if src == "" {
+		http.Error(w, "sourceDir is required", http.StatusBadRequest)
+		return
+	}
+	if st, err := os.Stat(src); err != nil || !st.IsDir() {
+		http.Error(w, "source directory not found", http.StatusBadRequest)
+		return
+	}
+	cfgPath := filepath.Join(src, "serverDZ.cfg")
+	preview := map[string]interface{}{"sourceDir": src}
+	if _, err := os.Stat(cfgPath); err == nil {
+		if cfg, err := config.LoadServerCfg(cfgPath); err == nil {
+			preview["cfg"] = cfg.AsMap()
+			preview["mission"] = cfg.MissionTemplate()
+		}
+	}
+	// Detect @-prefixed mod folders at the top level — the universal DayZ
+	// convention for client-side mods. Excludes keys/battleye/mpmissions/etc.
+	var foundMods []string
+	if entries, err := os.ReadDir(src); err == nil {
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), "@") {
+				foundMods = append(foundMods, e.Name())
+			}
+		}
+	}
+	preview["mods"] = foundMods
+	var missions []string
+	if entries, err := os.ReadDir(filepath.Join(src, "mpmissions")); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				missions = append(missions, e.Name())
+			}
+		}
+	}
+	preview["missions"] = missions
+	writeJSON(w, preview)
+}
+
+func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
+		return
+	}
+	defer unlock()
+
+	var req importReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	src := strings.TrimSpace(req.SourceDir)
+	if src == "" {
+		http.Error(w, "sourceDir is required", http.StatusBadRequest)
+		return
+	}
+	// Refuse to import from the very folder we're running in — it would loop
+	// and overwrite the manager's own files.
+	absSrc, _ := filepath.Abs(src)
+	absDst, _ := filepath.Abs(h.app.ServerDir)
+	if strings.EqualFold(absSrc, absDst) {
+		http.Error(w, "source and destination are the same directory", http.StatusBadRequest)
+		return
+	}
+
+	var copied []string
+	if req.CopyMods {
+		if entries, err := os.ReadDir(src); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() || !strings.HasPrefix(e.Name(), "@") {
+					continue
+				}
+				dst := filepath.Join(h.app.ServerDir, e.Name())
+				if _, err := os.Stat(dst); err == nil {
+					continue // skip already-present mods
+				}
+				if err := copyDirTree(filepath.Join(src, e.Name()), dst); err == nil {
+					copied = append(copied, e.Name())
+					if !contains(h.app.Config.Mods, e.Name()) {
+						h.app.Config.Mods = append(h.app.Config.Mods, e.Name())
+					}
+				}
+			}
+		}
+	}
+
+	if req.CopyCfg {
+		srcCfg := filepath.Join(src, "serverDZ.cfg")
+		if _, err := os.Stat(srcCfg); err == nil {
+			data, err := os.ReadFile(srcCfg)
+			if err == nil {
+				dstCfg := filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)
+				_ = util.BackupBeforeWrite(dstCfg)
+				_ = os.WriteFile(dstCfg, data, 0o644)
+			}
+		}
+	}
+	if req.Mission != "" {
+		cfgPath := filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)
+		if cfg, err := config.LoadServerCfg(cfgPath); err == nil {
+			cfg.SetMissionTemplate(req.Mission)
+			_ = cfg.Save(cfgPath)
+		}
+	}
+	if err := h.app.SaveConfig(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"copiedMods": copied})
+}
+
+// ---------------------------------------------------------------------------
+// Backups. Every atomic write goes through util.BackupBeforeWrite which
+// creates <file>.bak.<timestamp> siblings. This endpoint lists them per file
+// and offers restore (which itself backs up the current file before swapping).
+
+func (h *handlers) backupsList(w http.ResponseWriter, r *http.Request) {
+	rel := r.URL.Query().Get("path")
+	full, err := h.resolve(rel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	dir := filepath.Dir(full)
+	base := filepath.Base(full)
+	entries, _ := os.ReadDir(dir)
+	type bak struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+		Time int64  `json:"time"`
+	}
+	var out []bak
+	prefix := base + ".bak."
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), prefix) {
+			continue
+		}
+		info, _ := e.Info()
+		out = append(out, bak{
+			Name: e.Name(),
+			Size: sizeOrZero(info),
+			Time: info.ModTime().Unix(),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Time > out[j].Time })
+	writeJSON(w, map[string]interface{}{"path": rel, "backups": out})
+}
+
+func (h *handlers) backupsRestore(w http.ResponseWriter, r *http.Request) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
+		return
+	}
+	defer unlock()
+	var req struct {
+		Path   string `json:"path"`
+		Backup string `json:"backup"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	full, err := h.resolve(req.Path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Validate backup name: must be a sibling of `full`, start with its base
+	// + ".bak.", and not contain path separators.
+	if strings.ContainsAny(req.Backup, `/\`) {
+		http.Error(w, "invalid backup name", http.StatusBadRequest)
+		return
+	}
+	base := filepath.Base(full)
+	if !strings.HasPrefix(req.Backup, base+".bak.") {
+		http.Error(w, "backup name does not belong to this file", http.StatusBadRequest)
+		return
+	}
+	bakPath := filepath.Join(filepath.Dir(full), req.Backup)
+	data, err := os.ReadFile(bakPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	_ = util.BackupBeforeWrite(full)
+	if err := os.WriteFile(full, data, 0o644); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "restored"})
+}
+
+// ---------------------------------------------------------------------------
+// Mod profile config editor. Mods like Expansion, Namalsk, DayZ-Dog write
+// their own config files under the server's profile folder. We expose
+// recursive tree/read/write just like the general files editor, but rooted
+// at the profiles directory so the server doesn't need to be stopped for
+// typical cosmetic settings edits.
+
+func (h *handlers) profilesRoot() string {
+	p := h.app.Config.ProfilesDir
+	if p == "" {
+		p = "profiles"
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(h.app.ServerDir, p)
+	}
+	return p
+}
+
+func (h *handlers) profilesResolve(rel string) (string, error) {
+	root := h.profilesRoot()
+	clean := filepath.Clean("/" + rel)
+	clean = strings.TrimPrefix(clean, string(filepath.Separator))
+	full := filepath.Join(root, clean)
+	absRoot, _ := filepath.Abs(root)
+	absFull, _ := filepath.Abs(full)
+	if !strings.HasPrefix(absFull, absRoot) {
+		return "", fmt.Errorf("path escapes profiles dir")
+	}
+	return full, nil
+}
+
+func (h *handlers) profilesTree(w http.ResponseWriter, r *http.Request) {
+	rel := r.URL.Query().Get("path")
+	full, err := h.profilesResolve(rel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	entries, err := os.ReadDir(full)
+	if err != nil {
+		// Empty profiles dir isn't an error — the server just hasn't been
+		// started yet, so return an empty list so the UI can render a hint.
+		if os.IsNotExist(err) {
+			writeJSON(w, map[string]interface{}{"path": rel, "entries": []interface{}{}})
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	type node struct {
+		Name  string `json:"name"`
+		Path  string `json:"path"`
+		IsDir bool   `json:"isDir"`
+		Size  int64  `json:"size"`
+	}
+	out := []node{}
+	for _, e := range entries {
+		info, _ := e.Info()
+		child := filepath.ToSlash(filepath.Join(rel, e.Name()))
+		out = append(out, node{Name: e.Name(), Path: child, IsDir: e.IsDir(), Size: sizeOrZero(info)})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].IsDir != out[j].IsDir {
+			return out[i].IsDir
+		}
+		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+	})
+	writeJSON(w, map[string]interface{}{"path": rel, "entries": out})
+}
+
+func (h *handlers) profilesRead(w http.ResponseWriter, r *http.Request) {
+	rel := r.URL.Query().Get("path")
+	full, err := h.profilesResolve(rel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	body, err := os.ReadFile(full)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"path": rel, "content": string(body)})
+}
+
+func (h *handlers) profilesWrite(w http.ResponseWriter, r *http.Request) {
+	// Note: profiles edits do NOT require the server to be stopped — most
+	// are read on server startup but rewritten by the mod itself at runtime,
+	// so the race here is no worse than the mod's own write patterns.
+	var req struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	full, err := h.profilesResolve(req.Path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	_ = util.BackupBeforeWrite(full)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmp := full + ".tmp"
+	if err := os.WriteFile(tmp, []byte(req.Content), 0o644); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := os.Rename(tmp, full); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "saved"})
 }
 
 // ---------------------------------------------------------------------------

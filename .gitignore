@@ -27,3 +27,7 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+*.bak.*
+
+# Reference DayZ server install used for local testing (not distributed).
+DayZServer/

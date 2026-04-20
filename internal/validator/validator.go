@@ -10,10 +10,12 @@
 package validator
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	dztypes "dayzmanager/internal/types"
@@ -132,13 +134,24 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 	return issues, nil
 }
 
+// reXMLComment matches an entire <!-- ... --> block, including newlines.
+// BI's vanilla XML uses `-------` decorations inside comments which is illegal
+// per XML spec. DayZ's own loader ignores those, so we strip comments out
+// before handing bytes to Go's strict parser — otherwise every default mission
+// reports false errors on perfectly shipping files.
+var reXMLComment = regexp.MustCompile(`(?s)<!--.*?-->`)
+
 func validateXML(path string) *Issue {
-	f, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return &Issue{File: path, Severity: SevError, Message: err.Error()}
 	}
-	defer f.Close()
-	dec := xml.NewDecoder(f)
+	// Replace each comment with the same number of newlines so line numbers
+	// from the decoder still point at meaningful positions in the file.
+	cleaned := reXMLComment.ReplaceAllFunc(raw, func(m []byte) []byte {
+		return bytes.Repeat([]byte{'\n'}, bytes.Count(m, []byte{'\n'}))
+	})
+	dec := xml.NewDecoder(bytes.NewReader(cleaned))
 	dec.Strict = true
 	for {
 		_, err := dec.Token()

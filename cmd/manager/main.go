@@ -22,14 +22,14 @@ import (
 
 const (
 	appName    = "DayZ Server Manager"
-	appVersion = "0.2.0"
+	appVersion = "0.3.0"
 	appAuthor  = "Aristarh Ucolov"
 )
 
 func main() {
 	var (
 		webPort   = flag.Int("port", 8787, "web panel port")
-		bindAddr  = flag.String("bind", "127.0.0.1", "web panel bind address (use 0.0.0.0 to expose)")
+		bindAddr  = flag.String("bind", "", "web panel bind address (blank = follow settings.exposure: 127.0.0.1 for local, 0.0.0.0 for LAN)")
 		noBrowser = flag.Bool("no-browser", false, "do not auto-open the browser")
 		showVer   = flag.Bool("version", false, "print version and exit")
 	)
@@ -58,7 +58,16 @@ func main() {
 	a.Log.Printf("%s v%s — server dir: %s", appName, appVersion, serverDir)
 	a.Log.Printf("language: %s", i18n.Name(a.Config.Language))
 
-	srv := web.New(a, *bindAddr, *webPort)
+	effectiveBind := *bindAddr
+	if effectiveBind == "" {
+		if a.Config.Exposure == "internet" {
+			effectiveBind = "0.0.0.0"
+		} else {
+			effectiveBind = "127.0.0.1"
+		}
+	}
+
+	srv := web.New(a, effectiveBind, *webPort)
 	ctx, cancel := signalContext()
 	defer cancel()
 
@@ -68,7 +77,7 @@ func main() {
 		}
 	}()
 
-	url := fmt.Sprintf("http://%s:%d/", displayHost(*bindAddr), *webPort)
+	url := fmt.Sprintf("http://%s:%d/", displayHost(effectiveBind), *webPort)
 	a.Log.Printf("panel: %s", url)
 	if !*noBrowser {
 		time.AfterFunc(400*time.Millisecond, func() { openBrowser(url) })

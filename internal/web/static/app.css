@@ -3,7 +3,8 @@
   Copyright (c) 2026 Aristarh Ucolov.
 */
 
-:root {
+:root,
+html[data-theme="dark"] {
   --bg: #10141a;
   --bg-soft: #151b24;
   --panel: #1b2230;
@@ -18,6 +19,22 @@
   --error: #ff5a5f;
   --radius: 10px;
   --shadow: 0 4px 18px rgba(0,0,0,.25);
+}
+
+html[data-theme="light"] {
+  --bg: #f4f6fa;
+  --bg-soft: #ffffff;
+  --panel: #ffffff;
+  --panel-alt: #eef2f8;
+  --border: #d4dbe5;
+  --text: #1a2130;
+  --text-dim: #5c6a80;
+  --accent: #d85a10;
+  --accent-hover: #ef6a1f;
+  --ok: #1f9b57;
+  --warn: #c88a0e;
+  --error: #d1403f;
+  --shadow: 0 4px 18px rgba(15,25,45,.08);
 }
 
 * { box-sizing: border-box; }
@@ -281,3 +298,46 @@ tbody tr:hover { background: rgba(255,122,43,0.06); }
 }
 .order-row:hover { border-color: var(--accent); }
 .order-row.dragging { opacity: 0.4; cursor: grabbing; }
+
+.donate-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.donate-link:hover { color: var(--accent); }
+.footer { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px; color: var(--text-dim); font-size: 12px; }
+.footer-sep { opacity: .4; }
+
+.icon-btn { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 14px; }
+.icon-btn:hover { border-color: var(--accent); }
+
+.two-col { display: grid; grid-template-columns: 280px 1fr; gap: 14px; }
+.two-col .left  { border-right: 1px solid var(--border); padding-right: 12px; }
+.tree-node { padding: 3px 6px; cursor: pointer; border-radius: 4px; font-size: 13px; }
+.tree-node:hover { background: var(--panel-alt); }
+.tree-node.active { background: var(--accent); color: #fff; }
+.tree-node.dir { color: var(--text-dim); font-weight: 600; }
+
+.donate-card {
+  background: linear-gradient(135deg, rgba(255,122,43,0.08), rgba(255,122,43,0.02));
+  border: 1px solid rgba(255,122,43,0.3);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-top: 16px;
+}
+.donate-card h3 { margin: 0 0 6px 0; color: var(--accent); }
+.donate-card p  { margin: 0 0 10px 0; color: var(--text-dim); }
+.donate-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+.donate-buttons a {
+  padding: 8px 14px; border-radius: 6px; color: #fff; font-weight: 600; font-size: 13px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.donate-buttons a.coffee { background: #ff813f; }
+.donate-buttons a.coffee:hover { background: #ff9254; }
+.donate-buttons a.da     { background: #ec4980; }
+.donate-buttons a.da:hover     { background: #f25a8f; }
+
+.issue-row { display: grid; grid-template-columns: 80px 1fr 60px 2fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.issue-row .sev-error   { color: var(--error); font-weight: 600; }
+.issue-row .sev-warning { color: var(--warn); }
+.issue-row .sev-info    { color: var(--text-dim); }
