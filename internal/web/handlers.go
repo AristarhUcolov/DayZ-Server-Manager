@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,7 +63,11 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/mods/uninstall", methods(h.modsUninstall, http.MethodPost))
 	mux.HandleFunc("/api/mods/update", methods(h.modsUpdate, http.MethodPost))
 	mux.HandleFunc("/api/mods/update-all", methods(h.modsUpdateAll, http.MethodPost))
+	mux.HandleFunc("/api/mods/sync-all", methods(h.modsSyncAll, http.MethodPost))
 	mux.HandleFunc("/api/mods/sync-keys", methods(h.modsSyncKeys, http.MethodPost))
+	// Steam Workshop collection URL importer: fetches the public collection
+	// HTML and matches child IDs to @Mod folders via meta.cpp.
+	mux.HandleFunc("/api/mods/collection/resolve", methods(h.modsCollectionResolve, http.MethodPost))
 	mux.HandleFunc("/api/mods/enable", methods(h.modsEnable, http.MethodPost))
 	mux.HandleFunc("/api/mods/order", methods(h.modsOrder, http.MethodPost))
 	// Scan a mod folder for bundled types.xml so the user can merge them
@@ -75,6 +80,23 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/types/item", methods(h.typesItem, http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete))
 	mux.HandleFunc("/api/types/presets", methods(h.typesPresets, http.MethodGet))
 	mux.HandleFunc("/api/types/apply-preset", methods(h.typesApplyPreset, http.MethodPost))
+	// Bulk-edit endpoint: apply a scalar field patch to many types at once.
+	mux.HandleFunc("/api/types/bulk-patch", methods(h.typesBulkPatch, http.MethodPost))
+
+	// BattlEye configuration files (bans, whitelist, script filters, ...).
+	mux.HandleFunc("/api/battleye/list", methods(h.battleyeList, http.MethodGet))
+	mux.HandleFunc("/api/battleye/read", methods(h.battleyeRead, http.MethodGet))
+	mux.HandleFunc("/api/battleye/write", methods(h.battleyeWrite, http.MethodPost))
+
+	// Mission central-economy files (globals.xml, economy.xml, types.xml,
+	// events.xml, cfgspawnabletypes.xml, ...). Read-only listing +
+	// raw-text edit, without the strongly-typed editor's constraints.
+	mux.HandleFunc("/api/mission/db/list", methods(h.missionDBList, http.MethodGet))
+	mux.HandleFunc("/api/mission/db/read", methods(h.missionDBRead, http.MethodGet))
+	mux.HandleFunc("/api/mission/db/write", methods(h.missionDBWrite, http.MethodPost))
+
+	// Scheduled RCon announcements CRUD (stored in manager config).
+	mux.HandleFunc("/api/announcements", methods(h.announcementsList, http.MethodGet, http.MethodPost))
 
 	// Moded types files.
 	mux.HandleFunc("/api/moded", methods(h.modedList, http.MethodGet))
@@ -116,6 +138,16 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/logs/list", methods(h.logsList, http.MethodGet))
 	mux.HandleFunc("/api/logs/read", methods(h.logsRead, http.MethodGet))
 	mux.HandleFunc("/api/logs/stream", methods(h.logsStream, http.MethodGet))
+
+	// ADM log viewer.
+	mux.HandleFunc("/api/admlog/recent", methods(h.admlogRecent, http.MethodGet))
+
+	// Config zip backup (export / import).
+	mux.HandleFunc("/api/backup/export", methods(h.backupExport, http.MethodGet))
+	mux.HandleFunc("/api/backup/import", methods(h.backupImport, http.MethodPost))
+
+	// Dashboard live metrics.
+	mux.HandleFunc("/api/dashboard/metrics", methods(h.dashboardMetrics, http.MethodGet))
 
 	// RCon.
 	mux.HandleFunc("/api/rcon/players", methods(h.rconPlayers, http.MethodGet))
@@ -1010,6 +1042,50 @@ func (h *handlers) modedDelete(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 // Raw files tree/editor. Confined to the server directory.
 
+// binaryExts lists file extensions the editor refuses to open. Opening a
+// multi-megabyte PE binary as text would freeze the browser (it did — that
+// was the reported RPT/files crash). Users interested in non-DayZ files
+// can still reach them via the OS file explorer.
+var binaryExts = map[string]bool{
+	".exe": true, ".dll": true, ".so": true, ".dylib": true,
+	".pbo": true, ".bin": true, ".bisign": true, ".bikey": true,
+	".zip": true, ".rar": true, ".7z": true, ".tar": true, ".gz": true,
+	".pak": true, ".mdk": true, ".mtk": true,
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".bmp": true,
+	".ico": true, ".webp": true, ".tga": true, ".paa": true,
+	".wav": true, ".ogg": true, ".mp3": true, ".mp4": true,
+	".p3d": true, ".rvmat": true, ".edds": true, ".tex": true,
+}
+
+// hiddenFiles lists file/dir names the editor hides entirely. Keeps the
+// tree focused on server configuration (profiles, mpmissions, cfg/xml)
+// rather than cluttering it with the manager's own state or backup trash.
+var hiddenNames = map[string]bool{
+	".dayz-manager": true,
+	"thumbs.db":     true,
+	".ds_store":     true,
+	"node_modules":  true,
+}
+
+func isBinaryFile(name string) bool {
+	return binaryExts[strings.ToLower(filepath.Ext(name))]
+}
+
+func isHidden(name string) bool {
+	lower := strings.ToLower(name)
+	if hiddenNames[lower] {
+		return true
+	}
+	// Strip per-backup timestamp suffix (.bak.2026-04-20T12-00-00).
+	if strings.Contains(lower, ".bak") {
+		return true
+	}
+	if strings.HasSuffix(lower, ".tmp") {
+		return true
+	}
+	return false
+}
+
 func (h *handlers) filesTree(w http.ResponseWriter, r *http.Request) {
 	rel := r.URL.Query().Get("path")
 	full, err := h.resolve(rel)
@@ -1023,16 +1099,24 @@ func (h *handlers) filesTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type node struct {
-		Name  string `json:"name"`
-		Path  string `json:"path"`
-		IsDir bool   `json:"isDir"`
-		Size  int64  `json:"size"`
+		Name     string `json:"name"`
+		Path     string `json:"path"`
+		IsDir    bool   `json:"isDir"`
+		Size     int64  `json:"size"`
+		Binary   bool   `json:"binary,omitempty"`
 	}
 	out := []node{}
 	for _, e := range entries {
+		name := e.Name()
+		if isHidden(name) {
+			continue
+		}
+		if !e.IsDir() && isBinaryFile(name) {
+			continue
+		}
 		info, _ := e.Info()
-		child := filepath.ToSlash(filepath.Join(rel, e.Name()))
-		out = append(out, node{Name: e.Name(), Path: child, IsDir: e.IsDir(), Size: sizeOrZero(info)})
+		child := filepath.ToSlash(filepath.Join(rel, name))
+		out = append(out, node{Name: name, Path: child, IsDir: e.IsDir(), Size: sizeOrZero(info)})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].IsDir != out[j].IsDir {
@@ -1043,11 +1127,29 @@ func (h *handlers) filesTree(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{"path": rel, "entries": out})
 }
 
+// Files above this size would freeze the browser if rendered inline. A
+// fresh DayZ types.xml is ~600 KB, the largest legitimate hand-edited file
+// in a mission tree is well under 2 MB, so this is a safe ceiling.
+const maxEditableBytes = 2 * 1024 * 1024
+
 func (h *handlers) filesRead(w http.ResponseWriter, r *http.Request) {
 	rel := r.URL.Query().Get("path")
 	full, err := h.resolve(rel)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if isBinaryFile(filepath.Base(full)) {
+		http.Error(w, "binary file — not editable in the panel", http.StatusUnsupportedMediaType)
+		return
+	}
+	st, err := os.Stat(full)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if st.Size() > maxEditableBytes {
+		http.Error(w, fmt.Sprintf("file too large (%d bytes) — panel editor limit is %d", st.Size(), maxEditableBytes), http.StatusRequestEntityTooLarge)
 		return
 	}
 	f, err := os.Open(full)
@@ -1106,8 +1208,10 @@ func (h *handlers) logsList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, dzlogs.Discover(h.app.ServerDir, h.app.Config.ProfilesDir))
 }
 
-// logsRead returns a static snapshot — the last N bytes of a log file.
-// Handy for the initial scrollback on the Logs tab.
+// logsRead returns a tail snapshot of a log file. Cap is deliberately tight
+// (128 KB default, 512 KB max) — the DayZ RPT grows to tens of megabytes and
+// dumping that into the DOM freezes the browser. Callers can request more
+// via ?bytes= up to the cap.
 func (h *handlers) logsRead(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	path := dzlogs.Resolve(h.app.ServerDir, h.app.Config.ProfilesDir, id)
@@ -1115,21 +1219,52 @@ func (h *handlers) logsRead(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown log id", http.StatusBadRequest)
 		return
 	}
-	const maxBytes = 256 * 1024
+	const (
+		defaultBytes = 128 * 1024
+		hardCap      = 512 * 1024
+	)
+	want := int64(defaultBytes)
+	if v := r.URL.Query().Get("bytes"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			if n > hardCap {
+				n = hardCap
+			}
+			want = n
+		}
+	}
 	f, err := os.Open(path)
 	if err != nil {
-		writeJSON(w, map[string]interface{}{"path": path, "content": ""})
+		writeJSON(w, map[string]interface{}{"path": path, "content": "", "size": 0, "truncated": false})
 		return
 	}
 	defer f.Close()
 	st, _ := f.Stat()
+	size := int64(0)
 	offset := int64(0)
-	if st != nil && st.Size() > maxBytes {
-		offset = st.Size() - maxBytes
+	truncated := false
+	if st != nil {
+		size = st.Size()
+		if size > want {
+			offset = size - want
+			truncated = true
+		}
 	}
 	_, _ = f.Seek(offset, 0)
 	body, _ := io.ReadAll(f)
-	writeJSON(w, map[string]interface{}{"path": path, "content": string(body)})
+	// If we seeked mid-line, drop the first (partial) line so the UI does
+	// not display a misleading fragment at the top.
+	if offset > 0 {
+		if nl := strings.IndexByte(string(body), '\n'); nl >= 0 {
+			body = body[nl+1:]
+		}
+	}
+	writeJSON(w, map[string]interface{}{
+		"path":      path,
+		"content":   string(body),
+		"size":      size,
+		"offset":    offset,
+		"truncated": truncated,
+	})
 }
 
 // logsStream is a Server-Sent Events endpoint. EventSource on the client

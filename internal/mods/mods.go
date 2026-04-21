@@ -214,6 +214,61 @@ func UpdateAll(serverDir, vanillaDayZPath string) ([]string, error) {
 	return updated, nil
 }
 
+// SyncAllResult describes what SyncAll did so the UI can show a detailed toast
+// instead of a silent "done".
+type SyncAllResult struct {
+	Installed []string `json:"installed"`
+	Updated   []string `json:"updated"`
+	Skipped   []string `json:"skipped"` // already up to date
+}
+
+// SyncAll brings the server directory in line with the client !Workshop:
+// every Workshop mod missing on the server is installed, every outdated one
+// is updated. Nothing is removed — if a mod is only present server-side
+// (user copied manually, or Workshop version was unsubscribed) it stays.
+// Keys are synced once at the end. This is the one-click "match Workshop"
+// the users asked for instead of tracking each mod manually.
+func SyncAll(serverDir, vanillaDayZPath string, only []string) (*SyncAllResult, error) {
+	if vanillaDayZPath == "" {
+		return nil, ErrNoVanillaPath
+	}
+	list, err := List(serverDir, vanillaDayZPath)
+	if err != nil {
+		return nil, err
+	}
+	filter := map[string]bool{}
+	for _, n := range only {
+		filter[n] = true
+	}
+	res := &SyncAllResult{}
+	for _, m := range list {
+		if len(filter) > 0 && !filter[m.Name] {
+			continue
+		}
+		if !m.AvailableInWorkshop {
+			continue
+		}
+		switch {
+		case !m.InstalledInServer:
+			if err := Install(serverDir, vanillaDayZPath, m.Name); err != nil {
+				return res, fmt.Errorf("install %s: %w", m.Name, err)
+			}
+			res.Installed = append(res.Installed, m.Name)
+		case m.UpdateAvailable:
+			if err := Update(serverDir, vanillaDayZPath, m.Name); err != nil {
+				return res, fmt.Errorf("update %s: %w", m.Name, err)
+			}
+			res.Updated = append(res.Updated, m.Name)
+		default:
+			res.Skipped = append(res.Skipped, m.Name)
+		}
+	}
+	// One final key sync catches any bikeys that may have moved between
+	// subfolders during the update.
+	_ = SyncKeys(serverDir, nil)
+	return res, nil
+}
+
 // Uninstall removes @ModName from the server directory. Keys are removed from
 // <serverDir>/keys ONLY if no other still-installed mod provides the same key
 // file — so uninstalling one component of a mod suite (e.g. @DayZ-Expansion-AI)

@@ -81,18 +81,54 @@ func New(serverDir, name, version, author string) (*App, error) {
 
 // ApplyRConConfig reconfigures the RCon manager from the current Config.
 // Call after any config update or server restart.
+//
+// If the manager config does not have an RCon password set, we fall back to
+// reading battleye/beserver_x64.cfg — that's where DayZ actually stores the
+// credential, so most users never have to type it twice. The manager
+// override still wins so the Settings page can force a specific password.
 func (a *App) ApplyRConConfig() {
 	port := a.Config.RConPort
+	password := a.Config.RConPassword
+
+	if password == "" || port == 0 {
+		beDir := a.Config.BEPath
+		if beDir != "" && !filepath.IsAbs(beDir) {
+			beDir = filepath.Join(a.ServerDir, beDir)
+		}
+		if be := config.FindBEConfig(beDir); be != nil {
+			if password == "" {
+				password = be.RConPassword
+			}
+			if port == 0 && be.RConPort != 0 {
+				port = be.RConPort
+			}
+		}
+	}
+
 	if port == 0 {
 		port = a.Config.ServerPort + 1 // DayZ default
 	}
-	a.RCon.Configure("127.0.0.1", port, a.Config.RConPassword)
+	a.RCon.Configure("127.0.0.1", port, password)
 }
 
 func (a *App) SaveConfig() error {
 	a.configMu.Lock()
 	defer a.configMu.Unlock()
 	return config.SaveManager(a.configPath, a.Config)
+}
+
+// ReloadConfig re-reads manager.json from disk and replaces the in-memory
+// config. Used after a backup restore so the rest of the process sees the
+// restored values without a restart.
+func (a *App) ReloadConfig() error {
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
+	cfg, err := config.LoadManager(a.configPath)
+	if err != nil {
+		return err
+	}
+	*a.Config = *cfg
+	return nil
 }
 
 func (a *App) Close() error {

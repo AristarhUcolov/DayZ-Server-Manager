@@ -242,6 +242,8 @@ func (c *Controller) StartAutoRestartLoop() {
 	// Scheduled cron-style restarts: check every minute whether any of the
 	// cfg.ScheduledRestarts ("HH:MM") entries matches local time.
 	go c.scheduledRestartLoop(stop)
+	// Scheduled RCon announcements (rules reminders, discord links, events).
+	go c.scheduledAnnounceLoop(stop)
 
 	// Interval-based auto-restart (the classic .bat behavior).
 	go func() {
@@ -289,6 +291,44 @@ func (c *Controller) StartAutoRestartLoop() {
 			}
 		}
 	}()
+}
+
+// scheduledAnnounceLoop fires once per minute and broadcasts any enabled
+// announcement whose Time matches current HH:MM. A dedup map prevents
+// firing the same announcement twice within its minute window in case the
+// loop gets delayed and wakes up twice inside the same minute.
+func (c *Controller) scheduledAnnounceLoop(stop <-chan struct{}) {
+	fired := map[string]string{} // key → last yyyy-mm-ddTHH:MM we fired
+	for {
+		now := time.Now()
+		next := now.Truncate(time.Minute).Add(time.Minute)
+		select {
+		case <-stop:
+			return
+		case <-time.After(time.Until(next)):
+		}
+		if c.Broadcast == nil || !c.IsRunning() {
+			continue
+		}
+		hhmm := time.Now().Format("15:04")
+		stamp := time.Now().Format("2006-01-02T15:04")
+		for i, a := range c.cfg.ScheduledAnnouncements {
+			if !a.Enabled || strings.TrimSpace(a.Time) != hhmm {
+				continue
+			}
+			key := fmt.Sprintf("%d:%s", i, a.Time)
+			if fired[key] == stamp {
+				continue
+			}
+			fired[key] = stamp
+			msg := a.Message
+			go func() {
+				if err := c.Broadcast.Say(msg); err != nil {
+					c.log.Printf("announce %q: %v", msg, err)
+				}
+			}()
+		}
+	}
 }
 
 // scheduledRestartLoop wakes at the start of every minute and fires a

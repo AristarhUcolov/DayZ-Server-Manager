@@ -150,6 +150,73 @@ func (d *TypesDoc) Sort() {
 	})
 }
 
+// BulkPatch applies the non-nil numeric fields of patch to every type named
+// in names (case-insensitive). Scalar fields only — Usages/Values/Tags are
+// intentionally left out because the meaning of "merge" vs "replace" for
+// those is ambiguous at bulk scale and the per-type editor already handles
+// them. Returns the count of types actually touched.
+type BulkFieldPatch struct {
+	Nominal  *int `json:"nominal,omitempty"`
+	Lifetime *int `json:"lifetime,omitempty"`
+	Restock  *int `json:"restock,omitempty"`
+	Min      *int `json:"min,omitempty"`
+	QuantMin *int `json:"quantmin,omitempty"`
+	QuantMax *int `json:"quantmax,omitempty"`
+	Cost     *int `json:"cost,omitempty"`
+	Category *string `json:"category,omitempty"`
+}
+
+func (d *TypesDoc) BulkPatch(names []string, patch BulkFieldPatch) int {
+	want := map[string]struct{}{}
+	for _, n := range names {
+		want[strings.ToLower(n)] = struct{}{}
+	}
+	touched := 0
+	for i := range d.Types {
+		if _, ok := want[strings.ToLower(d.Types[i].Name)]; !ok {
+			continue
+		}
+		t := &d.Types[i]
+		if patch.Nominal != nil {
+			v := *patch.Nominal
+			t.Nominal = &v
+		}
+		if patch.Lifetime != nil {
+			v := *patch.Lifetime
+			t.Lifetime = &v
+		}
+		if patch.Restock != nil {
+			v := *patch.Restock
+			t.Restock = &v
+		}
+		if patch.Min != nil {
+			v := *patch.Min
+			t.Min = &v
+		}
+		if patch.QuantMin != nil {
+			v := *patch.QuantMin
+			t.QuantMin = &v
+		}
+		if patch.QuantMax != nil {
+			v := *patch.QuantMax
+			t.QuantMax = &v
+		}
+		if patch.Cost != nil {
+			v := *patch.Cost
+			t.Cost = &v
+		}
+		if patch.Category != nil {
+			if *patch.Category == "" {
+				t.Category = nil
+			} else {
+				t.Category = &NamedRef{Name: *patch.Category}
+			}
+		}
+		touched++
+	}
+	return touched
+}
+
 // ---------------------------------------------------------------------------
 // Spawn presets — quick bulk tag/value/usage assignments the user can apply
 // from the UI. Kept as a simple built-in list; the UI can extend it later.

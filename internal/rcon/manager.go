@@ -53,7 +53,7 @@ func (m *Manager) Connect() error {
 		return nil
 	}
 	if m.host == "" || m.port == 0 || m.pass == "" {
-		return fmt.Errorf("rcon: not configured (set host/port/password in settings)")
+		return fmt.Errorf("rcon: not configured — set RConPassword in battleye/beserver_x64.cfg (or override in Settings)")
 	}
 	c, err := Dial(fmt.Sprintf("%s:%d", m.host, m.port), m.pass)
 	if err != nil {

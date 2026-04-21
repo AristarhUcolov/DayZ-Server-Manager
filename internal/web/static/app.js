@@ -225,7 +225,6 @@ async function logout() {
 
 Views.dashboard = async (root) => {
   await refreshStatus();
-  const s = State.serverStatus;
 
   // Silent probe — if a newer manager version is out, show a non-blocking
   // banner. Failures are swallowed; this should never block the dashboard.
@@ -242,42 +241,124 @@ Views.dashboard = async (root) => {
     } catch {}
   })();
 
-  root.append(
-    h('div', { class: 'grid-3' }, [
-      h('div', { class: 'card' }, [
-        h('h3', { i18n: 'nav.server' }),
-        h('div', { class: 'kv' }, [
-          h('div', { class: 'k', i18n: 'status.running' }),
-          h('div', { text: s.running ? 'YES' : 'NO' }),
-          h('div', { class: 'k', i18n: 'status.pid' }),
-          h('div', { text: s.pid || '—' }),
-          h('div', { class: 'k', i18n: 'status.uptime' }),
-          h('div', { text: s.uptime || '—' }),
-          h('div', { class: 'k', i18n: 'status.port' }),
-          h('div', { text: s.port }),
+  const metricsHost = h('div');
+  root.append(metricsHost);
+
+  const render = (m) => {
+    metricsHost.innerHTML = '';
+    const s = {
+      running: m.running, pid: m.pid, uptime: m.uptime, port: m.port,
+    };
+    const mods = m.mods || { total: 0, installed: 0, active: 0 };
+    const disk = m.diskFreeBytes != null ? bytes(m.diskFreeBytes) : '—';
+    const players = m.playerCount != null ? m.playerCount : '—';
+    const recent = Array.isArray(m.recentAdm) ? m.recentAdm : [];
+
+    metricsHost.append(
+      h('div', { class: 'grid-3' }, [
+        h('div', { class: 'card' }, [
+          h('h3', { i18n: 'nav.server' }),
+          h('div', { class: 'kv' }, [
+            h('div', { class: 'k', i18n: 'status.running' }),
+            h('div', { text: s.running ? 'YES' : 'NO' }),
+            h('div', { class: 'k', i18n: 'status.pid' }),
+            h('div', { text: s.pid || '—' }),
+            h('div', { class: 'k', i18n: 'status.uptime' }),
+            h('div', { text: s.uptime || '—' }),
+            h('div', { class: 'k', i18n: 'status.port' }),
+            h('div', { text: s.port }),
+            h('div', { class: 'k', i18n: 'status.players' }),
+            h('div', { text: String(players) }),
+          ]),
+          h('div', { class: 'actions' }, [
+            s.running
+              ? h('button', { class: 'danger', i18n: 'action.stop',
+                  onclick: async () => { try { await api.post('/api/server/stop'); await navigate('dashboard'); } catch(e){handleErr(e);} }})
+              : h('button', { class: 'primary', i18n: 'action.start',
+                  onclick: async () => { try { await api.post('/api/server/start'); await navigate('dashboard'); } catch(e){handleErr(e);} }}),
+            h('button', { i18n: 'action.restart',
+              onclick: async () => { try { await api.post('/api/server/restart'); await navigate('dashboard'); } catch(e){handleErr(e);} }}),
+          ]),
         ]),
-        h('div', { class: 'actions' }, [
-          s.running
-            ? h('button', { class: 'danger', i18n: 'action.stop',
-                onclick: async () => { try { await api.post('/api/server/stop'); await navigate('dashboard'); } catch(e){handleErr(e);} }})
-            : h('button', { class: 'primary', i18n: 'action.start',
-                onclick: async () => { try { await api.post('/api/server/start'); await navigate('dashboard'); } catch(e){handleErr(e);} }}),
-          h('button', { i18n: 'action.restart',
-            onclick: async () => { try { await api.post('/api/server/restart'); await navigate('dashboard'); } catch(e){handleErr(e);} }}),
+        h('div', { class: 'card' }, [
+          h('h3', { i18n: 'dashboard.mods' }),
+          h('div', { class: 'kv' }, [
+            h('div', { class: 'k', i18n: 'dashboard.mods.active' }),
+            h('div', { text: String(mods.active) }),
+            h('div', { class: 'k', i18n: 'dashboard.mods.installed' }),
+            h('div', { text: String(mods.installed) }),
+            h('div', { class: 'k', text: 'total' }),
+            h('div', { text: String(mods.total) }),
+          ]),
+          h('div', { class: 'actions' }, [
+            h('button', { i18n: 'nav.mods', onclick: () => navigate('mods') }),
+          ]),
         ]),
-      ]),
+        h('div', { class: 'card' }, [
+          h('h3', { i18n: 'dashboard.disk' }),
+          h('p', { class: 'stat', text: disk }),
+          h('div', { class: 'actions' }, [
+            h('button', { i18n: 'nav.validator', onclick: () => navigate('validator') }),
+          ]),
+        ]),
+      ])
+    );
+
+    // Recent ADM events strip.
+    const events = recent.slice().reverse();
+    const list = h('div', { class: 'adm-strip' });
+    if (events.length === 0) {
+      list.append(h('p', { class: 'hint', i18n: 'admlog.noEvents' }));
+    } else {
+      for (const e of events) {
+        list.append(admEventRow(e));
+      }
+    }
+    metricsHost.append(
       h('div', { class: 'card' }, [
-        h('h3', { i18n: 'nav.mods' }),
-        h('p', { text: `${(State.config.mods || []).length} active` }),
-        h('button', { i18n: 'nav.mods', onclick: () => navigate('mods') }),
-      ]),
-      h('div', { class: 'card' }, [
-        h('h3', { i18n: 'nav.validator' }),
-        h('button', { i18n: 'action.validate', onclick: () => navigate('validator') }),
-      ]),
-    ])
-  );
+        h('div', { class: 'toolbar' }, [
+          h('h3', { i18n: 'dashboard.recentAdm' }),
+          h('button', { i18n: 'nav.admlog', onclick: () => navigate('admlog') }),
+        ]),
+        list,
+      ])
+    );
+  };
+
+  let stopped = false;
+  const tick = async () => {
+    if (stopped) return;
+    try {
+      const m = await api.get('/api/dashboard/metrics');
+      if (!stopped) render(m);
+    } catch {}
+  };
+  await tick();
+  const iv = setInterval(tick, 5000);
+  root._teardown = () => { stopped = true; clearInterval(iv); };
 };
+
+function admEventRow(e) {
+  const typeClass = 'adm-type adm-' + (e.type || 'other');
+  const pieces = [
+    h('span', { class: 'adm-time', text: e.time || '' }),
+    h('span', { class: typeClass, text: e.type || '' }),
+  ];
+  if (e.player) pieces.push(h('span', { class: 'adm-player', text: e.player }));
+  if (e.type === 'kill' || e.type === 'hit') {
+    if (e.target) pieces.push(h('span', { class: 'adm-arrow', text: '→' }));
+    if (e.target) pieces.push(h('span', { class: 'adm-player', text: e.target }));
+    const meta = [];
+    if (e.weapon) meta.push(e.weapon);
+    if (e.distance) meta.push(e.distance + 'm');
+    if (meta.length) pieces.push(h('span', { class: 'adm-meta', text: '(' + meta.join(', ') + ')' }));
+  } else if (e.type === 'chat' && e.message) {
+    pieces.push(h('span', { class: 'adm-msg', text: e.message }));
+  } else if (e.message) {
+    pieces.push(h('span', { class: 'adm-meta', text: e.message }));
+  }
+  return h('div', { class: 'adm-row' }, pieces);
+}
 
 // --------------------------------------------------------------------- server.cfg
 
@@ -456,6 +537,20 @@ Views.mods = async (root) => {
     h('button', { i18n: 'action.syncKeys',
       onclick: async () => { try { await api.post('/api/mods/sync-keys'); toast('keys synced','ok'); } catch (e) { handleErr(e); } }
     }),
+    h('button', { class: 'primary', i18n: 'mods.syncAll',
+      onclick: async () => {
+        if (!confirm(t('mods.syncAll.confirm'))) return;
+        try {
+          const r = await api.post('/api/mods/sync-all', {});
+          const parts = [];
+          if (r.installed && r.installed.length) parts.push(`+${r.installed.length} installed`);
+          if (r.updated   && r.updated.length)   parts.push(`~${r.updated.length} updated`);
+          if (r.skipped   && r.skipped.length)   parts.push(`${r.skipped.length} up-to-date`);
+          toast(parts.join(', ') || 'nothing to do', 'ok');
+          await navigate('mods');
+        } catch (e) { handleErr(e); }
+      }
+    }),
   ]);
   if (outdatedCount > 0) {
     toolbar.append(h('button', {
@@ -470,11 +565,67 @@ Views.mods = async (root) => {
     }, [h('span', { i18n: 'action.updateAll' }), h('span', { text: ` (${outdatedCount})` })]));
   }
 
+  // Workshop Collection URL importer. Users paste a
+  // `steamcommunity.com/.../?id=...` link, we fetch the public collection
+  // page and match child IDs against the !Workshop folder by meta.cpp.
+  const collectionInput = h('input', { type: 'text', placeholder: 'https://steamcommunity.com/sharedfiles/filedetails/?id=...' });
+  const collectionResults = h('div', { class: 'hint', style: { marginTop: '8px' } });
+  const collectionCard = h('div', { class: 'card' }, [
+    h('h3', { i18n: 'mods.collection.title' }),
+    h('p', { class: 'hint', i18n: 'mods.collection.hint' }),
+    h('div', { class: 'toolbar' }, [
+      collectionInput,
+      h('button', { class: 'primary', i18n: 'mods.collection.resolve',
+        onclick: async () => {
+          const url = collectionInput.value.trim();
+          if (!url) return;
+          try {
+            const r = await api.post('/api/mods/collection/resolve', { url, save: true });
+            collectionResults.innerHTML = '';
+            const ok = r.resolved || [];
+            const missing = r.missing || [];
+            collectionResults.append(
+              h('div', { text: `Collection #${r.collectionId}: ${ok.length} resolved, ${missing.length} missing` }),
+            );
+            if (ok.length) {
+              const list = h('ul');
+              for (const m of ok) list.append(h('li', { text: `${m.modName}${m.displayName ? ' — ' + m.displayName : ''} (id ${m.publishedId})` }));
+              collectionResults.append(list);
+              const activate = h('button', { class: 'primary', style: { marginTop: '8px' }, text: t('mods.collection.activate'),
+                onclick: async () => {
+                  for (const m of ok) {
+                    try { await api.post('/api/mods/enable', { mod: m.modName, enabled: true }); } catch {}
+                  }
+                  toast('activated', 'ok');
+                  await navigate('mods');
+                }
+              });
+              collectionResults.append(activate);
+            }
+            if (missing.length) {
+              const dl = h('div', { style: { marginTop: '8px' } });
+              dl.append(h('div', { text: t('mods.collection.missing') }));
+              for (const id of missing) {
+                dl.append(h('div', {}, h('a', {
+                  href: `https://steamcommunity.com/sharedfiles/filedetails/?id=${id}`,
+                  target: '_blank', rel: 'noopener', text: `subscribe id ${id}`,
+                })));
+              }
+              collectionResults.append(dl);
+            }
+          } catch (e) { handleErr(e); }
+        }
+      }),
+    ]),
+    collectionResults,
+  ]);
+
   wrap.append(h('div', { class: 'card' }, [
     h('h2', { i18n: 'mods.title' }),
     toolbar,
     tbl,
   ]));
+  wrap.append(collectionCard);
 
   // Load-order (drag-to-reorder) panel. Reflects the current config.mods list.
   const orderWrap = h('div', { class: 'card' }, [
@@ -564,6 +715,52 @@ Views.types = async (root) => {
     presetsWrap.append(pills);
     presetsWrap.append(h('p', { class: 'hint', i18n: 'types.presets.hint' }));
   } catch (e) { /* empty */ }
+
+  // Bulk-edit panel. Scalar fields only — the per-type editor handles
+  // usages/values/tags because bulk semantics for those are ambiguous.
+  const bulkFields = {
+    nominal: h('input', { type: 'number', placeholder: 'nominal' }),
+    min: h('input', { type: 'number', placeholder: 'min' }),
+    lifetime: h('input', { type: 'number', placeholder: 'lifetime' }),
+    restock: h('input', { type: 'number', placeholder: 'restock' }),
+    quantmin: h('input', { type: 'number', placeholder: 'quantmin' }),
+    quantmax: h('input', { type: 'number', placeholder: 'quantmax' }),
+    cost: h('input', { type: 'number', placeholder: 'cost' }),
+    category: h('input', { type: 'text', placeholder: 'category' }),
+  };
+  const bulkGrid = h('div', { class: 'grid-3' });
+  for (const [k, el] of Object.entries(bulkFields)) {
+    bulkGrid.append(h('div', {}, [h('label', { text: k }), el]));
+  }
+  const bulkWrap = h('div', { class: 'card' }, [
+    h('h3', { i18n: 'types.bulk' }),
+    h('p', { class: 'hint', i18n: 'types.bulk.hint' }),
+    bulkGrid,
+    h('div', { class: 'actions' }, [
+      h('button', { class: 'primary', i18n: 'types.bulk.apply',
+        onclick: async () => {
+          const selected = [...tableWrap.querySelectorAll('input[type=checkbox]:checked')]
+            .map(cb => cb.dataset.name);
+          if (!selected.length) { toast('select types first'); return; }
+          const patch = {};
+          for (const [k, el] of Object.entries(bulkFields)) {
+            const v = el.value.trim();
+            if (v === '') continue;
+            if (k === 'category') patch.category = v;
+            else patch[k] = Number(v);
+          }
+          if (Object.keys(patch).length === 0) { toast('set at least one field'); return; }
+          try {
+            const r = await api.post('/api/types/bulk-patch', {
+              file: fileSelect.value, names: selected, patch,
+            });
+            toast(`patched ${r.touched} type(s)`, 'ok');
+            await refreshTable();
+          } catch (e) { handleErr(e); }
+        }
+      }),
+    ]),
+  ]);
 
   async function refreshTable() {
     tableWrap.innerHTML = '';
@@ -723,6 +920,7 @@ Views.types = async (root) => {
       tableWrap,
     ]),
     presetsWrap,
+    bulkWrap,
     editorWrap,
   );
   await refreshTable();
@@ -1022,6 +1220,52 @@ Views.logs = async (root) => {
   root._teardown = () => { if (source) source.close(); };
 };
 
+// --------------------------------------------------------------------- admlog
+
+Views.admlog = async (root) => {
+  const typeSel = h('select', {});
+  const types = ['all','connect','disconnect','kill','hit','chat','death','other'];
+  for (const tp of types) {
+    typeSel.append(h('option', { value: tp === 'all' ? '' : tp, i18n: `admlog.type.${tp}` }));
+  }
+  const playerInp = h('input', { type: 'text', placeholder: t('admlog.player') });
+  const reloadBtn = h('button', { i18n: 'action.reload' });
+  const pathLbl = h('small', { class: 'hint' });
+  const list = h('div', { class: 'adm-list' });
+
+  async function load() {
+    list.innerHTML = '';
+    const q = new URLSearchParams();
+    if (typeSel.value) q.set('type', typeSel.value);
+    if (playerInp.value.trim()) q.set('player', playerInp.value.trim());
+    q.set('limit', '500');
+    try {
+      const r = await api.get('/api/admlog/recent?' + q.toString());
+      pathLbl.textContent = r.path || '';
+      if (!r.path) { list.append(h('p', { class: 'hint', i18n: 'admlog.noFile' })); return; }
+      if (!r.events || r.events.length === 0) {
+        list.append(h('p', { class: 'hint', i18n: 'admlog.noEvents' }));
+        return;
+      }
+      for (const e of r.events.slice().reverse()) list.append(admEventRow(e));
+    } catch (err) { handleErr(err); }
+  }
+
+  reloadBtn.onclick = load;
+  typeSel.onchange = load;
+  playerInp.onkeydown = (e) => { if (e.key === 'Enter') load(); };
+
+  root.append(
+    h('div', { class: 'card' }, [
+      h('h2', { i18n: 'admlog.title' }),
+      h('p', { class: 'hint', i18n: 'admlog.hint' }),
+      h('div', { class: 'toolbar' }, [typeSel, playerInp, reloadBtn, pathLbl]),
+      list,
+    ])
+  );
+  await load();
+};
+
 // --------------------------------------------------------------------- rcon
 
 Views.rcon = async (root) => {
@@ -1275,6 +1519,65 @@ Views.events = async (root) => {
 
 // --------------------------------------------------------------------- settings
 
+// Scheduled RCon announcements UI. Renders a mini-editor inside Settings so
+// admins can add/remove lines without hand-editing manager.json.
+function announcementsCard() {
+  const card = h('div', { class: 'card' }, [
+    h('h3', { i18n: 'settings.announcements' }),
+    h('p', { class: 'hint', i18n: 'settings.announcements.hint' }),
+  ]);
+  const list = h('div');
+  card.append(list);
+
+  const state = { items: [] };
+
+  async function reload() {
+    try {
+      const r = await api.get('/api/announcements');
+      state.items = r.announcements || [];
+    } catch { state.items = []; }
+    render();
+  }
+
+  function render() {
+    list.innerHTML = '';
+    state.items.forEach((a, i) => {
+      const time = h('input', { type: 'text', value: a.time, placeholder: 'HH:MM', style: { width: '80px' } });
+      const msg  = h('input', { type: 'text', value: a.message || '', style: { flex: '1' } });
+      const en   = h('input', { type: 'checkbox' });
+      en.checked = !!a.enabled;
+      const row = h('div', { class: 'row', style: { gap: '8px', marginBottom: '6px' } }, [
+        time, msg,
+        h('label', {}, [en, h('span', { text: ' on' })]),
+        h('button', { class: 'danger', text: '×',
+          onclick: () => { state.items.splice(i, 1); render(); } }),
+      ]);
+      time.onchange = () => { state.items[i].time = time.value.trim(); };
+      msg.oninput   = () => { state.items[i].message = msg.value; };
+      en.onchange   = () => { state.items[i].enabled = en.checked; };
+      list.append(row);
+    });
+  }
+
+  card.append(
+    h('div', { class: 'actions' }, [
+      h('button', { i18n: 'settings.announcements.add',
+        onclick: () => { state.items.push({ time: '12:00', message: '', enabled: true }); render(); }
+      }),
+      h('button', { class: 'primary', i18n: 'action.save',
+        onclick: async () => {
+          try {
+            await api.post('/api/announcements', { announcements: state.items });
+            toast('saved', 'ok');
+          } catch (e) { handleErr(e); }
+        }
+      }),
+    ]),
+  );
+  reload();
+  return card;
+}
+
 Views.settings = async (root) => {
   const c = State.config;
   const F = {
@@ -1372,6 +1675,10 @@ Views.settings = async (root) => {
       ]),
     ]),
 
+    announcementsCard(),
+
+    backupCard(),
+
     h('div', { class: 'actions' }, [
       h('button', { class: 'primary', i18n: 'action.save',
         onclick: async () => {
@@ -1396,6 +1703,42 @@ Views.settings = async (root) => {
     donationCard(),
   );
 };
+
+function backupCard() {
+  const fileInp = h('input', { type: 'file', accept: '.zip' });
+  fileInp.style.display = 'none';
+  const resultBox = h('div', { class: 'hint' });
+
+  const exportBtn = h('a', { class: 'btn-link', href: '/api/backup/export', i18n: 'settings.backup.export' });
+  const importBtn = h('button', { i18n: 'settings.backup.import',
+    onclick: () => fileInp.click() });
+
+  fileInp.onchange = async () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('zip', f);
+    try {
+      const r = await fetch('/api/backup/import', {
+        method: 'POST', credentials: 'same-origin', body: fd,
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const data = await r.json();
+      resultBox.textContent = `restored: ${(data.restored || []).length}, skipped: ${(data.skipped || []).length}`;
+      toast(t('action.save'), 'ok');
+      // Refresh config view so restored values surface.
+      State.config = await api.get('/api/config');
+    } catch (e) { handleErr(e); }
+    fileInp.value = '';
+  };
+
+  return h('div', { class: 'card' }, [
+    h('h3', { i18n: 'settings.backup' }),
+    h('p', { class: 'hint', i18n: 'settings.backup.hint' }),
+    h('div', { class: 'actions' }, [exportBtn, importBtn, fileInp]),
+    resultBox,
+  ]);
+}
 
 function donationCard() {
   return h('div', { class: 'donate-card' }, [
@@ -1593,5 +1936,100 @@ function currentRoute() {
   const active = document.querySelector('.nav a.active');
   return active ? active.dataset.route : 'dashboard';
 }
+
+// --------------------------------------------------------------------- battleye
+
+Views.battleye = async (root) => {
+  const d = await api.get('/api/battleye/list');
+  const wrap = h('div');
+  if (State.serverStatus.running) wrap.append(runningBanner());
+
+  const fileSelect = h('select', {});
+  for (const f of d.files) {
+    const label = f.exists ? `${f.name} (${bytes(f.size)}${f.lineHint ? ', ' + f.lineHint : ''})` : `${f.name} (empty)`;
+    fileSelect.append(h('option', { value: f.name, text: label }));
+  }
+  const editor = h('textarea', { rows: 22, style: { width: '100%', fontFamily: 'monospace' } });
+  const load = async () => {
+    try {
+      const r = await api.get('/api/battleye/read?name=' + encodeURIComponent(fileSelect.value));
+      editor.value = r.content || '';
+    } catch (e) { handleErr(e); }
+  };
+  fileSelect.onchange = load;
+
+  wrap.append(h('div', { class: 'card' }, [
+    h('h2', { i18n: 'nav.battleye' }),
+    h('p', { class: 'hint', text: d.dir }),
+    h('div', { class: 'toolbar' }, [
+      fileSelect,
+      h('button', { i18n: 'action.reload', onclick: load }),
+      h('button', { class: 'primary', i18n: 'action.save',
+        onclick: async () => {
+          try {
+            await api.post('/api/battleye/write', { name: fileSelect.value, content: editor.value });
+            toast('saved', 'ok');
+            await navigate('battleye');
+          } catch (e) { handleErr(e); }
+        }
+      }),
+    ]),
+    editor,
+    h('p', { class: 'hint', i18n: 'battleye.hint' }),
+  ]));
+  root.append(wrap);
+  await load();
+};
+
+// --------------------------------------------------------------------- mission DB
+
+Views.missiondb = async (root) => {
+  const d = await api.get('/api/mission/db/list');
+  const wrap = h('div');
+  if (State.serverStatus.running) wrap.append(runningBanner());
+
+  const fileSelect = h('select', {});
+  for (const f of d.files) {
+    const label = f.exists ? `${f.path} (${bytes(f.size)})` : `${f.path} (missing)`;
+    const opt = h('option', { value: f.path, text: label });
+    if (!f.exists) opt.disabled = true;
+    fileSelect.append(opt);
+  }
+  const editor = h('textarea', { rows: 28, style: { width: '100%', fontFamily: 'monospace' } });
+  const load = async () => {
+    try {
+      const r = await api.get('/api/mission/db/read?path=' + encodeURIComponent(fileSelect.value));
+      editor.value = r.content || '';
+    } catch (e) { handleErr(e); }
+  };
+  fileSelect.onchange = load;
+
+  wrap.append(h('div', { class: 'card' }, [
+    h('h2', { i18n: 'nav.missionDb' }),
+    h('p', { class: 'hint', text: d.dir }),
+    h('div', { class: 'toolbar' }, [
+      fileSelect,
+      h('button', { i18n: 'action.reload', onclick: load }),
+      h('button', { class: 'primary', i18n: 'action.save',
+        onclick: async () => {
+          try {
+            await api.post('/api/mission/db/write', { path: fileSelect.value, content: editor.value });
+            toast('saved', 'ok');
+          } catch (e) { handleErr(e); }
+        }
+      }),
+    ]),
+    editor,
+    h('p', { class: 'hint', i18n: 'missionDb.hint' }),
+  ]));
+  root.append(wrap);
+  // Pick the first existing file automatically so the textarea is not blank
+  // on first open.
+  const firstExisting = d.files.find(f => f.exists);
+  if (firstExisting) {
+    fileSelect.value = firstExisting.path;
+    await load();
+  }
+};
 
 main();

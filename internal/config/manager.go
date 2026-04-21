@@ -65,6 +65,21 @@ type Manager struct {
 	// Minutes before a scheduled/auto restart to broadcast via RCon.
 	// Default [5, 3, 1]. Set empty to disable warnings.
 	RestartWarnMinutes []int `json:"restartWarnMinutes"`
+
+	// Scheduled RCon broadcasts — "say all" messages pushed on a daily
+	// schedule. Useful for rules reminders, discord links, event pings.
+	ScheduledAnnouncements []ScheduledAnnouncement `json:"scheduledAnnouncements"`
+
+	// Workshop mod collection URLs users can re-import in one click.
+	// Stored as raw URLs or bare IDs.
+	WorkshopCollections []string `json:"workshopCollections"`
+}
+
+// ScheduledAnnouncement fires once a day at Time (HH:MM, local) when Enabled.
+type ScheduledAnnouncement struct {
+	Time    string `json:"time"`    // "HH:MM"
+	Message string `json:"message"`
+	Enabled bool   `json:"enabled"`
 }
 
 func defaultManager() *Manager {

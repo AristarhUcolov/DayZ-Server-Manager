@@ -341,3 +341,40 @@ tbody tr:hover { background: rgba(255,122,43,0.06); }
 .issue-row .sev-error   { color: var(--error); font-weight: 600; }
 .issue-row .sev-warning { color: var(--warn); }
 .issue-row .sev-info    { color: var(--text-dim); }
+
+/* Dashboard stat numbers */
+.stat { font-size: 22px; font-weight: 700; color: var(--accent); margin: 8px 0 10px 0; }
+
+/* Download-link styled as button */
+.btn-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--panel-alt); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; padding: 6px 12px;
+  text-decoration: none; font-size: 13px; cursor: pointer;
+}
+.btn-link:hover { border-color: var(--accent); }
+
+/* ADM log rows */
+.adm-list, .adm-strip { display: flex; flex-direction: column; gap: 4px; max-height: 600px; overflow-y: auto; }
+.adm-strip { max-height: 260px; }
+.adm-row {
+  display: flex; gap: 10px; align-items: center; font-size: 12px;
+  padding: 4px 8px; border-bottom: 1px solid var(--border);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.adm-time { color: var(--text-dim); min-width: 58px; }
+.adm-type {
+  text-transform: uppercase; font-weight: 700; font-size: 10px;
+  padding: 1px 6px; border-radius: 4px; min-width: 62px; text-align: center;
+  background: var(--panel-alt); color: var(--text-dim);
+}
+.adm-connect    { background: rgba(80,200,120,.15); color: #6edb8d; }
+.adm-disconnect { background: rgba(120,120,120,.15); color: var(--text-dim); }
+.adm-kill       { background: rgba(237,80,80,.18); color: #ff7a7a; }
+.adm-hit        { background: rgba(237,180,80,.15); color: #f4c264; }
+.adm-chat       { background: rgba(80,160,237,.15); color: #7fb6ef; }
+.adm-death      { background: rgba(237,80,80,.1);  color: #ef8c8c; }
+.adm-player     { font-weight: 600; color: var(--text); }
+.adm-arrow      { color: var(--text-dim); }
+.adm-meta       { color: var(--text-dim); font-style: italic; }
+.adm-msg        { color: var(--text); }

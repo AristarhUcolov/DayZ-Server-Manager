@@ -53,20 +53,34 @@ func LoadServerCfg(path string) (*ServerCfg, error) {
 	scan := bufio.NewScanner(f)
 	scan.Buffer(make([]byte, 1<<20), 1<<20)
 
-	var inClass int // brace depth
+	// Class collection tracks a multi-line `class Foo { ... };` block.
+	// `collecting` flips true on the header line and stays true until the
+	// first `{` opens the block and the matching `}` closes it. Using a
+	// separate flag (not just brace depth) is required because stock DayZ
+	// configs place the opening brace on its own next line, so depth is 0
+	// for multiple iterations after the header — we must keep appending
+	// until we've actually seen the body close.
+	var collecting bool
+	var depth int
+	var sawOpen bool
 	var classBuf strings.Builder
 
 	for scan.Scan() {
 		line := scan.Text()
 
-		if inClass > 0 {
+		if collecting {
 			classBuf.WriteString(line)
 			classBuf.WriteByte('\n')
-			inClass += strings.Count(line, "{") - strings.Count(line, "}")
-			if inClass <= 0 {
+			depth += strings.Count(line, "{") - strings.Count(line, "}")
+			if strings.Contains(line, "{") {
+				sawOpen = true
+			}
+			if sawOpen && depth <= 0 {
 				cfg.Entries = append(cfg.Entries, ServerCfgEntry{Kind: EntryClass, Raw: classBuf.String()})
 				classBuf.Reset()
-				inClass = 0
+				collecting = false
+				sawOpen = false
+				depth = 0
 			}
 			continue
 		}
@@ -83,10 +97,18 @@ func LoadServerCfg(path string) (*ServerCfg, error) {
 		if reClass.MatchString(line) {
 			classBuf.WriteString(line)
 			classBuf.WriteByte('\n')
-			inClass = strings.Count(line, "{") - strings.Count(line, "}")
-			if inClass == 0 && strings.Contains(line, "};") {
+			collecting = true
+			depth = strings.Count(line, "{") - strings.Count(line, "}")
+			if strings.Contains(line, "{") {
+				sawOpen = true
+			}
+			// Rare single-line case: `class Foo { a=1; };`.
+			if sawOpen && depth <= 0 {
 				cfg.Entries = append(cfg.Entries, ServerCfgEntry{Kind: EntryClass, Raw: classBuf.String()})
 				classBuf.Reset()
+				collecting = false
+				sawOpen = false
+				depth = 0
 			}
 			continue
 		}
@@ -101,6 +123,11 @@ func LoadServerCfg(path string) (*ServerCfg, error) {
 	}
 	if err := scan.Err(); err != nil {
 		return nil, err
+	}
+	// Flush any still-open class block so truncated/malformed files do not
+	// silently lose content on round-trip.
+	if collecting && classBuf.Len() > 0 {
+		cfg.Entries = append(cfg.Entries, ServerCfgEntry{Kind: EntryClass, Raw: classBuf.String()})
 	}
 	return cfg, nil
 }
@@ -168,7 +195,9 @@ func (c *ServerCfg) SetMissionTemplate(tmpl string) bool {
 		}
 		re := regexp.MustCompile(`template\s*=\s*"[^"]*"`)
 		if re.MatchString(raw) {
-			c.Entries[i].Raw = re.ReplaceAllString(raw, fmt.Sprintf(`template="%s"`, tmpl))
+			// ReplaceAllLiteralString so any `$` in the template name is
+			// treated as a literal (not a regex back-reference).
+			c.Entries[i].Raw = re.ReplaceAllLiteralString(raw, fmt.Sprintf(`template="%s"`, tmpl))
 			return true
 		}
 		// class Missions exists but has no template line — inject one.
