@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -114,6 +115,23 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 	// Disk free on the drive holding the server dir.
 	if free, err := util.DiskFree(h.app.ServerDir); err == nil {
 		out["diskFreeBytes"] = free
+	}
+
+	// Process stats for DayZServer_x64.exe (Windows only; no-op stub elsewhere).
+	if pid := h.app.Server.PID(); pid > 0 {
+		if cpu, mem, err := util.ProcessStats(uint32(pid)); err == nil {
+			cores := runtime.NumCPU()
+			norm := cpu
+			if cores > 0 {
+				norm = cpu / float64(cores)
+			}
+			out["proc"] = map[string]interface{}{
+				"cpuPercent":     norm,
+				"cpuPercentRaw":  cpu,
+				"memBytes":       mem,
+				"cores":          cores,
+			}
+		}
 	}
 
 	// Live player count — best-effort, only when the server is up.

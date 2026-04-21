@@ -9,8 +9,9 @@ dayz-manager-*
 # exe is deployed to; should not be in the repo).
 .dayz-manager/
 
-# Go
-vendor/
+# Go — repo-root Go module vendor/ only. The internal/web/static/vendor/
+# tree (CodeMirror assets shipped with the binary) must be committed.
+/vendor/
 go.work
 go.work.sum
 

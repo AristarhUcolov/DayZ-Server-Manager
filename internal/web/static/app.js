@@ -137,6 +137,86 @@ function runningBanner() {
   return h('div', { class: 'warning-bar', i18n: 'guard.serverRunning' });
 }
 
+// --------------------------------------------------------------------- CodeMirror lazy loader
+//
+// CM is vendored under /vendor/codemirror so the panel stays single-exe and
+// works offline. We load it on demand — only pages that actually render an
+// editor pay the cost.
+
+const CM = {
+  loaded: false,
+  loading: null,
+  async load() {
+    if (this.loaded) return window.CodeMirror;
+    if (this.loading) return this.loading;
+    const base = '/vendor/codemirror';
+    const add = (tag, attrs) => new Promise((res, rej) => {
+      const el = document.createElement(tag);
+      Object.assign(el, attrs);
+      el.onload = () => res(el);
+      el.onerror = () => rej(new Error('load failed: ' + (attrs.src || attrs.href)));
+      document.head.appendChild(el);
+    });
+    this.loading = (async () => {
+      await Promise.all([
+        add('link',   { rel: 'stylesheet', href: `${base}/codemirror.min.css` }),
+        add('link',   { rel: 'stylesheet', href: `${base}/theme/material-darker.min.css` }),
+        add('link',   { rel: 'stylesheet', href: `${base}/addon/fold/foldgutter.min.css` }),
+        add('link',   { rel: 'stylesheet', href: `${base}/addon/dialog/dialog.min.css` }),
+      ]);
+      await add('script', { src: `${base}/codemirror.min.js` });
+      await Promise.all([
+        add('script', { src: `${base}/mode/xml/xml.min.js` }),
+        add('script', { src: `${base}/mode/javascript/javascript.min.js` }),
+        add('script', { src: `${base}/mode/clike/clike.min.js` }),
+        add('script', { src: `${base}/mode/shell/shell.min.js` }),
+        add('script', { src: `${base}/addon/edit/matchbrackets.min.js` }),
+        add('script', { src: `${base}/addon/edit/closebrackets.min.js` }),
+        add('script', { src: `${base}/addon/fold/foldcode.min.js` }),
+        add('script', { src: `${base}/addon/fold/foldgutter.min.js` }),
+        add('script', { src: `${base}/addon/fold/xml-fold.min.js` }),
+        add('script', { src: `${base}/addon/fold/brace-fold.min.js` }),
+        add('script', { src: `${base}/addon/search/searchcursor.min.js` }),
+        add('script', { src: `${base}/addon/search/search.min.js` }),
+        add('script', { src: `${base}/addon/dialog/dialog.min.js` }),
+      ]);
+      this.loaded = true;
+      return window.CodeMirror;
+    })();
+    return this.loading;
+  },
+
+  modeFor(name) {
+    const n = String(name || '').toLowerCase();
+    if (n.endsWith('.xml'))  return { name: 'xml', htmlMode: false };
+    if (n.endsWith('.json')) return { name: 'javascript', json: true };
+    if (n.endsWith('.c') || n.endsWith('.h') || n.endsWith('.cpp') || n.endsWith('.hpp'))
+      return 'text/x-csrc';
+    if (n.endsWith('.js'))   return 'javascript';
+    if (n.endsWith('.cfg') || n.endsWith('.bat') || n.endsWith('.sh')) return 'shell';
+    return null; // plain text
+  },
+
+  // Mount a CodeMirror instance on a textarea-like host. Returns the CM
+  // handle. Call cm.toTextArea() to clean up before replacing.
+  async mount(hostTextarea, opts) {
+    const CodeMirror = await this.load();
+    const cm = CodeMirror.fromTextArea(hostTextarea, Object.assign({
+      lineNumbers: true,
+      theme: 'material-darker',
+      matchBrackets: true,
+      autoCloseBrackets: true,
+      foldGutter: true,
+      gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+      lineWrapping: false,
+      indentUnit: 2,
+      tabSize: 2,
+      viewportMargin: 80,
+    }, opts || {}));
+    return cm;
+  },
+};
+
 // --------------------------------------------------------------------- status
 
 async function refreshStatus() {
@@ -160,6 +240,75 @@ async function ensureFirstRunDone() {
   modal.classList.remove('hidden');
   document.getElementById('fr-lang').value = State.config.language || 'en';
   document.getElementById('fr-vanilla').value = State.config.vanillaDayZPath || '';
+
+  // Steam auto-detect button. Populates the vanilla path field in one click;
+  // if multiple installs are found, renders a small chooser under it.
+  const steamBtn = document.getElementById('fr-steam');
+  const steamList = document.getElementById('fr-steam-list');
+  if (steamBtn) {
+    steamBtn.onclick = async () => {
+      steamList.innerHTML = '';
+      steamList.classList.add('hidden');
+      try {
+        const r = await api.get('/api/steam/detect');
+        const installs = (r && r.installs) || [];
+        if (installs.length === 0) {
+          toast(t('firstRun.detect.none') || 'No DayZ install found', 'error');
+          return;
+        }
+        if (installs.length === 1) {
+          document.getElementById('fr-vanilla').value = installs[0].path || installs[0];
+          toast(t('firstRun.detect.ok') || 'DayZ install detected', 'ok');
+          refreshMissionsPreview();
+          return;
+        }
+        steamList.classList.remove('hidden');
+        for (const inst of installs) {
+          const p = inst.path || inst;
+          const row = h('div', { class: 'steam-row' }, [
+            h('span', { text: p, class: 'mono' }),
+            h('button', {
+              class: 'secondary', text: t('action.select') || 'Select',
+              onclick: () => {
+                document.getElementById('fr-vanilla').value = p;
+                steamList.classList.add('hidden');
+                refreshMissionsPreview();
+              },
+            }),
+          ]);
+          steamList.append(row);
+        }
+      } catch (e) { handleErr(e); }
+    };
+  }
+
+  // Missions preview — lists mpmissions/* in the current server dir so the
+  // user sees what's already there before committing. Skipped if the folder
+  // is empty or missing.
+  const missionsHost = document.getElementById('fr-missions');
+  async function refreshMissionsPreview() {
+    if (!missionsHost) return;
+    missionsHost.innerHTML = '';
+    missionsHost.classList.add('hidden');
+    try {
+      const r = await api.get('/api/missions');
+      const list = (r && r.missions) || [];
+      if (list.length === 0) return;
+      missionsHost.classList.remove('hidden');
+      missionsHost.append(h('div', { class: 'missions-title',
+        text: t('firstRun.missions.title') || 'Missions detected in server dir:' }));
+      const ul = h('ul', { class: 'missions-list' });
+      for (const m of list) {
+        ul.append(h('li', { class: m.active ? 'active' : '' }, [
+          h('span', { text: m.name }),
+          m.active ? h('span', { class: 'badge ok', text: t('missions.active') || 'active' }) : null,
+        ]));
+      }
+      missionsHost.append(ul);
+    } catch {}
+  }
+  refreshMissionsPreview();
+
   document.getElementById('fr-finish').onclick = async () => {
     const pass = document.getElementById('fr-admin-pass').value;
     const exposure = document.querySelector('input[name=fr-exposure]:checked').value;
@@ -244,6 +393,11 @@ Views.dashboard = async (root) => {
   const metricsHost = h('div');
   root.append(metricsHost);
 
+  // Ring buffers for sparklines. 60 samples @ 5s = 5 minutes of history.
+  const cpuHist = [];
+  const memHist = [];
+  const pushHist = (buf, v) => { buf.push(v); if (buf.length > 60) buf.shift(); };
+
   const render = (m) => {
     metricsHost.innerHTML = '';
     const s = {
@@ -253,9 +407,14 @@ Views.dashboard = async (root) => {
     const disk = m.diskFreeBytes != null ? bytes(m.diskFreeBytes) : '—';
     const players = m.playerCount != null ? m.playerCount : '—';
     const recent = Array.isArray(m.recentAdm) ? m.recentAdm : [];
+    const proc = m.proc || null;
+    if (proc) {
+      pushHist(cpuHist, proc.cpuPercent || 0);
+      pushHist(memHist, proc.memBytes || 0);
+    }
 
     metricsHost.append(
-      h('div', { class: 'grid-3' }, [
+      h('div', { class: 'grid-4' }, [
         h('div', { class: 'card' }, [
           h('h3', { i18n: 'nav.server' }),
           h('div', { class: 'kv' }, [
@@ -301,6 +460,17 @@ Views.dashboard = async (root) => {
             h('button', { i18n: 'nav.validator', onclick: () => navigate('validator') }),
           ]),
         ]),
+        h('div', { class: 'card' }, [
+          h('h3', { i18n: 'dashboard.process' }),
+          h('div', { class: 'metric-num',
+            text: proc ? (Math.round(proc.cpuPercent * 10) / 10).toFixed(1) + ' %' : '—' }),
+          h('div', { class: 'metric-sub', i18n: 'dashboard.process.cpu' }),
+          sparkline(cpuHist, 100),
+          h('div', { class: 'metric-num',
+            text: proc ? bytes(proc.memBytes) : '—', style: 'margin-top:8px' }),
+          h('div', { class: 'metric-sub', i18n: 'dashboard.process.mem' }),
+          sparkline(memHist, 0),
+        ]),
       ])
     );
 
@@ -337,6 +507,40 @@ Views.dashboard = async (root) => {
   const iv = setInterval(tick, 5000);
   root._teardown = () => { stopped = true; clearInterval(iv); };
 };
+
+// sparkline renders an SVG polyline from a numeric series.
+// maxFixed: if > 0, y-axis is clamped to [0, maxFixed] (use for CPU %);
+// if 0, scales to max(data).
+function sparkline(series, maxFixed) {
+  const W = 180, H = 40, pad = 2;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('class', 'spark');
+  if (!series || series.length === 0) return svg;
+  const n = series.length;
+  const maxV = maxFixed > 0 ? maxFixed : Math.max(1, ...series);
+  const x = (i) => (n === 1 ? W / 2 : pad + (i * (W - 2 * pad)) / (n - 1));
+  const y = (v) => {
+    const ratio = Math.max(0, Math.min(1, v / maxV));
+    return H - pad - ratio * (H - 2 * pad);
+  };
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    d += (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + y(series[i]).toFixed(1) + ' ';
+  }
+  const area = `M${x(0).toFixed(1)} ${H - pad} ` +
+    series.map((v, i) => 'L' + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join(' ') +
+    ` L${x(n - 1).toFixed(1)} ${H - pad} Z`;
+  const areaPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  areaPath.setAttribute('class', 'spark-area');
+  areaPath.setAttribute('d', area);
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  line.setAttribute('d', d);
+  svg.appendChild(areaPath);
+  svg.appendChild(line);
+  return svg;
+}
 
 function admEventRow(e) {
   const typeClass = 'adm-type adm-' + (e.type || 'other');
@@ -995,10 +1199,15 @@ Views.moded = async (root) => {
 
 Views.files = async (root) => {
   const tree = h('div', { class: 'tree' });
-  const editor = h('textarea', { placeholder: 'Select a file' });
+  const editorHost = h('textarea', { placeholder: 'Select a file' });
   const pathLabel = h('div', { class: 'hint' });
   const backupList = h('div', { class: 'card', style: { marginTop: '12px' } });
   let currentPath = '';
+  let cm = null;
+
+  const getValue = () => cm ? cm.getValue() : editorHost.value;
+  const setValue = (v) => { if (cm) cm.setValue(v || ''); else editorHost.value = v || ''; };
+  const setMode = (path) => { if (cm) cm.setOption('mode', CM.modeFor(path)); };
 
   async function refreshBackups() {
     backupList.innerHTML = '';
@@ -1020,7 +1229,7 @@ Views.files = async (root) => {
             try {
               await api.post('/api/backups/restore', { path: currentPath, backup: b.name });
               const r = await api.get('/api/files/read?path=' + encodeURIComponent(currentPath));
-              editor.value = r.content;
+              setValue(r.content);
               toast(t('backup.restored'), 'ok');
               refreshBackups();
             } catch (e) { handleErr(e); }
@@ -1046,7 +1255,8 @@ Views.files = async (root) => {
         if (e.isDir) return loadDir(e.path);
         const r = await api.get(`/api/files/read?path=${encodeURIComponent(e.path)}`);
         currentPath = e.path;
-        editor.value = r.content;
+        setMode(e.name);
+        setValue(r.content);
         pathLabel.textContent = e.path;
         await refreshBackups();
       };
@@ -1064,13 +1274,13 @@ Views.files = async (root) => {
         h('div', {}, [
           h('h3', { i18n: 'files.editor' }),
           pathLabel,
-          editor,
+          editorHost,
           h('div', { class: 'actions' }, [
             h('button', { class: 'primary', i18n: 'files.save',
               onclick: async () => {
                 if (!currentPath) return;
                 try {
-                  await api.post('/api/files/write', { path: currentPath, content: editor.value });
+                  await api.post('/api/files/write', { path: currentPath, content: getValue() });
                   toast(t('files.save'), 'ok');
                   await refreshBackups();
                 } catch (e) { handleErr(e); }
@@ -1082,6 +1292,14 @@ Views.files = async (root) => {
       ]),
     ])
   );
+
+  try {
+    cm = await CM.mount(editorHost, { mode: null });
+    root._teardown = () => { try { cm && cm.toTextArea(); } catch {} };
+  } catch (e) {
+    // CM failed to load — textarea stays functional as a fallback.
+    console.warn('CodeMirror load failed', e);
+  }
 };
 
 // Inline modal-ish dialog that lists candidate types.xml inside a mod and
@@ -1834,10 +2052,15 @@ Views.profiles = async (root) => {
   const tree = h('div', { class: 'left' });
   const editor = h('textarea', { style: { height: '60vh', fontFamily: 'monospace' }, placeholder: t('profiles.empty') });
   const savedPath = { path: '' };
+  let cm = null;
+  const getValue = () => cm ? cm.getValue() : editor.value;
+  const setValue = (v) => { if (cm) cm.setValue(v || ''); else editor.value = v || ''; };
+  const setMode  = (p) => { if (cm) cm.setOption('mode', CM.modeFor(p)); };
+
   const savebtn = h('button', { class: 'primary', i18n: 'files.save', disabled: true, onclick: async () => {
     if (!savedPath.path) return;
     try {
-      await api.post('/api/profiles/write', { path: savedPath.path, content: editor.value });
+      await api.post('/api/profiles/write', { path: savedPath.path, content: getValue() });
       toast(t('files.save'), 'ok');
     } catch (e) { handleErr(e); }
   }});
@@ -1845,7 +2068,8 @@ Views.profiles = async (root) => {
   async function openFile(path) {
     try {
       const r = await api.get('/api/profiles/read?path=' + encodeURIComponent(path));
-      editor.value = r.content;
+      setMode(path);
+      setValue(r.content);
       savedPath.path = path;
       savebtn.disabled = false;
     } catch (e) { handleErr(e); }
@@ -1883,6 +2107,10 @@ Views.profiles = async (root) => {
     ]),
   );
   await renderDir('');
+  try {
+    cm = await CM.mount(editor, { mode: null });
+    root._teardown = () => { try { cm && cm.toTextArea(); } catch {} };
+  } catch (e) { console.warn('CodeMirror load failed', e); }
 };
 
 // --------------------------------------------------------------------- bootstrap
@@ -1949,11 +2177,15 @@ Views.battleye = async (root) => {
     const label = f.exists ? `${f.name} (${bytes(f.size)}${f.lineHint ? ', ' + f.lineHint : ''})` : `${f.name} (empty)`;
     fileSelect.append(h('option', { value: f.name, text: label }));
   }
-  const editor = h('textarea', { rows: 22, style: { width: '100%', fontFamily: 'monospace' } });
+  const editorHost = h('textarea', { rows: 22, style: { width: '100%', fontFamily: 'monospace' } });
+  let cm = null;
+  const getValue = () => cm ? cm.getValue() : editorHost.value;
+  const setValue = (v) => { if (cm) cm.setValue(v || ''); else editorHost.value = v || ''; };
+
   const load = async () => {
     try {
       const r = await api.get('/api/battleye/read?name=' + encodeURIComponent(fileSelect.value));
-      editor.value = r.content || '';
+      setValue(r.content || '');
     } catch (e) { handleErr(e); }
   };
   fileSelect.onchange = load;
@@ -1967,18 +2199,24 @@ Views.battleye = async (root) => {
       h('button', { class: 'primary', i18n: 'action.save',
         onclick: async () => {
           try {
-            await api.post('/api/battleye/write', { name: fileSelect.value, content: editor.value });
+            await api.post('/api/battleye/write', { name: fileSelect.value, content: getValue() });
             toast('saved', 'ok');
-            await navigate('battleye');
           } catch (e) { handleErr(e); }
         }
       }),
     ]),
-    editor,
+    editorHost,
     h('p', { class: 'hint', i18n: 'battleye.hint' }),
   ]));
   root.append(wrap);
   await load();
+
+  try {
+    cm = await CM.mount(editorHost, { mode: null, lineWrapping: true });
+    // Re-apply initial value that was set before mount.
+    if (editorHost.value && !cm.getValue()) cm.setValue(editorHost.value);
+    root._teardown = () => { try { cm && cm.toTextArea(); } catch {} };
+  } catch (e) { console.warn('CodeMirror load failed', e); }
 };
 
 // --------------------------------------------------------------------- mission DB
@@ -1995,11 +2233,17 @@ Views.missiondb = async (root) => {
     if (!f.exists) opt.disabled = true;
     fileSelect.append(opt);
   }
-  const editor = h('textarea', { rows: 28, style: { width: '100%', fontFamily: 'monospace' } });
+  const editorHost = h('textarea', { rows: 28, style: { width: '100%', fontFamily: 'monospace' } });
+  let cm = null;
+  const getValue = () => cm ? cm.getValue() : editorHost.value;
+  const setValue = (v) => { if (cm) cm.setValue(v || ''); else editorHost.value = v || ''; };
+  const setMode = (path) => { if (cm) cm.setOption('mode', CM.modeFor(path)); };
+
   const load = async () => {
     try {
       const r = await api.get('/api/mission/db/read?path=' + encodeURIComponent(fileSelect.value));
-      editor.value = r.content || '';
+      setMode(fileSelect.value);
+      setValue(r.content || '');
     } catch (e) { handleErr(e); }
   };
   fileSelect.onchange = load;
@@ -2013,23 +2257,28 @@ Views.missiondb = async (root) => {
       h('button', { class: 'primary', i18n: 'action.save',
         onclick: async () => {
           try {
-            await api.post('/api/mission/db/write', { path: fileSelect.value, content: editor.value });
+            await api.post('/api/mission/db/write', { path: fileSelect.value, content: getValue() });
             toast('saved', 'ok');
           } catch (e) { handleErr(e); }
         }
       }),
     ]),
-    editor,
+    editorHost,
     h('p', { class: 'hint', i18n: 'missionDb.hint' }),
   ]));
   root.append(wrap);
+
   // Pick the first existing file automatically so the textarea is not blank
   // on first open.
   const firstExisting = d.files.find(f => f.exists);
-  if (firstExisting) {
-    fileSelect.value = firstExisting.path;
-    await load();
-  }
+  if (firstExisting) fileSelect.value = firstExisting.path;
+
+  try {
+    cm = await CM.mount(editorHost, { mode: CM.modeFor(fileSelect.value) });
+    root._teardown = () => { try { cm && cm.toTextArea(); } catch {} };
+  } catch (e) { console.warn('CodeMirror load failed', e); }
+
+  if (firstExisting) await load();
 };
 
 main();

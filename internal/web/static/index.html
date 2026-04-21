@@ -22,8 +22,13 @@
       </select>
 
       <label data-i18n="firstRun.vanillaPath"></label>
-      <input id="fr-vanilla" type="text" placeholder="F:\SteamLibrary\steamapps\common\DayZ" />
+      <div class="row" style="gap:6px;">
+        <input id="fr-vanilla" type="text" placeholder="F:\SteamLibrary\steamapps\common\DayZ" style="flex:1;" />
+        <button type="button" id="fr-steam" class="secondary" data-i18n="firstRun.detect"></button>
+      </div>
       <small class="hint" data-i18n="firstRun.vanillaPath.hint"></small>
+      <div id="fr-steam-list" class="steam-list hidden"></div>
+      <div id="fr-missions" class="missions-preview hidden"></div>
 
       <label data-i18n="firstRun.exposure"></label>
       <div class="row">
@@ -68,21 +73,26 @@
       </div>
     </div>
     <nav class="nav">
-      <a data-route="dashboard"  class="active" data-i18n="nav.dashboard"></a>
+      <a data-route="dashboard" class="active" data-i18n="nav.dashboard"></a>
+      <span class="nav-sep"></span>
       <a data-route="server"     data-i18n="nav.server"></a>
       <a data-route="mods"       data-i18n="nav.mods"></a>
+      <a data-route="events"     data-i18n="nav.events"></a>
+      <span class="nav-sep"></span>
       <a data-route="types"      data-i18n="nav.types"></a>
       <a data-route="moded"      data-i18n="nav.modedTypes"></a>
       <a data-route="missiondb"  data-i18n="nav.missionDb"></a>
+      <span class="nav-sep"></span>
       <a data-route="files"      data-i18n="nav.files"></a>
+      <a data-route="profiles"   data-i18n="nav.profiles"></a>
+      <a data-route="battleye"   data-i18n="nav.battleye"></a>
+      <span class="nav-sep"></span>
       <a data-route="logs"       data-i18n="nav.logs"></a>
       <a data-route="admlog"     data-i18n="nav.admlog"></a>
       <a data-route="rcon"       data-i18n="nav.rcon"></a>
-      <a data-route="battleye"   data-i18n="nav.battleye"></a>
-      <a data-route="events"     data-i18n="nav.events"></a>
-      <a data-route="profiles"   data-i18n="nav.profiles"></a>
-      <a data-route="sync"       data-i18n="nav.sync"></a>
       <a data-route="validator"  data-i18n="nav.validator"></a>
+      <span class="nav-sep"></span>
+      <a data-route="sync"       data-i18n="nav.sync"></a>
       <a data-route="settings"   data-i18n="nav.settings"></a>
     </nav>
     <div class="top-right">
