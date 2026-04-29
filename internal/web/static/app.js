@@ -412,6 +412,7 @@ Views.dashboard = async (root) => {
       pushHist(cpuHist, proc.cpuPercent || 0);
       pushHist(memHist, proc.memBytes || 0);
     }
+    const nextRestart = nextRestartLabel(s.running, s.uptime);
 
     metricsHost.append(
       h('div', { class: 'grid-4' }, [
@@ -428,6 +429,10 @@ Views.dashboard = async (root) => {
             h('div', { text: s.port }),
             h('div', { class: 'k', i18n: 'status.players' }),
             h('div', { text: String(players) }),
+            ...(nextRestart ? [
+              h('div', { class: 'k', i18n: 'status.nextRestart' }),
+              h('div', { text: nextRestart }),
+            ] : []),
           ]),
           h('div', { class: 'actions' }, [
             s.running
@@ -507,6 +512,61 @@ Views.dashboard = async (root) => {
   const iv = setInterval(tick, 5000);
   root._teardown = () => { stopped = true; clearInterval(iv); };
 };
+
+// parseUptimeSeconds turns the backend's Duration string ("3h17m4s",
+// "47m12s", "5s") into seconds. Returns 0 for unparsable input.
+function parseUptimeSeconds(s) {
+  if (!s || typeof s !== 'string') return 0;
+  let total = 0;
+  const re = /(\d+)([hms])/g;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const n = parseInt(m[1], 10);
+    if (m[2] === 'h') total += n * 3600;
+    else if (m[2] === 'm') total += n * 60;
+    else total += n;
+  }
+  return total;
+}
+
+// nextRestartLabel returns "in HH:MM:SS" / "—" / null based on the active
+// auto-restart configuration. Returns null if no schedule is configured at
+// all (so the dashboard hides the row entirely).
+function nextRestartLabel(running, uptimeStr) {
+  const c = State.config || {};
+  const times = Array.isArray(c.scheduledRestarts) ? c.scheduledRestarts : [];
+  const intervalOn = !!c.autoRestartEnabled && (c.autoRestartSeconds || 0) > 0;
+  const hasSchedule = times.length > 0 || intervalOn;
+  if (!hasSchedule) return null;
+  if (!running) return t('status.notRunning') || '—';
+
+  const candidates = [];
+  // Interval-based: AutoRestartSeconds - uptime.
+  if (intervalOn) {
+    const remaining = c.autoRestartSeconds - parseUptimeSeconds(uptimeStr);
+    if (remaining > 0) candidates.push(remaining);
+  }
+  // HH:MM schedule: pick nearest in the future (today or tomorrow).
+  const now = new Date();
+  for (const tm of times) {
+    const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(tm || '');
+    if (!m) continue;
+    const hh = parseInt(m[1], 10), mm = parseInt(m[2], 10);
+    if (hh > 23 || mm > 59) continue;
+    const target = new Date(now);
+    target.setHours(hh, mm, 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 1);
+    candidates.push(Math.round((target - now) / 1000));
+  }
+  if (candidates.length === 0) return '—';
+  let s = Math.min(...candidates);
+  if (s < 0) s = 0;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(sec)}`;
+}
 
 // sparkline renders an SVG polyline from a numeric series.
 // maxFixed: if > 0, y-axis is clamped to [0, maxFixed] (use for CPU %);
@@ -1739,6 +1799,63 @@ Views.events = async (root) => {
 
 // Scheduled RCon announcements UI. Renders a mini-editor inside Settings so
 // admins can add/remove lines without hand-editing manager.json.
+// scheduledRestartsCard — UI for cfg.ScheduledRestarts (HH:MM list) and
+// cfg.RestartWarnMinutes. Mutates the parent F object so the main Settings
+// save path picks up the values without a separate endpoint.
+function scheduledRestartsCard(c, F) {
+  const times = Array.isArray(c.scheduledRestarts) ? c.scheduledRestarts.slice() : [];
+  const warnsCsv = (Array.isArray(c.restartWarnMinutes) ? c.restartWarnMinutes : [5,3,1]).join(',');
+
+  const list = h('div');
+  const warnInput = h('input', { type: 'text', value: warnsCsv, placeholder: '5,3,1', style: { width: '160px' } });
+
+  function render() {
+    list.innerHTML = '';
+    times.forEach((tm, i) => {
+      const inp = h('input', { type: 'text', value: tm, placeholder: 'HH:MM', style: { width: '90px' } });
+      inp.onchange = () => { times[i] = inp.value.trim(); };
+      const rm = h('button', { class: 'danger', text: '×',
+        onclick: () => { times.splice(i, 1); render(); } });
+      list.append(h('div', { class: 'row', style: { gap: '8px', marginBottom: '6px' } }, [inp, rm]));
+    });
+    if (times.length === 0) {
+      list.append(h('p', { class: 'hint', i18n: 'settings.restarts.empty' }));
+    }
+  }
+  render();
+
+  // Expose getters via fake form fields so the parent save path picks them up.
+  F.scheduledRestarts = {
+    type: 'list-times',
+    get value() {
+      return times.map(s => (s || '').trim()).filter(Boolean);
+    },
+  };
+  F.restartWarnMinutes = {
+    type: 'list-numbers',
+    get value() {
+      return warnInput.value
+        .split(',').map(s => parseInt(s.trim(), 10))
+        .filter(n => Number.isFinite(n) && n > 0);
+    },
+  };
+
+  return h('div', { class: 'card' }, [
+    h('h3', { i18n: 'settings.restarts.title' }),
+    h('p', { class: 'hint', i18n: 'settings.restarts.hint' }),
+    list,
+    h('div', { class: 'actions' }, [
+      h('button', { i18n: 'settings.restarts.add',
+        onclick: () => { times.push('04:00'); render(); } }),
+    ]),
+    h('div', { style: { marginTop: '12px' } }, [
+      h('label', { i18n: 'settings.restarts.warn' }),
+      warnInput,
+      h('small', { class: 'hint', i18n: 'settings.restarts.warn.hint' }),
+    ]),
+  ]);
+}
+
 function announcementsCard() {
   const card = h('div', { class: 'card' }, [
     h('h3', { i18n: 'settings.announcements' }),
@@ -1891,7 +2008,10 @@ Views.settings = async (root) => {
         h('label', {}, [F.autoRestartEnabled, h('span', { i18n: 'settings.autorestart.enable' })]),
         row('settings.autorestart', F.autoRestartSeconds),
       ]),
+      h('p', { class: 'hint', i18n: 'settings.autorestart.hint' }),
     ]),
+
+    scheduledRestartsCard(c, F),
 
     announcementsCard(),
 
@@ -1904,6 +2024,7 @@ Views.settings = async (root) => {
           for (const [k, el] of Object.entries(F)) {
             if (el.type === 'checkbox') next[k] = el.checked;
             else if (el.type === 'number') next[k] = Number(el.value);
+            else if (el.type === 'list-times' || el.type === 'list-numbers') next[k] = el.value;
             else next[k] = el.value;
           }
           try {
