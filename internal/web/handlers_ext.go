@@ -72,7 +72,7 @@ func (h *handlers) modsCollectionResolve(w http.ResponseWriter, r *http.Request)
 		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
 		return
 	}
-	res, err := mods.ResolveCollection(h.app.Config.VanillaDayZPath, children)
+	res, err := mods.ResolveCollection(r.Context(), h.app.Config.VanillaDayZPath, children)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

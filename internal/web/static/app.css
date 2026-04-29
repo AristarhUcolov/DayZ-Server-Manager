@@ -235,10 +235,40 @@ td.mono, th.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospa
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 24px;
-  width: min(520px, 90%);
+  padding: 0;
+  width: min(560px, 92%);
+  max-height: 88vh;
+  overflow: auto;
   box-shadow: var(--shadow);
 }
+.modal-card.wide { width: min(960px, 94%); }
+.modal-overlay { padding: 24px; }
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--panel); z-index: 1;
+}
+.modal-header h3 { margin: 0; font-size: 16px; }
+.modal-body { padding: 18px; }
+.modal-close {
+  background: transparent; border: none; color: var(--text-dim);
+  font-size: 22px; cursor: pointer; line-height: 1; padding: 0 6px;
+}
+.modal-close:hover { color: var(--text); }
+
+/* Mod picker list (ModedTypes import-from-mod modal). */
+.mod-pick-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.mod-pick {
+  text-align: left; padding: 10px 12px; background: var(--bg-soft);
+  border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+  color: var(--text); font-size: 13px;
+}
+.mod-pick:hover { border-color: var(--accent); background: rgba(255,122,43,0.06); }
+
+/* Pagination strip used by Types/Events tables. */
+.pager { display: flex; gap: 6px; align-items: center; padding: 8px 0; }
+.pager .pager-num { min-width: 90px; text-align: center; color: var(--text-dim); }
+.pager input[type="number"] { width: 70px; }
 
 /* ---------------- Toast ---------------- */
 

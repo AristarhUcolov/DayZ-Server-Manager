@@ -602,6 +602,34 @@ function sparkline(series, maxFixed) {
   return svg;
 }
 
+// openModal renders a content-agnostic modal overlay with a close button.
+// Returns { close, body } so callers can build their UI inside `body` and
+// dismiss programmatically. Click on backdrop or Escape both close. The
+// caller's onClose callback (if provided) runs after the DOM is removed.
+function openModal({ title, onClose, wide } = {}) {
+  const body = h('div', { class: 'modal-body' });
+  const closeBtn = h('button', { class: 'modal-close', text: '×',
+    'aria-label': 'Close', onclick: () => close() });
+  const card = h('div', { class: 'modal-card' + (wide ? ' wide' : '') }, [
+    h('div', { class: 'modal-header' }, [
+      h('h3', { text: title || '' }),
+      closeBtn,
+    ]),
+    body,
+  ]);
+  const overlay = h('div', { class: 'modal modal-overlay' }, card);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  function close() {
+    document.removeEventListener('keydown', onKey);
+    overlay.remove();
+    if (onClose) try { onClose(); } catch {}
+  }
+  document.body.append(overlay);
+  return { body, close };
+}
+
 function admEventRow(e) {
   const typeClass = 'adm-type adm-' + (e.type || 'other');
   const pieces = [
@@ -1001,7 +1029,14 @@ Views.types = async (root) => {
 
   const search = h('input', { type: 'text', placeholder: t('types.search') });
   const tableWrap = h('div');
-  const editorWrap = h('div');
+  const pagerHost = h('div');
+
+  // Pagination state. Page size kept conservative so large types.xml files
+  // (5k+ entries) render snappily. Search resets to page 1.
+  const PAGE_SIZE = 200;
+  let currentPage = 1;
+  let lastFilteredCount = 0;
+  let lastTotalCount = 0;
 
   const presetsWrap = h('div', { class: 'card' }, [h('h3', { i18n: 'types.presets' })]);
   try {
@@ -1028,98 +1063,134 @@ Views.types = async (root) => {
     presetsWrap.append(h('p', { class: 'hint', i18n: 'types.presets.hint' }));
   } catch (e) { /* empty */ }
 
-  // Bulk-edit panel. Scalar fields only — the per-type editor handles
-  // usages/values/tags because bulk semantics for those are ambiguous.
-  const bulkFields = {
-    nominal: h('input', { type: 'number', placeholder: 'nominal' }),
-    min: h('input', { type: 'number', placeholder: 'min' }),
-    lifetime: h('input', { type: 'number', placeholder: 'lifetime' }),
-    restock: h('input', { type: 'number', placeholder: 'restock' }),
-    quantmin: h('input', { type: 'number', placeholder: 'quantmin' }),
-    quantmax: h('input', { type: 'number', placeholder: 'quantmax' }),
-    cost: h('input', { type: 'number', placeholder: 'cost' }),
-    category: h('input', { type: 'text', placeholder: 'category' }),
-  };
-  const bulkGrid = h('div', { class: 'grid-3' });
-  for (const [k, el] of Object.entries(bulkFields)) {
-    bulkGrid.append(h('div', {}, [h('label', { text: k }), el]));
-  }
-  const bulkWrap = h('div', { class: 'card' }, [
-    h('h3', { i18n: 'types.bulk' }),
-    h('p', { class: 'hint', i18n: 'types.bulk.hint' }),
-    bulkGrid,
-    h('div', { class: 'actions' }, [
-      h('button', { class: 'primary', i18n: 'types.bulk.apply',
-        onclick: async () => {
-          const selected = [...tableWrap.querySelectorAll('input[type=checkbox]:checked')]
-            .map(cb => cb.dataset.name);
-          if (!selected.length) { toast('select types first'); return; }
-          const patch = {};
-          for (const [k, el] of Object.entries(bulkFields)) {
-            const v = el.value.trim();
-            if (v === '') continue;
-            if (k === 'category') patch.category = v;
-            else patch[k] = Number(v);
+  // Bulk-edit modal — opened from the toolbar when at least one row is
+  // selected. Scalar fields only; per-type editor handles usages/values/tags.
+  function openBulkEdit() {
+    const selected = [...tableWrap.querySelectorAll('input[type=checkbox]:checked')]
+      .map(cb => cb.dataset.name);
+    if (!selected.length) { toast('select types first'); return; }
+    const fields = {
+      nominal: h('input', { type: 'number', placeholder: 'nominal' }),
+      min: h('input', { type: 'number', placeholder: 'min' }),
+      lifetime: h('input', { type: 'number', placeholder: 'lifetime' }),
+      restock: h('input', { type: 'number', placeholder: 'restock' }),
+      quantmin: h('input', { type: 'number', placeholder: 'quantmin' }),
+      quantmax: h('input', { type: 'number', placeholder: 'quantmax' }),
+      cost: h('input', { type: 'number', placeholder: 'cost' }),
+      category: h('input', { type: 'text', placeholder: 'category' }),
+    };
+    const grid = h('div', { class: 'grid-3' });
+    for (const [k, el] of Object.entries(fields)) {
+      grid.append(h('div', {}, [h('label', { text: k }), el]));
+    }
+    const m = openModal({ title: t('types.bulk') + ` — ${selected.length} selected`, wide: true });
+    m.body.append(
+      h('p', { class: 'hint', i18n: 'types.bulk.hint' }),
+      grid,
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'primary', i18n: 'types.bulk.apply',
+          onclick: async () => {
+            const patch = {};
+            for (const [k, el] of Object.entries(fields)) {
+              const v = el.value.trim();
+              if (v === '') continue;
+              if (k === 'category') patch.category = v;
+              else patch[k] = Number(v);
+            }
+            if (Object.keys(patch).length === 0) { toast('set at least one field'); return; }
+            try {
+              const r = await api.post('/api/types/bulk-patch', {
+                file: fileSelect.value, names: selected, patch,
+              });
+              toast(`patched ${r.touched} type(s)`, 'ok');
+              m.close();
+              await refreshTable();
+            } catch (e) { handleErr(e); }
           }
-          if (Object.keys(patch).length === 0) { toast('set at least one field'); return; }
-          try {
-            const r = await api.post('/api/types/bulk-patch', {
-              file: fileSelect.value, names: selected, patch,
-            });
-            toast(`patched ${r.touched} type(s)`, 'ok');
-            await refreshTable();
-          } catch (e) { handleErr(e); }
-        }
-      }),
-    ]),
-  ]);
+        }),
+        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+      ]),
+    );
+  }
 
   async function refreshTable() {
     tableWrap.innerHTML = '';
+    pagerHost.innerHTML = '';
     let d;
     try { d = await api.get(`/api/types?file=${encodeURIComponent(fileSelect.value)}`); }
     catch (e) { tableWrap.append(h('p', { text: e.message })); return; }
+
     const q = search.value.toLowerCase();
+    const filtered = q ? d.types.filter(r => r.name.toLowerCase().includes(q)) : d.types;
+    lastFilteredCount = filtered.length;
+    lastTotalCount = d.count;
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const slice = filtered.slice(start, start + PAGE_SIZE);
 
     const tbl = h('table');
+    const headCb = h('input', { type: 'checkbox', title: 'Select page' });
+    headCb.onchange = () => {
+      tableWrap.querySelectorAll('input[type=checkbox][data-name]').forEach(cb => cb.checked = headCb.checked);
+    };
     tbl.append(h('thead', {}, h('tr', {}, [
-      h('th', {}),
+      h('th', {}, headCb),
       h('th', { text: 'Name' }),
-      h('th', { i18n: 'types.field.nominal' }),
-      h('th', { i18n: 'types.field.min' }),
-      h('th', { i18n: 'types.field.lifetime' }),
+      h('th', { class: 'num', i18n: 'types.field.nominal' }),
+      h('th', { class: 'num', i18n: 'types.field.min' }),
+      h('th', { class: 'num', i18n: 'types.field.lifetime' }),
       h('th', { i18n: 'types.field.category' }),
       h('th', { text: '' }),
     ])));
     const tbody = h('tbody');
-    let shown = 0;
-    for (const row of d.types) {
-      if (q && !row.name.toLowerCase().includes(q)) continue;
-      if (++shown > 500) break;
+    for (const row of slice) {
       const cb = h('input', { type: 'checkbox' });
       cb.dataset.name = row.name;
       tbody.append(h('tr', {}, [
         h('td', {}, cb),
         h('td', { text: row.name }),
-        h('td', { text: row.nominal ?? '' }),
-        h('td', { text: row.min ?? '' }),
-        h('td', { text: row.lifetime ?? '' }),
+        h('td', { class: 'num', text: row.nominal ?? '' }),
+        h('td', { class: 'num', text: row.min ?? '' }),
+        h('td', { class: 'num', text: row.lifetime ?? '' }),
         h('td', { text: row.category || '' }),
-        h('td', {}, h('button', { text: 'Edit',
+        h('td', {}, h('button', { i18n: 'action.edit',
           onclick: () => openEditor(row.name)
         })),
       ]));
     }
     tbl.append(tbody);
-    tableWrap.append(
-      h('p', { class: 'hint', text: `${shown}/${d.count} shown${d.count>500?' (first 500)':''}` }),
-      tbl,
-    );
+    tableWrap.append(tbl);
+
+    // Pager: prev / page X of Y / next + jump-to.
+    const prev = h('button', { text: '←', onclick: () => { currentPage--; refreshTable(); } });
+    const next = h('button', { text: '→', onclick: () => { currentPage++; refreshTable(); } });
+    if (currentPage <= 1) prev.disabled = true;
+    if (currentPage >= totalPages) next.disabled = true;
+    const jump = h('input', { type: 'number', value: currentPage, min: 1, max: totalPages });
+    jump.onchange = () => {
+      const n = parseInt(jump.value, 10);
+      if (Number.isFinite(n) && n >= 1 && n <= totalPages) { currentPage = n; refreshTable(); }
+    };
+    pagerHost.append(h('div', { class: 'pager' }, [
+      prev, next,
+      h('span', { class: 'pager-num',
+        text: `${start + 1}–${Math.min(start + PAGE_SIZE, filtered.length)} / ${filtered.length}${q ? ` (of ${d.count})` : ''}` }),
+      h('span', { class: 'spacer' }),
+      h('span', { class: 'hint', text: t('pager.jump') || 'Page' }),
+      jump,
+      h('span', { class: 'hint', text: `/ ${totalPages}` }),
+    ]));
   }
 
   async function openEditor(name) {
-    editorWrap.innerHTML = '';
-    const t = await api.get(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
+    let t;
+    try {
+      t = await api.get(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
+    } catch (e) { handleErr(e); return; }
+    const m = openModal({ title: name, wide: true });
     const fields = {
       nominal: h('input', { type: 'number', value: t.nominal ?? '' }),
       min: h('input', { type: 'number', value: t.min ?? '' }),
@@ -1177,63 +1248,64 @@ Views.types = async (root) => {
       flagGrid.append(h('div', {}, [h('label', { text: key }), inp]));
     }
 
-    editorWrap.append(
-      h('div', { class: 'card' }, [
-        h('h3', { text: `${name}` }),
-        grid,
-        lists,
-        h('label', { text: 'flags' }),
-        flagGrid,
-        h('div', { class: 'actions' }, [
-          h('button', { class: 'primary', i18n: 'action.save',
-            onclick: async () => {
-              const body = { name };
-              for (const [k, el] of Object.entries(fields)) {
-                const v = el.value.trim();
-                if (v === '') continue;
-                if (k === 'category') body.category = { name: v };
-                else body[k] = Number(v);
-              }
-              body.usages = usages;
-              body.values = values;
-              body.tags = tags;
-              body.flags = Object.fromEntries(Object.entries(flagInputs).map(([k, el]) => [k, Number(el.value) || 0]));
-              try {
-                await api.post(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`, body);
-                toast('saved', 'ok');
-                await refreshTable();
-              } catch (e) { handleErr(e); }
+    m.body.append(
+      grid,
+      lists,
+      h('label', { text: 'flags' }),
+      flagGrid,
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'primary', i18n: 'action.save',
+          onclick: async () => {
+            const body = { name };
+            for (const [k, el] of Object.entries(fields)) {
+              const v = el.value.trim();
+              if (v === '') continue;
+              if (k === 'category') body.category = { name: v };
+              else body[k] = Number(v);
             }
-          }),
-          h('button', { class: 'danger', i18n: 'action.delete',
-            onclick: async () => {
-              if (!confirm(`Delete ${name}?`)) return;
-              try {
-                await api.del(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
-                toast('deleted', 'ok');
-                editorWrap.innerHTML = '';
-                await refreshTable();
-              } catch (e) { handleErr(e); }
-            }
-          }),
-        ]),
-      ])
+            body.usages = usages;
+            body.values = values;
+            body.tags = tags;
+            body.flags = Object.fromEntries(Object.entries(flagInputs).map(([k, el]) => [k, Number(el.value) || 0]));
+            try {
+              await api.post(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`, body);
+              toast('saved', 'ok');
+              m.close();
+              await refreshTable();
+            } catch (e) { handleErr(e); }
+          }
+        }),
+        h('button', { class: 'danger', i18n: 'action.delete',
+          onclick: async () => {
+            if (!confirm(`Delete ${name}?`)) return;
+            try {
+              await api.del(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
+              toast('deleted', 'ok');
+              m.close();
+              await refreshTable();
+            } catch (e) { handleErr(e); }
+          }
+        }),
+        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+      ]),
     );
   }
 
-  fileSelect.onchange = refreshTable;
-  search.oninput = refreshTable;
+  fileSelect.onchange = () => { currentPage = 1; refreshTable(); };
+  search.oninput = () => { currentPage = 1; refreshTable(); };
 
   if (State.serverStatus.running) root.append(runningBanner());
   root.append(
     h('div', { class: 'card' }, [
       h('h2', { i18n: 'types.title' }),
-      h('div', { class: 'toolbar' }, [fileSelect, search]),
+      h('div', { class: 'toolbar' }, [
+        fileSelect, search,
+        h('button', { i18n: 'types.bulk', onclick: openBulkEdit }),
+      ]),
       tableWrap,
+      pagerHost,
     ]),
     presetsWrap,
-    bulkWrap,
-    editorWrap,
   );
   await refreshTable();
 };
@@ -1280,6 +1352,14 @@ Views.moded = async (root) => {
       table,
     ]),
     h('div', { class: 'card' }, [
+      h('h3', { i18n: 'moded.import' }),
+      h('p', { class: 'hint', i18n: 'moded.import.hint' }),
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'primary', i18n: 'moded.import.pick',
+          onclick: () => openImportFromMod() }),
+      ]),
+    ]),
+    h('div', { class: 'card' }, [
       h('h3', { i18n: 'moded.create' }),
       h('label', { i18n: 'moded.fileName' }), nameInput,
       h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, [
@@ -1299,8 +1379,46 @@ Views.moded = async (root) => {
           }
         }),
       ]),
-    ])
+    ]),
   );
+
+  // openImportFromMod: pick an installed @Mod, scan it for *_types.xml files,
+  // pick one, install. Reuses /api/mods/scan-types and /api/mods/install-types
+  // — same flow as the per-mod button on Mods page, just discoverable from
+  // the ModedTypes view.
+  async function openImportFromMod() {
+    let mods;
+    try { mods = await api.get('/api/mods'); }
+    catch (e) { handleErr(e); return; }
+    const installed = (mods.mods || []).filter(m => m.installedInServer);
+    if (!installed.length) {
+      toast(t('moded.import.noMods') || 'No mods installed', 'error');
+      return;
+    }
+    const m = openModal({ title: t('moded.import') || 'Import types from mod', wide: true });
+    const list = h('div', { class: 'mod-pick-list' });
+    for (const mod of installed) {
+      list.append(h('button', { class: 'mod-pick',
+        onclick: async () => {
+          try {
+            const r = await api.get('/api/mods/scan-types?mod=' + encodeURIComponent(mod.name));
+            const files = r.files || [];
+            if (!files.length) { toast(t('modtypes.none')); return; }
+            m.close();
+            await openModTypesDialog(mod.name, files);
+            await navigate('moded');
+          } catch (e) { handleErr(e); }
+        },
+      }, [
+        h('div', { text: mod.name, style: { fontWeight: '600' } }),
+        mod.displayName ? h('div', { class: 'hint', text: mod.displayName }) : null,
+      ]));
+    }
+    m.body.append(list);
+    m.body.append(h('div', { class: 'actions' }, [
+      h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+    ]));
+  }
 };
 
 // --------------------------------------------------------------------- files
@@ -1499,20 +1617,38 @@ Views.logs = async (root) => {
   const pane = h('pre', { class: 'log-pane' });
   const autoScroll = h('input', { type: 'checkbox' });
   autoScroll.checked = true;
+  const paused = h('input', { type: 'checkbox' });
 
   let source;
-  const MAX_CHARS = 400_000;
+  const MAX_CHARS = 200_000;
 
+  // Buffer incoming chunks and flush at most every 200 ms so a chatty RPT
+  // does not produce hundreds of DOM mutations per second (which is what
+  // froze the panel before).
+  let pending = '';
+  let flushScheduled = false;
+  function scheduleFlush() {
+    if (flushScheduled || paused.checked) return;
+    flushScheduled = true;
+    setTimeout(() => {
+      flushScheduled = false;
+      if (!pending) return;
+      let next = pane.textContent + pending;
+      pending = '';
+      if (next.length > MAX_CHARS) next = next.slice(-MAX_CHARS);
+      pane.textContent = next;
+      if (autoScroll.checked) pane.scrollTop = pane.scrollHeight;
+    }, 200);
+  }
   function append(text) {
-    pane.textContent += text;
-    if (pane.textContent.length > MAX_CHARS) {
-      pane.textContent = pane.textContent.slice(-MAX_CHARS);
-    }
-    if (autoScroll.checked) pane.scrollTop = pane.scrollHeight;
+    pending += text;
+    if (pending.length > MAX_CHARS) pending = pending.slice(-MAX_CHARS);
+    scheduleFlush();
   }
 
   async function attach(id) {
     if (source) { source.close(); source = null; }
+    pending = '';
     pane.textContent = '';
     try {
       const r = await api.get(`/api/logs/read?id=${encodeURIComponent(id)}`);
@@ -1531,10 +1667,11 @@ Views.logs = async (root) => {
       h('h2', { i18n: 'nav.logs' }),
       h('div', { class: 'toolbar' }, [
         picker,
-        h('label', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
-          autoScroll, h('span', { text: 'autoscroll' }),
-        ]),
-        h('button', { text: 'Clear', onclick: () => { pane.textContent = ''; } }),
+        h('label', {}, [autoScroll, h('span', { text: ' autoscroll' })]),
+        h('label', {}, [paused, h('span', { text: ' pause' })]),
+        h('button', { text: 'Clear', onclick: () => { pane.textContent = ''; pending = ''; } }),
+        h('span', { class: 'spacer' }),
+        h('small', { class: 'hint', text: 'Tail capped at 200 KB on screen' }),
       ]),
       pane,
     ]),
@@ -1597,13 +1734,43 @@ Views.admlog = async (root) => {
 Views.rcon = async (root) => {
   const card = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.rcon' })]);
   const status = h('div', { class: 'hint' });
+  const setupHost = h('div');
   const players = h('div', { class: 'players-grid' });
   const sayInp = h('input', { type: 'text', placeholder: 'Broadcast message' });
   const cmdInp = h('input', { type: 'text', placeholder: 'Raw RCon command, e.g. #shutdown' });
   const cmdOut = h('pre', { class: 'log-pane', style: { height: '180px' } });
 
+  function renderSetup(message) {
+    setupHost.innerHTML = '';
+    const passInp = h('input', { type: 'password', placeholder: 'RCon password', style: { flex: '1' } });
+    const portInp = h('input', { type: 'number', placeholder: 'Port (auto)', style: { width: '120px' } });
+    setupHost.append(
+      h('div', { class: 'card', style: { borderColor: 'var(--warn)' } }, [
+        h('h3', { i18n: 'rcon.notConfigured' }),
+        h('p', { class: 'hint', text: message || t('rcon.notConfigured.hint') }),
+        h('div', { class: 'row', style: { gap: '8px' } }, [
+          passInp, portInp,
+          h('button', { class: 'primary', i18n: 'action.save', onclick: async () => {
+            try {
+              const cur = await api.get('/api/config');
+              const next = { ...cur };
+              next.rconPassword = passInp.value.trim();
+              const p = parseInt(portInp.value, 10);
+              if (Number.isFinite(p) && p > 0) next.rconPort = p;
+              await api.post('/api/config', next);
+              State.config = next;
+              setupHost.innerHTML = '';
+              await refresh();
+            } catch (e) { handleErr(e); }
+          }}),
+        ]),
+      ]),
+    );
+  }
+
   async function refresh() {
     status.textContent = '';
+    setupHost.innerHTML = '';
     players.innerHTML = '';
     try {
       const d = await api.get('/api/rcon/players');
@@ -1640,7 +1807,12 @@ Views.rcon = async (root) => {
       }
       status.textContent = `${d.count || 0} player(s)`;
     } catch (e) {
-      status.textContent = `RCon error: ${e.message}. Configure RCon in settings.`;
+      const msg = e.message || '';
+      if (/not configured|not running|connect: connection refused|password/i.test(msg)) {
+        renderSetup(msg);
+      } else {
+        status.textContent = `RCon: ${msg}`;
+      }
     }
   }
 
@@ -1649,6 +1821,7 @@ Views.rcon = async (root) => {
       h('button', { text: 'Refresh', onclick: refresh }),
     ]),
     status,
+    setupHost,
     players,
     h('h3', { text: 'Broadcast' }),
     h('div', { class: 'row' }, [
@@ -1683,54 +1856,78 @@ Views.rcon = async (root) => {
 Views.events = async (root) => {
   const search = h('input', { type: 'text', placeholder: t('events.search') });
   const tableWrap = h('div');
-  const editorWrap = h('div');
+  const pagerHost = h('div');
+  const PAGE_SIZE = 200;
+  let currentPage = 1;
 
   const NUM_FIELDS = ['nominal','min','max','lifetime','restock','saveable','active'];
 
   async function refreshTable() {
     tableWrap.innerHTML = '';
+    pagerHost.innerHTML = '';
     let d;
     try { d = await api.get('/api/events'); }
     catch (e) { tableWrap.append(h('p', { text: e.message })); return; }
     const q = search.value.toLowerCase();
+    const filtered = q ? d.events.filter(r => r.name.toLowerCase().includes(q)) : d.events;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const slice = filtered.slice(start, start + PAGE_SIZE);
 
     const tbl = h('table');
     tbl.append(h('thead', {}, h('tr', {}, [
       h('th', { text: 'Name' }),
-      h('th', { i18n: 'events.field.nominal' }),
-      h('th', { i18n: 'events.field.min' }),
-      h('th', { i18n: 'events.field.max' }),
-      h('th', { i18n: 'events.field.lifetime' }),
+      h('th', { class: 'num', i18n: 'events.field.nominal' }),
+      h('th', { class: 'num', i18n: 'events.field.min' }),
+      h('th', { class: 'num', i18n: 'events.field.max' }),
+      h('th', { class: 'num', i18n: 'events.field.lifetime' }),
       h('th', { i18n: 'events.field.active' }),
-      h('th', { i18n: 'events.field.children' }),
+      h('th', { class: 'num', i18n: 'events.field.children' }),
       h('th', { text: '' }),
     ])));
     const tbody = h('tbody');
-    let shown = 0;
-    for (const row of d.events) {
-      if (q && !row.name.toLowerCase().includes(q)) continue;
-      if (++shown > 500) break;
+    for (const row of slice) {
       tbody.append(h('tr', {}, [
         h('td', { text: row.name }),
-        h('td', { text: row.nominal ?? '' }),
-        h('td', { text: row.min ?? '' }),
-        h('td', { text: row.max ?? '' }),
-        h('td', { text: row.lifetime ?? '' }),
+        h('td', { class: 'num', text: row.nominal ?? '' }),
+        h('td', { class: 'num', text: row.min ?? '' }),
+        h('td', { class: 'num', text: row.max ?? '' }),
+        h('td', { class: 'num', text: row.lifetime ?? '' }),
         h('td', {}, row.active ? h('span', { class: 'badge ok', text: '✓' }) : h('span', { class: 'badge mute', text: '—' })),
-        h('td', { text: row.children || 0 }),
-        h('td', {}, h('button', { text: 'Edit', onclick: () => openEditor(row.name) })),
+        h('td', { class: 'num', text: row.children || 0 }),
+        h('td', {}, h('button', { i18n: 'action.edit', onclick: () => openEditor(row.name) })),
       ]));
     }
     tbl.append(tbody);
-    tableWrap.append(
-      h('p', { class: 'hint', text: `${shown}/${d.count} shown${d.count>500?' (first 500)':''}` }),
-      tbl,
-    );
+    tableWrap.append(tbl);
+
+    const prev = h('button', { text: '←', onclick: () => { currentPage--; refreshTable(); } });
+    const next = h('button', { text: '→', onclick: () => { currentPage++; refreshTable(); } });
+    if (currentPage <= 1) prev.disabled = true;
+    if (currentPage >= totalPages) next.disabled = true;
+    const jump = h('input', { type: 'number', value: currentPage, min: 1, max: totalPages });
+    jump.onchange = () => {
+      const n = parseInt(jump.value, 10);
+      if (Number.isFinite(n) && n >= 1 && n <= totalPages) { currentPage = n; refreshTable(); }
+    };
+    pagerHost.append(h('div', { class: 'pager' }, [
+      prev, next,
+      h('span', { class: 'pager-num',
+        text: `${start + 1}–${Math.min(start + PAGE_SIZE, filtered.length)} / ${filtered.length}${q ? ` (of ${d.count})` : ''}` }),
+      h('span', { class: 'spacer' }),
+      h('span', { class: 'hint', text: t('pager.jump') || 'Page' }),
+      jump,
+      h('span', { class: 'hint', text: `/ ${totalPages}` }),
+    ]));
   }
 
   async function openEditor(name) {
-    editorWrap.innerHTML = '';
-    const ev = await api.get(`/api/events/item?name=${encodeURIComponent(name)}`);
+    let ev;
+    try { ev = await api.get(`/api/events/item?name=${encodeURIComponent(name)}`); }
+    catch (e) { handleErr(e); return; }
+    const m = openModal({ title: name, wide: true });
 
     const inputs = {};
     const grid = h('div', { class: 'grid-3' });
@@ -1785,50 +1982,47 @@ Views.events = async (root) => {
     }
     renderChildren();
 
-    editorWrap.append(
-      h('div', { class: 'card' }, [
-        h('h3', { text: name }),
-        grid,
-        h('h4', { i18n: 'events.field.children' }),
-        childrenWrap,
-        h('div', { class: 'actions' }, [
-          h('button', { class: 'primary', i18n: 'action.save',
-            onclick: async () => {
-              const body = { Name: name };
-              for (const k of NUM_FIELDS) {
-                const v = inputs[k].value.trim();
-                if (v === '') continue;
-                // Go json decodes `*int` from a JSON number; capitalize to match struct tags
-                // won't work because xml struct tags drive json too via field name. Use struct field name.
-                const field = k.charAt(0).toUpperCase() + k.slice(1);
-                body[field] = Number(v);
-              }
-              if (children.length) body.Children = { Child: children };
-              try {
-                await api.post(`/api/events/item?name=${encodeURIComponent(name)}`, body);
-                toast('saved', 'ok');
-                await refreshTable();
-              } catch (e) { handleErr(e); }
+    m.body.append(
+      grid,
+      h('h4', { i18n: 'events.field.children' }),
+      childrenWrap,
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'primary', i18n: 'action.save',
+          onclick: async () => {
+            const body = { Name: name };
+            for (const k of NUM_FIELDS) {
+              const v = inputs[k].value.trim();
+              if (v === '') continue;
+              const field = k.charAt(0).toUpperCase() + k.slice(1);
+              body[field] = Number(v);
             }
-          }),
-          h('button', { class: 'danger', i18n: 'action.delete',
-            onclick: async () => {
-              if (!confirm(`Delete event ${name}?`)) return;
-              try {
-                await api.del(`/api/events/item?name=${encodeURIComponent(name)}`);
-                toast('deleted', 'ok');
-                editorWrap.innerHTML = '';
-                await refreshTable();
-              } catch (e) { handleErr(e); }
-            }
-          }),
-        ]),
-      ])
+            if (children.length) body.Children = { Child: children };
+            try {
+              await api.post(`/api/events/item?name=${encodeURIComponent(name)}`, body);
+              toast('saved', 'ok');
+              m.close();
+              await refreshTable();
+            } catch (e) { handleErr(e); }
+          }
+        }),
+        h('button', { class: 'danger', i18n: 'action.delete',
+          onclick: async () => {
+            if (!confirm(`Delete event ${name}?`)) return;
+            try {
+              await api.del(`/api/events/item?name=${encodeURIComponent(name)}`);
+              toast('deleted', 'ok');
+              m.close();
+              await refreshTable();
+            } catch (e) { handleErr(e); }
+          }
+        }),
+        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+      ]),
     );
     applyI18n();
   }
 
-  search.oninput = refreshTable;
+  search.oninput = () => { currentPage = 1; refreshTable(); };
 
   if (State.serverStatus.running) root.append(runningBanner());
   root.append(
@@ -1837,8 +2031,8 @@ Views.events = async (root) => {
       h('p', { class: 'hint', i18n: 'events.hint' }),
       h('div', { class: 'toolbar' }, [search]),
       tableWrap,
+      pagerHost,
     ]),
-    editorWrap,
   );
   await refreshTable();
 };

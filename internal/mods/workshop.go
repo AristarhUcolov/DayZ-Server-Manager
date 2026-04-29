@@ -13,6 +13,7 @@
 package mods
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -116,11 +117,18 @@ func FetchCollectionChildren(collectionID string) ([]string, error) {
 }
 
 // ResolveCollection matches a list of publishedids to @Mod directories in
-// the user's !Workshop folder. A mod is considered resolved if its meta.cpp
-// contains the matching publishedid. Unresolved IDs go into Missing — the
-// user has to subscribe and let Steam download them, we cannot pull from
-// Workshop without the Steam client.
-func ResolveCollection(vanillaDayZPath string, ids []string) (*CollectionResolution, error) {
+// the user's !Workshop folder. Three-pass strategy:
+//
+//  1. Match by meta.cpp PublishedID (cheapest, exact).
+//  2. For unmatched IDs, hit Steam GetPublishedFileDetails to learn the title
+//     and match by normalized folder name ("@FooBar" ↔ "Foo Bar"). This
+//     catches mods where the user's local meta.cpp is stale or missing,
+//     which is common for older DayZ mods.
+//  3. Anything still unmatched lands in Missing (user genuinely needs to
+//     subscribe in Steam).
+//
+// The Steam call is best-effort — if it fails, fallback IDs stay missing.
+func ResolveCollection(ctx context.Context, vanillaDayZPath string, ids []string) (*CollectionResolution, error) {
 	if vanillaDayZPath == "" {
 		return nil, ErrNoVanillaPath
 	}
@@ -128,22 +136,67 @@ func ResolveCollection(vanillaDayZPath string, ids []string) (*CollectionResolut
 	for _, id := range ids {
 		want[id] = true
 	}
-	byID := map[string]ResolvedMod{}
+
+	// Snapshot @Mod folders once with their meta.cpp so we don't re-stat.
+	type wsEntry struct {
+		Folder      string // "@CommunityFramework"
+		PublishedID string // "" if no meta.cpp / no publishedid line
+		Name        string // human-readable from meta.cpp; "" if absent
+	}
 	ws := filepath.Join(vanillaDayZPath, "!Workshop")
 	entries, _ := os.ReadDir(ws)
+	folders := make([]wsEntry, 0, len(entries))
+	usedFolder := map[string]bool{}
 	for _, e := range entries {
 		if !e.IsDir() || !strings.HasPrefix(e.Name(), "@") {
 			continue
 		}
 		meta := readMeta(filepath.Join(ws, e.Name()))
-		if meta.PublishedID == "" {
+		folders = append(folders, wsEntry{Folder: e.Name(), PublishedID: meta.PublishedID, Name: meta.Name})
+	}
+
+	byID := map[string]ResolvedMod{}
+
+	// Pass 1: exact PublishedID match.
+	for _, f := range folders {
+		if f.PublishedID == "" || !want[f.PublishedID] {
 			continue
 		}
-		if want[meta.PublishedID] {
-			byID[meta.PublishedID] = ResolvedMod{
-				PublishedID: meta.PublishedID,
-				ModName:     e.Name(),
-				DisplayName: meta.Name,
+		byID[f.PublishedID] = ResolvedMod{PublishedID: f.PublishedID, ModName: f.Folder, DisplayName: f.Name}
+		usedFolder[f.Folder] = true
+	}
+
+	// Pass 2: Steam-aided name match for the leftover IDs.
+	leftover := make([]string, 0)
+	for _, id := range ids {
+		if _, ok := byID[id]; !ok {
+			leftover = append(leftover, id)
+		}
+	}
+	if len(leftover) > 0 {
+		// Bound the Steam call so a slow upstream never hangs the request.
+		sctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		remote, err := FetchWorkshopMeta(sctx, leftover)
+		if err == nil {
+			// Build lookup from normalized folder name → wsEntry.
+			folderNorm := map[string]wsEntry{}
+			for _, f := range folders {
+				if usedFolder[f.Folder] {
+					continue
+				}
+				folderNorm[normalizeName(strings.TrimPrefix(f.Folder, "@"))] = f
+			}
+			for id, r := range remote {
+				if r.Result != 1 || r.Title == "" {
+					continue
+				}
+				key := normalizeName(r.Title)
+				if f, ok := folderNorm[key]; ok && !usedFolder[f.Folder] {
+					byID[id] = ResolvedMod{PublishedID: id, ModName: f.Folder, DisplayName: f.Name}
+					usedFolder[f.Folder] = true
+					delete(folderNorm, key)
+				}
 			}
 		}
 	}
@@ -157,4 +210,18 @@ func ResolveCollection(vanillaDayZPath string, ids []string) (*CollectionResolut
 		}
 	}
 	return res, nil
+}
+
+// normalizeName lowercases and strips non-alphanumerics so "Community-Online
+// Tools!" and "@CommunityOnlineTools" match. DayZ mod authors are creative
+// with separators, so this is the cheapest fuzzy match that is still safe.
+func normalizeName(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
