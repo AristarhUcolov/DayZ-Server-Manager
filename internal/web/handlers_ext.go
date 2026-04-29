@@ -361,3 +361,88 @@ func (h *handlers) announcementsList(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]interface{}{"announcements": h.app.Config.ScheduledAnnouncements})
 }
+
+// ---------------------------------------------------------------------------
+// Mods: Workshop staleness check.
+//
+// Compares the *Workshop-side* mod folder mtime (i.e. the user's local Steam
+// download) against Steam's published time_updated. A mod is "outdated" when
+// the local Workshop copy is older than what Steam reports — meaning the
+// user needs to run Steam to pull the new files before SyncAll can copy them
+// into the server dir. We surface PublishedID, local time, remote time, and
+// the diff so the frontend can render a clear stale/up-to-date state.
+//
+// Mods without a meta.cpp PublishedID are skipped (e.g. hand-rolled @Mods).
+
+func (h *handlers) modsCheckUpdates(w http.ResponseWriter, r *http.Request) {
+	if h.app.Config.VanillaDayZPath == "" {
+		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
+		return
+	}
+	list, err := mods.List(h.app.ServerDir, h.app.Config.VanillaDayZPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	idToMod := map[string]*mods.Mod{}
+	ids := make([]string, 0, len(list))
+	for i := range list {
+		m := &list[i]
+		if m.PublishedID == "" {
+			continue
+		}
+		idToMod[m.PublishedID] = m
+		ids = append(ids, m.PublishedID)
+	}
+	remote, err := mods.FetchWorkshopMeta(r.Context(), ids)
+	if err != nil {
+		// Partial results are still useful — return what we got with the error.
+		writeJSON(w, map[string]interface{}{
+			"error":   err.Error(),
+			"results": buildCheckResults(idToMod, remote),
+		})
+		return
+	}
+	writeJSON(w, map[string]interface{}{
+		"results": buildCheckResults(idToMod, remote),
+	})
+}
+
+func buildCheckResults(idToMod map[string]*mods.Mod, remote map[string]mods.WorkshopRemote) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(idToMod))
+	for id, m := range idToMod {
+		row := map[string]interface{}{
+			"name":         m.Name,
+			"publishedId":  id,
+			"localUpdated": m.WorkshopModifiedAt,
+		}
+		r, ok := remote[id]
+		if !ok {
+			row["status"] = "unknown"
+			out = append(out, row)
+			continue
+		}
+		row["title"] = r.Title
+		row["remoteUpdated"] = r.TimeUpdated
+		row["remoteResult"] = r.Result
+		switch {
+		case r.Result != 1:
+			row["status"] = "missing" // ID was removed/private on Steam
+		case r.TimeUpdated.IsZero():
+			row["status"] = "unknown"
+		case m.WorkshopModifiedAt.IsZero():
+			row["status"] = "unknown"
+		case r.TimeUpdated.After(m.WorkshopModifiedAt.Add(2 * time.Minute)):
+			row["status"] = "outdated"
+		default:
+			row["status"] = "ok"
+		}
+		out = append(out, row)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		ai, _ := out[i]["name"].(string)
+		aj, _ := out[j]["name"].(string)
+		return strings.ToLower(ai) < strings.ToLower(aj)
+	})
+	return out
+}

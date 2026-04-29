@@ -785,7 +785,7 @@ Views.mods = async (root) => {
         target: '_blank', rel: 'noopener', text: `id: ${m.publishedId}`,
       })) : null,
     ]);
-    tbody.append(h('tr', {}, [
+    const tr = h('tr', {}, [
       nameCell,
       h('td', {}, statusBadge),
       h('td', {}, m.availableInWorkshop ? h('span', { class: 'badge ok', text: '✓' }) : h('span', { class: 'badge mute', text: '—' })),
@@ -793,13 +793,61 @@ Views.mods = async (root) => {
       h('td', { text: bytes(m.sizeBytes) }),
       h('td', {}, activeCb),
       h('td', {}, actions),
-    ]));
+    ]);
+    if (m.publishedId) tr.dataset.published = m.publishedId;
+    tbody.append(tr);
   }
   tbl.append(tbody);
+
+  // Apply Steam-side staleness to rows by publishedId. Adds a second status
+  // line ("Steam: up-to-date" / "Steam: outdated by 3d") under each name cell.
+  const applySteamCheck = (results) => {
+    const byId = {};
+    for (const r of results) byId[r.publishedId] = r;
+    const trs = tbody.querySelectorAll('tr[data-published]');
+    let outdated = 0;
+    trs.forEach(tr => {
+      const id = tr.dataset.published;
+      const r = byId[id];
+      const name = tr.firstChild;
+      // Strip any prior Steam row.
+      name.querySelectorAll('.steam-row').forEach(n => n.remove());
+      if (!r) return;
+      let cls = 'mute', label = t('mods.steam.unknown') || 'Steam: unknown';
+      if (r.status === 'outdated') {
+        cls = 'warn';
+        outdated++;
+        const ms = new Date(r.remoteUpdated).getTime() - new Date(r.localUpdated || 0).getTime();
+        const days = Math.max(1, Math.round(ms / (24 * 3600 * 1000)));
+        label = (t('mods.steam.outdated') || 'Steam: outdated') + ` (~${days}d)`;
+      } else if (r.status === 'ok') {
+        cls = 'ok'; label = t('mods.steam.ok') || 'Steam: up-to-date';
+      } else if (r.status === 'missing') {
+        cls = 'err'; label = t('mods.steam.missing') || 'Steam: removed/private';
+      }
+      name.appendChild(h('div', { class: 'hint steam-row' },
+        h('span', { class: 'badge ' + cls, text: label })));
+    });
+    return outdated;
+  };
 
   const toolbar = h('div', { class: 'toolbar' }, [
     h('button', { i18n: 'action.syncKeys',
       onclick: async () => { try { await api.post('/api/mods/sync-keys'); toast('keys synced','ok'); } catch (e) { handleErr(e); } }
+    }),
+    h('button', { i18n: 'mods.checkSteam',
+      onclick: async (e) => {
+        const btn = e.currentTarget;
+        const original = btn.textContent;
+        btn.disabled = true; btn.textContent = (t('mods.checkingSteam') || 'Checking…');
+        try {
+          const r = await api.post('/api/mods/check-updates', {});
+          const out = applySteamCheck(r.results || []);
+          if (r.error) toast(r.error, 'error');
+          else toast((t('mods.checkSteam.done') || 'Checked: ') + (out > 0 ? `${out} outdated` : 'all up-to-date'), out > 0 ? 'warn' : 'ok');
+        } catch (err) { handleErr(err); }
+        finally { btn.disabled = false; btn.textContent = original; }
+      }
     }),
     h('button', { class: 'primary', i18n: 'mods.syncAll',
       onclick: async () => {

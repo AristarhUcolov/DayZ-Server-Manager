@@ -65,6 +65,8 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/mods/update-all", methods(h.modsUpdateAll, http.MethodPost))
 	mux.HandleFunc("/api/mods/sync-all", methods(h.modsSyncAll, http.MethodPost))
 	mux.HandleFunc("/api/mods/sync-keys", methods(h.modsSyncKeys, http.MethodPost))
+	// Workshop "is the local copy stale vs Steam?" probe.
+	mux.HandleFunc("/api/mods/check-updates", methods(h.modsCheckUpdates, http.MethodPost))
 	// Steam Workshop collection URL importer: fetches the public collection
 	// HTML and matches child IDs to @Mod folders via meta.cpp.
 	mux.HandleFunc("/api/mods/collection/resolve", methods(h.modsCollectionResolve, http.MethodPost))
