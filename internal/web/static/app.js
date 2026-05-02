@@ -15,24 +15,62 @@ const State = {
 
 // --------------------------------------------------------------------- api
 
+// Top-of-page indeterminate progress bar tied to api call lifecycle.
+// Counts in-flight requests; bar fades in after a short delay so quick
+// (~<300ms) calls don't flash. Streaming endpoints (/api/logs/stream) bypass
+// this — they're long-lived and would pin the bar forever.
+const Progress = {
+  pending: 0, showTimer: 0,
+  bar() {
+    let el = document.getElementById('top-progress');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'top-progress';
+      el.className = 'top-progress';
+      document.body.append(el);
+    }
+    return el;
+  },
+  start() {
+    this.pending++;
+    if (this.pending === 1) {
+      clearTimeout(this.showTimer);
+      this.showTimer = setTimeout(() => this.bar().classList.add('busy'), 250);
+    }
+  },
+  end() {
+    if (this.pending > 0) this.pending--;
+    if (this.pending === 0) {
+      clearTimeout(this.showTimer);
+      this.bar().classList.remove('busy');
+    }
+  },
+};
+
 const api = {
   async get(path) {
-    const r = await fetch(path, { credentials: 'same-origin' });
-    if (r.status === 401) { showLogin(); throw new Error('unauthorized'); }
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+    Progress.start();
+    try {
+      const r = await fetch(path, { credentials: 'same-origin' });
+      if (r.status === 401) { showLogin(); throw new Error('unauthorized'); }
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    } finally { Progress.end(); }
   },
   async send(path, method, body) {
-    const r = await fetch(path, {
-      method,
-      credentials: 'same-origin',
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (r.status === 401) { showLogin(); throw new Error('unauthorized'); }
-    if (!r.ok) throw new Error(await r.text());
-    const text = await r.text();
-    try { return text ? JSON.parse(text) : {}; } catch { return {}; }
+    Progress.start();
+    try {
+      const r = await fetch(path, {
+        method,
+        credentials: 'same-origin',
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (r.status === 401) { showLogin(); throw new Error('unauthorized'); }
+      if (!r.ok) throw new Error(await r.text());
+      const text = await r.text();
+      try { return text ? JSON.parse(text) : {}; } catch { return {}; }
+    } finally { Progress.end(); }
   },
   post(p, b)   { return this.send(p, 'POST',   b); },
   put(p, b)    { return this.send(p, 'PUT',    b); },
@@ -101,6 +139,25 @@ async function navigate(name) {
 document.addEventListener('click', e => {
   const a = e.target.closest('.nav a');
   if (a && a.dataset.route) { e.preventDefault(); navigate(a.dataset.route); }
+});
+
+// Global keyboard shortcuts.
+//   Ctrl/Cmd+S — call root._save() if the active view registered one.
+//   Ctrl/Cmd+K — open the command palette.
+// Always swallows the browser default (Save Page As / search bar focus).
+document.addEventListener('keydown', e => {
+  const meta = e.ctrlKey || e.metaKey;
+  if (!meta) return;
+  if (e.key === 's' || e.key === 'S') {
+    const root = document.getElementById('view');
+    if (root && typeof root._save === 'function') {
+      e.preventDefault();
+      Promise.resolve(root._save()).catch(handleErr);
+    }
+  } else if (e.key === 'k' || e.key === 'K') {
+    e.preventDefault();
+    openCommandPalette();
+  }
 });
 
 // --------------------------------------------------------------------- helpers
@@ -600,6 +657,133 @@ function sparkline(series, maxFixed) {
   svg.appendChild(areaPath);
   svg.appendChild(line);
   return svg;
+}
+
+// openCommandPalette — Ctrl+K quick navigator. Lists all routes plus a few
+// always-available actions (start/stop/restart/sync). Filterable by keyword;
+// arrow keys move selection, Enter triggers, Esc closes. Reuses .modal-card
+// styling but with its own search-result body.
+let _commandPaletteOpen = false;
+function openCommandPalette() {
+  if (_commandPaletteOpen) return;
+  _commandPaletteOpen = true;
+
+  const items = [
+    { kind: 'route', label: t('nav.dashboard') || 'Dashboard',  route: 'dashboard' },
+    { kind: 'route', label: t('nav.server')    || 'Server',     route: 'server' },
+    { kind: 'route', label: t('nav.mods')      || 'Mods',       route: 'mods' },
+    { kind: 'route', label: t('nav.events')    || 'Events',     route: 'events' },
+    { kind: 'route', label: t('nav.types')     || 'Types',      route: 'types' },
+    { kind: 'route', label: t('nav.modedTypes')|| 'Custom types', route: 'moded' },
+    { kind: 'route', label: t('nav.missionDb') || 'Mission DB', route: 'missiondb' },
+    { kind: 'route', label: t('nav.files')     || 'Files',      route: 'files' },
+    { kind: 'route', label: t('nav.profiles')  || 'Profiles',   route: 'profiles' },
+    { kind: 'route', label: t('nav.battleye')  || 'BattlEye',   route: 'battleye' },
+    { kind: 'route', label: t('nav.logs')      || 'Logs',       route: 'logs' },
+    { kind: 'route', label: t('nav.admlog')    || 'ADM log',    route: 'admlog' },
+    { kind: 'route', label: t('nav.rcon')      || 'RCon',       route: 'rcon' },
+    { kind: 'route', label: t('nav.validator') || 'Validator',  route: 'validator' },
+    { kind: 'route', label: t('nav.sync')      || 'Sync',       route: 'sync' },
+    { kind: 'route', label: t('nav.settings')  || 'Settings',   route: 'settings' },
+    { kind: 'action', label: (t('action.start') || 'Start server'),
+      run: async () => { try { await api.post('/api/server/start'); toast('starting', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
+    { kind: 'action', label: (t('action.stop') || 'Stop server'),
+      run: async () => { try { await api.post('/api/server/stop'); toast('stopping', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
+    { kind: 'action', label: (t('action.restart') || 'Restart server'),
+      run: async () => { try { await api.post('/api/server/restart'); toast('restarting', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
+    { kind: 'action', label: (t('action.logout') || 'Logout'),
+      run: () => logout() },
+    { kind: 'action', label: (t('action.theme.toggle') || 'Toggle theme'),
+      run: () => { const cur = (localStorage.getItem('theme') || 'dark'); setTheme(cur === 'dark' ? 'light' : 'dark'); } },
+  ];
+
+  const overlay = h('div', { class: 'modal modal-overlay cmdp-overlay' });
+  const card = h('div', { class: 'modal-card cmdp' });
+  const input = h('input', { type: 'text',
+    placeholder: (t('cmdp.placeholder') || 'Type a route or action — ↑↓ Enter Esc'),
+    autocomplete: 'off', spellcheck: 'false' });
+  const list = h('div', { class: 'cmdp-list' });
+  card.append(
+    h('div', { class: 'cmdp-input-wrap' }, [input]),
+    list,
+    h('div', { class: 'cmdp-foot hint' }, [
+      h('span', { text: '↑↓ ' }), h('span', { text: t('cmdp.move') || 'navigate' }),
+      h('span', { text: '   Enter ' }), h('span', { text: t('cmdp.go') || 'go' }),
+      h('span', { text: '   Esc ' }), h('span', { text: t('cmdp.close') || 'close' }),
+    ]),
+  );
+  overlay.append(card);
+
+  let selected = 0;
+  let filtered = items.slice();
+
+  function score(label, q) {
+    label = label.toLowerCase(); q = q.toLowerCase();
+    if (!q) return 1;
+    if (label === q) return 1000;
+    if (label.startsWith(q)) return 500;
+    if (label.includes(q)) return 100;
+    // Subsequence fallback so "msd" matches "Mission DB".
+    let li = 0; for (const ch of q) {
+      const at = label.indexOf(ch, li);
+      if (at < 0) return 0;
+      li = at + 1;
+    }
+    return 10;
+  }
+
+  function render() {
+    list.innerHTML = '';
+    if (filtered.length === 0) {
+      list.append(h('div', { class: 'cmdp-empty hint', text: t('cmdp.empty') || 'No matches' }));
+      return;
+    }
+    filtered.forEach((it, i) => {
+      const row = h('div', { class: 'cmdp-row' + (i === selected ? ' active' : '') }, [
+        h('span', { class: 'cmdp-kind ' + it.kind, text: it.kind === 'route' ? '→' : '⚡' }),
+        h('span', { class: 'cmdp-label', text: it.label }),
+      ]);
+      row.onclick = () => { selected = i; trigger(); };
+      list.append(row);
+    });
+  }
+
+  function refilter() {
+    const q = input.value.trim();
+    filtered = items
+      .map(it => ({ it, s: score(it.label, q) }))
+      .filter(x => x.s > 0)
+      .sort((a, b) => b.s - a.s)
+      .map(x => x.it);
+    selected = 0;
+    render();
+  }
+  refilter();
+
+  function close() {
+    _commandPaletteOpen = false;
+    document.removeEventListener('keydown', onKey, true);
+    overlay.remove();
+  }
+  function trigger() {
+    const it = filtered[selected];
+    if (!it) return;
+    close();
+    if (it.kind === 'route') navigate(it.route);
+    else if (typeof it.run === 'function') Promise.resolve(it.run()).catch(handleErr);
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (selected < filtered.length - 1) { selected++; render(); } return; }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); if (selected > 0) { selected--; render(); } return; }
+    if (e.key === 'Enter')     { e.preventDefault(); trigger(); return; }
+  }
+  document.addEventListener('keydown', onKey, true);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  input.addEventListener('input', refilter);
+
+  document.body.append(overlay);
+  setTimeout(() => input.focus(), 0);
 }
 
 // openModal renders a content-agnostic modal overlay with a close button.
@@ -1502,15 +1686,8 @@ Views.files = async (root) => {
           pathLabel,
           editorHost,
           h('div', { class: 'actions' }, [
-            h('button', { class: 'primary', i18n: 'files.save',
-              onclick: async () => {
-                if (!currentPath) return;
-                try {
-                  await api.post('/api/files/write', { path: currentPath, content: getValue() });
-                  toast(t('files.save'), 'ok');
-                  await refreshBackups();
-                } catch (e) { handleErr(e); }
-              }
+            h('button', { class: 'primary', i18n: 'files.save', title: 'Ctrl+S',
+              onclick: () => doSave(),
             }),
           ]),
           backupList,
@@ -1518,6 +1695,16 @@ Views.files = async (root) => {
       ]),
     ])
   );
+
+  async function doSave() {
+    if (!currentPath) return;
+    try {
+      await api.post('/api/files/write', { path: currentPath, content: getValue() });
+      toast(t('files.save'), 'ok');
+      await refreshBackups();
+    } catch (e) { handleErr(e); }
+  }
+  root._save = doSave;
 
   try {
     cm = await CM.mount(editorHost, { mode: null });
@@ -2420,13 +2607,16 @@ Views.profiles = async (root) => {
   const setValue = (v) => { if (cm) cm.setValue(v || ''); else editor.value = v || ''; };
   const setMode  = (p) => { if (cm) cm.setOption('mode', CM.modeFor(p)); };
 
-  const savebtn = h('button', { class: 'primary', i18n: 'files.save', disabled: true, onclick: async () => {
+  async function doSave() {
     if (!savedPath.path) return;
     try {
       await api.post('/api/profiles/write', { path: savedPath.path, content: getValue() });
       toast(t('files.save'), 'ok');
     } catch (e) { handleErr(e); }
-  }});
+  }
+  const savebtn = h('button', { class: 'primary', i18n: 'files.save', disabled: true, title: 'Ctrl+S',
+    onclick: doSave });
+  root._save = doSave;
 
   async function openFile(path) {
     try {
@@ -2488,6 +2678,14 @@ async function main() {
       themeBtn.onclick = () => {
         const cur = document.documentElement.getAttribute('data-theme');
         setTheme(cur === 'light' ? 'dark' : 'light');
+      };
+    }
+    const cmdpBtn = document.getElementById('cmdp-btn');
+    if (cmdpBtn) cmdpBtn.onclick = () => openCommandPalette();
+    const navToggle = document.getElementById('nav-toggle');
+    if (navToggle) {
+      navToggle.onclick = () => {
+        document.querySelector('.topbar')?.classList.toggle('nav-open');
       };
     }
 
@@ -2553,20 +2751,21 @@ Views.battleye = async (root) => {
   };
   fileSelect.onchange = load;
 
+  async function doSave() {
+    try {
+      await api.post('/api/battleye/write', { name: fileSelect.value, content: getValue() });
+      toast('saved', 'ok');
+    } catch (e) { handleErr(e); }
+  }
+  root._save = doSave;
+
   wrap.append(h('div', { class: 'card' }, [
     h('h2', { i18n: 'nav.battleye' }),
     h('p', { class: 'hint', text: d.dir }),
     h('div', { class: 'toolbar' }, [
       fileSelect,
       h('button', { i18n: 'action.reload', onclick: load }),
-      h('button', { class: 'primary', i18n: 'action.save',
-        onclick: async () => {
-          try {
-            await api.post('/api/battleye/write', { name: fileSelect.value, content: getValue() });
-            toast('saved', 'ok');
-          } catch (e) { handleErr(e); }
-        }
-      }),
+      h('button', { class: 'primary', i18n: 'action.save', title: 'Ctrl+S', onclick: doSave }),
     ]),
     editorHost,
     h('p', { class: 'hint', i18n: 'battleye.hint' }),
@@ -2611,20 +2810,21 @@ Views.missiondb = async (root) => {
   };
   fileSelect.onchange = load;
 
+  async function doSave() {
+    try {
+      await api.post('/api/mission/db/write', { path: fileSelect.value, content: getValue() });
+      toast('saved', 'ok');
+    } catch (e) { handleErr(e); }
+  }
+  root._save = doSave;
+
   wrap.append(h('div', { class: 'card' }, [
     h('h2', { i18n: 'nav.missionDb' }),
     h('p', { class: 'hint', text: d.dir }),
     h('div', { class: 'toolbar' }, [
       fileSelect,
       h('button', { i18n: 'action.reload', onclick: load }),
-      h('button', { class: 'primary', i18n: 'action.save',
-        onclick: async () => {
-          try {
-            await api.post('/api/mission/db/write', { path: fileSelect.value, content: getValue() });
-            toast('saved', 'ok');
-          } catch (e) { handleErr(e); }
-        }
-      }),
+      h('button', { class: 'primary', i18n: 'action.save', title: 'Ctrl+S', onclick: doSave }),
     ]),
     editorHost,
     h('p', { class: 'hint', i18n: 'missionDb.hint' }),
