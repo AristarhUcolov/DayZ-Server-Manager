@@ -14,6 +14,7 @@
 и превращает обычный сервер в удобную панель управления в браузере. Никаких
 `Notepad`, никаких `.bat` — всё через приятный веб-интерфейс. Вдохновлён
 панелями хостингов GTA SA:MP.
+<img width="1914" height="893" alt="{295FFA97-BA29-411B-8868-ECC23DE34220}" src="https://github.com/user-attachments/assets/bae4cc20-936a-47e8-8251-2e8948987e87" />
 
 ## Что умеет
 
@@ -145,6 +146,7 @@ dedicated server. Drop it into your DayZ Server folder and a browser-based
 admin panel opens. No more Notepad, no more fiddling with `.bat` files —
 everything through a clean web UI. Inspired by classic GTA SA:MP hosting
 panels.
+<img width="1912" height="897" alt="{6C2F5542-BC13-48A3-9B8E-670671B97C7C}" src="https://github.com/user-attachments/assets/408af898-ad66-4de2-b176-f0b703d6dcf1" />
 
 ## What it does
 
