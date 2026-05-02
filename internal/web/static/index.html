@@ -13,117 +13,147 @@
 <body>
   <div id="first-run" class="modal hidden">
     <div class="modal-card">
-      <h2 data-i18n="firstRun.title"></h2>
+      <div class="modal-header"><h3 data-i18n="firstRun.title"></h3></div>
+      <div class="modal-body">
+        <label data-i18n="firstRun.lang"></label>
+        <select id="fr-lang">
+          <option value="en">English</option>
+          <option value="ru">Русский</option>
+        </select>
 
-      <label data-i18n="firstRun.lang"></label>
-      <select id="fr-lang">
-        <option value="en">English</option>
-        <option value="ru">Русский</option>
-      </select>
+        <label data-i18n="firstRun.vanillaPath"></label>
+        <div class="row" style="gap:6px;">
+          <input id="fr-vanilla" type="text" placeholder="F:\SteamLibrary\steamapps\common\DayZ" style="flex:1;" />
+          <button type="button" id="fr-steam" class="secondary" data-i18n="firstRun.detect"></button>
+        </div>
+        <small class="hint" data-i18n="firstRun.vanillaPath.hint"></small>
+        <div id="fr-steam-list" class="steam-list hidden"></div>
+        <div id="fr-missions" class="missions-preview hidden"></div>
 
-      <label data-i18n="firstRun.vanillaPath"></label>
-      <div class="row" style="gap:6px;">
-        <input id="fr-vanilla" type="text" placeholder="F:\SteamLibrary\steamapps\common\DayZ" style="flex:1;" />
-        <button type="button" id="fr-steam" class="secondary" data-i18n="firstRun.detect"></button>
-      </div>
-      <small class="hint" data-i18n="firstRun.vanillaPath.hint"></small>
-      <div id="fr-steam-list" class="steam-list hidden"></div>
-      <div id="fr-missions" class="missions-preview hidden"></div>
+        <label data-i18n="firstRun.exposure"></label>
+        <div class="row">
+          <label><input type="radio" name="fr-exposure" value="local" checked /> <span data-i18n="firstRun.exposure.local"></span></label>
+          <label><input type="radio" name="fr-exposure" value="internet" /> <span data-i18n="firstRun.exposure.internet"></span></label>
+        </div>
 
-      <label data-i18n="firstRun.exposure"></label>
-      <div class="row">
-        <label><input type="radio" name="fr-exposure" value="local" checked /> <span data-i18n="firstRun.exposure.local"></span></label>
-        <label><input type="radio" name="fr-exposure" value="internet" /> <span data-i18n="firstRun.exposure.internet"></span></label>
-      </div>
+        <div id="fr-auth-block">
+          <label data-i18n="firstRun.adminUsername"></label>
+          <input id="fr-admin-user" type="text" value="admin" autocomplete="username" />
+          <label data-i18n="firstRun.adminPassword"></label>
+          <input id="fr-admin-pass" type="password" autocomplete="new-password" />
+          <small class="hint" data-i18n="firstRun.adminPassword.hint"></small>
+        </div>
 
-      <div id="fr-auth-block">
-        <label data-i18n="firstRun.adminUsername"></label>
-        <input id="fr-admin-user" type="text" value="admin" autocomplete="username" />
-        <label data-i18n="firstRun.adminPassword"></label>
-        <input id="fr-admin-pass" type="password" autocomplete="new-password" />
-        <small class="hint" data-i18n="firstRun.adminPassword.hint"></small>
-      </div>
-
-      <div class="actions">
-        <button id="fr-finish" class="primary" data-i18n="firstRun.finish"></button>
+        <div class="actions">
+          <button id="fr-finish" class="primary" data-i18n="firstRun.finish"></button>
+        </div>
       </div>
     </div>
   </div>
 
   <div id="login" class="modal hidden">
     <div class="modal-card">
-      <h2 data-i18n="login.title"></h2>
-      <label data-i18n="login.username"></label>
-      <input id="login-user" type="text" autocomplete="username" />
-      <label data-i18n="login.password"></label>
-      <input id="login-pass" type="password" autocomplete="current-password" />
-      <div id="login-error" class="hint" style="color:#ff6b6b;"></div>
-      <div class="actions">
-        <button id="login-submit" class="primary" data-i18n="login.submit"></button>
+      <div class="modal-header"><h3 data-i18n="login.title"></h3></div>
+      <div class="modal-body">
+        <label data-i18n="login.username"></label>
+        <input id="login-user" type="text" autocomplete="username" />
+        <label data-i18n="login.password"></label>
+        <input id="login-pass" type="password" autocomplete="current-password" />
+        <div id="login-error" class="hint" style="color:var(--error);"></div>
+        <div class="actions">
+          <button id="login-submit" class="primary" data-i18n="login.submit"></button>
+        </div>
       </div>
     </div>
   </div>
 
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">DZ</span>
-      <div>
-        <div class="title" data-i18n="app.name"></div>
-        <div class="subtitle" data-i18n="app.author"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <span class="logo">DZ</span>
+        <div>
+          <div class="title" data-i18n="app.name"></div>
+          <div class="subtitle" data-i18n="app.author"></div>
+        </div>
       </div>
-    </div>
-    <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">≡</button>
-    <nav class="nav">
-      <a data-route="dashboard" class="active" data-i18n="nav.dashboard"></a>
-      <span class="nav-sep"></span>
-      <a data-route="server"     data-i18n="nav.server"></a>
-      <a data-route="mods"       data-i18n="nav.mods"></a>
-      <a data-route="events"     data-i18n="nav.events"></a>
-      <span class="nav-sep"></span>
-      <a data-route="types"      data-i18n="nav.types"></a>
-      <a data-route="moded"      data-i18n="nav.modedTypes"></a>
-      <a data-route="missiondb"  data-i18n="nav.missionDb"></a>
-      <span class="nav-sep"></span>
-      <a data-route="files"      data-i18n="nav.files"></a>
-      <a data-route="profiles"   data-i18n="nav.profiles"></a>
-      <a data-route="battleye"   data-i18n="nav.battleye"></a>
-      <span class="nav-sep"></span>
-      <a data-route="logs"       data-i18n="nav.logs"></a>
-      <a data-route="admlog"     data-i18n="nav.admlog"></a>
-      <a data-route="rcon"       data-i18n="nav.rcon"></a>
-      <a data-route="validator"  data-i18n="nav.validator"></a>
-      <span class="nav-sep"></span>
-      <a data-route="sync"       data-i18n="nav.sync"></a>
-      <a data-route="settings"   data-i18n="nav.settings"></a>
-    </nav>
-    <div class="top-right">
-      <button id="cmdp-btn" class="kbd-hint" title="Open command palette (Ctrl+K)" aria-label="Open command palette">
-        <span class="kbd">Ctrl</span><span class="kbd">K</span>
-      </button>
-      <button id="theme-toggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
-        <span class="theme-icon">◐</span>
-      </button>
-      <select id="lang-switch">
-        <option value="en">EN</option>
-        <option value="ru">RU</option>
-      </select>
-      <span id="server-indicator" class="chip stopped">
-        <span class="dot"></span>
-        <span id="server-indicator-text" data-i18n="status.stopped"></span>
-      </span>
-      <button id="logout-btn" class="hidden" data-i18n="action.logout"></button>
-    </div>
-  </header>
 
-  <main id="view"></main>
+      <nav class="nav">
+        <div class="nav-group">
+          <a data-route="dashboard" class="active">
+            <span class="nav-icon">◉</span><span data-i18n="nav.dashboard"></span>
+          </a>
+        </div>
 
-  <footer class="footer">
-    <span data-i18n="app.copyright"></span>
-    <span class="footer-sep">·</span>
-    <a href="https://buymeacoffee.com/aristarh.ucolov" target="_blank" rel="noopener" class="donate-link">☕ <span data-i18n="support.coffee"></span></a>
-    <span class="footer-sep">·</span>
-    <a href="https://www.donationalerts.com/r/aristarh_ucolov" target="_blank" rel="noopener" class="donate-link">♥ <span data-i18n="support.donationalerts"></span></a>
-  </footer>
+        <div class="nav-group">
+          <div class="nav-group-label" data-i18n="nav.group.server"></div>
+          <a data-route="server"><span class="nav-icon">⌂</span><span data-i18n="nav.server"></span></a>
+          <a data-route="mods"><span class="nav-icon">▦</span><span data-i18n="nav.mods"></span></a>
+          <a data-route="events"><span class="nav-icon">★</span><span data-i18n="nav.events"></span></a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label" data-i18n="nav.group.economy"></div>
+          <a data-route="types"><span class="nav-icon">≡</span><span data-i18n="nav.types"></span></a>
+          <a data-route="moded"><span class="nav-icon">≢</span><span data-i18n="nav.modedTypes"></span></a>
+          <a data-route="missiondb"><span class="nav-icon">⛶</span><span data-i18n="nav.missionDb"></span></a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label" data-i18n="nav.group.config"></div>
+          <a data-route="files"><span class="nav-icon">▤</span><span data-i18n="nav.files"></span></a>
+          <a data-route="profiles"><span class="nav-icon">⊟</span><span data-i18n="nav.profiles"></span></a>
+          <a data-route="battleye"><span class="nav-icon">⊕</span><span data-i18n="nav.battleye"></span></a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label" data-i18n="nav.group.live"></div>
+          <a data-route="logs"><span class="nav-icon">◷</span><span data-i18n="nav.logs"></span></a>
+          <a data-route="admlog"><span class="nav-icon">◑</span><span data-i18n="nav.admlog"></span></a>
+          <a data-route="rcon"><span class="nav-icon">⚡</span><span data-i18n="nav.rcon"></span></a>
+          <a data-route="validator"><span class="nav-icon">✓</span><span data-i18n="nav.validator"></span></a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label" data-i18n="nav.group.system"></div>
+          <a data-route="sync"><span class="nav-icon">↻</span><span data-i18n="nav.sync"></span></a>
+          <a data-route="settings"><span class="nav-icon">⚙</span><span data-i18n="nav.settings"></span></a>
+        </div>
+      </nav>
+
+      <div class="sidebar-foot">
+        <a href="https://buymeacoffee.com/aristarh.ucolov" target="_blank" rel="noopener" class="donate-link">☕ <span data-i18n="support.coffee"></span></a>
+        <a href="https://www.donationalerts.com/r/aristarh_ucolov" target="_blank" rel="noopener" class="donate-link">♥ <span data-i18n="support.donationalerts"></span></a>
+        <span class="copyright" data-i18n="app.copyright"></span>
+      </div>
+    </aside>
+
+    <div class="main-col">
+      <header class="topbar">
+        <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">≡</button>
+        <button id="cmdp-btn" class="kbd-hint" title="Open command palette (Ctrl+K)" aria-label="Open command palette">
+          <span class="kbd">Ctrl</span><span class="kbd">K</span>
+          <span class="kbd-hint-label" data-i18n="cmdp.search"></span>
+        </button>
+        <span class="grow"></span>
+        <span id="server-indicator" class="chip stopped">
+          <span class="dot"></span>
+          <span id="server-indicator-text" data-i18n="status.stopped"></span>
+        </span>
+        <select id="lang-switch" class="topbar-sel" aria-label="Language">
+          <option value="en">EN</option>
+          <option value="ru">RU</option>
+        </select>
+        <button id="theme-toggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
+          <span class="theme-icon">◐</span>
+        </button>
+        <button id="logout-btn" class="hidden" data-i18n="action.logout"></button>
+      </header>
+
+      <main id="view"></main>
+    </div>
+
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+  </div>
 
   <div id="toast" class="toast"></div>
 

@@ -431,6 +431,12 @@ async function logout() {
 
 Views.dashboard = async (root) => {
   await refreshStatus();
+  root.append(pageHeader('nav.dashboard', 'dashboard.subtitle', [
+    h('button', { class: 'primary', i18n: 'action.start',
+      onclick: async () => { try { await api.post('/api/server/start'); refreshStatus(); } catch (e) { handleErr(e); } } }),
+    h('button', { i18n: 'action.restart',
+      onclick: async () => { try { await api.post('/api/server/restart'); refreshStatus(); } catch (e) { handleErr(e); } } }),
+  ]));
 
   // Silent probe — if a newer manager version is out, show a non-blocking
   // banner. Failures are swallowed; this should never block the dashboard.
@@ -786,6 +792,16 @@ function openCommandPalette() {
   setTimeout(() => input.focus(), 0);
 }
 
+// pageHeader renders the standard route header — large title + optional
+// subtitle + right-aligned action buttons. Use as the first element appended
+// to a view's `root` so every page reads consistently.
+function pageHeader(titleKey, subKey, actions) {
+  const left = h('div', {}, [h('h1', { i18n: titleKey })]);
+  if (subKey) left.append(h('div', { class: 'page-sub', i18n: subKey }));
+  const right = h('div', { class: 'page-actions' }, actions || []);
+  return h('div', { class: 'page-header' }, [left, right]);
+}
+
 // openModal renders a content-agnostic modal overlay with a close button.
 // Returns { close, body } so callers can build their UI inside `body` and
 // dismiss programmatically. Click on backdrop or Escape both close. The
@@ -920,6 +936,7 @@ Views.server = async (root) => {
 
 Views.mods = async (root) => {
   const d = await api.get('/api/mods');
+  root.append(pageHeader('nav.mods', 'mods.subtitle'));
   const wrap = h('div');
 
   if (State.serverStatus.running) wrap.append(runningBanner());
@@ -2395,7 +2412,7 @@ Views.settings = async (root) => {
   themeSel.onchange = () => setTheme(themeSel.value);
 
   root.append(
-    h('div', { class: 'card' }, [h('h2', { i18n: 'settings.title' })]),
+    pageHeader('nav.settings', 'settings.subtitle'),
 
     section('settings.title', [
       row('settings.language', F.language),
@@ -2682,12 +2699,30 @@ async function main() {
     }
     const cmdpBtn = document.getElementById('cmdp-btn');
     if (cmdpBtn) cmdpBtn.onclick = () => openCommandPalette();
+    // Sidebar drawer behavior on narrow screens. Topbar ≡ button toggles it,
+    // backdrop click and route navigation close it. No-op when sidebar is
+    // already in always-visible mode (CSS handles the transform).
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    const closeSidebar = () => {
+      sidebar?.classList.remove('open');
+      backdrop?.classList.remove('visible');
+    };
+    const openSidebar = () => {
+      sidebar?.classList.add('open');
+      backdrop?.classList.add('visible');
+    };
     const navToggle = document.getElementById('nav-toggle');
     if (navToggle) {
       navToggle.onclick = () => {
-        document.querySelector('.topbar')?.classList.toggle('nav-open');
+        if (sidebar?.classList.contains('open')) closeSidebar(); else openSidebar();
       };
     }
+    if (backdrop) backdrop.onclick = closeSidebar;
+    document.addEventListener('click', e => {
+      const link = e.target.closest('.nav a');
+      if (link && window.matchMedia('(max-width: 1000px)').matches) closeSidebar();
+    });
 
     State.info = await api.get('/api/info');
     // Check auth before anything else. If the panel requires auth and we

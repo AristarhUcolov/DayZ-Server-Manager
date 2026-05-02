@@ -53,6 +53,18 @@ var en = Bundle{
 	"nav.profiles":                 "Mod profiles",
 	"nav.settings":                 "Settings",
 
+	"nav.group.server":             "Server",
+	"nav.group.economy":            "Economy",
+	"nav.group.config":             "Config",
+	"nav.group.live":               "Live",
+	"nav.group.system":             "System",
+
+	"cmdp.search":                  "Search",
+
+	"dashboard.subtitle":           "Live overview — server, mods, players and resources",
+	"mods.subtitle":                "Install, update and toggle Workshop mods",
+	"settings.subtitle":            "Configuration, scheduler, announcements, backup",
+
 	"action.start":                 "Start server",
 	"action.stop":                  "Stop server",
 	"action.restart":                "Restart server",
@@ -328,6 +340,18 @@ var ru = Bundle{
 	"nav.profiles":                 "Моды: настройки",
 	"nav.validator":                "Валидатор",
 	"nav.settings":                 "Настройки",
+
+	"nav.group.server":             "Сервер",
+	"nav.group.economy":            "Экономика",
+	"nav.group.config":             "Конфиг",
+	"nav.group.live":               "В реальном времени",
+	"nav.group.system":             "Система",
+
+	"cmdp.search":                  "Поиск",
+
+	"dashboard.subtitle":           "Живая сводка — сервер, моды, игроки, ресурсы",
+	"mods.subtitle":                "Устанавливайте, обновляйте и включайте моды Workshop",
+	"settings.subtitle":            "Конфиг, расписание, анонсы, бэкап",
 
 	"action.start":                 "Запустить сервер",
 	"action.stop":                  "Остановить сервер",
