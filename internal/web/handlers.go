@@ -810,11 +810,20 @@ func (h *handlers) modsOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) modName(r *http.Request) (string, error) {
+	// Try the query string first so GET callers don't trip on empty-body
+	// JSON decoding (which returns io.EOF). POST callers hand us a JSON
+	// body — fall through to that.
+	if q := strings.TrimSpace(r.URL.Query().Get("mod")); q != "" {
+		if !strings.HasPrefix(q, "@") {
+			return "", fmt.Errorf("mod name (starting with '@') required")
+		}
+		return q, nil
+	}
 	var req struct {
 		Mod string `json:"mod"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return "", err
+		return "", fmt.Errorf("mod name (starting with '@') required")
 	}
 	if req.Mod == "" || !strings.HasPrefix(req.Mod, "@") {
 		return "", fmt.Errorf("mod name (starting with '@') required")
@@ -1601,9 +1610,16 @@ func (h *handlers) steamDetect(w http.ResponseWriter, r *http.Request) {
 // in cfgeconomycore.xml so the server actually loads it on next start.
 
 func (h *handlers) modsScanTypes(w http.ResponseWriter, r *http.Request) {
-	name, err := h.modName(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	// scan-types is a GET — modName() decodes a JSON body, which on a GET
+	// produces io.EOF and surfaces as the "EOF" toast users have been
+	// seeing. Read the mod name from the query string instead.
+	name := strings.TrimSpace(r.URL.Query().Get("mod"))
+	if name == "" || !strings.HasPrefix(name, "@") {
+		http.Error(w, "mod name (starting with '@') required", http.StatusBadRequest)
+		return
+	}
+	if strings.ContainsAny(name, `/\`) {
+		http.Error(w, "invalid mod name", http.StatusBadRequest)
 		return
 	}
 	// Also probe the workshop side: many !Workshop mods carry their loot

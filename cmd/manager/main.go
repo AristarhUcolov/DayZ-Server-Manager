@@ -22,7 +22,7 @@ import (
 
 const (
 	appName    = "DayZ Server Manager"
-	appVersion = "0.9.2"
+	appVersion = "0.9.3"
 	appAuthor  = "Aristarh Ucolov"
 )
 
