@@ -1617,6 +1617,11 @@ func (h *handlers) modsScanTypes(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// !Workshop entries are usually NTFS junctions; resolve before walking
+	// so filepath.Walk descends into the real folder.
+	if r, err := filepath.EvalSymlinks(dir); err == nil && r != "" {
+		dir = r
+	}
 	type hit struct {
 		Path  string `json:"path"`           // absolute path
 		Rel   string `json:"rel"`            // relative to mod folder

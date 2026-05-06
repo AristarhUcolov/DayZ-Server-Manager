@@ -148,10 +148,14 @@ func ResolveCollection(ctx context.Context, vanillaDayZPath string, ids []string
 	folders := make([]wsEntry, 0, len(entries))
 	usedFolder := map[string]bool{}
 	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), "@") {
+		if !strings.HasPrefix(e.Name(), "@") {
 			continue
 		}
-		meta := readMeta(filepath.Join(ws, e.Name()))
+		full := filepath.Join(ws, e.Name())
+		if !isDirOrJunction(e, full) {
+			continue
+		}
+		meta := readMeta(full)
 		folders = append(folders, wsEntry{Folder: e.Name(), PublishedID: meta.PublishedID, Name: meta.Name})
 	}
 

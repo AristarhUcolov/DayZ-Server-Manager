@@ -56,10 +56,13 @@ func List(serverDir, vanillaDayZPath string) ([]Mod, error) {
 	// Server-side @Mod directories.
 	srvEntries, _ := os.ReadDir(serverDir)
 	for _, e := range srvEntries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), "@") {
+		if !strings.HasPrefix(e.Name(), "@") {
 			continue
 		}
 		p := filepath.Join(serverDir, e.Name())
+		if !isDirOrJunction(e, p) {
+			continue
+		}
 		byName[e.Name()] = &Mod{
 			Name:              e.Name(),
 			InstalledInServer: true,
@@ -71,14 +74,20 @@ func List(serverDir, vanillaDayZPath string) ([]Mod, error) {
 	}
 
 	// Workshop-side mods (from the user's main DayZ install).
+	// Steam / DayZ Launcher creates @Mod entries as Windows junctions
+	// pointing at steamapps/workshop/content/221100/<id>/, so we have to
+	// follow them — DirEntry.IsDir() returns false on a symlink.
 	if vanillaDayZPath != "" {
 		ws := filepath.Join(vanillaDayZPath, "!Workshop")
 		wsEntries, _ := os.ReadDir(ws)
 		for _, e := range wsEntries {
-			if !e.IsDir() || !strings.HasPrefix(e.Name(), "@") {
+			if !strings.HasPrefix(e.Name(), "@") {
 				continue
 			}
 			p := filepath.Join(ws, e.Name())
+			if !isDirOrJunction(e, p) {
+				continue
+			}
 			m := byName[e.Name()]
 			if m == nil {
 				m = &Mod{Name: e.Name()}
@@ -376,7 +385,19 @@ func countKeys(modDir string) int {
 	return len(collectKeyNames(modDir))
 }
 
+// resolveSymlink returns the link target (recursively) if dir is a
+// junction/symlink, otherwise dir itself. filepath.Walk will not descend
+// into a symlink at its root, so we have to resolve before walking — DayZ
+// Launcher mounts !Workshop/@Mod entries as junctions.
+func resolveSymlink(dir string) string {
+	if r, err := filepath.EvalSymlinks(dir); err == nil && r != "" {
+		return r
+	}
+	return dir
+}
+
 func dirSize(dir string) int64 {
+	dir = resolveSymlink(dir)
 	var total int64
 	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
 		if err == nil && info != nil && !info.IsDir() {
@@ -388,6 +409,7 @@ func dirSize(dir string) int64 {
 }
 
 func newestMTime(dir string) time.Time {
+	dir = resolveSymlink(dir)
 	var newest time.Time
 	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
 		if err != nil || info == nil || info.IsDir() {
@@ -402,6 +424,7 @@ func newestMTime(dir string) time.Time {
 }
 
 func copyTree(src, dst string) error {
+	src = resolveSymlink(src)
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			if Logger != nil {
@@ -491,3 +514,20 @@ type modMeta struct {
 // ErrNoVanillaPath is returned when install/list is called without a
 // configured vanilla DayZ path.
 var ErrNoVanillaPath = errors.New("vanilla DayZ path is not configured")
+
+// isDirOrJunction reports whether the entry should be treated as a directory.
+// On Windows, DayZ Launcher / Steam mount mods under !Workshop as NTFS
+// junctions to steamapps/workshop/content/221100/<id>/, so DirEntry.IsDir()
+// returns false (the entry type is reported as a symlink / reparse point)
+// even though the link resolves to a real folder. Anything that's not a
+// plain regular file is worth a follow-up os.Stat to dereference.
+func isDirOrJunction(e os.DirEntry, fullPath string) bool {
+	if e.IsDir() {
+		return true
+	}
+	if e.Type().IsRegular() {
+		return false
+	}
+	st, err := os.Stat(fullPath)
+	return err == nil && st.IsDir()
+}

@@ -107,6 +107,10 @@ function toast(msg, kind = '') {
 
 function handleErr(err) {
   console.error(err);
+  // Auth errors are handled by showLogin() inside api.get/send. The throw
+  // we receive here is just a flow-control signal — never surface it as a
+  // toast, which used to confuse users into thinking the panel was broken.
+  if (String(err && err.message) === 'unauthorized') return;
   toast(String(err.message || err), 'error');
 }
 
@@ -2915,7 +2919,10 @@ async function main() {
     }
     await ensureFirstRunDone();
     await refreshStatus();
-    setInterval(refreshStatus, 5000);
+    // A second main() entry (after re-login) creates a fresh interval
+    // without clearing the previous one. Track and cancel.
+    if (window._statusInterval) clearInterval(window._statusInterval);
+    window._statusInterval = setInterval(refreshStatus, 5000);
     await navigate('dashboard');
   } catch (err) {
     if (String(err.message) !== 'unauthorized') handleErr(err);
