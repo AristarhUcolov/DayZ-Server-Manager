@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"dayzmanager/internal/app"
-	"dayzmanager/internal/auth"
 	"dayzmanager/internal/config"
 	"dayzmanager/internal/i18n"
 	dzlogs "dayzmanager/internal/logs"
@@ -33,12 +32,6 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// Meta.
 	mux.HandleFunc("/api/info", methods(h.info, http.MethodGet))
 	mux.HandleFunc("/api/i18n", methods(h.i18nBundle, http.MethodGet))
-
-	// Auth.
-	mux.HandleFunc("/api/auth/status", methods(h.authStatus, http.MethodGet))
-	mux.HandleFunc("/api/auth/login", methods(h.authLogin, http.MethodPost))
-	mux.HandleFunc("/api/auth/logout", methods(h.authLogout, http.MethodPost))
-	mux.HandleFunc("/api/auth/password", methods(h.authPassword, http.MethodPost))
 
 	// Manager config (language, vanilla path, launch params).
 	mux.HandleFunc("/api/config", methods(h.config, http.MethodGet, http.MethodPost, http.MethodPut))
@@ -215,13 +208,14 @@ func (h *handlers) config(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, h.app.Config)
 }
 
+// finishFirstRun records the language, vanilla DayZ path and exposure mode
+// chosen in the first-run wizard. Auth fields removed in v0.10.0 — the
+// panel is meant to be reachable from a trusted local network only.
 func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Language        string `json:"language"`
 		VanillaDayZPath string `json:"vanillaDayZPath"`
 		Exposure        string `json:"exposure"`
-		AdminUsername   string `json:"adminUsername"`
-		AdminPassword   string `json:"adminPassword"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -230,10 +224,6 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 	if req.Language != "" {
 		h.app.Config.Language = req.Language
 	}
-	// Validate the vanilla DayZ path — the rest of the manager is useless
-	// without a working !Workshop folder to source mods from. Allowing
-	// the wizard to finish with a bogus path just pushes the confusing
-	// error into every mod list refresh.
 	if req.VanillaDayZPath != "" {
 		st, err := os.Stat(req.VanillaDayZPath)
 		if err != nil || !st.IsDir() {
@@ -250,158 +240,12 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 	if req.Exposure != "" {
 		h.app.Config.Exposure = req.Exposure
 	}
-	// Auth is required when binding outside localhost. On "internet" exposure
-	// we refuse to finish the wizard without a password — that's the whole
-	// point of the gate.
-	if req.Exposure == "internet" && strings.TrimSpace(req.AdminPassword) == "" {
-		http.Error(w, "password required for LAN/Internet exposure", http.StatusBadRequest)
-		return
-	}
-	if req.AdminPassword != "" {
-		hash, salt, err := auth.HashPassword(req.AdminPassword)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		h.app.Config.AdminUsername = strings.TrimSpace(req.AdminUsername)
-		if h.app.Config.AdminUsername == "" {
-			h.app.Config.AdminUsername = "admin"
-		}
-		h.app.Config.AdminPasswordHash = hash
-		h.app.Config.AdminPasswordSalt = salt
-		h.app.Config.RequireAuth = true
-	}
 	h.app.Config.FirstRunDone = true
 	if err := h.app.SaveConfig(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, h.app.Config)
-}
-
-// ---------------------------------------------------------------------------
-// Auth.
-
-func (h *handlers) authStatus(w http.ResponseWriter, r *http.Request) {
-	authed := false
-	if !h.app.Config.RequireAuth {
-		authed = true
-	} else if c, err := r.Cookie(auth.SessionCookieName); err == nil {
-		authed = h.app.Auth.Valid(c.Value)
-	}
-	writeJSON(w, map[string]interface{}{
-		"requireAuth":   h.app.Config.RequireAuth,
-		"authenticated": authed,
-		"username":      h.app.Config.AdminUsername,
-	})
-}
-
-func (h *handlers) authLogin(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if !h.app.Config.RequireAuth {
-		writeJSON(w, map[string]string{"status": "ok"})
-		return
-	}
-	if req.Username != h.app.Config.AdminUsername ||
-		!auth.VerifyPassword(req.Password, h.app.Config.AdminPasswordHash, h.app.Config.AdminPasswordSalt) {
-		// Constant-ish delay discourages online brute force. The cost of
-		// PBKDF2 verification is already ~50-100ms which helps too.
-		time.Sleep(300 * time.Millisecond)
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
-		return
-	}
-	tok, err := h.app.Auth.Create()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.SetCookie(w, auth.CookieFor(tok))
-	writeJSON(w, map[string]string{"status": "ok"})
-}
-
-func (h *handlers) authLogout(w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(auth.SessionCookieName); err == nil {
-		h.app.Auth.Destroy(c.Value)
-	}
-	http.SetCookie(w, auth.ClearCookie())
-	writeJSON(w, map[string]string{"status": "ok"})
-}
-
-// authPassword updates (or removes) the panel password.
-//
-//   - {newPassword: ""}                  → remove auth (RequireAuth=false). Allowed
-//     only when the panel is bound to localhost; otherwise rejected so a LAN-
-//     exposed panel can't be silently opened up via the UI.
-//   - {currentPassword, newPassword}     → change. currentPassword must verify if
-//     auth was already required.
-//
-// On success existing sessions are invalidated so all open tabs are forced to
-// re-authenticate with the new credential.
-func (h *handlers) authPassword(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		CurrentPassword string `json:"currentPassword"`
-		NewPassword     string `json:"newPassword"`
-		Username        string `json:"username"` // optional rename
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// If auth is already on, the caller must prove they know the current pw.
-	// (The middleware-level session check already ran, so the bearer is at
-	//  least authenticated — we re-verify the password to defend against
-	//  stolen-cookie session-hijack updating a credential.)
-	if h.app.Config.RequireAuth {
-		if !auth.VerifyPassword(req.CurrentPassword, h.app.Config.AdminPasswordHash, h.app.Config.AdminPasswordSalt) {
-			time.Sleep(300 * time.Millisecond)
-			http.Error(w, "current password is incorrect", http.StatusUnauthorized)
-			return
-		}
-	}
-
-	if req.NewPassword == "" {
-		// Disable auth entirely. Refuse if the panel is reachable from
-		// somewhere other than localhost.
-		if h.app.Config.Exposure == "internet" {
-			http.Error(w, "cannot disable auth on a LAN-exposed panel — change Exposure to local first", http.StatusForbidden)
-			return
-		}
-		h.app.Config.RequireAuth = false
-		h.app.Config.AdminPasswordHash = ""
-		h.app.Config.AdminPasswordSalt = ""
-	} else {
-		hash, salt, err := auth.HashPassword(req.NewPassword)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		h.app.Config.RequireAuth = true
-		h.app.Config.AdminPasswordHash = hash
-		h.app.Config.AdminPasswordSalt = salt
-		if u := strings.TrimSpace(req.Username); u != "" {
-			h.app.Config.AdminUsername = u
-		}
-	}
-	if err := h.app.SaveConfig(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	// Force a re-login on every open tab. The cookie just set by /api/auth/login
-	// would otherwise survive a password change.
-	h.app.Auth = auth.NewStore()
-	http.SetCookie(w, auth.ClearCookie())
-	writeJSON(w, map[string]interface{}{
-		"requireAuth": h.app.Config.RequireAuth,
-		"username":    h.app.Config.AdminUsername,
-	})
 }
 
 // ---------------------------------------------------------------------------

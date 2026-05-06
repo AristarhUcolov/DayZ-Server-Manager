@@ -52,7 +52,6 @@ const api = {
     Progress.start();
     try {
       const r = await fetch(path, { credentials: 'same-origin' });
-      if (r.status === 401) { showLogin(); throw new Error('unauthorized'); }
       if (!r.ok) throw new Error(await r.text());
       return r.json();
     } finally { Progress.end(); }
@@ -66,7 +65,6 @@ const api = {
         headers: body ? { 'Content-Type': 'application/json' } : {},
         body: body ? JSON.stringify(body) : undefined,
       });
-      if (r.status === 401) { showLogin(); throw new Error('unauthorized'); }
       if (!r.ok) throw new Error(await r.text());
       const text = await r.text();
       try { return text ? JSON.parse(text) : {}; } catch { return {}; }
@@ -107,10 +105,6 @@ function toast(msg, kind = '') {
 
 function handleErr(err) {
   console.error(err);
-  // Auth errors are handled by showLogin() inside api.get/send. The throw
-  // we receive here is just a flow-control signal — never surface it as a
-  // toast, which used to confuse users into thinking the panel was broken.
-  if (String(err && err.message) === 'unauthorized') return;
   toast(String(err.message || err), 'error');
 }
 
@@ -134,7 +128,6 @@ async function navigate(name) {
     await view(root);
     applyI18n();
   } catch (err) {
-    if (String(err.message) === 'unauthorized') return;
     handleErr(err);
     root.innerHTML = `<div class="card"><p>${err.message || err}</p></div>`;
   }
@@ -371,68 +364,23 @@ async function ensureFirstRunDone() {
   refreshMissionsPreview();
 
   document.getElementById('fr-finish').onclick = async () => {
-    const pass = document.getElementById('fr-admin-pass').value;
     const exposure = document.querySelector('input[name=fr-exposure]:checked').value;
-    if (exposure === 'internet' && !pass) {
-      toast(t('firstRun.adminPassword.hint'), 'error');
-      return;
-    }
     const body = {
       language: document.getElementById('fr-lang').value,
       vanillaDayZPath: document.getElementById('fr-vanilla').value.trim(),
       exposure,
-      adminUsername: document.getElementById('fr-admin-user').value.trim() || 'admin',
-      adminPassword: pass,
     };
     try {
       State.config = await api.post('/api/config/finish-first-run', body);
       await loadI18n(State.config.language);
       document.getElementById('lang-switch').value = State.config.language;
       modal.classList.add('hidden');
-      // If a password was set, an explicit login is now required (no
-      // auto-session is granted from the wizard).
-      if (State.config.requireAuth) { showLogin(); return; }
       await navigate('dashboard');
     } catch (err) { handleErr(err); }
   };
   document.getElementById('fr-lang').addEventListener('change', async e => {
     await loadI18n(e.target.value);
   });
-}
-
-// --------------------------------------------------------------------- login
-
-function showLogin() {
-  const modal = document.getElementById('login');
-  modal.classList.remove('hidden');
-  // Re-apply i18n in case loadI18n hasn't run yet on stale-cookie reload.
-  applyI18n();
-  // Focus the username field so the user can start typing immediately.
-  setTimeout(() => document.getElementById('login-user')?.focus(), 50);
-  const err = document.getElementById('login-error');
-  err.textContent = '';
-  document.getElementById('login-submit').onclick = async () => {
-    err.textContent = '';
-    try {
-      await api.post('/api/auth/login', {
-        username: document.getElementById('login-user').value.trim(),
-        password: document.getElementById('login-pass').value,
-      });
-      modal.classList.add('hidden');
-      document.getElementById('login-pass').value = '';
-      await main();
-    } catch (e) {
-      err.textContent = t('login.invalid');
-    }
-  };
-  const onKey = (e) => { if (e.key === 'Enter') document.getElementById('login-submit').click(); };
-  document.getElementById('login-user').onkeydown = onKey;
-  document.getElementById('login-pass').onkeydown = onKey;
-}
-
-async function logout() {
-  try { await api.post('/api/auth/logout'); } catch (e) {}
-  showLogin();
 }
 
 // --------------------------------------------------------------------- dashboard
@@ -705,8 +653,6 @@ function openCommandPalette() {
       run: async () => { try { await api.post('/api/server/stop'); toast('stopping', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
     { kind: 'action', label: (t('action.restart') || 'Restart server'),
       run: async () => { try { await api.post('/api/server/restart'); toast('restarting', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
-    { kind: 'action', label: (t('action.logout') || 'Logout'),
-      run: () => logout() },
     { kind: 'action', label: (t('action.theme.toggle') || 'Toggle theme'),
       run: () => { const cur = (localStorage.getItem('theme') || 'dark'); setTheme(cur === 'dark' ? 'light' : 'dark'); } },
   ];
@@ -2396,70 +2342,6 @@ function scheduledRestartsCard(c, F) {
   ]);
 }
 
-// securityCard — set / change / remove the panel password.
-// Stays inert if Exposure=internet and the user clicks "remove" — the
-// backend rejects that combination with 403.
-function securityCard(c) {
-  const hasPassword = !!c.requireAuth;
-  const userInp = h('input', { type: 'text', value: c.adminUsername || 'admin', placeholder: 'admin' });
-  const curInp  = h('input', { type: 'password', placeholder: t('security.current') || 'Current password', autocomplete: 'current-password' });
-  const newInp  = h('input', { type: 'password', placeholder: t('security.new')     || 'New password',     autocomplete: 'new-password' });
-  const new2Inp = h('input', { type: 'password', placeholder: t('security.confirm') || 'Confirm new password', autocomplete: 'new-password' });
-  const status  = h('div', { class: 'hint' });
-
-  const apply = async (clearing) => {
-    status.textContent = '';
-    if (!clearing) {
-      if (!newInp.value) { status.textContent = t('security.required') || 'New password required'; return; }
-      if (newInp.value !== new2Inp.value) { status.textContent = t('security.mismatch') || 'Passwords do not match'; return; }
-    }
-    try {
-      const r = await api.post('/api/auth/password', {
-        currentPassword: curInp.value,
-        newPassword: clearing ? '' : newInp.value,
-        username: userInp.value.trim(),
-      });
-      // Cookie was just cleared by the server. Force a re-login.
-      State.config.requireAuth = !!r.requireAuth;
-      State.config.adminUsername = r.username;
-      toast(t(clearing ? 'security.removed' : 'security.changed') ||
-            (clearing ? 'Password removed' : 'Password changed'), 'ok');
-      if (r.requireAuth) {
-        showLogin();
-      } else {
-        // Re-render Settings so the card reflects the new state.
-        await navigate('settings');
-      }
-    } catch (e) { status.textContent = String(e.message || e); }
-  };
-
-  return h('div', { class: 'card' }, [
-    h('h3', { i18n: 'settings.security' }),
-    h('p', { class: 'hint',
-      i18n: hasPassword ? 'settings.security.hint.has' : 'settings.security.hint.none' }),
-    h('div', { class: 'grid-2' }, [
-      h('div', {}, [h('label', { i18n: 'security.username' }), userInp]),
-      h('div', {}, hasPassword ? [h('label', { i18n: 'security.current' }), curInp] : []),
-    ]),
-    h('div', { class: 'grid-2' }, [
-      h('div', {}, [h('label', { i18n: 'security.new' }),     newInp]),
-      h('div', {}, [h('label', { i18n: 'security.confirm' }), new2Inp]),
-    ]),
-    status,
-    h('div', { class: 'actions' }, [
-      h('button', { class: 'primary', i18n: hasPassword ? 'security.change' : 'security.set',
-        onclick: () => apply(false) }),
-      hasPassword
-        ? h('button', { class: 'danger', i18n: 'security.remove',
-            onclick: () => {
-              if (!confirm(t('security.removeConfirm') || 'Remove password and disable login?')) return;
-              apply(true);
-            } })
-        : null,
-    ]),
-  ]);
-}
-
 function announcementsCard() {
   const card = h('div', { class: 'card' }, [
     h('h3', { i18n: 'settings.announcements' }),
@@ -2618,8 +2500,6 @@ Views.settings = async (root) => {
     scheduledRestartsCard(c, F),
 
     announcementsCard(),
-
-    securityCard(c),
 
     backupCard(),
 
@@ -2892,12 +2772,6 @@ async function main() {
     const earlyLang = localStorage.getItem('lang') || 'en';
     try { await loadI18n(earlyLang); } catch {}
 
-    // Check auth before fetching the rest. If the panel requires auth and
-    // we have no valid session, surface the login modal and bail out —
-    // the user will re-enter main() from the login submit handler.
-    const s = await api.get('/api/auth/status');
-    if (s.requireAuth && !s.authenticated) { showLogin(); return; }
-
     State.config = await api.get('/api/config');
     if (State.config.language && State.config.language !== State.lang) {
       await loadI18n(State.config.language);
@@ -2911,21 +2785,13 @@ async function main() {
       await loadI18n(v);
       await navigate(currentRoute());
     };
-    // Wire the topbar logout button (hidden when auth is disabled).
-    const lo = document.getElementById('logout-btn');
-    if (lo) {
-      lo.classList.toggle('hidden', !State.config.requireAuth);
-      lo.onclick = () => logout();
-    }
     await ensureFirstRunDone();
     await refreshStatus();
-    // A second main() entry (after re-login) creates a fresh interval
-    // without clearing the previous one. Track and cancel.
     if (window._statusInterval) clearInterval(window._statusInterval);
     window._statusInterval = setInterval(refreshStatus, 5000);
     await navigate('dashboard');
   } catch (err) {
-    if (String(err.message) !== 'unauthorized') handleErr(err);
+    handleErr(err);
   }
 }
 

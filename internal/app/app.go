@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"dayzmanager/internal/auth"
 	"dayzmanager/internal/config"
 	"dayzmanager/internal/mods"
 	"dayzmanager/internal/rcon"
@@ -27,7 +26,6 @@ type App struct {
 	configPath  string
 
 	Server *server.Controller
-	Auth   *auth.Store
 	RCon   *rcon.Manager
 
 	// WriteMu serializes every state-mutating operation across subsystems
@@ -74,7 +72,6 @@ func New(serverDir, name, version, author string) (*App, error) {
 		Config:     cfg,
 		configPath: cfgPath,
 		Server:     ctrl,
-		Auth:       auth.NewStore(),
 		RCon:       rc,
 	}, nil
 }

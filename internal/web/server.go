@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"dayzmanager/internal/app"
-	"dayzmanager/internal/auth"
 )
 
 type Server struct {
@@ -26,18 +25,10 @@ func New(a *app.App, bind string, port int) *Server {
 	sub, _ := fs.Sub(staticFS, "static")
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 
-	// Auth gate — applied to /api/* only. Static assets stay public so the
-	// login page can load its own CSS/JS before the user authenticates.
-	// Exempt read-only endpoints that the login page itself calls.
-	authMW := auth.Middleware(
-		a.Auth,
-		func() bool { return a.Config.RequireAuth },
-		[]string{
-			"/api/info", "/api/i18n",
-			"/api/auth/login", "/api/auth/logout", "/api/auth/status",
-		},
-	)
-	apiHandler := authMW(bodyLimit(64<<20)(mux)) // 64 MB cap on request bodies
+	// v0.10.0 dropped panel auth — the manager is meant to be reachable
+	// from a trusted local network only. Operators who need access control
+	// in front of it should put a reverse proxy (Caddy, nginx) on top.
+	apiHandler := bodyLimit(64<<20)(mux) // 64 MB cap on request bodies
 
 	return &Server{
 		app: a,

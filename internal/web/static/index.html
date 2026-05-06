@@ -35,33 +35,10 @@
           <label><input type="radio" name="fr-exposure" value="local" checked /> <span data-i18n="firstRun.exposure.local"></span></label>
           <label><input type="radio" name="fr-exposure" value="internet" /> <span data-i18n="firstRun.exposure.internet"></span></label>
         </div>
-
-        <div id="fr-auth-block">
-          <label data-i18n="firstRun.adminUsername"></label>
-          <input id="fr-admin-user" type="text" value="admin" autocomplete="username" />
-          <label data-i18n="firstRun.adminPassword"></label>
-          <input id="fr-admin-pass" type="password" autocomplete="new-password" />
-          <small class="hint" data-i18n="firstRun.adminPassword.hint"></small>
-        </div>
+        <small class="hint" data-i18n="firstRun.exposure.hint"></small>
 
         <div class="actions">
           <button id="fr-finish" class="primary" data-i18n="firstRun.finish"></button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="login" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-header"><h3 data-i18n="login.title"></h3></div>
-      <div class="modal-body">
-        <label data-i18n="login.username"></label>
-        <input id="login-user" type="text" autocomplete="username" />
-        <label data-i18n="login.password"></label>
-        <input id="login-pass" type="password" autocomplete="current-password" />
-        <div id="login-error" class="hint" style="color:var(--error);"></div>
-        <div class="actions">
-          <button id="login-submit" class="primary" data-i18n="login.submit"></button>
         </div>
       </div>
     </div>
@@ -146,7 +123,6 @@
         <button id="theme-toggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
           <span class="theme-icon">◐</span>
         </button>
-        <button id="logout-btn" class="hidden" data-i18n="action.logout"></button>
       </header>
 
       <main id="view"></main>

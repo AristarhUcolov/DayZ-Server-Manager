@@ -43,15 +43,6 @@ type Manager struct {
 	// keep the user preference here so the UI can reflect it.
 	Exposure string `json:"exposure"` // "local" | "internet"
 
-	// Panel admin credentials. Password is PBKDF2-HMAC-SHA256 hex of salted.
-	// RequireAuth = false disables the login gate entirely (useful for
-	// local-only deployments). The first-run wizard sets this automatically:
-	// on "internet" it forces a password; on "local" it leaves auth off.
-	AdminUsername     string `json:"adminUsername"`
-	AdminPasswordHash string `json:"adminPasswordHash"`
-	AdminPasswordSalt string `json:"adminPasswordSalt"`
-	RequireAuth       bool   `json:"requireAuth"`
-
 	// BattlEye RCon settings. Port defaults to ServerPort+1 per DayZ
 	// convention. Password is cached here so the panel can re-connect after
 	// a server restart without asking the user.
@@ -103,8 +94,6 @@ func defaultManager() *Manager {
 		AutoRestartEnabled: false,
 		Exposure:           "local",
 
-		AdminUsername:      "admin",
-		RequireAuth:        false,
 		RestartWarnMinutes: []int{5, 3, 1},
 	}
 }
