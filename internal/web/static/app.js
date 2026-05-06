@@ -401,6 +401,10 @@ async function ensureFirstRunDone() {
 function showLogin() {
   const modal = document.getElementById('login');
   modal.classList.remove('hidden');
+  // Re-apply i18n in case loadI18n hasn't run yet on stale-cookie reload.
+  applyI18n();
+  // Focus the username field so the user can start typing immediately.
+  setTimeout(() => document.getElementById('login-user')?.focus(), 50);
   const err = document.getElementById('login-error');
   err.textContent = '';
   document.getElementById('login-submit').onclick = async () => {
@@ -880,8 +884,9 @@ Views.server = async (root) => {
   }
   missionSelect.value = data.mission || missions.active || '';
 
+  root.append(pageHeader('nav.server', 'server.subtitle'));
+  if (State.serverStatus.running) root.append(runningBanner());
   root.append(
-    State.serverStatus.running ? runningBanner() : null,
     h('div', { class: 'card' }, [
       h('h2', { i18n: 'settings.title' }),
       h('div', { class: 'kv' }, [
@@ -1079,18 +1084,7 @@ Views.mods = async (root) => {
       }
     }),
     h('button', { class: 'primary', i18n: 'mods.syncAll',
-      onclick: async () => {
-        if (!confirm(t('mods.syncAll.confirm'))) return;
-        try {
-          const r = await api.post('/api/mods/sync-all', {});
-          const parts = [];
-          if (r.installed && r.installed.length) parts.push(`+${r.installed.length} installed`);
-          if (r.updated   && r.updated.length)   parts.push(`~${r.updated.length} updated`);
-          if (r.skipped   && r.skipped.length)   parts.push(`${r.skipped.length} up-to-date`);
-          toast(parts.join(', ') || 'nothing to do', 'ok');
-          await navigate('mods');
-        } catch (e) { handleErr(e); }
-      }
+      onclick: () => openSyncAllPicker(d),
     }),
   ]);
   if (outdatedCount > 0) {
@@ -1545,8 +1539,9 @@ Views.moded = async (root) => {
   const nameInput = h('input', { type: 'text', placeholder: 'mymod_types.xml' });
   const regCb    = h('input', { type: 'checkbox' }); regCb.checked = true;
 
+  root.append(pageHeader('nav.modedTypes', 'moded.subtitle'));
+  if (State.serverStatus.running) root.append(runningBanner());
   root.append(
-    State.serverStatus.running ? runningBanner() : null,
     h('div', { class: 'card' }, [
       h('h2', { i18n: 'moded.title' }),
       h('p', { class: 'hint', text: d.folder }),
@@ -1692,8 +1687,8 @@ Views.files = async (root) => {
   }
   try { await loadDir(''); } catch (e) { handleErr(e); }
 
+  if (State.serverStatus.running) root.append(runningBanner());
   root.append(
-    State.serverStatus.running ? runningBanner() : null,
     h('div', { class: 'card' }, [
       h('h2', { i18n: 'files.title' }),
       h('div', { class: 'grid-2' }, [
@@ -1732,12 +1727,104 @@ Views.files = async (root) => {
   }
 };
 
+// openSyncAllPicker — interactive modal for the "Sync all" flow. Shows
+// every Workshop @Mod with its current state ("Not installed" / "Update
+// available" / "Up to date"), pre-selects the actionable ones, and lets
+// the user trim the list before applying. Surfaces a clear message when
+// the !Workshop folder is empty so the user can spot a misconfigured
+// vanilla path immediately.
+function openSyncAllPicker(d) {
+  const workshopMods = (d.mods || []).filter(m => m.availableInWorkshop);
+  const m = openModal({ title: t('mods.syncAll') || 'Sync all mods', wide: true });
+
+  if (workshopMods.length === 0) {
+    m.body.append(
+      h('p', { class: 'hint',
+        text: (t('mods.syncAll.empty') || 'No mods found in !Workshop. Vanilla path:') + ' ' + (d.vanillaPath || '—') }),
+      h('p', { class: 'hint', i18n: 'mods.syncAll.empty.hint' }),
+      h('div', { class: 'actions' }, [
+        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+      ]),
+    );
+    return;
+  }
+
+  // Counts before sync, then individual rows with checkboxes.
+  let cNot = 0, cOut = 0, cOk = 0;
+  const checkboxes = [];
+  const list = h('div', { class: 'sync-pick-list' });
+  for (const mod of workshopMods) {
+    let label, cls, preSelect = false;
+    if (!mod.installedInServer)      { label = t('mods.notInstalled')   || 'Not installed';   cls = 'warn'; preSelect = true; cNot++; }
+    else if (mod.updateAvailable)    { label = t('mods.updateAvailable')|| 'Update available'; cls = 'warn'; preSelect = true; cOut++; }
+    else                             { label = t('mods.upToDate')       || 'Up to date';      cls = 'ok'; cOk++; }
+    const cb = h('input', { type: 'checkbox' });
+    cb.checked = preSelect;
+    cb.dataset.name = mod.name;
+    checkboxes.push(cb);
+    list.append(h('label', { class: 'sync-pick-row' }, [
+      cb,
+      h('div', { class: 'sync-pick-name' }, [
+        h('div', { text: mod.name, style: { fontWeight: '600' } }),
+        mod.displayName ? h('div', { class: 'hint', text: mod.displayName }) : null,
+      ]),
+      h('span', { class: 'badge ' + cls, text: label }),
+    ]));
+  }
+
+  const summary = h('p', { class: 'hint',
+    text: `${workshopMods.length} ${(t('mods.foundInWorkshop') || 'in !Workshop')} · ` +
+          `${cNot} ${t('mods.notInstalled') || 'not installed'} · ` +
+          `${cOut} ${t('mods.updateAvailable') || 'updates'} · ` +
+          `${cOk} ${t('mods.upToDate') || 'up-to-date'}` });
+
+  const setAll = (val) => checkboxes.forEach(cb => cb.checked = val);
+  m.body.append(
+    summary,
+    h('div', { class: 'toolbar' }, [
+      h('button', { i18n: 'mods.pick.actionable', onclick: () => {
+        // Re-select only what's actionable (not installed OR update available).
+        for (const cb of checkboxes) {
+          const row = (d.mods || []).find(x => x.name === cb.dataset.name);
+          cb.checked = row && (!row.installedInServer || row.updateAvailable);
+        }
+      }}),
+      h('button', { i18n: 'mods.pick.all',  onclick: () => setAll(true) }),
+      h('button', { i18n: 'mods.pick.none', onclick: () => setAll(false) }),
+    ]),
+    list,
+    h('div', { class: 'actions' }, [
+      h('button', { class: 'primary', i18n: 'mods.pick.apply', onclick: async () => {
+        const only = checkboxes.filter(cb => cb.checked).map(cb => cb.dataset.name);
+        if (only.length === 0) { toast(t('mods.pick.empty') || 'Nothing selected', 'warn'); return; }
+        try {
+          const r = await api.post('/api/mods/sync-all', { only });
+          const parts = [];
+          if (r.installed?.length) parts.push(`+${r.installed.length} ${t('mods.installedShort') || 'installed'}`);
+          if (r.updated?.length)   parts.push(`~${r.updated.length} ${t('mods.updatedShort') || 'updated'}`);
+          if (r.skipped?.length)   parts.push(`${r.skipped.length} ${t('mods.upToDate') || 'up-to-date'}`);
+          toast(parts.join(', ') || (t('mods.syncAll.done') || 'Done'), 'ok');
+          m.close();
+          await navigate('mods');
+        } catch (e) { handleErr(e); }
+      }}),
+      h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+    ]),
+  );
+}
+
 // Inline modal-ish dialog that lists candidate types.xml inside a mod and
 // lets the user install each one into the active mission with a chosen name.
 async function openModTypesDialog(mod, files) {
-  const dialog = h('div', { class: 'modal' });
-  const card = h('div', { class: 'modal-card', style: { maxWidth: '640px' } });
-  card.append(h('h2', { text: `${mod} — types` }));
+  const m = openModal({ title: `${mod} — XML candidates`, wide: true });
+  if (!files.length) {
+    m.body.append(h('p', { class: 'hint', i18n: 'modtypes.none' }));
+    m.body.append(h('div', { class: 'actions' }, [
+      h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+    ]));
+    return;
+  }
+  m.body.append(h('p', { class: 'hint', i18n: 'modtypes.dialog.hint' }));
   for (const f of files) {
     const nameInput = h('input', { type: 'text',
       value: mod.replace(/^@/, '').replace(/\s+/g, '_') + '_' + f.rel.split('/').pop() });
@@ -1748,20 +1835,23 @@ async function openModTypesDialog(mod, files) {
         btn.disabled = true;
       } catch (e) { handleErr(e); }
     }});
-    card.append(h('div', { class: 'card' }, [
-      h('div', {}, [
+    const tag = f.kind === 'types'
+      ? h('span', { class: 'badge ok',  text: `<types> · ${f.types}` })
+      : (f.kind === 'json'
+          ? h('span', { class: 'badge mute', text: 'json' })
+          : h('span', { class: 'badge mute', text: 'xml' }));
+    m.body.append(h('div', { class: 'modxml-row' }, [
+      h('div', { class: 'modxml-meta' }, [
         h('code', { text: f.rel }),
-        ' · ',
-        h('span', { class: 'hint', text: `${f.types} <type>` }),
+        tag,
+        h('span', { class: 'hint', text: bytes(f.size || 0) }),
       ]),
-      h('div', { class: 'row' }, [nameInput, btn]),
+      h('div', { class: 'row', style: { gap: '8px', marginTop: '6px' } }, [nameInput, btn]),
     ]));
   }
-  card.append(h('div', { class: 'actions' }, [
-    h('button', { i18n: 'action.cancel', onclick: () => dialog.remove() }),
+  m.body.append(h('div', { class: 'actions' }, [
+    h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
   ]));
-  dialog.append(card);
-  document.body.append(dialog);
 }
 
 // --------------------------------------------------------------------- validator
@@ -2302,6 +2392,70 @@ function scheduledRestartsCard(c, F) {
   ]);
 }
 
+// securityCard — set / change / remove the panel password.
+// Stays inert if Exposure=internet and the user clicks "remove" — the
+// backend rejects that combination with 403.
+function securityCard(c) {
+  const hasPassword = !!c.requireAuth;
+  const userInp = h('input', { type: 'text', value: c.adminUsername || 'admin', placeholder: 'admin' });
+  const curInp  = h('input', { type: 'password', placeholder: t('security.current') || 'Current password', autocomplete: 'current-password' });
+  const newInp  = h('input', { type: 'password', placeholder: t('security.new')     || 'New password',     autocomplete: 'new-password' });
+  const new2Inp = h('input', { type: 'password', placeholder: t('security.confirm') || 'Confirm new password', autocomplete: 'new-password' });
+  const status  = h('div', { class: 'hint' });
+
+  const apply = async (clearing) => {
+    status.textContent = '';
+    if (!clearing) {
+      if (!newInp.value) { status.textContent = t('security.required') || 'New password required'; return; }
+      if (newInp.value !== new2Inp.value) { status.textContent = t('security.mismatch') || 'Passwords do not match'; return; }
+    }
+    try {
+      const r = await api.post('/api/auth/password', {
+        currentPassword: curInp.value,
+        newPassword: clearing ? '' : newInp.value,
+        username: userInp.value.trim(),
+      });
+      // Cookie was just cleared by the server. Force a re-login.
+      State.config.requireAuth = !!r.requireAuth;
+      State.config.adminUsername = r.username;
+      toast(t(clearing ? 'security.removed' : 'security.changed') ||
+            (clearing ? 'Password removed' : 'Password changed'), 'ok');
+      if (r.requireAuth) {
+        showLogin();
+      } else {
+        // Re-render Settings so the card reflects the new state.
+        await navigate('settings');
+      }
+    } catch (e) { status.textContent = String(e.message || e); }
+  };
+
+  return h('div', { class: 'card' }, [
+    h('h3', { i18n: 'settings.security' }),
+    h('p', { class: 'hint',
+      i18n: hasPassword ? 'settings.security.hint.has' : 'settings.security.hint.none' }),
+    h('div', { class: 'grid-2' }, [
+      h('div', {}, [h('label', { i18n: 'security.username' }), userInp]),
+      h('div', {}, hasPassword ? [h('label', { i18n: 'security.current' }), curInp] : []),
+    ]),
+    h('div', { class: 'grid-2' }, [
+      h('div', {}, [h('label', { i18n: 'security.new' }),     newInp]),
+      h('div', {}, [h('label', { i18n: 'security.confirm' }), new2Inp]),
+    ]),
+    status,
+    h('div', { class: 'actions' }, [
+      h('button', { class: 'primary', i18n: hasPassword ? 'security.change' : 'security.set',
+        onclick: () => apply(false) }),
+      hasPassword
+        ? h('button', { class: 'danger', i18n: 'security.remove',
+            onclick: () => {
+              if (!confirm(t('security.removeConfirm') || 'Remove password and disable login?')) return;
+              apply(true);
+            } })
+        : null,
+    ]),
+  ]);
+}
+
 function announcementsCard() {
   const card = h('div', { class: 'card' }, [
     h('h3', { i18n: 'settings.announcements' }),
@@ -2460,6 +2614,8 @@ Views.settings = async (root) => {
     scheduledRestartsCard(c, F),
 
     announcementsCard(),
+
+    securityCard(c),
 
     backupCard(),
 
@@ -2725,18 +2881,28 @@ async function main() {
     });
 
     State.info = await api.get('/api/info');
-    // Check auth before anything else. If the panel requires auth and we
-    // have no valid session, surface the login modal and bail out — the
-    // user will re-enter main() from the login submit handler.
+    // Load i18n early — using a remembered locale or 'en' — so the login
+    // modal has populated labels even before we know the configured
+    // language. Without this the modal would render blank labels on a
+    // stale-cookie reload, which looks like a broken state to the user.
+    const earlyLang = localStorage.getItem('lang') || 'en';
+    try { await loadI18n(earlyLang); } catch {}
+
+    // Check auth before fetching the rest. If the panel requires auth and
+    // we have no valid session, surface the login modal and bail out —
+    // the user will re-enter main() from the login submit handler.
     const s = await api.get('/api/auth/status');
     if (s.requireAuth && !s.authenticated) { showLogin(); return; }
 
     State.config = await api.get('/api/config');
-    await loadI18n(State.config.language || 'en');
+    if (State.config.language && State.config.language !== State.lang) {
+      await loadI18n(State.config.language);
+    }
     document.getElementById('lang-switch').value = State.lang;
     document.getElementById('lang-switch').onchange = async e => {
       const v = e.target.value;
       State.config.language = v;
+      localStorage.setItem('lang', v);
       try { await api.post('/api/config', State.config); } catch (err) {}
       await loadI18n(v);
       await navigate(currentRoute());

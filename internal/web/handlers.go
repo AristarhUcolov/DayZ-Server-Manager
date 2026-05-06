@@ -38,6 +38,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/auth/status", methods(h.authStatus, http.MethodGet))
 	mux.HandleFunc("/api/auth/login", methods(h.authLogin, http.MethodPost))
 	mux.HandleFunc("/api/auth/logout", methods(h.authLogout, http.MethodPost))
+	mux.HandleFunc("/api/auth/password", methods(h.authPassword, http.MethodPost))
 
 	// Manager config (language, vanilla path, launch params).
 	mux.HandleFunc("/api/config", methods(h.config, http.MethodGet, http.MethodPost, http.MethodPut))
@@ -331,6 +332,76 @@ func (h *handlers) authLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, auth.ClearCookie())
 	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+// authPassword updates (or removes) the panel password.
+//
+//   - {newPassword: ""}                  → remove auth (RequireAuth=false). Allowed
+//     only when the panel is bound to localhost; otherwise rejected so a LAN-
+//     exposed panel can't be silently opened up via the UI.
+//   - {currentPassword, newPassword}     → change. currentPassword must verify if
+//     auth was already required.
+//
+// On success existing sessions are invalidated so all open tabs are forced to
+// re-authenticate with the new credential.
+func (h *handlers) authPassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+		Username        string `json:"username"` // optional rename
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// If auth is already on, the caller must prove they know the current pw.
+	// (The middleware-level session check already ran, so the bearer is at
+	//  least authenticated — we re-verify the password to defend against
+	//  stolen-cookie session-hijack updating a credential.)
+	if h.app.Config.RequireAuth {
+		if !auth.VerifyPassword(req.CurrentPassword, h.app.Config.AdminPasswordHash, h.app.Config.AdminPasswordSalt) {
+			time.Sleep(300 * time.Millisecond)
+			http.Error(w, "current password is incorrect", http.StatusUnauthorized)
+			return
+		}
+	}
+
+	if req.NewPassword == "" {
+		// Disable auth entirely. Refuse if the panel is reachable from
+		// somewhere other than localhost.
+		if h.app.Config.Exposure == "internet" {
+			http.Error(w, "cannot disable auth on a LAN-exposed panel — change Exposure to local first", http.StatusForbidden)
+			return
+		}
+		h.app.Config.RequireAuth = false
+		h.app.Config.AdminPasswordHash = ""
+		h.app.Config.AdminPasswordSalt = ""
+	} else {
+		hash, salt, err := auth.HashPassword(req.NewPassword)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		h.app.Config.RequireAuth = true
+		h.app.Config.AdminPasswordHash = hash
+		h.app.Config.AdminPasswordSalt = salt
+		if u := strings.TrimSpace(req.Username); u != "" {
+			h.app.Config.AdminUsername = u
+		}
+	}
+	if err := h.app.SaveConfig(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Force a re-login on every open tab. The cookie just set by /api/auth/login
+	// would otherwise survive a password change.
+	h.app.Auth = auth.NewStore()
+	http.SetCookie(w, auth.ClearCookie())
+	writeJSON(w, map[string]interface{}{
+		"requireAuth": h.app.Config.RequireAuth,
+		"username":    h.app.Config.AdminUsername,
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -1535,32 +1606,62 @@ func (h *handlers) modsScanTypes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	// Also probe the workshop side: many !Workshop mods carry their loot
+	// XML under @Mod/dz/... that the server-side copy may not yet have.
 	dir := filepath.Join(h.app.ServerDir, name)
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		if h.app.Config.VanillaDayZPath != "" {
+			alt := filepath.Join(h.app.Config.VanillaDayZPath, "!Workshop", name)
+			if st, err := os.Stat(alt); err == nil && st.IsDir() {
+				dir = alt
+			}
+		}
+	}
 	type hit struct {
-		Path  string `json:"path"`  // absolute path
-		Rel   string `json:"rel"`   // relative to mod folder
-		Types int    `json:"types"` // how many <type> entries
+		Path  string `json:"path"`           // absolute path
+		Rel   string `json:"rel"`            // relative to mod folder
+		Types int    `json:"types"`          // how many <type> entries; 0 if not a types doc
+		Size  int64  `json:"size"`
+		Kind  string `json:"kind"`           // "types" | "xml" | "json"
 	}
 	var hits []hit
 	_ = filepath.Walk(dir, func(p string, info os.FileInfo, werr error) error {
 		if werr != nil || info == nil || info.IsDir() {
 			return nil
 		}
-		if !strings.EqualFold(filepath.Ext(info.Name()), ".xml") {
+		ext := strings.ToLower(filepath.Ext(info.Name()))
+		if ext != ".xml" && ext != ".json" {
 			return nil
 		}
-		if info.Size() > 10*1024*1024 { // skip absurdly-large XML
-			return nil
-		}
-		doc, err := dztypes.Load(p)
-		if err != nil || len(doc.Types) == 0 {
+		if info.Size() > 10*1024*1024 { // skip absurdly-large files
 			return nil
 		}
 		rel, _ := filepath.Rel(dir, p)
-		hits = append(hits, hit{Path: p, Rel: filepath.ToSlash(rel), Types: len(doc.Types)})
+		entry := hit{
+			Path: p, Rel: filepath.ToSlash(rel), Size: info.Size(),
+			Kind: strings.TrimPrefix(ext, "."),
+		}
+		// Only XML can be a DayZ types doc. We try the strict parser first
+		// and tag the file so the UI can highlight known-good targets, but
+		// non-matching XMLs still appear so the user can pick one whose
+		// author named it differently (cfgeconomycore.xml, events.xml, etc).
+		if ext == ".xml" {
+			if doc, err := dztypes.Load(p); err == nil && len(doc.Types) > 0 {
+				entry.Kind = "types"
+				entry.Types = len(doc.Types)
+			}
+		}
+		hits = append(hits, entry)
 		return nil
 	})
-	writeJSON(w, map[string]interface{}{"mod": name, "files": hits})
+	// Sort: types-rooted files first (best candidates), then by rel path.
+	sort.Slice(hits, func(i, j int) bool {
+		if (hits[i].Kind == "types") != (hits[j].Kind == "types") {
+			return hits[i].Kind == "types"
+		}
+		return strings.ToLower(hits[i].Rel) < strings.ToLower(hits[j].Rel)
+	})
+	writeJSON(w, map[string]interface{}{"mod": name, "scannedDir": dir, "files": hits})
 }
 
 func (h *handlers) modsInstallTypes(w http.ResponseWriter, r *http.Request) {

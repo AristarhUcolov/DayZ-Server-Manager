@@ -217,9 +217,13 @@ func UpdateAll(serverDir, vanillaDayZPath string) ([]string, error) {
 // SyncAllResult describes what SyncAll did so the UI can show a detailed toast
 // instead of a silent "done".
 type SyncAllResult struct {
-	Installed []string `json:"installed"`
-	Updated   []string `json:"updated"`
-	Skipped   []string `json:"skipped"` // already up to date
+	Installed   []string `json:"installed"`
+	Updated     []string `json:"updated"`
+	Skipped     []string `json:"skipped"` // already up to date
+	WorkshopDir string   `json:"workshopDir"`
+	Total       int      `json:"total"`         // mods seen in !Workshop
+	NotInstalled int     `json:"notInstalled"`  // (before sync) waiting for install
+	OutOfDate    int     `json:"outOfDate"`     // (before sync) update-available count
 }
 
 // SyncAll brings the server directory in line with the client !Workshop:
@@ -240,8 +244,18 @@ func SyncAll(serverDir, vanillaDayZPath string, only []string) (*SyncAllResult, 
 	for _, n := range only {
 		filter[n] = true
 	}
-	res := &SyncAllResult{}
+	res := &SyncAllResult{
+		WorkshopDir: filepath.Join(vanillaDayZPath, "!Workshop"),
+	}
 	for _, m := range list {
+		if m.AvailableInWorkshop {
+			res.Total++
+			if !m.InstalledInServer {
+				res.NotInstalled++
+			} else if m.UpdateAvailable {
+				res.OutOfDate++
+			}
+		}
 		if len(filter) > 0 && !filter[m.Name] {
 			continue
 		}

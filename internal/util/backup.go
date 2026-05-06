@@ -21,10 +21,20 @@ const maxBackups = 5
 // BackupBeforeWrite copies path → path.bak.<timestamp> if the file exists.
 // It is a best-effort operation; callers ignore errors (the worst case is
 // we failed to save a backup — the actual save will still proceed).
+//
+// Skips the snapshot when the most-recent existing backup is byte-identical
+// to the current file. This avoids cluttering the directory when the user
+// hits Save in Settings without making real changes — the most common cause
+// of complaints about "auto-backup spam".
 func BackupBeforeWrite(path string) error {
 	st, err := os.Stat(path)
 	if err != nil || st.IsDir() {
 		return nil // nothing to back up
+	}
+	if newest, ok := newestBackup(path); ok {
+		if same, _ := filesEqual(path, newest); same {
+			return nil // no-change save → no new backup
+		}
 	}
 	ts := time.Now().Format("20060102-150405")
 	bak := path + ".bak." + ts
@@ -33,6 +43,69 @@ func BackupBeforeWrite(path string) error {
 	}
 	pruneOld(path)
 	return nil
+}
+
+// newestBackup returns the path of the youngest <file>.bak.<ts> sibling, or
+// ("", false) when none exist.
+func newestBackup(path string) (string, bool) {
+	dir := filepath.Dir(path)
+	base := filepath.Base(path) + ".bak."
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	var newestName string
+	var newestTime time.Time
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), base) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(newestTime) {
+			newestTime = info.ModTime()
+			newestName = e.Name()
+		}
+	}
+	if newestName == "" {
+		return "", false
+	}
+	return filepath.Join(dir, newestName), true
+}
+
+// filesEqual is a cheap byte-equality check. Any I/O error is treated as
+// "not equal" so callers fall through and create a backup just in case.
+func filesEqual(a, b string) (bool, error) {
+	sa, err := os.Stat(a)
+	if err != nil {
+		return false, err
+	}
+	sb, err := os.Stat(b)
+	if err != nil {
+		return false, err
+	}
+	if sa.Size() != sb.Size() {
+		return false, nil
+	}
+	da, err := os.ReadFile(a)
+	if err != nil {
+		return false, err
+	}
+	db, err := os.ReadFile(b)
+	if err != nil {
+		return false, err
+	}
+	if len(da) != len(db) {
+		return false, nil
+	}
+	for i := range da {
+		if da[i] != db[i] {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func copyFile(src, dst string) error {
