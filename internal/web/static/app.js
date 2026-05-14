@@ -818,6 +818,7 @@ Views.server = async (root) => {
     'enableWhitelist','disableVoN','vonCodecQuality','disable3rdPerson','disableCrosshair',
     'disablePersonalLight','lightingConfig','verifySignatures','forceSameBuild',
     'shardId','instanceId','storageAutoFix','loginQueueConcurrentPlayers','loginQueueMaxPlayers',
+    'steamProtocolMaxDataSize',
   ];
   for (const k of KEYS) {
     const val = data.values[k] ?? '';
