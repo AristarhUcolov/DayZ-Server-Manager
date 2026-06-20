@@ -22,7 +22,7 @@ import (
 
 const (
 	appName    = "DayZ Server Manager"
-	appVersion = "0.10.1"
+	appVersion = "0.11.0"
 	appAuthor  = "Aristarh Ucolov"
 )
 
@@ -60,7 +60,10 @@ func main() {
 
 	effectiveBind := *bindAddr
 	if effectiveBind == "" {
-		if a.Config.Exposure == "internet" {
+		// "lan" and "internet" both expose the panel on all interfaces so
+		// other devices on the network can reach it; only "local" stays
+		// loopback-only.
+		if a.Config.Exposure == "internet" || a.Config.Exposure == "lan" {
 			effectiveBind = "0.0.0.0"
 		} else {
 			effectiveBind = "127.0.0.1"

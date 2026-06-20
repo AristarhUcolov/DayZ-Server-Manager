@@ -43,9 +43,10 @@ const (
 
 // Conn is a live BattlEye RCon connection.
 type Conn struct {
-	addr string
-	pass string
-	udp  *net.UDPConn
+	addr  string
+	pass  string
+	udp   *net.UDPConn // UNCONNECTED socket — see Dial for why
+	raddr *net.UDPAddr // server address we send to / expect replies from
 
 	mu       sync.Mutex
 	seq      uint32
@@ -72,14 +73,24 @@ func Dial(addr, password string) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	u, err := net.DialUDP("udp", nil, udpAddr)
+	// IMPORTANT: use an UNCONNECTED socket (ListenUDP + WriteToUDP/ReadFromUDP)
+	// rather than a connected one (DialUDP). On Windows a *connected* UDP socket
+	// that received an ICMP "port unreachable" (e.g. a packet sent in the brief
+	// window the BattlEye RCon port wasn't listening yet) starts dropping all
+	// subsequent valid datagrams — the login is accepted server-side but the
+	// client never receives any reply, so every command times out and the panel
+	// reconnects in a loop ("RCon admin logged in" every few seconds). An
+	// unconnected socket receives from any source and isn't poisoned by that.
+	u, err := net.ListenUDP("udp", &net.UDPAddr{Port: 0})
 	if err != nil {
 		return nil, err
 	}
+	disableConnReset(u) // belt-and-suspenders for the same Windows quirk
 	c := &Conn{
 		addr:    addr,
 		pass:    password,
 		udp:     u,
+		raddr:   udpAddr,
 		pending: map[byte]*pending{},
 		parts:   map[byte]map[byte][]byte{},
 	}
@@ -91,7 +102,7 @@ func Dial(addr, password string) (*Conn, error) {
 	}
 	_ = u.SetReadDeadline(time.Now().Add(readTimeout))
 	buf := make([]byte, 4096)
-	n, err := u.Read(buf)
+	n, _, err := u.ReadFromUDP(buf)
 	_ = u.SetReadDeadline(time.Time{})
 	if err != nil {
 		_ = u.Close()
@@ -114,6 +125,7 @@ func Dial(addr, password string) (*Conn, error) {
 		return nil, ErrAuthFailed
 	}
 
+	dbg("connected to %s, login ok", addr)
 	go c.readLoop()
 	go c.keepAlive()
 	return c, nil
@@ -124,13 +136,14 @@ func (c *Conn) Command(cmd string) (string, error) {
 	if c.closed.Load() {
 		return "", ErrNotConnected
 	}
-	seq := byte(atomic.AddUint32(&c.seq, 1))
+	seq := byte(atomic.AddUint32(&c.seq, 1) - 1) // BE spec: sequence starts at 0
 	p := &pending{done: make(chan []byte, 4)}
 	c.mu.Lock()
 	c.pending[seq] = p
 	c.mu.Unlock()
 
 	frame := append([]byte{0x01, seq}, []byte(cmd)...)
+	dbg("send seq=%d cmd=%q", seq, cmd)
 	if err := c.sendFrame(frame); err != nil {
 		c.mu.Lock()
 		delete(c.pending, seq)
@@ -140,8 +153,10 @@ func (c *Conn) Command(cmd string) (string, error) {
 
 	select {
 	case reply := <-p.done:
+		dbg("reply seq=%d len=%d", seq, len(reply))
 		return string(reply), nil
 	case <-time.After(readTimeout):
+		dbg("TIMEOUT seq=%d cmd=%q (no matching reply in %s)", seq, cmd, readTimeout)
 		c.mu.Lock()
 		delete(c.pending, seq)
 		c.mu.Unlock()
@@ -173,7 +188,7 @@ func (c *Conn) sendFrame(payload []byte) error {
 	out = append(out, 'B', 'E')
 	out = binary.LittleEndian.AppendUint32(out, crc)
 	out = append(out, body...)
-	_, err := c.udp.Write(out)
+	_, err := c.udp.WriteToUDP(out, c.raddr)
 	return err
 }
 
@@ -200,15 +215,18 @@ func (c *Conn) readLoop() {
 		if c.closed.Load() {
 			return
 		}
-		n, err := c.udp.Read(buf)
+		n, _, err := c.udp.ReadFromUDP(buf)
 		if err != nil {
+			dbg("read error: %v", err)
 			c.readErr.Store(err)
 			return
 		}
 		pkt, err := parseHeader(buf[:n])
 		if err != nil || len(pkt) < 1 {
+			dbg("drop packet (%d bytes): %v", n, err)
 			continue
 		}
+		dbg("recv pkt type=0x%02x payloadLen=%d", pkt[0], len(pkt))
 		switch pkt[0] {
 		case 0x01:
 			c.handleCommandReply(pkt[1:])
@@ -265,6 +283,7 @@ func (c *Conn) handleCommandReply(b []byte) {
 	p := c.pending[seq]
 	delete(c.pending, seq)
 	c.mu.Unlock()
+	dbg("cmdReply seq=%d len=%d pendingMatch=%v", seq, len(rest), p != nil)
 	if p != nil {
 		p.done <- rest
 	}
@@ -273,14 +292,11 @@ func (c *Conn) handleCommandReply(b []byte) {
 func (c *Conn) keepAlive() {
 	t := time.NewTicker(keepAliveInterval)
 	defer t.Stop()
-	for {
-		select {
-		case <-t.C:
-			if c.closed.Load() {
-				return
-			}
-			seq := byte(atomic.AddUint32(&c.seq, 1))
-			_ = c.sendFrame([]byte{0x01, seq})
+	for range t.C {
+		if c.closed.Load() {
+			return
 		}
+		seq := byte(atomic.AddUint32(&c.seq, 1) - 1) // BE spec: sequence starts at 0
+		_ = c.sendFrame([]byte{0x01, seq})
 	}
 }

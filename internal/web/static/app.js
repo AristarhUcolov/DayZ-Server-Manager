@@ -118,24 +118,62 @@ function setActiveRoute(name) {
   });
 }
 
+// routeFromHash reads the current section from location.hash, falling back to
+// 'dashboard' for an empty or unknown route. This is what lets a page reload
+// (F5) land back on the section the user was looking at instead of always
+// bouncing to the dashboard.
+function routeFromHash() {
+  const raw = decodeURIComponent((location.hash || '').replace(/^#/, '')).trim();
+  return Views[raw] ? raw : 'dashboard';
+}
+
+// _navSeq tags each navigation. If a newer navigate starts while an older one
+// is still awaiting its (async) view, the older one bails out on resume instead
+// of appending its content/footer into the new page — which is what produced
+// duplicate "Support" cards when switching sections quickly.
+let _navSeq = 0;
+
 async function navigate(name) {
+  const myNav = ++_navSeq;
   setActiveRoute(name);
+  // Mirror the route into the URL hash so a reload restores this section.
+  // Done before awaiting the view so the resulting hashchange sees the active
+  // route already updated and becomes a no-op (avoids a double render).
+  if (routeFromHash() !== name) location.hash = name;
   const view = Views[name] || Views.dashboard;
   const root = document.getElementById('view');
   if (root._teardown) { try { root._teardown(); } catch {} root._teardown = null; }
   root.innerHTML = '';
   try {
     await view(root);
+    if (myNav !== _navSeq) return; // superseded by a newer navigation
     applyI18n();
   } catch (err) {
+    if (myNav !== _navSeq) return;
     handleErr(err);
     root.innerHTML = `<div class="card"><p>${err.message || err}</p></div>`;
   }
 }
 
+// renderSupportFooter populates the persistent #support-footer exactly once.
+// Because it lives outside #view, navigation never touches or duplicates it.
+function renderSupportFooter() {
+  const host = document.getElementById('support-footer');
+  if (!host || host.firstChild) return;
+  host.append(donationCard());
+}
+
 document.addEventListener('click', e => {
   const a = e.target.closest('.nav a');
   if (a && a.dataset.route) { e.preventDefault(); navigate(a.dataset.route); }
+});
+
+// Browser back/forward and manual hash edits. navigate() also writes the hash,
+// but only when it differs from the active route, so its own updates don't
+// re-trigger this handler.
+window.addEventListener('hashchange', () => {
+  const r = routeFromHash();
+  if (r !== currentRoute()) navigate(r);
 });
 
 // Global keyboard shortcuts.
@@ -387,12 +425,9 @@ async function ensureFirstRunDone() {
 
 Views.dashboard = async (root) => {
   await refreshStatus();
-  root.append(pageHeader('nav.dashboard', 'dashboard.subtitle', [
-    h('button', { class: 'primary', i18n: 'action.start',
-      onclick: async () => { try { await api.post('/api/server/start'); refreshStatus(); } catch (e) { handleErr(e); } } }),
-    h('button', { i18n: 'action.restart',
-      onclick: async () => { try { await api.post('/api/server/restart'); refreshStatus(); } catch (e) { handleErr(e); } } }),
-  ]));
+  // Start/Stop/Restart live in the Server card below — no duplicate set in the
+  // header (was confusing to have two).
+  root.append(pageHeader('nav.dashboard', 'dashboard.subtitle'));
 
   // Silent probe — if a newer manager version is out, show a non-blocking
   // banner. Failures are swallowed; this should never block the dashboard.
@@ -479,10 +514,8 @@ Views.dashboard = async (root) => {
         ]),
         h('div', { class: 'card' }, [
           h('h3', { i18n: 'dashboard.disk' }),
-          h('p', { class: 'stat', text: disk }),
-          h('div', { class: 'actions' }, [
-            h('button', { i18n: 'nav.validator', onclick: () => navigate('validator') }),
-          ]),
+          h('div', { class: 'metric-num', text: disk }),
+          h('div', { class: 'metric-sub', i18n: 'dashboard.disk.free' }),
         ]),
         h('div', { class: 'card' }, [
           h('h3', { i18n: 'dashboard.process' }),
@@ -527,9 +560,12 @@ Views.dashboard = async (root) => {
       if (!stopped) render(m);
     } catch {}
   };
-  await tick();
+  // Register teardown + interval BEFORE the first await so navigating away
+  // during the initial fetch can't leak the interval (which kept hammering
+  // /api/dashboard/metrics — and thus RCon — from detached pages).
   const iv = setInterval(tick, 5000);
   root._teardown = () => { stopped = true; clearInterval(iv); };
+  await tick();
 };
 
 // parseUptimeSeconds turns the backend's Duration string ("3h17m4s",
@@ -645,7 +681,9 @@ function openCommandPalette() {
     { kind: 'route', label: t('nav.admlog')    || 'ADM log',    route: 'admlog' },
     { kind: 'route', label: t('nav.rcon')      || 'RCon',       route: 'rcon' },
     { kind: 'route', label: t('nav.validator') || 'Validator',  route: 'validator' },
+    { kind: 'route', label: t('nav.weather')   || 'Weather & Time', route: 'weather' },
     { kind: 'route', label: t('nav.sync')      || 'Sync',       route: 'sync' },
+    { kind: 'route', label: t('nav.wipe')      || 'Wipe',       route: 'wipe' },
     { kind: 'route', label: t('nav.settings')  || 'Settings',   route: 'settings' },
     { kind: 'action', label: (t('action.start') || 'Start server'),
       run: async () => { try { await api.post('/api/server/start'); toast('starting', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
@@ -896,7 +934,7 @@ Views.mods = async (root) => {
   const wrap = h('div');
 
   if (State.serverStatus.running) wrap.append(runningBanner());
-  if (!d.vanillaPath) wrap.append(h('div', { class: 'warning-bar', text: 'Vanilla DayZ path is not set — Settings.' }));
+  if (!d.vanillaPath) wrap.append(h('div', { class: 'warning-bar', text: t('mods.noClientFolder') }));
 
   const outdatedCount = d.mods.filter(m => m.updateAvailable).length;
 
@@ -914,12 +952,25 @@ Views.mods = async (root) => {
   );
   const tbody = h('tbody');
   for (const m of d.mods) {
-    const activeCb = h('input', { type: 'checkbox' });
-    activeCb.checked = d.activeMods.includes(m.name);
-    activeCb.onchange = async () => {
-      try { await api.post('/api/mods/enable', { mod: m.name, enabled: activeCb.checked }); }
-      catch (e) { handleErr(e); activeCb.checked = !activeCb.checked; }
-    };
+    // Launch toggle. A mod that isn't installed in the server dir can't be
+    // enabled — DayZServer would fail to start — so we lock it with a padlock
+    // and a hint to install it first (the backend rejects it too).
+    let activeControl;
+    if (m.installedInServer) {
+      const activeCb = h('input', { type: 'checkbox', class: 'switch' });
+      activeCb.checked = d.activeMods.includes(m.name);
+      activeCb.onchange = async () => {
+        try { await api.post('/api/mods/enable', { mod: m.name, enabled: activeCb.checked }); }
+        catch (e) { handleErr(e); activeCb.checked = !activeCb.checked; }
+      };
+      activeControl = activeCb;
+    } else {
+      activeControl = h('span', {
+        class: 'lock-indicator',
+        title: t('mods.installFirst') || 'Install the mod before enabling it',
+        text: '🔒',
+      });
+    }
 
     const actions = h('div', { class: 'actions', style: { margin: 0 } });
     if (!m.installedInServer && m.availableInWorkshop) {
@@ -976,7 +1027,7 @@ Views.mods = async (root) => {
       h('td', {}, m.availableInWorkshop ? h('span', { class: 'badge ok', text: '✓' }) : h('span', { class: 'badge mute', text: '—' })),
       h('td', { text: m.keyCount }),
       h('td', { text: bytes(m.sizeBytes) }),
-      h('td', {}, activeCb),
+      h('td', {}, activeControl),
       h('td', {}, actions),
     ]);
     if (m.publishedId) tr.dataset.published = m.publishedId;
@@ -1017,6 +1068,10 @@ Views.mods = async (root) => {
   };
 
   const toolbar = h('div', { class: 'toolbar' }, [
+    h('button', { i18n: 'mods.refreshList',
+      title: t('mods.refreshList.hint') || 'Re-scan !Workshop and the server folder',
+      onclick: () => navigate('mods'),
+    }),
     h('button', { i18n: 'action.syncKeys',
       onclick: async () => { try { await api.post('/api/mods/sync-keys'); toast('keys synced','ok'); } catch (e) { handleErr(e); } }
     }),
@@ -1825,7 +1880,7 @@ Views.validator = async (root) => {
       for (const i of d.issues) {
         const cls = i.severity === 'error' ? 'err' : (i.severity === 'warning' ? 'warn' : 'mute');
         tb.append(h('tr', {}, [
-          h('td', {}, h('span', { class: `badge ${cls}`, text: i.severity })),
+          h('td', {}, h('span', { class: `badge ${cls}`, text: t('validator.severity.' + i.severity) || i.severity })),
           h('td', { text: i.file }),
           h('td', { text: i.line || '' }),
           h('td', { text: i.message }),
@@ -1977,48 +2032,74 @@ Views.admlog = async (root) => {
 // --------------------------------------------------------------------- rcon
 
 Views.rcon = async (root) => {
+  await refreshStatus();
+  // Pull current RCon settings so the access form is prefilled and the status
+  // badge is accurate regardless of whether the server is running.
+  let cfg = State.config || {};
+  try { cfg = await api.get('/api/config'); State.config = cfg; } catch {}
+
   const card = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.rcon' })]);
   const status = h('div', { class: 'hint' });
-  const setupHost = h('div');
   const players = h('div', { class: 'players-grid' });
   const sayInp = h('input', { type: 'text', placeholder: 'Broadcast message' });
   const cmdInp = h('input', { type: 'text', placeholder: 'Raw RCon command, e.g. #shutdown' });
   const cmdOut = h('pre', { class: 'log-pane', style: { height: '180px' } });
 
-  function renderSetup(message) {
-    setupHost.innerHTML = '';
-    const passInp = h('input', { type: 'password', placeholder: 'RCon password', style: { flex: '1' } });
-    const portInp = h('input', { type: 'number', placeholder: 'Port (auto)', style: { width: '120px' } });
-    setupHost.append(
-      h('div', { class: 'card', style: { borderColor: 'var(--warn)' } }, [
-        h('h3', { i18n: 'rcon.notConfigured' }),
-        h('p', { class: 'hint', text: message || t('rcon.notConfigured.hint') }),
-        h('div', { class: 'row', style: { gap: '8px' } }, [
-          passInp, portInp,
-          h('button', { class: 'primary', i18n: 'action.save', onclick: async () => {
-            try {
-              const cur = await api.get('/api/config');
-              const next = { ...cur };
-              next.rconPassword = passInp.value.trim();
-              const p = parseInt(portInp.value, 10);
-              if (Number.isFinite(p) && p > 0) next.rconPort = p;
-              await api.post('/api/config', next);
-              State.config = next;
-              setupHost.innerHTML = '';
-              await refresh();
-            } catch (e) { handleErr(e); }
-          }}),
-        ]),
-      ]),
-    );
-  }
+  let timer = 0;
+  const startPolling = () => { if (!timer) timer = setInterval(refresh, 5000); };
+  const stopPolling  = () => { if (timer) { clearInterval(timer); timer = 0; } };
+
+  // --- Always-visible access card. The RCon password can be set/changed at
+  // any time (even with the server stopped — the correct order, since BattlEye
+  // reads beserver_x64.cfg at launch). Saving POSTs the config, which writes
+  // beserver_x64.cfg on the backend; it takes effect on the next server start.
+  const passInp = h('input', { type: 'password', value: cfg.rconPassword || '',
+    placeholder: t('rcon.password'), style: { flex: '1', minWidth: '180px' } });
+  const showChk = h('input', { type: 'checkbox' });
+  showChk.onchange = () => { passInp.type = showChk.checked ? 'text' : 'password'; };
+  const portInp = h('input', { type: 'number', value: cfg.rconPort || '',
+    placeholder: Number(cfg.serverPort) ? (Number(cfg.serverPort) + 4) : 'auto', style: { width: '130px' } });
+  const accessBadge = h('span', { class: 'badge ' + (cfg.rconPassword ? 'ok' : 'mute'),
+    i18n: cfg.rconPassword ? 'rcon.access.configured' : 'rcon.access.notset' });
+
+  const accessCard = h('div', { class: 'card' }, [
+    h('h3', { i18n: 'rcon.access.title' }),
+    h('div', { class: 'row', style: { marginBottom: '8px' } }, [accessBadge]),
+    h('div', { class: 'row', style: { gap: '8px' } }, [
+      passInp, portInp,
+      h('button', { class: 'primary', i18n: 'action.save', onclick: async () => {
+        try {
+          const next = { ...(await api.get('/api/config')) };
+          next.rconPassword = passInp.value.trim();
+          const p = parseInt(portInp.value, 10);
+          next.rconPort = (Number.isFinite(p) && p > 0) ? p : 0;
+          await api.post('/api/config', next);
+          State.config = next;
+          toast(t('rcon.savedRestart'), 'ok');
+          await navigate('rcon');
+        } catch (e) { handleErr(e); }
+      }}),
+    ]),
+    h('label', { style: { display: 'inline-flex', gap: '8px', alignItems: 'center', marginTop: '8px' } },
+      [showChk, h('span', { i18n: 'rcon.showPassword' })]),
+    h('p', { class: 'hint', i18n: 'rcon.notConfigured.hint' }),
+  ]);
 
   async function refresh() {
-    status.textContent = '';
-    setupHost.innerHTML = '';
-    players.innerHTML = '';
+    // If the server isn't running there's nothing to connect to. Show a calm
+    // hint instead of the password form. We keep the poll alive (there's no
+    // input form to clobber here) but return before any network call, so it
+    // costs nothing while down and auto-recovers once the server is up.
+    if (!State.serverStatus.running) {
+      startPolling();
+      players.innerHTML = '';
+      status.textContent = t('rcon.serverOffline') || 'Server is not running — start it to use RCon.';
+      return;
+    }
     try {
       const d = await api.get('/api/rcon/players');
+      startPolling();
+      players.innerHTML = '';
       players.append(
         h('div', { class: 'head', text: 'ID' }),
         h('div', { class: 'head', text: 'Name' }),
@@ -2053,47 +2134,58 @@ Views.rcon = async (root) => {
       status.textContent = `${d.count || 0} player(s)`;
     } catch (e) {
       const msg = e.message || '';
-      if (/not configured|not running|connect: connection refused|password/i.test(msg)) {
-        renderSetup(msg);
+      if (/not configured|password|auth/i.test(msg)) {
+        // Password missing/wrong, or set but not yet loaded (BE reads it at
+        // start). The access card above is always available to fix this.
+        players.innerHTML = '';
+        status.textContent = t('rcon.notActiveYet') ||
+          'RCon password isn’t active yet — set it above and restart the server.';
       } else {
+        // Transient (timeout, BattlEye still loading). Keep polling quietly.
         status.textContent = `RCon: ${msg}`;
       }
     }
   }
 
+  status.style.margin = '4px 0 12px';
+  players.style.margin = '8px 0';
+
   card.append(
-    h('div', { class: 'actions' }, [
+    h('div', { class: 'actions', style: { marginTop: 0 } }, [
       h('button', { text: 'Refresh', onclick: refresh }),
     ]),
     status,
-    setupHost,
     players,
-    h('h3', { text: 'Broadcast' }),
-    h('div', { class: 'row' }, [
-      sayInp,
-      h('button', { class: 'primary', text: 'Say', onclick: async () => {
-        if (!sayInp.value.trim()) return;
-        try { await api.post('/api/rcon/say', { message: sayInp.value }); sayInp.value = ''; toast('sent','ok'); }
-        catch (e) { handleErr(e); }
-      }}),
+    // Broadcast — separated section so it doesn't bleed into the player table.
+    h('div', { style: { marginTop: '22px' } }, [
+      h('h3', { text: 'Broadcast' }),
+      h('div', { class: 'row' }, [
+        sayInp,
+        h('button', { class: 'primary', text: 'Say', onclick: async () => {
+          if (!sayInp.value.trim()) return;
+          try { await api.post('/api/rcon/say', { message: sayInp.value }); sayInp.value = ''; toast('sent','ok'); }
+          catch (e) { handleErr(e); }
+        }}),
+      ]),
     ]),
-    h('h3', { text: 'Raw command' }),
-    h('div', { class: 'row' }, [
-      cmdInp,
-      h('button', { text: 'Send', onclick: async () => {
-        if (!cmdInp.value.trim()) return;
-        try { const r = await api.post('/api/rcon/command', { command: cmdInp.value }); cmdOut.textContent = r.output || '(empty)'; }
-        catch (e) { cmdOut.textContent = `ERR: ${e.message}`; }
-      }}),
+    h('div', { style: { marginTop: '22px' } }, [
+      h('h3', { text: 'Raw command' }),
+      h('div', { class: 'row' }, [
+        cmdInp,
+        h('button', { text: 'Send', onclick: async () => {
+          if (!cmdInp.value.trim()) return;
+          try { const r = await api.post('/api/rcon/command', { command: cmdInp.value }); cmdOut.textContent = r.output || '(empty)'; }
+          catch (e) { cmdOut.textContent = `ERR: ${e.message}`; }
+        }}),
+      ]),
+      h('div', { style: { marginTop: '10px' } }, [cmdOut]),
     ]),
-    cmdOut,
   );
 
-  root.append(card);
+  // Access card first (always usable), then the live console below it.
+  root.append(accessCard, card);
   await refresh();
-
-  const timer = setInterval(refresh, 5000);
-  root._teardown = () => clearInterval(timer);
+  root._teardown = stopPolling;
 };
 
 // --------------------------------------------------------------------- events
@@ -2366,7 +2458,7 @@ function announcementsCard() {
     state.items.forEach((a, i) => {
       const time = h('input', { type: 'text', value: a.time, placeholder: 'HH:MM', style: { width: '80px' } });
       const msg  = h('input', { type: 'text', value: a.message || '', style: { flex: '1' } });
-      const en   = h('input', { type: 'checkbox' });
+      const en   = h('input', { type: 'checkbox', class: 'switch' });
       en.checked = !!a.enabled;
       const row = h('div', { class: 'row', style: { gap: '8px', marginBottom: '6px' } }, [
         time, msg,
@@ -2400,6 +2492,203 @@ function announcementsCard() {
   return card;
 }
 
+// --------------------------------------------------------------------- weather & time
+
+Views.weather = async (root) => {
+  await refreshStatus();
+  const running = State.serverStatus.running;
+  const d = await api.get('/api/weather');
+  const params = d.params || {};
+  const presets = d.presets || [];
+  const tm = d.time || {};
+
+  root.append(pageHeader('nav.weather', 'weather.subtitle'));
+  const wrap = h('div');
+  root.append(wrap);
+  if (running) wrap.append(runningBanner());
+
+  // ---- presets ----
+  // "Enabled" (not mere file existence) decides whether the manager controls
+  // weather — the vanilla cfgweather.xml ships present but with enable="0".
+  const enabled = !!params.enable;
+  const PIC = { clear: '☀️', cloudy: '☁️', foggy: '🌫️', rainy: '🌧️', storm: '⛈️', snowy: '❄️', dynamic: '🔄', off: '🚫' };
+  const matchedBadge = h('span', { class: 'badge ' + (enabled ? 'ok' : 'mute'),
+    text: enabled ? ((PIC[d.matched] || '') + ' ' + (t('weather.preset.' + d.matched) || d.matched)) : '—' });
+
+  const applyPreset = async (name) => {
+    try { await api.post('/api/weather/preset', { name }); toast(t('action.save'), 'ok'); await navigate('weather'); }
+    catch (e) { handleErr(e); }
+  };
+  const presetTile = (name) => h('button', {
+    class: 'preset-tile' + ((name === d.matched && enabled) ? ' active' : ''),
+    disabled: running, onclick: () => applyPreset(name),
+  }, [
+    h('span', { class: 'ic', text: PIC[name] || '•' }),
+    h('span', { i18n: 'weather.preset.' + name }),
+  ]);
+  const tiles = presets.map(presetTile);
+  tiles.push(presetTile('off'));
+
+  wrap.append(h('div', { class: 'card' }, [
+    h('h3', { i18n: 'weather.presets.title' }),
+    h('p', { class: 'hint', i18n: 'weather.presets.hint' }),
+    h('div', { class: 'row', style: { gap: '6px', alignItems: 'center', marginBottom: '10px' } }, [
+      h('span', { class: 'k', i18n: 'weather.current' }), matchedBadge,
+    ]),
+    enabled ? null : h('p', { class: 'hint', i18n: 'weather.disabled' }),
+    h('div', { class: 'preset-grid' }, tiles),
+  ]));
+
+  // ---- manual editor ----
+  // Generic slider row. `unit` is '%' (value stored 0..1) or 'm/s' (raw value).
+  const sliderRow = (labelKey, icon, val, opts = {}) => {
+    const unit = opts.unit || '%';
+    const max = opts.max || 100;
+    const step = opts.step || '1';
+    const toDisplay = (v) => unit === '%' ? Math.round((v || 0) * 100) : (v || 0);
+    const fmt = (n) => unit === '%' ? n + '%' : n + ' m/s';
+    const out = h('span', { class: 'slider-val', text: fmt(toDisplay(val)) });
+    const range = h('input', { type: 'range', min: '0', max: String(max), step,
+      value: String(toDisplay(val)), style: { flex: '1' } });
+    range.oninput = () => { out.textContent = fmt(Number(range.value)); };
+    const row = h('div', { class: 'row', style: { gap: '10px', alignItems: 'center', marginBottom: '10px' } }, [
+      h('span', { class: 'slider-label' }, [h('span', { class: 'ic', text: icon }), h('span', { i18n: labelKey })]),
+      range, out,
+    ]);
+    return { row, get: () => unit === '%' ? Number(range.value) / 100 : Number(range.value) };
+  };
+  const oc = sliderRow('weather.overcast', '☁️', params.overcast);
+  const fog = sliderRow('weather.fog', '🌫️', params.fog);
+  const rain = sliderRow('weather.rain', '🌧️', params.rain);
+  const snow = sliderRow('weather.snowfall', '❄️', params.snowfall);
+  const storm = sliderRow('weather.storm', '⚡', params.stormDensity);
+  const wind = sliderRow('weather.wind', '🌬️', params.wind, { unit: 'm/s', max: 20, step: '0.5' });
+  const dynChk = h('input', { type: 'checkbox', class: 'switch' });
+  dynChk.checked = !!params.dynamic;
+
+  wrap.append(h('div', { class: 'card' }, [
+    h('h3', { i18n: 'weather.custom.title' }),
+    h('p', { class: 'hint', i18n: 'weather.custom.hint' }),
+    oc.row, fog.row, rain.row, wind.row, snow.row, storm.row,
+    h('label', {}, [dynChk, h('span', { i18n: 'weather.preset.dynamic' })]),
+    h('div', { class: 'actions' }, [
+      h('button', { class: 'primary', i18n: 'weather.apply', disabled: running,
+        onclick: async () => {
+          try {
+            await api.post('/api/weather/custom', {
+              overcast: oc.get(), fog: fog.get(), rain: rain.get(),
+              snowfall: snow.get(), stormDensity: storm.get(),
+              wind: wind.get(), dynamic: dynChk.checked,
+            });
+            toast(t('action.save'), 'ok'); await navigate('weather');
+          } catch (e) { handleErr(e); }
+        } }),
+    ]),
+    h('p', { class: 'hint', i18n: 'weather.timedHint' }),
+  ]));
+
+  // ---- in-game time ----
+  const accel = h('input', { type: 'number', min: '0.1', max: '24', step: '0.1', value: tm.serverTimeAcceleration ?? '1', style: { width: '90px' } });
+  const nAccel = h('input', { type: 'number', min: '0.1', max: '64', step: '0.1', value: tm.serverNightTimeAcceleration ?? '1', style: { width: '90px' } });
+  const sTime = h('input', { type: 'text', value: tm.serverTime ?? 'SystemTime', style: { width: '180px' } });
+  const persist = h('input', { type: 'checkbox', class: 'switch' });
+  persist.checked = String(tm.serverTimePersistent ?? '0') === '1';
+
+  // Quick-pick chips so users don't have to know the multiplier / time format.
+  const accelQuick = h('div', { class: 'pills' }, [1, 6, 12, 24].map(v =>
+    h('button', { class: 'pill', text: v + '×', onclick: () => { accel.value = v; } })));
+  const startQuick = h('div', { class: 'pills' }, [
+    ['weather.time.start.system', 'SystemTime'],
+    ['weather.time.start.morning', '2024/7/1/8/0'],
+    ['weather.time.start.noon', '2024/7/1/12/0'],
+    ['weather.time.start.evening', '2024/7/1/19/0'],
+    ['weather.time.start.night', '2024/7/1/0/0'],
+  ].map(([k, val]) => h('button', { class: 'pill', i18n: k, onclick: () => { sTime.value = val; } })));
+
+  const tRow = (labelKey, el, extra, hintKey) => h('div', { style: { marginBottom: '12px' } }, [
+    h('label', { i18n: labelKey }), el,
+    extra || null,
+    hintKey ? h('small', { class: 'hint', i18n: hintKey }) : null,
+  ]);
+
+  wrap.append(h('div', { class: 'card' }, [
+    h('h3', { i18n: 'weather.time.title' }),
+    tRow('weather.time.accel', accel, accelQuick),
+    tRow('weather.time.nightAccel', nAccel),
+    tRow('weather.time.serverTime', sTime, startQuick, 'weather.time.serverTime.hint'),
+    h('label', {}, [persist, h('span', { i18n: 'weather.time.persistent' })]),
+    h('div', { class: 'actions' }, [
+      h('button', { class: 'primary', i18n: 'weather.time.save', disabled: running,
+        onclick: async () => {
+          try {
+            await api.post('/api/weather/time', {
+              serverTimeAcceleration: Number(accel.value) || 1,
+              serverNightTimeAcceleration: Number(nAccel.value) || 1,
+              serverTime: sTime.value.trim() || 'SystemTime',
+              serverTimePersistent: persist.checked ? 1 : 0,
+            });
+            toast(t('action.save'), 'ok');
+          } catch (e) { handleErr(e); }
+        } }),
+    ]),
+  ]));
+};
+
+// --------------------------------------------------------------------- wipe
+
+Views.wipe = async (root) => {
+  const d = await api.get('/api/wipe/preview');
+  root.append(pageHeader('nav.wipe', 'wipe.subtitle'));
+  const wrap = h('div');
+  root.append(wrap);
+
+  if (d.serverRunning) wrap.append(runningBanner());
+
+  const folders = d.folders || [];
+  const list = h('div');
+  if (folders.length === 0) {
+    list.append(h('p', { class: 'hint', i18n: 'wipe.nothing' }));
+  } else {
+    const tbl = h('table');
+    tbl.append(h('thead', {}, h('tr', {}, [h('th', { text: 'storage' }), h('th', { text: 'Size' })])));
+    const tb = h('tbody');
+    for (const f of folders) {
+      tb.append(h('tr', {}, [h('td', { text: f.name }), h('td', { text: bytes(f.sizeBytes) })]));
+    }
+    tbl.append(tb);
+    list.append(tbl);
+  }
+
+  const confirm = h('input', { type: 'checkbox' });
+  const wipeBtn = h('button', { class: 'danger', i18n: 'wipe.button',
+    disabled: true,
+    onclick: async () => {
+      try {
+        const r = await api.post('/api/wipe', {});
+        toast(t('wipe.done'), 'ok');
+        await navigate('wipe');
+      } catch (e) { handleErr(e); }
+    } });
+  const refreshBtnState = () => {
+    wipeBtn.disabled = !(confirm.checked && !d.serverRunning && folders.length > 0);
+  };
+  confirm.onchange = refreshBtnState;
+  refreshBtnState();
+
+  wrap.append(h('div', { class: 'card', style: { borderColor: 'var(--error)' } }, [
+    h('h3', { i18n: 'nav.wipe' }),
+    h('p', { class: 'warning-bar', i18n: 'wipe.warning' }),
+    h('p', { class: 'hint', i18n: 'wipe.whatItDoes' }),
+    h('p', { class: 'hint', i18n: 'wipe.backupNote' }),
+    d.instanceId ? h('p', { class: 'hint', text: 'instanceId: ' + d.instanceId }) : null,
+    h('h4', { i18n: 'wipe.preview.title' }),
+    list,
+    d.serverRunning ? h('p', { class: 'hint', i18n: 'wipe.serverRunning' }) : null,
+    h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '10px 0' } }, [confirm, h('span', { i18n: 'wipe.confirm' })]),
+    h('div', { class: 'actions' }, [wipeBtn]),
+  ]));
+};
+
 Views.settings = async (root) => {
   const c = State.config;
   const F = {
@@ -2407,25 +2696,27 @@ Views.settings = async (root) => {
     vanillaDayZPath: h('input',  { type: 'text', value: c.vanillaDayZPath || '' }),
     exposure:        h('select', {}, [
                        h('option', { value: 'local',    i18n: 'settings.exposure.local' }),
+                       h('option', { value: 'lan',      i18n: 'settings.exposure.lan' }),
                        h('option', { value: 'internet', i18n: 'settings.exposure.internet' }),
                      ]),
-    serverName:      h('input',  { type: 'text', value: c.serverName || '' }),
     serverPort:      h('input',  { type: 'number', value: c.serverPort }),
     serverCfg:       h('input',  { type: 'text', value: c.serverCfg }),
     cpuCount:        h('input',  { type: 'number', value: c.cpuCount }),
     bePath:          h('input',  { type: 'text', value: c.bePath }),
     profilesDir:     h('input',  { type: 'text', value: c.profilesDir }),
     autoRestartSeconds: h('input', { type: 'number', value: c.autoRestartSeconds }),
-    autoRestartEnabled: h('input', { type: 'checkbox' }),
-    doLogs:       h('input', { type: 'checkbox' }),
-    adminLog:     h('input', { type: 'checkbox' }),
-    netLog:       h('input', { type: 'checkbox' }),
-    freezeCheck:  h('input', { type: 'checkbox' }),
-    filePatching: h('input', { type: 'checkbox' }),
+    autoRestartEnabled: h('input', { type: 'checkbox', class: 'switch' }),
+    autoUpdateCheckMinutes: h('input', { type: 'number', value: c.autoUpdateCheckMinutes ?? 0 }),
+    autoUpdateModsOnRestart: h('input', { type: 'checkbox', class: 'switch' }),
+    doLogs:       h('input', { type: 'checkbox', class: 'switch' }),
+    adminLog:     h('input', { type: 'checkbox', class: 'switch' }),
+    netLog:       h('input', { type: 'checkbox', class: 'switch' }),
+    freezeCheck:  h('input', { type: 'checkbox', class: 'switch' }),
+    filePatching: h('input', { type: 'checkbox', class: 'switch' }),
   };
   F.language.value = c.language;
   F.exposure.value = c.exposure || 'local';
-  for (const k of ['autoRestartEnabled','doLogs','adminLog','netLog','freezeCheck','filePatching']) {
+  for (const k of ['autoRestartEnabled','autoUpdateModsOnRestart','doLogs','adminLog','netLog','freezeCheck','filePatching']) {
     F[k].checked = !!c[k];
   }
 
@@ -2470,8 +2761,9 @@ Views.settings = async (root) => {
     ]),
 
     section('nav.server', [
+      // Server name is edited via the serverDZ.cfg "hostname" field in the
+      // Server section — it lived here too, which only caused confusion (#7).
       h('div', { class: 'grid-2' }, [
-        row('settings.serverName', F.serverName),
         row('settings.serverPort', F.serverPort),
         row('settings.serverCfg', F.serverCfg),
         row('settings.cpuCount', F.cpuCount),
@@ -2497,6 +2789,19 @@ Views.settings = async (root) => {
       ]),
       h('p', { class: 'hint', i18n: 'settings.autorestart.hint' }),
     ]),
+
+    section('settings.autoupdate.title', [
+      h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+        [F.autoUpdateModsOnRestart, h('span', { i18n: 'settings.autoupdate.onRestart' })]),
+      h('small', { class: 'hint', i18n: 'settings.autoupdate.onRestart.hint' }),
+      h('div', { style: { marginTop: '12px' } }, [
+        h('label', { i18n: 'settings.autoupdate.check' }),
+        F.autoUpdateCheckMinutes,
+        h('small', { class: 'hint', i18n: 'settings.autoupdate.check.hint' }),
+      ]),
+    ]),
+
+    networkCard(),
 
     scheduledRestartsCard(c, F),
 
@@ -2525,10 +2830,45 @@ Views.settings = async (root) => {
         }
       }),
     ]),
-
-    donationCard(),
   );
+  // Support card is appended globally by navigate(), so it isn't repeated here.
 };
+
+// networkCard shows how to reach the panel from other devices on the LAN
+// (item 9). Read-only — exposure itself is the select above; this just renders
+// the URLs to type on a phone, or a hint when the panel is local-only.
+function networkCard() {
+  const card = h('div', { class: 'card' }, [
+    h('h3', { i18n: 'settings.network.title' }),
+    h('p', { class: 'hint', i18n: 'settings.network.hint' }),
+  ]);
+  const body = h('div');
+  card.append(body);
+  (async () => {
+    try {
+      const d = await api.get('/api/network/addresses');
+      body.innerHTML = '';
+      if (!d.lanEnabled) {
+        body.append(h('p', { class: 'warning-bar', i18n: 'settings.network.localOnly' }));
+        return;
+      }
+      const urls = d.urls || [];
+      if (urls.length === 0) {
+        body.append(h('p', { class: 'hint', i18n: 'settings.network.localOnly' }));
+      } else {
+        body.append(h('div', { class: 'k', i18n: 'settings.network.urls' }));
+        const ul = h('ul', { style: { margin: '6px 0' } });
+        for (const u of urls) {
+          ul.append(h('li', {}, h('a', { href: u, target: '_blank', rel: 'noopener', text: u })));
+        }
+        body.append(ul);
+      }
+      body.append(h('p', { class: 'hint', i18n: 'settings.network.firewall' }));
+      body.append(h('p', { class: 'hint', i18n: 'settings.network.restartNote' }));
+    } catch (e) { /* non-fatal */ }
+  })();
+  return card;
+}
 
 function backupCard() {
   const fileInp = h('input', { type: 'file', accept: '.zip' });
@@ -2790,7 +3130,12 @@ async function main() {
     await refreshStatus();
     if (window._statusInterval) clearInterval(window._statusInterval);
     window._statusInterval = setInterval(refreshStatus, 5000);
-    await navigate('dashboard');
+    // Support footer is rendered once here (outside #view) so it appears under
+    // every section without any chance of duplication.
+    renderSupportFooter();
+    // Restore the section from the URL hash so a reload keeps the user where
+    // they were (defaults to dashboard for a fresh load / unknown hash).
+    await navigate(routeFromHash());
   } catch (err) {
     handleErr(err);
   }

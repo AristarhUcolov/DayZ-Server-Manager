@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Player struct {
@@ -27,6 +28,21 @@ type Manager struct {
 	host string
 	port int
 	pass string
+
+	// cmdMu serializes whole commands so two callers (e.g. the dashboard poll
+	// and the RCon page) can never run on the connection concurrently. Without
+	// this, an abandoned/slow command could Close the socket while another was
+	// mid-flight, triggering a reconnect cascade — visible as a new "RCon admin
+	// logged in" in the BE log every few seconds, plus needless load.
+	cmdMu sync.Mutex
+
+	// Player-list cache shared by the dashboard and the RCon page so neither
+	// opens its own connection per poll.
+	cacheMu    sync.Mutex
+	cache      []Player
+	cacheAt    time.Time
+	cacheErr   error
+	refreshing bool
 }
 
 func NewManager() *Manager { return &Manager{} }
@@ -73,7 +89,11 @@ func (m *Manager) Close() {
 }
 
 // Command sends a raw RCon command, reconnecting once on transport errors.
+// Fully serialized: only one command runs at a time on the single connection.
 func (m *Manager) Command(cmd string) (string, error) {
+	m.cmdMu.Lock()
+	defer m.cmdMu.Unlock()
+
 	if err := m.Connect(); err != nil {
 		return "", err
 	}
@@ -84,7 +104,7 @@ func (m *Manager) Command(cmd string) (string, error) {
 	if err == nil {
 		return out, nil
 	}
-	// one retry.
+	// one retry on a fresh connection.
 	m.Close()
 	if err := m.Connect(); err != nil {
 		return "", err
@@ -101,6 +121,63 @@ func (m *Manager) Players() ([]Player, error) {
 		return nil, err
 	}
 	return parsePlayers(raw), nil
+}
+
+// PlayersFresh returns the cached player list immediately (never blocks) and
+// kicks off a single background refresh when the cache is older than maxAge.
+// Used by the dashboard so a slow/unreachable RCon can never stall the page.
+func (m *Manager) PlayersFresh(maxAge time.Duration) []Player {
+	m.cacheMu.Lock()
+	cached := m.cache
+	stale := time.Since(m.cacheAt) > maxAge
+	start := stale && !m.refreshing
+	if start {
+		m.refreshing = true
+	}
+	m.cacheMu.Unlock()
+
+	if start {
+		go func() {
+			p, err := m.Players()
+			m.cacheMu.Lock()
+			if err == nil {
+				m.cache = p
+			}
+			m.cacheAt, m.cacheErr, m.refreshing = time.Now(), err, false
+			m.cacheMu.Unlock()
+		}()
+	}
+	return cached
+}
+
+// InvalidatePlayers marks the player cache stale so the next read refetches.
+// Called after a kick/ban so the change shows up immediately.
+func (m *Manager) InvalidatePlayers() {
+	m.cacheMu.Lock()
+	m.cacheAt = time.Time{}
+	m.cacheMu.Unlock()
+}
+
+// PlayersCached returns the cached list if it's younger than maxAge; otherwise
+// it fetches live (serialized), updates the cache, and returns the result. Used
+// by the RCon page, which wants accurate data and can tolerate a brief wait.
+func (m *Manager) PlayersCached(maxAge time.Duration) ([]Player, error) {
+	m.cacheMu.Lock()
+	if time.Since(m.cacheAt) <= maxAge && m.cacheErr == nil && m.cache != nil {
+		p := m.cache
+		m.cacheMu.Unlock()
+		return p, nil
+	}
+	m.cacheMu.Unlock()
+
+	p, err := m.Players()
+	m.cacheMu.Lock()
+	if err == nil {
+		m.cache = p
+	}
+	m.cacheAt, m.cacheErr = time.Now(), err
+	m.cacheMu.Unlock()
+	return p, err
 }
 
 func (m *Manager) Say(msg string) error {

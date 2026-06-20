@@ -1,107 +1,111 @@
 /*
   DayZ Server Manager — web UI styles.
   Copyright (c) 2026 Aristarh Ucolov.
-  v0.9.0 — full redesign: sidebar layout, refreshed component system,
-  premium dashboard look-and-feel, mobile-first responsive.
+  Design system v2 — "clean modern panel": graphite/blue surfaces, indigo
+  accent, softened radii + diffuse shadows, toggle switches. Sidebar shell
+  retained; component CSS is token-driven so the palette drives the whole look.
 */
 
 /* ============================================================
    1. DESIGN TOKENS
    ============================================================ */
 
+/* v2 design system — "clean modern panel": graphite/blue surfaces, indigo
+   accent, softened radii + diffuse shadows. All component CSS below reads
+   these tokens, so the palette drives the whole look. */
 :root,
 html[data-theme="dark"] {
   /* Surfaces — increasing prominence */
-  --bg:               #0c1016;
-  --bg-soft:          #11161f;
-  --surface:          #161c28;
-  --surface-2:        #1c2331;
-  --surface-hover:    #20283a;
-  --panel:            #161c28;          /* alias used by legacy classes */
-  --panel-alt:        #1c2331;
+  --bg:               #0d1017;
+  --bg-soft:          #12151d;
+  --surface:          #171b24;
+  --surface-2:        #1d222e;
+  --surface-hover:    #232938;
+  --panel:            #171b24;          /* alias used by legacy classes */
+  --panel-alt:        #1d222e;
 
   /* Borders */
-  --border:           #232c3e;
-  --border-strong:    #2d3850;
-  --border-subtle:    #1a2030;
+  --border:           #262d3a;
+  --border-strong:    #333c4d;
+  --border-subtle:    #1b212c;
 
   /* Text */
-  --text:             #eef2f8;
-  --text-secondary:   #b6c0d2;
-  --text-tertiary:    #7d8aa3;
-  --text-dim:         #7d8aa3;          /* legacy alias */
+  --text:             #eef1f7;
+  --text-secondary:   #adb6c8;
+  --text-tertiary:    #6f7a92;
+  --text-dim:         #6f7a92;          /* legacy alias */
 
-  /* Accent */
-  --accent:           #ff7a2b;
-  --accent-hover:     #ff8f4d;
-  --accent-soft:      rgba(255, 122, 43, 0.12);
-  --accent-soft-2:    rgba(255, 122, 43, 0.20);
-  --accent-ink:       #14080a;          /* foreground on accent surface */
+  /* Accent — indigo */
+  --accent:           #6366f1;
+  --accent-hover:     #7c83f8;
+  --accent-soft:      rgba(99, 102, 241, 0.14);
+  --accent-soft-2:    rgba(99, 102, 241, 0.24);
+  --accent-ink:       #ffffff;          /* foreground on accent surface */
 
   /* Semantic */
-  --ok:               #3fd07b;
-  --ok-soft:          rgba(63, 208, 123, 0.13);
-  --warn:             #f5b841;
-  --warn-soft:        rgba(245, 184, 65, 0.14);
-  --error:            #ff5a5f;
-  --error-soft:       rgba(255, 90, 95, 0.14);
-  --info:             #6aa8ff;
-  --info-soft:        rgba(106, 168, 255, 0.14);
+  --ok:               #3ecf8e;
+  --ok-soft:          rgba(62, 207, 142, 0.14);
+  --warn:             #f5b740;
+  --warn-soft:        rgba(245, 183, 64, 0.14);
+  --error:            #fb5d63;
+  --error-soft:       rgba(251, 93, 99, 0.14);
+  --info:             #5fa8fb;
+  --info-soft:        rgba(95, 168, 251, 0.14);
 
-  /* Radius scale */
-  --radius-sm: 6px;
-  --radius:    10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
+  /* Radius scale — softened */
+  --radius-sm: 8px;
+  --radius:    12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 
-  /* Shadow scale */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .25);
-  --shadow:    0 4px 14px rgba(0, 0, 0, .28);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, .42);
+  /* Shadow scale — diffuse, low-contrast */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .22);
+  --shadow:    0 6px 20px rgba(0, 0, 0, .30);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, .46);
 
   /* Layout */
-  --sidebar-w: 248px;
-  --topbar-h: 56px;
+  --sidebar-w: 252px;
+  --topbar-h: 58px;
 
   --focus-ring: 0 0 0 3px var(--accent-soft-2);
 }
 
 html[data-theme="light"] {
-  --bg:               #f6f8fc;
+  --bg:               #f7f8fb;
   --bg-soft:          #ffffff;
   --surface:          #ffffff;
-  --surface-2:        #f1f4f9;
-  --surface-hover:    #ebeff6;
+  --surface-2:        #f2f4f8;
+  --surface-hover:    #eceff5;
   --panel:            #ffffff;
-  --panel-alt:        #f1f4f9;
+  --panel-alt:        #f2f4f8;
 
-  --border:           #dbe1ec;
-  --border-strong:    #c5cdda;
-  --border-subtle:    #eaeef5;
+  --border:           #e3e7ef;
+  --border-strong:    #ccd3df;
+  --border-subtle:    #eef1f6;
 
-  --text:             #131a26;
-  --text-secondary:   #44516a;
-  --text-tertiary:    #6c7891;
-  --text-dim:         #6c7891;
+  --text:             #181d28;
+  --text-secondary:   #495468;
+  --text-tertiary:    #717c92;
+  --text-dim:         #717c92;
 
-  --accent:           #d65a10;
-  --accent-hover:     #ef6a1f;
-  --accent-soft:      rgba(214, 90, 16, 0.10);
-  --accent-soft-2:    rgba(214, 90, 16, 0.20);
+  --accent:           #5457e6;
+  --accent-hover:     #474add;
+  --accent-soft:      rgba(84, 87, 230, 0.10);
+  --accent-soft-2:    rgba(84, 87, 230, 0.20);
   --accent-ink:       #ffffff;
 
-  --ok:               #1f9b57;
-  --ok-soft:          rgba(31, 155, 87, 0.10);
-  --warn:             #b8830a;
-  --warn-soft:        rgba(184, 131, 10, 0.10);
-  --error:            #d1403f;
-  --error-soft:       rgba(209, 64, 63, 0.10);
-  --info:             #2e6cd1;
-  --info-soft:        rgba(46, 108, 209, 0.10);
+  --ok:               #12a165;
+  --ok-soft:          rgba(18, 161, 101, 0.10);
+  --warn:             #a9790a;
+  --warn-soft:        rgba(169, 121, 10, 0.10);
+  --error:            #d8453f;
+  --error-soft:       rgba(216, 69, 63, 0.10);
+  --info:             #2f6fe0;
+  --info-soft:        rgba(47, 111, 224, 0.10);
 
   --shadow-sm: 0 1px 2px rgba(20, 30, 50, .06);
-  --shadow:    0 4px 14px rgba(20, 30, 50, .08);
-  --shadow-lg: 0 12px 32px rgba(20, 30, 50, .14);
+  --shadow:    0 6px 20px rgba(20, 30, 50, .09);
+  --shadow-lg: 0 16px 40px rgba(20, 30, 50, .16);
 }
 
 /* ============================================================
@@ -166,6 +170,7 @@ button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 button.primary {
   background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
 }
 button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
@@ -173,9 +178,6 @@ button.danger {
   background: var(--error-soft); border-color: transparent; color: var(--error);
 }
 button.danger:hover { background: var(--error); color: #fff; border-color: var(--error); }
-
-button.ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
-button.ghost:hover { background: var(--surface-hover); color: var(--text); }
 
 button:disabled { opacity: .45; cursor: not-allowed; }
 
@@ -198,6 +200,43 @@ textarea { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; min-
 
 input[type=checkbox], input[type=radio] {
   width: auto; accent-color: var(--accent); margin-right: 4px;
+}
+
+/* Toggle switch (item #11) — add class "switch" to an <input type=checkbox>.
+   Replaces plain checkboxes for on/off settings. */
+input[type=checkbox].switch {
+  appearance: none; -webkit-appearance: none;
+  position: relative; flex: none; margin: 0;
+  width: 40px; height: 22px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  cursor: pointer; vertical-align: middle;
+  transition: background .15s, border-color .15s;
+}
+input[type=checkbox].switch::after {
+  content: ''; position: absolute; top: 50%; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--text-tertiary);
+  transform: translateY(-50%);
+  transition: transform .15s, background .15s;
+}
+input[type=checkbox].switch:checked {
+  background: var(--accent); border-color: var(--accent);
+}
+input[type=checkbox].switch:checked::after {
+  background: #fff; transform: translateY(-50%) translateX(18px);
+}
+input[type=checkbox].switch:disabled { opacity: .5; cursor: not-allowed; }
+input[type=checkbox].switch:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* A label wrapping a switch reads as a clean horizontal row, not the small
+   uppercase field-label style. */
+label:has(> input.switch) {
+  display: inline-flex; align-items: center; gap: 10px;
+  margin: 8px 0; cursor: pointer;
+  text-transform: none; letter-spacing: 0;
+  font-size: 13px; font-weight: 500; color: var(--text-secondary);
 }
 
 label {
@@ -238,11 +277,12 @@ label {
 }
 .sidebar-brand .logo {
   width: 36px; height: 36px;
-  background: var(--accent); color: var(--accent-ink);
+  background: linear-gradient(135deg, var(--accent), #8b8ff9);
+  color: #fff;
   display: grid; place-items: center;
   font-weight: 800; border-radius: var(--radius-sm);
   letter-spacing: -1px; font-size: 15px;
-  box-shadow: 0 0 0 1px var(--accent-soft-2), 0 4px 16px var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent-soft-2), 0 6px 18px var(--accent-soft);
 }
 .sidebar-brand .title { font-weight: 700; font-size: 14px; line-height: 1.2; }
 .sidebar-brand .subtitle { color: var(--text-tertiary); font-size: 11px; line-height: 1.2; margin-top: 2px; }
@@ -269,6 +309,7 @@ label {
 .nav a.active {
   background: var(--accent-soft);
   color: var(--accent);
+  font-weight: 600;
 }
 .nav .nav-icon {
   display: inline-grid; place-items: center;
@@ -277,7 +318,6 @@ label {
   opacity: 0.75;
 }
 .nav a.active .nav-icon { opacity: 1; }
-.nav-sep { display: none; }                 /* legacy class — replaced by nav-group */
 
 .sidebar-foot {
   display: flex; flex-direction: column; gap: 4px;
@@ -347,8 +387,6 @@ label {
   width: auto; min-width: 64px; padding: 6px 10px;
   background: var(--surface); height: 36px;
 }
-#logout-btn { background: var(--surface); }
-#logout-btn:not(.hidden) { display: inline-flex; }
 
 .chip {
   display: inline-flex; align-items: center; gap: 8px;
@@ -381,6 +419,15 @@ main {
 }
 @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
+/* Persistent support footer — matches the content column width/padding and
+   sits just below the active section (one instance, never duplicated). */
+.support-footer {
+  max-width: 1500px; width: 100%; margin: 0 auto;
+  padding: 0 24px 24px;
+}
+.support-footer:empty { display: none; }
+.support-footer .donate-card { margin-top: 0; }
+
 .page-header {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: 16px; flex-wrap: wrap;
@@ -404,7 +451,6 @@ main {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
 }
 .card > p:first-of-type.hint { margin-top: -4px; margin-bottom: 14px; }
-.card-elevated { box-shadow: var(--shadow); }
 
 .grid-2, .grid-3, .grid-4 { display: grid; gap: 16px; }
 .grid-2 { grid-template-columns: repeat(2, 1fr); }
@@ -435,7 +481,6 @@ main {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
   font-weight: 600; margin-top: 4px;
 }
-.stat { font-size: 28px; font-weight: 700; color: var(--accent); margin: 6px 0 12px; line-height: 1.1; letter-spacing: -0.01em; }
 
 /* ============================================================
    8. TABLES
@@ -479,6 +524,43 @@ td.mono, th.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospa
 .badge.err  { background: var(--error-soft);color: var(--error); }
 .badge.info { background: var(--info-soft); color: var(--info); }
 .badge.mute { background: var(--surface-2); color: var(--text-tertiary); }
+
+/* Launch toggle is locked until a mod is installed (mods table, item #10). */
+.lock-indicator {
+  display: inline-flex; align-items: center; justify-content: center;
+  opacity: 0.55; cursor: not-allowed; font-size: 14px;
+  filter: grayscale(1);
+}
+
+/* Weather slider value badge (Weather & Time, item #16). */
+.slider-val {
+  min-width: 56px; text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary); font-size: 13px;
+}
+
+/* Weather preset tiles — scannable icon + label cards. */
+.preset-grid {
+  display: grid; gap: 10px; margin: 4px 0 12px;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+}
+.preset-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 14px 8px; font-size: 13px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text);
+  transition: border-color .12s, background .12s, color .12s;
+}
+.preset-tile:hover { border-color: var(--accent); background: var(--accent-soft); }
+.preset-tile.active {
+  border-color: var(--accent); background: var(--accent-soft);
+  color: var(--accent); font-weight: 600; box-shadow: var(--focus-ring);
+}
+.preset-tile:disabled { opacity: .5; cursor: not-allowed; }
+.preset-tile .ic { font-size: 25px; line-height: 1; }
+/* Weather slider label: icon + text on one line. */
+.slider-label { width: 180px; display: inline-flex; align-items: center; gap: 8px; }
+.slider-label .ic { font-size: 16px; line-height: 1; }
 
 /* ============================================================
    10. MODAL
@@ -616,7 +698,6 @@ td.mono, th.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospa
   border-radius: var(--radius);
 }
 .toolbar input[type="text"], .toolbar input[type="search"], .toolbar input:not([type]) { flex: 1 1 260px; }
-.toolbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px 4px; opacity: .6; }
 .toolbar .spacer, .toolbar .grow { flex: 1 1 auto; }
 .toolbar label {
   display: inline-flex; align-items: center; gap: 6px;
@@ -643,15 +724,18 @@ td.mono, th.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospa
 .tree-node.active { background: var(--accent); color: var(--accent-ink); }
 .tree-node.dir { color: var(--text-secondary); font-weight: 600; }
 
-.pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pills { display: flex; gap: 8px; flex-wrap: wrap; margin: 2px 0 10px; }
 .pill {
   background: var(--surface-2);
   border: 1px solid var(--border);
-  padding: 4px 12px;
+  padding: 6px 13px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 12.5px;
   display: inline-flex; align-items: center;
 }
+/* When pills are clickable buttons (e.g. spawn presets) give a clear accent
+   hover so they don't read as flat, crowded tags. */
+button.pill:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .pill button { margin-left: 6px; padding: 0 4px; background: transparent; border: none; color: var(--text-tertiary); }
 .pill button:hover { color: var(--error); background: transparent; }
 
@@ -732,16 +816,7 @@ td.mono, th.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospa
 .donate-buttons a.da     { background: #ec4980; }
 .donate-buttons a.da:hover     { background: #f25a8f; }
 
-.issue-row {
-  display: grid; grid-template-columns: 80px 1fr 60px 2fr;
-  gap: 8px; padding: 8px 0;
-  border-bottom: 1px solid var(--border-subtle); font-size: 13px;
-}
-.issue-row .sev-error   { color: var(--error); font-weight: 600; }
-.issue-row .sev-warning { color: var(--warn); }
-.issue-row .sev-info    { color: var(--text-tertiary); }
-
-#logout-btn, .hidden { display: none; }
+.hidden { display: none; }
 
 /* ============================================================
    15. CODEMIRROR
@@ -887,6 +962,7 @@ html[data-theme="light"] .CodeMirror .CodeMirror-gutters { background: #f5f5f7; 
   .nav-toggle { display: inline-flex; }
   .topbar { padding: 0 16px; }
   main { padding: 16px; }
+  .support-footer { padding: 0 16px 16px; }
   .card { padding: 16px 18px; border-radius: var(--radius); }
   .page-header h1 { font-size: 19px; }
 
@@ -901,6 +977,7 @@ html[data-theme="light"] .CodeMirror .CodeMirror-gutters { background: #f5f5f7; 
   .topbar .chip { font-size: 11px; padding: 4px 8px; }
   .topbar-sel { width: 60px; }
   main { padding: 12px; }
+  .support-footer { padding: 0 12px 12px; }
   .card { padding: 14px; }
   .toolbar { padding: 8px; }
   .toolbar input[type="text"], .toolbar input[type="search"] { flex: 1 1 100%; }

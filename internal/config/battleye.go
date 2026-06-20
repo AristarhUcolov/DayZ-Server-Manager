@@ -8,6 +8,7 @@ package config
 
 import (
 	"bufio"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -41,6 +42,87 @@ func FindBEConfig(beDir string) *BEConfig {
 		}
 	}
 	return nil
+}
+
+// EnsureBEConfig makes sure beserver_x64.cfg in beDir declares the RCon
+// password (and a port, if the file doesn't already have one). DayZ stores the
+// RCon credential HERE, not in server.cfg — and BattlEye only enables RCon when
+// this file exists with an RConPassword. On a fresh install the file is absent,
+// which is exactly why the panel reports "rcon: not configured" no matter what
+// password the user types: nothing was ever written where BattlEye looks.
+//
+// We create or update the file in place, preserving any other BE settings and
+// any pre-existing RConPort. Returns true if the file changed. The change takes
+// effect the next time the server starts (BattlEye reads it at launch).
+func EnsureBEConfig(beDir, password string, port int) (bool, error) {
+	if beDir == "" {
+		return false, errors.New("BattlEye path is not set")
+	}
+	if password == "" {
+		return false, nil // nothing to enforce
+	}
+	if err := os.MkdirAll(beDir, 0o755); err != nil {
+		return false, err
+	}
+
+	// Update an existing file (any casing) in place; otherwise create the
+	// canonical lowercase name DayZ itself writes.
+	path := filepath.Join(beDir, "beserver_x64.cfg")
+	if be := FindBEConfig(beDir); be != nil && be.Path != "" {
+		path = be.Path
+	}
+
+	orig := ""
+	var lines []string
+	if data, err := os.ReadFile(path); err == nil {
+		orig = strings.ReplaceAll(string(data), "\r\n", "\n")
+		lines = strings.Split(orig, "\n")
+	}
+
+	hasKey := func(key string) bool {
+		for _, ln := range lines {
+			t := strings.TrimSpace(ln)
+			if t == "" || strings.HasPrefix(t, "//") || strings.HasPrefix(t, "#") {
+				continue
+			}
+			f := strings.SplitN(t, " ", 2)
+			if strings.EqualFold(strings.TrimSpace(f[0]), key) {
+				return true
+			}
+		}
+		return false
+	}
+	setKey := func(key, val string) {
+		for i, ln := range lines {
+			t := strings.TrimSpace(ln)
+			if t == "" || strings.HasPrefix(t, "//") || strings.HasPrefix(t, "#") {
+				continue
+			}
+			f := strings.SplitN(t, " ", 2)
+			if strings.EqualFold(strings.TrimSpace(f[0]), key) {
+				lines[i] = key + " " + val
+				return
+			}
+		}
+		lines = append(lines, key+" "+val)
+	}
+
+	setKey("RConPassword", password)
+	// Only introduce a port if the file doesn't already specify one — never
+	// clobber a working port the operator set themselves.
+	if port > 0 && !hasKey("RConPort") {
+		setKey("RConPort", strconv.Itoa(port))
+	}
+
+	out := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
+	if orig == out {
+		return false, nil
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(out), 0o644); err != nil {
+		return false, err
+	}
+	return true, os.Rename(tmp, path)
 }
 
 func parseBEConfig(path string) *BEConfig {

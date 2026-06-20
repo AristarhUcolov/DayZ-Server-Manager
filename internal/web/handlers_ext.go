@@ -359,6 +359,9 @@ func (h *handlers) announcementsList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Push the new announcement list to the scheduler snapshot so it fires
+	// without a restart and the announce loop never reads torn config.
+	h.app.Server.SetScheduleConfig(h.app.Config)
 	writeJSON(w, map[string]interface{}{"announcements": h.app.Config.ScheduledAnnouncements})
 }
 

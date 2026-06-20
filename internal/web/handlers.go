@@ -145,6 +145,19 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// Dashboard live metrics.
 	mux.HandleFunc("/api/dashboard/metrics", methods(h.dashboardMetrics, http.MethodGet))
 
+	// Weather + in-game time (item 16).
+	mux.HandleFunc("/api/weather", methods(h.weatherGet, http.MethodGet))
+	mux.HandleFunc("/api/weather/preset", methods(h.weatherPreset, http.MethodPost))
+	mux.HandleFunc("/api/weather/custom", methods(h.weatherCustom, http.MethodPost))
+	mux.HandleFunc("/api/weather/time", methods(h.weatherTime, http.MethodPost))
+
+	// Server wipe — persistence reset (item 17).
+	mux.HandleFunc("/api/wipe/preview", methods(h.wipePreview, http.MethodGet))
+	mux.HandleFunc("/api/wipe", methods(h.wipeApply, http.MethodPost))
+
+	// LAN network addresses for phone / other-device access (item 9).
+	mux.HandleFunc("/api/network/addresses", methods(h.networkAddresses, http.MethodGet))
+
 	// RCon.
 	mux.HandleFunc("/api/rcon/players", methods(h.rconPlayers, http.MethodGet))
 	mux.HandleFunc("/api/rcon/say", methods(h.rconSay, http.MethodPost))
@@ -205,6 +218,13 @@ func (h *handlers) config(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Refresh the scheduler's snapshot so changed restart times / announcements
+	// take effect immediately and the supervisor loops never read torn config.
+	h.app.Server.SetScheduleConfig(h.app.Config)
+	// Keep RCon real: push the password into BattlEye's beserver_x64.cfg (so
+	// RCon is actually enabled) and refresh the in-memory connection params.
+	h.app.SyncBEConfig()
+	h.app.ApplyRConConfig()
 	writeJSON(w, h.app.Config)
 }
 
@@ -597,6 +617,19 @@ func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
 		target = &h.app.Config.ServerMods
 	}
 	if req.Enabled {
+		// Guard: never add a mod to the launch args unless it is actually
+		// installed in the server dir. Enabling a not-yet-installed mod would
+		// make DayZServer fail to start with a cryptic "-mod" error. The UI
+		// also locks the toggle, but this is the authoritative check.
+		if !strings.HasPrefix(req.Mod, "@") || filepath.Base(req.Mod) != req.Mod {
+			http.Error(w, "invalid mod name", http.StatusBadRequest)
+			return
+		}
+		st, err := os.Stat(filepath.Join(h.app.ServerDir, req.Mod))
+		if err != nil || !st.IsDir() {
+			http.Error(w, "mod is not installed in the server directory: "+req.Mod, http.StatusBadRequest)
+			return
+		}
 		if !contains(*target, req.Mod) {
 			*target = append(*target, req.Mod)
 		}
@@ -1239,8 +1272,9 @@ func (h *handlers) logsStream(w http.ResponseWriter, r *http.Request) {
 // RCon.
 
 func (h *handlers) rconPlayers(w http.ResponseWriter, r *http.Request) {
-	h.app.ApplyRConConfig()
-	players, err := h.app.RCon.Players()
+	// Served from the shared 2s cache so the RCon page's 5s poll reuses the one
+	// connection instead of opening (and logging in) a fresh one each time.
+	players, err := h.app.RCon.PlayersCached(2 * time.Second)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -1257,7 +1291,6 @@ func (h *handlers) rconSay(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "message required", http.StatusBadRequest)
 		return
 	}
-	h.app.ApplyRConConfig()
 	var err error
 	if req.PlayerID != nil {
 		err = h.app.RCon.SayTo(*req.PlayerID, req.Message)
@@ -1280,11 +1313,11 @@ func (h *handlers) rconKick(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.app.ApplyRConConfig()
 	if err := h.app.RCon.Kick(req.PlayerID, req.Reason); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
+	h.app.RCon.InvalidatePlayers() // reflect the kick on the next poll
 	writeJSON(w, map[string]string{"status": "ok"})
 }
 
@@ -1298,11 +1331,11 @@ func (h *handlers) rconBan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.app.ApplyRConConfig()
 	if err := h.app.RCon.Ban(req.PlayerID, req.Minutes, req.Reason); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
+	h.app.RCon.InvalidatePlayers() // reflect the ban on the next poll
 	writeJSON(w, map[string]string{"status": "ok"})
 }
 
@@ -1314,7 +1347,6 @@ func (h *handlers) rconCommand(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "command required", http.StatusBadRequest)
 		return
 	}
-	h.app.ApplyRConConfig()
 	out, err := h.app.RCon.Command(req.Command)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)

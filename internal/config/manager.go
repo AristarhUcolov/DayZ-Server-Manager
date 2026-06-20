@@ -38,10 +38,21 @@ type Manager struct {
 	AutoRestartSeconds int  `json:"autoRestartSeconds"` // 0 = disabled
 	AutoRestartEnabled bool `json:"autoRestartEnabled"`
 
-	// Exposure mode: "local" (127.0.0.1 only) vs "internet" (bind 0.0.0.0).
-	// Informational here — actually applied via CLI flag on startup — but we
-	// keep the user preference here so the UI can reflect it.
-	Exposure string `json:"exposure"` // "local" | "internet"
+	// Mod auto-update.
+	// AutoUpdateModsOnRestart: before any auto/scheduled restart, copy newer
+	// mod files from the client !Workshop into the server dir (done in the
+	// restart down-window while file locks are clear). No extra restarts.
+	// AutoUpdateCheckMinutes: when > 0, poll the local !Workshop on this cadence
+	// and, if any active mod is newer than the server copy, run an update +
+	// restart-with-countdown. 0 disables the poller.
+	AutoUpdateModsOnRestart bool `json:"autoUpdateModsOnRestart"`
+	AutoUpdateCheckMinutes  int  `json:"autoUpdateCheckMinutes"`
+
+	// Exposure mode: "local" (127.0.0.1 only) vs "lan"/"internet" (bind
+	// 0.0.0.0 so other devices on the network — e.g. a phone — can reach the
+	// panel). Applied via the bind address chosen on startup (see main.go), so
+	// a change here only takes effect after the manager is restarted.
+	Exposure string `json:"exposure"` // "local" | "lan" | "internet"
 
 	// BattlEye RCon settings. Port defaults to ServerPort+1 per DayZ
 	// convention. Password is cached here so the panel can re-connect after

@@ -44,13 +44,79 @@ type Controller struct {
 	// scheduled/auto restarts with a countdown.
 	Broadcast Broadcaster
 
+	// Mod auto-update hooks — set by app wiring so the server package doesn't
+	// import mods. Both take the client !Workshop's owning DayZ path. Nil = the
+	// feature is unavailable (no-op). UpdateMods copies newer mod files into the
+	// server dir (must run while stopped — file locks); ModUpdatesAvailable
+	// reports whether any active mod is newer in !Workshop than on the server.
+	UpdateMods          func(vanillaPath string) ([]string, error)
+	ModUpdatesAvailable func(vanillaPath string) (bool, error)
+
+	// One-shot: forces a mod update on the next restart even when
+	// AutoUpdateModsOnRestart is off (set by the update-check loop, which
+	// restarts precisely because it found a pending update).
+	forceModUpdate atomic.Bool
+
 	// Crash-loop protection — track recent exits to detect a broken mod set.
 	recentExits []time.Time
 	loopPaused  atomic.Bool
+
+	// Schedule snapshot. The supervisor loops run for the whole process
+	// lifetime and read these every minute, while the web layer replaces the
+	// shared *config.Manager wholesale on every POST. Reading the live config
+	// from the loops would be a data race (a torn slice header could panic the
+	// goroutine, which runs outside the HTTP recoverer and would take the whole
+	// manager down). So the loops read this immutable copy instead, refreshed
+	// via SetScheduleConfig whenever the config changes.
+	schedMu sync.Mutex
+	sched   scheduleConfig
+}
+
+// scheduleConfig is the subset of manager config the supervisor loops need.
+// Slices are always replaced wholesale (never mutated in place) so a snapshot
+// returned by schedSnapshot can be read without further locking.
+type scheduleConfig struct {
+	autoRestartEnabled bool
+	autoRestartSeconds int
+	restartWarnMinutes []int
+	scheduledRestarts  []string
+	announcements      []config.ScheduledAnnouncement
+
+	// Mod auto-update (item 2).
+	autoUpdateOnRestart    bool
+	autoUpdateCheckMinutes int
+	vanillaPath            string
 }
 
 func NewController(serverDir string, cfg *config.Manager, logger *log.Logger) *Controller {
-	return &Controller{serverDir: serverDir, cfg: cfg, log: logger}
+	c := &Controller{serverDir: serverDir, cfg: cfg, log: logger}
+	c.SetScheduleConfig(cfg)
+	return c
+}
+
+// SetScheduleConfig refreshes the snapshot the supervisor loops read. Call it
+// from every path that mutates the manager config (web config POST,
+// announcements POST, ReloadConfig) so scheduled restarts/announcements pick up
+// changes without a restart — and without racing the loops.
+func (c *Controller) SetScheduleConfig(cfg *config.Manager) {
+	c.schedMu.Lock()
+	defer c.schedMu.Unlock()
+	c.sched = scheduleConfig{
+		autoRestartEnabled:     cfg.AutoRestartEnabled,
+		autoRestartSeconds:     cfg.AutoRestartSeconds,
+		restartWarnMinutes:     append([]int(nil), cfg.RestartWarnMinutes...),
+		scheduledRestarts:      append([]string(nil), cfg.ScheduledRestarts...),
+		announcements:          append([]config.ScheduledAnnouncement(nil), cfg.ScheduledAnnouncements...),
+		autoUpdateOnRestart:    cfg.AutoUpdateModsOnRestart,
+		autoUpdateCheckMinutes: cfg.AutoUpdateCheckMinutes,
+		vanillaPath:            cfg.VanillaDayZPath,
+	}
+}
+
+func (c *Controller) schedSnapshot() scheduleConfig {
+	c.schedMu.Lock()
+	defer c.schedMu.Unlock()
+	return c.sched
 }
 
 func (c *Controller) IsRunning() bool { return c.running.Load() }
@@ -179,7 +245,33 @@ func (c *Controller) Restart() error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	// The server is now stopped and its file locks on the @mod folders are
+	// clear — the only safe window to refresh mods (item 2).
+	c.beforeRestart()
 	return c.Start()
+}
+
+// beforeRestart updates mods during the restart down-window when the user opted
+// in (AutoUpdateModsOnRestart) or the update-check loop forced it once. Safe to
+// call on every restart — it no-ops without the hook, a vanilla path, or a
+// reason to update.
+func (c *Controller) beforeRestart() {
+	forced := c.forceModUpdate.Swap(false)
+	s := c.schedSnapshot()
+	if !forced && !s.autoUpdateOnRestart {
+		return
+	}
+	if c.UpdateMods == nil || s.vanillaPath == "" {
+		return
+	}
+	updated, err := c.UpdateMods(s.vanillaPath)
+	if err != nil {
+		c.log.Printf("auto-update mods: %v", err)
+		return
+	}
+	if len(updated) > 0 {
+		c.log.Printf("auto-update: refreshed %d mod(s): %s", len(updated), strings.Join(updated, ", "))
+	}
 }
 
 // restartWithCountdown broadcasts "restart in Nm" via RCon for each entry in
@@ -244,12 +336,15 @@ func (c *Controller) StartAutoRestartLoop() {
 	go c.scheduledRestartLoop(stop)
 	// Scheduled RCon announcements (rules reminders, discord links, events).
 	go c.scheduledAnnounceLoop(stop)
+	// Periodic mod-update check → update + restart when a new version appears.
+	go c.modUpdateCheckLoop(stop)
 
 	// Interval-based auto-restart (the classic .bat behavior).
 	go func() {
 		lastStart := time.Now()
 		for {
-			if !c.cfg.AutoRestartEnabled || c.cfg.AutoRestartSeconds <= 0 || c.loopPaused.Load() {
+			s := c.schedSnapshot()
+			if !s.autoRestartEnabled || s.autoRestartSeconds <= 0 || c.loopPaused.Load() {
 				select {
 				case <-stop:
 					return
@@ -258,23 +353,18 @@ func (c *Controller) StartAutoRestartLoop() {
 				}
 			}
 			elapsed := time.Since(lastStart)
-			remaining := time.Duration(c.cfg.AutoRestartSeconds)*time.Second - elapsed
+			remaining := time.Duration(s.autoRestartSeconds)*time.Second - elapsed
 			if remaining <= 0 {
 				if c.IsRunning() {
 					c.log.Printf("auto-restart: cycling server")
-					_ = c.restartWithCountdown(c.cfg.RestartWarnMinutes)
+					_ = c.restartWithCountdown(s.restartWarnMinutes)
 				}
 				lastStart = time.Now()
 				continue
 			}
 			// Subtract the countdown warning — restartWithCountdown sleeps
 			// for it internally, so we shouldn't double-wait.
-			warnTotal := 0
-			for _, m := range c.cfg.RestartWarnMinutes {
-				if m > warnTotal {
-					warnTotal = m
-				}
-			}
+			warnTotal := maxWarnMinutes(s.restartWarnMinutes)
 			wait := remaining - time.Duration(warnTotal)*time.Minute
 			if wait < 100*time.Millisecond {
 				wait = 100 * time.Millisecond
@@ -285,7 +375,7 @@ func (c *Controller) StartAutoRestartLoop() {
 			case <-time.After(wait):
 				if c.IsRunning() {
 					c.log.Printf("auto-restart: cycling server")
-					_ = c.restartWithCountdown(c.cfg.RestartWarnMinutes)
+					_ = c.restartWithCountdown(s.restartWarnMinutes)
 				}
 				lastStart = time.Now()
 			}
@@ -312,7 +402,7 @@ func (c *Controller) scheduledAnnounceLoop(stop <-chan struct{}) {
 		}
 		hhmm := time.Now().Format("15:04")
 		stamp := time.Now().Format("2006-01-02T15:04")
-		for i, a := range c.cfg.ScheduledAnnouncements {
+		for i, a := range c.schedSnapshot().announcements {
 			if !a.Enabled || strings.TrimSpace(a.Time) != hhmm {
 				continue
 			}
@@ -331,10 +421,13 @@ func (c *Controller) scheduledAnnounceLoop(stop <-chan struct{}) {
 	}
 }
 
-// scheduledRestartLoop wakes at the start of every minute and fires a
-// restart when the current HH:MM matches one of cfg.ScheduledRestarts.
+// scheduledRestartLoop wakes at the start of every minute and begins a restart
+// countdown so that the actual restart lands exactly on one of the configured
+// HH:MM times. restartWithCountdown sleeps for the warning window internally,
+// so we start it `maxWarn` minutes early — a "03:00" restart with warnings
+// [5,3,1] announces at 02:55/02:57/02:59 and cycles the server at 03:00.
 func (c *Controller) scheduledRestartLoop(stop <-chan struct{}) {
-	// Align roughly to the minute boundary.
+	fired := map[string]string{} // scheduled time → last yyyy-mm-ddTHH:MM fired
 	for {
 		now := time.Now()
 		next := now.Truncate(time.Minute).Add(time.Minute)
@@ -346,15 +439,95 @@ func (c *Controller) scheduledRestartLoop(stop <-chan struct{}) {
 		if !c.IsRunning() || c.loopPaused.Load() {
 			continue
 		}
-		hhmm := time.Now().Format("15:04")
-		for _, t := range c.cfg.ScheduledRestarts {
-			if strings.TrimSpace(t) == hhmm {
-				c.log.Printf("scheduled restart at %s", hhmm)
-				go func() { _ = c.restartWithCountdown(c.cfg.RestartWarnMinutes) }()
-				break
+		now = time.Now()
+		hhmm := now.Format("15:04")
+		stamp := now.Format("2006-01-02T15:04")
+		s := c.schedSnapshot()
+		warn := maxWarnMinutes(s.restartWarnMinutes)
+		for _, t := range s.scheduledRestarts {
+			sched := strings.TrimSpace(t)
+			if sched == "" {
+				continue
 			}
+			if shiftHHMM(sched, -warn) != hhmm {
+				continue
+			}
+			if fired[sched] == stamp {
+				continue // already fired this minute
+			}
+			fired[sched] = stamp
+			warnMins := s.restartWarnMinutes
+			c.log.Printf("scheduled restart %s — countdown starting", sched)
+			go func() { _ = c.restartWithCountdown(warnMins) }()
+			break
 		}
 	}
+}
+
+// modUpdateCheckLoop polls the client !Workshop on the configured cadence and,
+// when an active mod is newer there than on the server, triggers an
+// update+restart (item 2). The mods are actually copied during the restart
+// down-window via beforeRestart (forced once here), so file locks are clear.
+// Disabled when AutoUpdateCheckMinutes <= 0.
+func (c *Controller) modUpdateCheckLoop(stop <-chan struct{}) {
+	var lastCheck time.Time
+	for {
+		// Wake at each minute boundary; the cadence gate below decides whether
+		// this tick actually performs a check.
+		now := time.Now()
+		next := now.Truncate(time.Minute).Add(time.Minute)
+		select {
+		case <-stop:
+			return
+		case <-time.After(time.Until(next)):
+		}
+
+		s := c.schedSnapshot()
+		if s.autoUpdateCheckMinutes <= 0 || s.vanillaPath == "" || c.ModUpdatesAvailable == nil {
+			continue
+		}
+		if !c.IsRunning() || c.loopPaused.Load() {
+			continue
+		}
+		if time.Since(lastCheck) < time.Duration(s.autoUpdateCheckMinutes)*time.Minute {
+			continue
+		}
+		lastCheck = time.Now()
+
+		avail, err := c.ModUpdatesAvailable(s.vanillaPath)
+		if err != nil {
+			c.log.Printf("mod update check: %v", err)
+			continue
+		}
+		if !avail {
+			continue
+		}
+		c.log.Printf("mod update available — updating and restarting")
+		c.forceModUpdate.Store(true)
+		go func() { _ = c.restartWithCountdown(s.restartWarnMinutes) }()
+	}
+}
+
+// maxWarnMinutes returns the largest entry in the warning list (0 if empty).
+func maxWarnMinutes(warn []int) int {
+	m := 0
+	for _, w := range warn {
+		if w > m {
+			m = w
+		}
+	}
+	return m
+}
+
+// shiftHHMM parses an "HH:MM" string, shifts it by deltaMinutes (may be
+// negative), and re-formats as "HH:MM", wrapping across midnight. Returns the
+// input unchanged if it isn't a valid time.
+func shiftHHMM(hhmm string, deltaMinutes int) string {
+	t, err := time.Parse("15:04", hhmm)
+	if err != nil {
+		return hhmm
+	}
+	return t.Add(time.Duration(deltaMinutes) * time.Minute).Format("15:04")
 }
 
 func (c *Controller) StopAutoRestartLoop() {

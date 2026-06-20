@@ -19,7 +19,6 @@ var (
 	procOpenProcess          = kernel32.NewProc("OpenProcess")
 	procCloseHandle          = kernel32.NewProc("CloseHandle")
 	procGetProcessTimes      = kernel32.NewProc("GetProcessTimes")
-	procGetSystemTimes       = kernel32.NewProc("GetSystemTimes")
 	psapi                    = syscall.NewLazyDLL("psapi.dll")
 	procGetProcessMemoryInfo = psapi.NewProc("GetProcessMemoryInfo")
 )

@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"dayzmanager/internal/admlog"
@@ -76,6 +77,15 @@ func (h *handlers) admlogRecent(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 // Dashboard metrics.
 
+// dashMods caches the dashboard's mod counts so the heavy mods.List walk runs
+// at most once per window instead of on every 5s poll. The stored map is
+// replaced wholesale (never mutated), so sharing it across requests is safe.
+var dashMods struct {
+	mu  sync.Mutex
+	at  time.Time
+	val map[string]interface{}
+}
+
 func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 	out := map[string]interface{}{
 		"running": h.app.ServerIsRunning(),
@@ -84,32 +94,43 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 		"port":    h.app.Config.ServerPort,
 	}
 
-	// Mods count (installed on the manager, mirrored to the server dir).
+	// Mods count. mods.List walks the whole mod tree (and !Workshop), which is
+	// too heavy to run on every 5s poll — especially while installing mods. We
+	// cache the counts for a short window; the dashboard only shows totals, not
+	// sizes, so slightly stale numbers are fine.
 	if h.app.Config.VanillaDayZPath != "" {
-		if list, err := mods.List(h.app.ServerDir, h.app.Config.VanillaDayZPath); err == nil {
-			active := map[string]bool{}
-			for _, name := range h.app.Config.Mods {
-				active[name] = true
-			}
-			for _, name := range h.app.Config.ServerMods {
-				active[name] = true
-			}
-			installed := 0
-			enabled := 0
-			for _, m := range list {
-				if m.InstalledInServer {
-					installed++
+		dashMods.mu.Lock()
+		stale := dashMods.val == nil || time.Since(dashMods.at) > 15*time.Second
+		dashMods.mu.Unlock()
+		if stale {
+			if list, err := mods.List(h.app.ServerDir, h.app.Config.VanillaDayZPath); err == nil {
+				active := map[string]bool{}
+				for _, name := range h.app.Config.Mods {
+					active[name] = true
 				}
-				if active[m.Name] {
-					enabled++
+				for _, name := range h.app.Config.ServerMods {
+					active[name] = true
 				}
-			}
-			out["mods"] = map[string]interface{}{
-				"total":     len(list),
-				"installed": installed,
-				"active":    enabled,
+				installed, enabled := 0, 0
+				for _, m := range list {
+					if m.InstalledInServer {
+						installed++
+					}
+					if active[m.Name] {
+						enabled++
+					}
+				}
+				v := map[string]interface{}{"total": len(list), "installed": installed, "active": enabled}
+				dashMods.mu.Lock()
+				dashMods.val, dashMods.at = v, time.Now()
+				dashMods.mu.Unlock()
 			}
 		}
+		dashMods.mu.Lock()
+		if dashMods.val != nil {
+			out["mods"] = dashMods.val
+		}
+		dashMods.mu.Unlock()
 	}
 
 	// Disk free on the drive holding the server dir.
@@ -134,13 +155,15 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Live player count — best-effort, only when the server is up.
+	// Live player count — read from the shared RCon cache. PlayersFresh never
+	// blocks: it returns the last known list and refreshes in the background at
+	// most once per window, so the dashboard stays snappy and reuses the single
+	// RCon connection instead of opening one per poll. (RCon is configured at
+	// boot and on config change, not here.)
 	if h.app.ServerIsRunning() {
-		h.app.ApplyRConConfig()
-		if players, err := h.app.RCon.Players(); err == nil {
-			out["playerCount"] = len(players)
-			out["players"] = players
-		}
+		players := h.app.RCon.PlayersFresh(8 * time.Second)
+		out["playerCount"] = len(players)
+		out["players"] = players
 	}
 
 	// Log sources with sizes.

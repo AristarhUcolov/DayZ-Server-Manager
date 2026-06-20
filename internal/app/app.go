@@ -50,6 +50,8 @@ func New(serverDir, name, version, author string) (*App, error) {
 	logger := log.New(newTee(os.Stdout, logFile), "", log.LstdFlags)
 	// Route the mods package's copy failures into the shared manager log.
 	mods.Logger = logger
+	// Route opt-in RCon protocol traces (DAYZ_RCON_DEBUG=1) into the same log.
+	rcon.Logger = logger
 
 	cfgPath := filepath.Join(managerDir, "manager.json")
 	cfg, err := config.LoadManager(cfgPath)
@@ -62,7 +64,27 @@ func New(serverDir, name, version, author string) (*App, error) {
 	// Wire the broadcaster so auto-restart can announce a countdown.
 	ctrl.Broadcast = rc
 
-	return &App{
+	// Mod auto-update hooks (item 2). Injected as closures so the server
+	// package needn't import mods. They take the vanilla path from the
+	// controller's race-safe schedule snapshot, closing over only the constant
+	// server dir — never the shared *config.Manager.
+	ctrl.UpdateMods = func(vanillaPath string) ([]string, error) {
+		return mods.UpdateAll(serverDir, vanillaPath)
+	}
+	ctrl.ModUpdatesAvailable = func(vanillaPath string) (bool, error) {
+		list, err := mods.List(serverDir, vanillaPath)
+		if err != nil {
+			return false, err
+		}
+		for _, m := range list {
+			if m.UpdateAvailable {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+
+	a := &App{
 		Name:       name,
 		Version:    version,
 		Author:     author,
@@ -73,7 +95,24 @@ func New(serverDir, name, version, author string) (*App, error) {
 		configPath: cfgPath,
 		Server:     ctrl,
 		RCon:       rc,
-	}, nil
+	}
+
+	// Configure RCon from beserver_x64.cfg / manager.json up front so the
+	// scheduler's countdown warnings and announcements can connect without
+	// waiting for a Settings save. If a password is already configured but the
+	// BE file is missing (e.g. carried over in manager.json), materialise it.
+	a.ApplyRConConfig()
+	a.SyncBEConfig()
+
+	// Start the scheduling supervisor once, at boot. The three loops it spawns
+	// (daily restarts, announcements, interval auto-restart) each gate on
+	// IsRunning() and the relevant config flags, so they idle harmlessly until
+	// the server is up and a schedule is configured. This call was previously
+	// missing entirely, which is why scheduled restarts/announcements never
+	// fired no matter what the user configured in Settings.
+	ctrl.StartAutoRestartLoop()
+
+	return a, nil
 }
 
 // ApplyRConConfig reconfigures the RCon manager from the current Config.
@@ -103,9 +142,45 @@ func (a *App) ApplyRConConfig() {
 	}
 
 	if port == 0 {
-		port = a.Config.ServerPort + 1 // DayZ default
+		// +4 keeps RCon clear of the game port and the Steam query ports
+		// (ServerPort .. +3), which DayZ also opens.
+		port = a.Config.ServerPort + 4
 	}
 	a.RCon.Configure("127.0.0.1", port, password)
+}
+
+// beResolvedDir returns the absolute BattlEye directory from config.
+func (a *App) beResolvedDir() string {
+	beDir := a.Config.BEPath
+	if beDir == "" {
+		beDir = "battleye"
+	}
+	if !filepath.IsAbs(beDir) {
+		beDir = filepath.Join(a.ServerDir, beDir)
+	}
+	return beDir
+}
+
+// SyncBEConfig mirrors the RCon password from manager.json into BattlEye's
+// beserver_x64.cfg so RCon is actually enabled on the next server start. No-op
+// when no password is set. This is what makes the panel's "set RCon password"
+// flow real instead of just storing a value the game never sees.
+func (a *App) SyncBEConfig() {
+	if a.Config.RConPassword == "" {
+		return
+	}
+	port := a.Config.RConPort
+	if port == 0 {
+		port = a.Config.ServerPort + 4
+	}
+	changed, err := config.EnsureBEConfig(a.beResolvedDir(), a.Config.RConPassword, port)
+	if err != nil {
+		a.Log.Printf("ensure beserver_x64.cfg: %v", err)
+		return
+	}
+	if changed {
+		a.Log.Printf("RCon password written to beserver_x64.cfg (takes effect on next server start)")
+	}
 }
 
 func (a *App) SaveConfig() error {
@@ -125,11 +200,14 @@ func (a *App) ReloadConfig() error {
 		return err
 	}
 	*a.Config = *cfg
+	// Keep the scheduler snapshot in sync with the restored config.
+	a.Server.SetScheduleConfig(a.Config)
 	return nil
 }
 
 func (a *App) Close() error {
 	if a.Server != nil {
+		a.Server.StopAutoRestartLoop()
 		_ = a.Server.Stop()
 	}
 	return nil

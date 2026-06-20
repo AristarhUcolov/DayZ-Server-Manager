@@ -47,7 +47,15 @@
   <div class="app">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
-        <span class="logo">DZ</span>
+        <span class="logo" aria-label="DayZ Server Manager">
+          <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="#fff"
+               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3.5" y="4" width="17" height="6.5" rx="2" />
+            <rect x="3.5" y="13.5" width="17" height="6.5" rx="2" />
+            <line x1="7" y1="7.25" x2="7" y2="7.25" />
+            <line x1="7" y1="16.75" x2="7" y2="16.75" />
+          </svg>
+        </span>
         <div>
           <div class="title" data-i18n="app.name"></div>
           <div class="subtitle" data-i18n="app.author"></div>
@@ -66,6 +74,7 @@
           <a data-route="server"><span class="nav-icon">⌂</span><span data-i18n="nav.server"></span></a>
           <a data-route="mods"><span class="nav-icon">▦</span><span data-i18n="nav.mods"></span></a>
           <a data-route="events"><span class="nav-icon">★</span><span data-i18n="nav.events"></span></a>
+          <a data-route="weather"><span class="nav-icon">☼</span><span data-i18n="nav.weather"></span></a>
         </div>
 
         <div class="nav-group">
@@ -86,13 +95,14 @@
           <div class="nav-group-label" data-i18n="nav.group.live"></div>
           <a data-route="logs"><span class="nav-icon">◷</span><span data-i18n="nav.logs"></span></a>
           <a data-route="admlog"><span class="nav-icon">◑</span><span data-i18n="nav.admlog"></span></a>
-          <a data-route="rcon"><span class="nav-icon">⚡</span><span data-i18n="nav.rcon"></span></a>
+          <a data-route="rcon"><span class="nav-icon">⌘</span><span data-i18n="nav.rcon"></span></a>
           <a data-route="validator"><span class="nav-icon">✓</span><span data-i18n="nav.validator"></span></a>
         </div>
 
         <div class="nav-group">
           <div class="nav-group-label" data-i18n="nav.group.system"></div>
           <a data-route="sync"><span class="nav-icon">↻</span><span data-i18n="nav.sync"></span></a>
+          <a data-route="wipe"><span class="nav-icon">⊘</span><span data-i18n="nav.wipe"></span></a>
           <a data-route="settings"><span class="nav-icon">⚙</span><span data-i18n="nav.settings"></span></a>
         </div>
       </nav>
@@ -126,6 +136,9 @@
       </header>
 
       <main id="view"></main>
+      <!-- Persistent support footer — rendered once, lives OUTSIDE #view so it
+           can never be duplicated by navigation. Shows under every section. -->
+      <div id="support-footer" class="support-footer"></div>
     </div>
 
     <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
