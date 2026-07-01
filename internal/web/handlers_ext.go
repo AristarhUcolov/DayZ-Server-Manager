@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"dayzmanager/internal/battleye"
-	"dayzmanager/internal/config"
 	"dayzmanager/internal/mods"
 	dztypes "dayzmanager/internal/types"
 	"dayzmanager/internal/util"
@@ -332,38 +331,8 @@ func (h *handlers) missionDBWrite(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 // Scheduled announcements.
 
-func (h *handlers) announcementsList(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		writeJSON(w, map[string]interface{}{
-			"announcements": h.app.Config.ScheduledAnnouncements,
-		})
-		return
-	}
-	var req struct {
-		Announcements []config.ScheduledAnnouncement `json:"announcements"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	// Light validation: HH:MM sanity.
-	for i, a := range req.Announcements {
-		t := strings.TrimSpace(a.Time)
-		if len(t) != 5 || t[2] != ':' {
-			http.Error(w, fmt.Sprintf("announcement %d: bad time %q (want HH:MM)", i, t), http.StatusBadRequest)
-			return
-		}
-	}
-	h.app.Config.ScheduledAnnouncements = req.Announcements
-	if err := h.app.SaveConfig(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	// Push the new announcement list to the scheduler snapshot so it fires
-	// without a restart and the announce loop never reads torn config.
-	h.app.Server.SetScheduleConfig(h.app.Config)
-	writeJSON(w, map[string]interface{}{"announcements": h.app.Config.ScheduledAnnouncements})
-}
+// (The old /api/announcements endpoint was removed — scheduled announcements
+// are now part of the manager config and saved via /api/config, item #2.)
 
 // ---------------------------------------------------------------------------
 // Mods: Workshop staleness check.

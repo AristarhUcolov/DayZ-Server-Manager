@@ -81,6 +81,7 @@ type scheduleConfig struct {
 	restartWarnMinutes []int
 	scheduledRestarts  []string
 	announcements      []config.ScheduledAnnouncement
+	intervalAnnounces  []config.IntervalAnnouncement
 
 	// Mod auto-update (item 2).
 	autoUpdateOnRestart    bool
@@ -107,6 +108,7 @@ func (c *Controller) SetScheduleConfig(cfg *config.Manager) {
 		restartWarnMinutes:     append([]int(nil), cfg.RestartWarnMinutes...),
 		scheduledRestarts:      append([]string(nil), cfg.ScheduledRestarts...),
 		announcements:          append([]config.ScheduledAnnouncement(nil), cfg.ScheduledAnnouncements...),
+		intervalAnnounces:      append([]config.IntervalAnnouncement(nil), cfg.IntervalAnnouncements...),
 		autoUpdateOnRestart:    cfg.AutoUpdateModsOnRestart,
 		autoUpdateCheckMinutes: cfg.AutoUpdateCheckMinutes,
 		vanillaPath:            cfg.VanillaDayZPath,
@@ -336,6 +338,8 @@ func (c *Controller) StartAutoRestartLoop() {
 	go c.scheduledRestartLoop(stop)
 	// Scheduled RCon announcements (rules reminders, discord links, events).
 	go c.scheduledAnnounceLoop(stop)
+	// Interval RCon announcements (every N minutes while running).
+	go c.intervalAnnounceLoop(stop)
 	// Periodic mod-update check → update + restart when a new version appears.
 	go c.modUpdateCheckLoop(stop)
 
@@ -417,6 +421,47 @@ func (c *Controller) scheduledAnnounceLoop(stop <-chan struct{}) {
 					c.log.Printf("announce %q: %v", msg, err)
 				}
 			}()
+		}
+	}
+}
+
+// intervalAnnounceLoop broadcasts each enabled interval announcement every
+// IntervalMinutes while the server is running. The per-item timer resets while
+// the server is down, so "every 30 min" counts uptime, not wall-clock through a
+// restart/outage.
+func (c *Controller) intervalAnnounceLoop(stop <-chan struct{}) {
+	lastFired := map[int]time.Time{} // snapshot index → last broadcast time
+	for {
+		now := time.Now()
+		next := now.Truncate(time.Minute).Add(time.Minute)
+		select {
+		case <-stop:
+			return
+		case <-time.After(time.Until(next)):
+		}
+		if c.Broadcast == nil || !c.IsRunning() {
+			lastFired = map[int]time.Time{} // reset timers while down
+			continue
+		}
+		now = time.Now()
+		for i, a := range c.schedSnapshot().intervalAnnounces {
+			if !a.Enabled || a.IntervalMinutes <= 0 || strings.TrimSpace(a.Message) == "" {
+				continue
+			}
+			lf, seen := lastFired[i]
+			if !seen {
+				lastFired[i] = now // baseline: first fire one interval from now
+				continue
+			}
+			if now.Sub(lf) >= time.Duration(a.IntervalMinutes)*time.Minute {
+				lastFired[i] = now
+				msg := a.Message
+				go func() {
+					if err := c.Broadcast.Say(msg); err != nil {
+						c.log.Printf("interval announce %q: %v", msg, err)
+					}
+				}()
+			}
 		}
 	}
 }

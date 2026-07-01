@@ -10,6 +10,7 @@ const State = {
   config: null,
   lang: 'en',
   i18n: {},
+  languages: null,
   serverStatus: { running: false },
 };
 
@@ -81,11 +82,22 @@ async function loadI18n(lang) {
   const data = await api.get(`/api/i18n?lang=${encodeURIComponent(lang)}`);
   State.lang = data.locale;
   State.i18n = data.messages || {};
+  if (data.languages) State.languages = data.languages;
   document.documentElement.lang = State.lang;
   applyI18n();
 }
 
 function t(key) { return State.i18n[key] || key; }
+
+// fillLangSelect populates a <select> with the available UI languages. `short`
+// shows the uppercase code (compact, for the topbar); otherwise the native name.
+function fillLangSelect(sel, selected, short) {
+  if (!sel) return;
+  const langs = State.languages || [{ code: 'en', name: 'English' }, { code: 'ru', name: 'Русский' }];
+  sel.innerHTML = '';
+  for (const l of langs) sel.append(h('option', { value: l.code, text: short ? l.code.toUpperCase() : l.name }));
+  if (selected != null) sel.value = selected;
+}
 
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -330,7 +342,7 @@ async function ensureFirstRunDone() {
   if (State.config.firstRunDone) return;
   const modal = document.getElementById('first-run');
   modal.classList.remove('hidden');
-  document.getElementById('fr-lang').value = State.config.language || 'en';
+  fillLangSelect(document.getElementById('fr-lang'), State.config.language || 'en', false);
   document.getElementById('fr-vanilla').value = State.config.vanillaDayZPath || '';
 
   // Steam auto-detect button. Populates the vanilla path field in one click;
@@ -822,6 +834,26 @@ function openModal({ title, onClose, wide } = {}) {
   return { body, close };
 }
 
+// confirmModal replaces the native confirm() with a styled modal. Resolves to
+// true only when the confirm button is pressed; Esc / backdrop / Cancel → false.
+function confirmModal(message, opts = {}) {
+  return new Promise((resolve) => {
+    let result = false;
+    const m = openModal({ title: opts.title || t('confirm.title'), onClose: () => resolve(result) });
+    const done = (v) => { result = v; m.close(); };
+    const okBtn = h('button', { class: opts.danger ? 'danger' : 'primary',
+      text: opts.okText || t('action.delete'), onclick: () => done(true) });
+    m.body.append(
+      h('p', { text: message, style: { marginBottom: '4px' } }),
+      h('div', { class: 'actions' }, [
+        okBtn,
+        h('button', { i18n: 'action.cancel', onclick: () => done(false) }),
+      ]),
+    );
+    setTimeout(() => okBtn.focus(), 0);
+  });
+}
+
 function admEventRow(e) {
   const typeClass = 'adm-type adm-' + (e.type || 'other');
   const pieces = [
@@ -917,7 +949,7 @@ Views.server = async (root) => {
             }
             try {
               await api.post('/api/servercfg', patch);
-              toast('saved', 'ok');
+              toast(t('msg.saved'), 'ok');
             } catch (e) { handleErr(e); }
           }
         }),
@@ -941,12 +973,13 @@ Views.mods = async (root) => {
   const tbl = h('table');
   tbl.append(
     h('thead', {}, h('tr', {}, [
-      h('th', { text: 'Mod' }),
-      h('th', { text: 'Status' }),
-      h('th', { text: 'Workshop' }),
-      h('th', { text: 'Keys' }),
-      h('th', { text: 'Size' }),
-      h('th', { text: 'Active' }),
+      h('th', { i18n: 'col.mod' }),
+      h('th', { i18n: 'col.status' }),
+      h('th', { i18n: 'col.workshop' }),
+      h('th', { i18n: 'col.keys' }),
+      h('th', { i18n: 'col.size' }),
+      h('th', { i18n: 'col.active' }),
+      h('th', { i18n: 'col.serverMod' }),
       h('th', { text: '' }),
     ]))
   );
@@ -972,17 +1005,35 @@ Views.mods = async (root) => {
       });
     }
 
+    // Server-side toggle (-serverMod=). Independent of Active (-mod=). Confirmed
+    // on enable so nobody flags a client mod as server-only by accident.
+    let serverControl;
+    if (m.installedInServer) {
+      const srvCb = h('input', { type: 'checkbox', class: 'switch' });
+      srvCb.checked = (d.serverMods || []).includes(m.name);
+      srvCb.onchange = async () => {
+        if (srvCb.checked && !(await confirmModal(t('mods.serverMod.confirm'), { danger: true, okText: t('action.save') }))) { srvCb.checked = false; return; }
+        try {
+          await api.post('/api/mods/enable', { mod: m.name, enabled: srvCb.checked, serverSide: true });
+          toast(t('action.save'), 'ok');
+        } catch (e) { handleErr(e); srvCb.checked = !srvCb.checked; }
+      };
+      serverControl = srvCb;
+    } else {
+      serverControl = h('span', { class: 'lock-indicator', title: t('mods.installFirst'), text: '🔒' });
+    }
+
     const actions = h('div', { class: 'actions', style: { margin: 0 } });
     if (!m.installedInServer && m.availableInWorkshop) {
       actions.append(h('button', { class: 'primary', i18n: 'action.install',
-        onclick: async () => { try { await api.post('/api/mods/install', { mod: m.name }); toast('installed','ok'); await navigate('mods'); } catch (e) { handleErr(e); } }}));
+        onclick: async () => { try { await api.post('/api/mods/install', { mod: m.name }); toast(t('msg.installed'),'ok'); await navigate('mods'); } catch (e) { handleErr(e); } }}));
     }
     if (m.installedInServer && m.availableInWorkshop) {
       actions.append(h('button', {
         class: m.updateAvailable ? 'primary' : '',
         i18n: 'action.update',
         onclick: async () => {
-          try { await api.post('/api/mods/update', { mod: m.name }); toast('updated','ok'); await navigate('mods'); }
+          try { await api.post('/api/mods/update', { mod: m.name }); toast(t('msg.updated'),'ok'); await navigate('mods'); }
           catch (e) { handleErr(e); }
         }
       }));
@@ -999,8 +1050,8 @@ Views.mods = async (root) => {
         }}));
       actions.append(h('button', { class: 'danger', i18n: 'action.uninstall',
         onclick: async () => {
-          if (!confirm(`Uninstall ${m.name}?`)) return;
-          try { await api.post('/api/mods/uninstall', { mod: m.name }); toast('removed','ok'); await navigate('mods'); } catch (e) { handleErr(e); }
+          if (!(await confirmModal(t('confirm.uninstall').replace('{mod}', m.name), { danger: true }))) return;
+          try { await api.post('/api/mods/uninstall', { mod: m.name }); toast(t('msg.removed'),'ok'); await navigate('mods'); } catch (e) { handleErr(e); }
         }}));
     }
 
@@ -1028,6 +1079,7 @@ Views.mods = async (root) => {
       h('td', { text: m.keyCount }),
       h('td', { text: bytes(m.sizeBytes) }),
       h('td', {}, activeControl),
+      h('td', {}, serverControl),
       h('td', {}, actions),
     ]);
     if (m.publishedId) tr.dataset.published = m.publishedId;
@@ -1073,7 +1125,7 @@ Views.mods = async (root) => {
       onclick: () => navigate('mods'),
     }),
     h('button', { i18n: 'action.syncKeys',
-      onclick: async () => { try { await api.post('/api/mods/sync-keys'); toast('keys synced','ok'); } catch (e) { handleErr(e); } }
+      onclick: async () => { try { await api.post('/api/mods/sync-keys'); toast(t('msg.keysSynced'),'ok'); } catch (e) { handleErr(e); } }
     }),
     h('button', { i18n: 'mods.checkSteam',
       onclick: async (e) => {
@@ -1238,6 +1290,41 @@ Views.types = async (root) => {
   let currentPage = 1;
   let lastFilteredCount = 0;
   let lastTotalCount = 0;
+  let sortKey = 'name';   // click a column header to sort (item #8)
+  let sortDir = 1;        // 1 = asc, -1 = desc
+
+  // Inline editing (item #8): unsaved edits live here (name -> {field: value})
+  // and survive sort/search/page changes until saved or discarded.
+  const dirty = {};
+  const dirtyBtn = h('button', { class: 'primary', onclick: () => saveDirty() });
+  const discardBtn = h('button', { onclick: () => { clearDirty(); refreshTable(); } });
+  function clearDirty() { for (const k of Object.keys(dirty)) delete dirty[k]; }
+  function updateDirtyUI() {
+    const n = Object.keys(dirty).length;
+    dirtyBtn.textContent = t('types.saveChanges') + (n ? ` (${n})` : '');
+    discardBtn.textContent = t('types.discard');
+    dirtyBtn.style.display = n ? '' : 'none';
+    discardBtn.style.display = n ? '' : 'none';
+  }
+  async function saveDirty() {
+    const names = Object.keys(dirty);
+    if (!names.length) return;
+    try {
+      for (const name of names) {
+        const dd = dirty[name], patch = {};
+        for (const f of ['nominal', 'min', 'lifetime']) {
+          if (f in dd) { const v = parseInt(dd[f], 10); if (Number.isFinite(v)) patch[f] = v; }
+        }
+        if ('category' in dd) patch.category = dd.category;
+        if (Object.keys(patch).length) {
+          await api.post('/api/types/bulk-patch', { file: fileSelect.value, names: [name], patch });
+        }
+      }
+      clearDirty();
+      toast(t('msg.saved'), 'ok');
+      await refreshTable();
+    } catch (e) { handleErr(e); }
+  }
 
   const presetsWrap = h('div', { class: 'card' }, [h('h3', { i18n: 'types.presets' })]);
   try {
@@ -1249,7 +1336,7 @@ Views.types = async (root) => {
         onclick: async () => {
           const selected = [...tableWrap.querySelectorAll('input[type=checkbox]:checked')]
             .map(cb => cb.dataset.name);
-          if (!selected.length) { toast('select types first'); return; }
+          if (!selected.length) { toast(t('msg.selectFirst')); return; }
           try {
             await api.post('/api/types/apply-preset', {
               file: fileSelect.value, names: selected, presetId: p.id,
@@ -1269,7 +1356,7 @@ Views.types = async (root) => {
   function openBulkEdit() {
     const selected = [...tableWrap.querySelectorAll('input[type=checkbox]:checked')]
       .map(cb => cb.dataset.name);
-    if (!selected.length) { toast('select types first'); return; }
+    if (!selected.length) { toast(t('msg.selectFirst')); return; }
     const fields = {
       nominal: h('input', { type: 'number', placeholder: 'nominal' }),
       min: h('input', { type: 'number', placeholder: 'min' }),
@@ -1298,12 +1385,12 @@ Views.types = async (root) => {
               if (k === 'category') patch.category = v;
               else patch[k] = Number(v);
             }
-            if (Object.keys(patch).length === 0) { toast('set at least one field'); return; }
+            if (Object.keys(patch).length === 0) { toast(t('msg.setOneField')); return; }
             try {
               const r = await api.post('/api/types/bulk-patch', {
                 file: fileSelect.value, names: selected, patch,
               });
-              toast(`patched ${r.touched} type(s)`, 'ok');
+              toast(t('msg.patched').replace('{n}', r.touched), 'ok');
               m.close();
               await refreshTable();
             } catch (e) { handleErr(e); }
@@ -1326,43 +1413,84 @@ Views.types = async (root) => {
     lastFilteredCount = filtered.length;
     lastTotalCount = d.count;
 
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    // Sort by the active column (numeric columns numerically, text columns
+    // alphabetically), then paginate.
+    const numericKeys = { nominal: 1, min: 1, lifetime: 1 };
+    const sorted = filtered.slice().sort((a, b) => {
+      const av = a[sortKey], bv = b[sortKey];
+      if (numericKeys[sortKey]) return ((Number(av) || 0) - (Number(bv) || 0)) * sortDir;
+      return String(av || '').localeCompare(String(bv || '')) * sortDir;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
     if (currentPage > totalPages) currentPage = totalPages;
     if (currentPage < 1) currentPage = 1;
     const start = (currentPage - 1) * PAGE_SIZE;
-    const slice = filtered.slice(start, start + PAGE_SIZE);
+    const slice = sorted.slice(start, start + PAGE_SIZE);
 
     const tbl = h('table');
-    const headCb = h('input', { type: 'checkbox', title: 'Select page' });
+    const headCb = h('input', { type: 'checkbox', title: t('types.selectPage') });
     headCb.onchange = () => {
       tableWrap.querySelectorAll('input[type=checkbox][data-name]').forEach(cb => cb.checked = headCb.checked);
     };
+    const sortTh = (label, key, num) => {
+      const active = sortKey === key;
+      return h('th', {
+        class: (num ? 'num ' : '') + 'sortable',
+        style: { cursor: 'pointer', userSelect: 'none' },
+        text: label + (active ? (sortDir === 1 ? '  ▲' : '  ▼') : ''),
+        onclick: () => { if (active) sortDir = -sortDir; else { sortKey = key; sortDir = 1; } refreshTable(); },
+      });
+    };
     tbl.append(h('thead', {}, h('tr', {}, [
       h('th', {}, headCb),
-      h('th', { text: 'Name' }),
-      h('th', { class: 'num', i18n: 'types.field.nominal' }),
-      h('th', { class: 'num', i18n: 'types.field.min' }),
-      h('th', { class: 'num', i18n: 'types.field.lifetime' }),
-      h('th', { i18n: 'types.field.category' }),
+      sortTh(t('col.name'), 'name', false),
+      sortTh(t('types.field.nominal'), 'nominal', true),
+      sortTh(t('types.field.min'), 'min', true),
+      sortTh(t('types.field.lifetime'), 'lifetime', true),
+      sortTh(t('types.field.category'), 'category', false),
       h('th', { text: '' }),
     ])));
     const tbody = h('tbody');
     for (const row of slice) {
       const cb = h('input', { type: 'checkbox' });
       cb.dataset.name = row.name;
-      tbody.append(h('tr', {}, [
+      let tr;
+      const mkCell = (field, numeric) => {
+        const has = dirty[row.name] && (field in dirty[row.name]);
+        const inp = h('input', {
+          type: numeric ? 'number' : 'text', class: 'inline-cell',
+          value: has ? dirty[row.name][field] : (row[field] ?? ''),
+        });
+        inp.onchange = () => {
+          const orig = row[field] ?? '';
+          if (String(inp.value) === String(orig)) {
+            if (dirty[row.name]) {
+              delete dirty[row.name][field];
+              if (!Object.keys(dirty[row.name]).length) delete dirty[row.name];
+            }
+          } else {
+            (dirty[row.name] = dirty[row.name] || {})[field] = inp.value;
+          }
+          if (tr) tr.classList.toggle('dirty', !!dirty[row.name]);
+          updateDirtyUI();
+        };
+        return h('td', { class: numeric ? 'num' : '' }, inp);
+      };
+      tr = h('tr', {}, [
         h('td', {}, cb),
         h('td', { text: row.name }),
-        h('td', { class: 'num', text: row.nominal ?? '' }),
-        h('td', { class: 'num', text: row.min ?? '' }),
-        h('td', { class: 'num', text: row.lifetime ?? '' }),
-        h('td', { text: row.category || '' }),
-        h('td', {}, h('button', { i18n: 'action.edit',
-          onclick: () => openEditor(row.name)
-        })),
-      ]));
+        mkCell('nominal', true),
+        mkCell('min', true),
+        mkCell('lifetime', true),
+        mkCell('category', false),
+        h('td', {}, h('button', { i18n: 'action.edit', onclick: () => openEditor(row.name) })),
+      ]);
+      if (dirty[row.name]) tr.classList.add('dirty');
+      tbody.append(tr);
     }
     tbl.append(tbody);
+    updateDirtyUI();
     tableWrap.append(tbl);
 
     // Pager: prev / page X of Y / next + jump-to.
@@ -1470,7 +1598,7 @@ Views.types = async (root) => {
             body.flags = Object.fromEntries(Object.entries(flagInputs).map(([k, el]) => [k, Number(el.value) || 0]));
             try {
               await api.post(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`, body);
-              toast('saved', 'ok');
+              toast(t('msg.saved'), 'ok');
               m.close();
               await refreshTable();
             } catch (e) { handleErr(e); }
@@ -1478,10 +1606,10 @@ Views.types = async (root) => {
         }),
         h('button', { class: 'danger', i18n: 'action.delete',
           onclick: async () => {
-            if (!confirm(`Delete ${name}?`)) return;
+            if (!(await confirmModal(t('confirm.delete').replace('{name}', name), { danger: true }))) return;
             try {
               await api.del(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
-              toast('deleted', 'ok');
+              toast(t('msg.deleted'), 'ok');
               m.close();
               await refreshTable();
             } catch (e) { handleErr(e); }
@@ -1492,7 +1620,7 @@ Views.types = async (root) => {
     );
   }
 
-  fileSelect.onchange = () => { currentPage = 1; refreshTable(); };
+  fileSelect.onchange = () => { clearDirty(); currentPage = 1; refreshTable(); };
   search.oninput = () => { currentPage = 1; refreshTable(); };
 
   if (State.serverStatus.running) root.append(runningBanner());
@@ -1502,7 +1630,11 @@ Views.types = async (root) => {
       h('div', { class: 'toolbar' }, [
         fileSelect, search,
         h('button', { i18n: 'types.bulk', onclick: openBulkEdit }),
+        h('span', { class: 'grow' }),
+        discardBtn,
+        dirtyBtn,
       ]),
+      h('p', { class: 'hint', i18n: 'types.inline.hint' }),
       tableWrap,
       pagerHost,
     ]),
@@ -1520,9 +1652,9 @@ Views.moded = async (root) => {
 
   const table = h('table');
   table.append(h('thead', {}, h('tr', {}, [
-    h('th', { text: 'File' }),
-    h('th', { text: 'Size' }),
-    h('th', { text: 'Registered' }),
+    h('th', { i18n: 'col.file' }),
+    h('th', { i18n: 'col.size' }),
+    h('th', { i18n: 'col.registered' }),
     h('th', { text: '' }),
   ])));
   const tbody = h('tbody');
@@ -1533,8 +1665,8 @@ Views.moded = async (root) => {
       h('td', {}, f.registered ? h('span', { class: 'badge ok', text: '✓' }) : h('span', { class: 'badge warn', text: '!' })),
       h('td', {}, h('button', { class: 'danger', i18n: 'action.delete',
         onclick: async () => {
-          if (!confirm(`Delete ${f.name}?`)) return;
-          try { await api.post('/api/moded/delete', { fileName: f.name }); toast('deleted','ok'); await navigate('moded'); }
+          if (!(await confirmModal(t('confirm.delete').replace('{name}', f.name), { danger: true }))) return;
+          try { await api.post('/api/moded/delete', { fileName: f.name }); toast(t('msg.deleted'),'ok'); await navigate('moded'); }
           catch (e) { handleErr(e); }
         }
       })),
@@ -1627,7 +1759,7 @@ Views.moded = async (root) => {
 
 Views.files = async (root) => {
   const tree = h('div', { class: 'tree' });
-  const editorHost = h('textarea', { placeholder: 'Select a file' });
+  const editorHost = h('textarea', { placeholder: t('files.selectFile') });
   const pathLabel = h('div', { class: 'hint' });
   const backupList = h('div', { class: 'card', style: { marginTop: '12px' } });
   let currentPath = '';
@@ -1871,10 +2003,10 @@ Views.validator = async (root) => {
       if (!d.count) { listEl.append(h('p', { i18n: 'validator.none' })); return; }
       const tbl = h('table');
       tbl.append(h('thead', {}, h('tr', {}, [
-        h('th', { text: 'Severity' }),
-        h('th', { text: 'File' }),
-        h('th', { text: 'Line' }),
-        h('th', { text: 'Message' }),
+        h('th', { i18n: 'col.severity' }),
+        h('th', { i18n: 'col.file' }),
+        h('th', { i18n: 'col.line' }),
+        h('th', { i18n: 'col.message' }),
       ])));
       const tb = h('tbody');
       for (const i of d.issues) {
@@ -1890,12 +2022,25 @@ Views.validator = async (root) => {
       listEl.append(tbl);
     } catch (e) { handleErr(e); }
   };
+  const autofix = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const r = await api.post('/api/validate/fix', {});
+      if (!r.count) toast(t('validator.fix.none'), 'ok');
+      else toast(t('validator.fix.done').replace('{n}', r.count), 'ok');
+      await run();
+    } catch (e) { handleErr(e); }
+    finally { btn.disabled = false; }
+  };
   root.append(
     h('div', { class: 'card' }, [
       h('h2', { i18n: 'validator.title' }),
       h('div', { class: 'actions' }, [
         h('button', { class: 'primary', i18n: 'action.validate', onclick: run }),
+        h('button', { i18n: 'validator.fix', onclick: autofix }),
       ]),
+      h('p', { class: 'hint', i18n: 'validator.fix.hint' }),
       listEl,
     ])
   );
@@ -2041,8 +2186,8 @@ Views.rcon = async (root) => {
   const card = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.rcon' })]);
   const status = h('div', { class: 'hint' });
   const players = h('div', { class: 'players-grid' });
-  const sayInp = h('input', { type: 'text', placeholder: 'Broadcast message' });
-  const cmdInp = h('input', { type: 'text', placeholder: 'Raw RCon command, e.g. #shutdown' });
+  const sayInp = h('input', { type: 'text', placeholder: t('rcon.broadcast.ph') });
+  const cmdInp = h('input', { type: 'text', placeholder: t('rcon.rawCommand.ph') });
   const cmdOut = h('pre', { class: 'log-pane', style: { height: '180px' } });
 
   let timer = 0;
@@ -2101,10 +2246,10 @@ Views.rcon = async (root) => {
       startPolling();
       players.innerHTML = '';
       players.append(
-        h('div', { class: 'head', text: 'ID' }),
-        h('div', { class: 'head', text: 'Name' }),
-        h('div', { class: 'head', text: 'GUID' }),
-        h('div', { class: 'head', text: 'Ping' }),
+        h('div', { class: 'head', i18n: 'col.id' }),
+        h('div', { class: 'head', i18n: 'col.name' }),
+        h('div', { class: 'head', i18n: 'col.guid' }),
+        h('div', { class: 'head', i18n: 'col.ping' }),
         h('div', { class: 'head', text: '' }),
       );
       for (const p of d.players || []) {
@@ -2114,20 +2259,9 @@ Views.rcon = async (root) => {
           h('div', { text: p.guid }),
           h('div', { text: p.ping }),
           h('div', {}, [
-            h('button', { text: 'Kick', onclick: async () => {
-              const r = prompt(`Kick ${p.name}? Reason:`, 'kicked');
-              if (r === null) return;
-              try { await api.post('/api/rcon/kick', { playerId: p.id, reason: r }); await refresh(); }
-              catch (e) { handleErr(e); }
-            }}),
+            h('button', { i18n: 'action.kick', onclick: () => kickDialog(p) }),
             ' ',
-            h('button', { class: 'danger', text: 'Ban', onclick: async () => {
-              const mins = prompt(`Ban ${p.name}. Minutes (0 = permanent):`, '60');
-              if (mins === null) return;
-              const reason = prompt('Reason:', 'banned') || '';
-              try { await api.post('/api/rcon/ban', { playerId: p.id, minutes: Number(mins) || 0, reason }); await refresh(); }
-              catch (e) { handleErr(e); }
-            }}),
+            h('button', { class: 'danger', i18n: 'action.ban', onclick: () => banDialog(p) }),
           ]),
         );
       }
@@ -2147,32 +2281,66 @@ Views.rcon = async (root) => {
     }
   }
 
+  // Kick / Ban dialogs — proper modals instead of native prompt().
+  function kickDialog(p) {
+    const m = openModal({ title: t('action.kick') + ' — ' + p.name });
+    const reason = h('input', { type: 'text', value: 'kicked', style: { width: '100%' } });
+    m.body.append(
+      h('label', { i18n: 'rcon.reason' }), reason,
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'danger', i18n: 'action.kick', onclick: async () => {
+          try { await api.post('/api/rcon/kick', { playerId: p.id, reason: reason.value }); m.close(); await refresh(); }
+          catch (e) { handleErr(e); }
+        }}),
+        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+      ]),
+    );
+    setTimeout(() => reason.focus(), 0);
+  }
+  function banDialog(p) {
+    const m = openModal({ title: t('action.ban') + ' — ' + p.name });
+    const mins = h('input', { type: 'number', value: '60', min: '0', style: { width: '140px' } });
+    const reason = h('input', { type: 'text', value: 'banned', style: { width: '100%' } });
+    m.body.append(
+      h('label', { i18n: 'rcon.ban.minutes' }), mins,
+      h('label', { i18n: 'rcon.reason' }), reason,
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'danger', i18n: 'action.ban', onclick: async () => {
+          try { await api.post('/api/rcon/ban', { playerId: p.id, minutes: Number(mins.value) || 0, reason: reason.value }); m.close(); await refresh(); }
+          catch (e) { handleErr(e); }
+        }}),
+        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+      ]),
+    );
+    setTimeout(() => mins.focus(), 0);
+  }
+
   status.style.margin = '4px 0 12px';
   players.style.margin = '8px 0';
 
   card.append(
     h('div', { class: 'actions', style: { marginTop: 0 } }, [
-      h('button', { text: 'Refresh', onclick: refresh }),
+      h('button', { i18n: 'rcon.refresh', onclick: refresh }),
     ]),
     status,
     players,
     // Broadcast — separated section so it doesn't bleed into the player table.
     h('div', { style: { marginTop: '22px' } }, [
-      h('h3', { text: 'Broadcast' }),
+      h('h3', { i18n: 'rcon.broadcast' }),
       h('div', { class: 'row' }, [
         sayInp,
-        h('button', { class: 'primary', text: 'Say', onclick: async () => {
+        h('button', { class: 'primary', i18n: 'rcon.say', onclick: async () => {
           if (!sayInp.value.trim()) return;
-          try { await api.post('/api/rcon/say', { message: sayInp.value }); sayInp.value = ''; toast('sent','ok'); }
+          try { await api.post('/api/rcon/say', { message: sayInp.value }); sayInp.value = ''; toast(t('msg.sent'),'ok'); }
           catch (e) { handleErr(e); }
         }}),
       ]),
     ]),
     h('div', { style: { marginTop: '22px' } }, [
-      h('h3', { text: 'Raw command' }),
+      h('h3', { i18n: 'rcon.rawCommand' }),
       h('div', { class: 'row' }, [
         cmdInp,
-        h('button', { text: 'Send', onclick: async () => {
+        h('button', { i18n: 'rcon.send', onclick: async () => {
           if (!cmdInp.value.trim()) return;
           try { const r = await api.post('/api/rcon/command', { command: cmdInp.value }); cmdOut.textContent = r.output || '(empty)'; }
           catch (e) { cmdOut.textContent = `ERR: ${e.message}`; }
@@ -2336,7 +2504,7 @@ Views.events = async (root) => {
             if (children.length) body.Children = { Child: children };
             try {
               await api.post(`/api/events/item?name=${encodeURIComponent(name)}`, body);
-              toast('saved', 'ok');
+              toast(t('msg.saved'), 'ok');
               m.close();
               await refreshTable();
             } catch (e) { handleErr(e); }
@@ -2344,10 +2512,10 @@ Views.events = async (root) => {
         }),
         h('button', { class: 'danger', i18n: 'action.delete',
           onclick: async () => {
-            if (!confirm(`Delete event ${name}?`)) return;
+            if (!(await confirmModal(t('confirm.deleteEvent').replace('{name}', name), { danger: true }))) return;
             try {
               await api.del(`/api/events/item?name=${encodeURIComponent(name)}`);
-              toast('deleted', 'ok');
+              toast(t('msg.deleted'), 'ok');
               m.close();
               await refreshTable();
             } catch (e) { handleErr(e); }
@@ -2381,7 +2549,8 @@ Views.events = async (root) => {
 // scheduledRestartsCard — UI for cfg.ScheduledRestarts (HH:MM list) and
 // cfg.RestartWarnMinutes. Mutates the parent F object so the main Settings
 // save path picks up the values without a separate endpoint.
-function scheduledRestartsCard(c, F) {
+function scheduledRestartsCard(c, F, onChange) {
+  const fire = () => onChange && onChange();
   const times = Array.isArray(c.scheduledRestarts) ? c.scheduledRestarts.slice() : [];
   const warnsCsv = (Array.isArray(c.restartWarnMinutes) ? c.restartWarnMinutes : [5,3,1]).join(',');
 
@@ -2394,7 +2563,7 @@ function scheduledRestartsCard(c, F) {
       const inp = h('input', { type: 'text', value: tm, placeholder: 'HH:MM', style: { width: '90px' } });
       inp.onchange = () => { times[i] = inp.value.trim(); };
       const rm = h('button', { class: 'danger', text: '×',
-        onclick: () => { times.splice(i, 1); render(); } });
+        onclick: () => { times.splice(i, 1); render(); fire(); } });
       list.append(h('div', { class: 'row', style: { gap: '8px', marginBottom: '6px' } }, [inp, rm]));
     });
     if (times.length === 0) {
@@ -2425,33 +2594,41 @@ function scheduledRestartsCard(c, F) {
     list,
     h('div', { class: 'actions' }, [
       h('button', { i18n: 'settings.restarts.add',
-        onclick: () => { times.push('04:00'); render(); } }),
+        onclick: () => { times.push('04:00'); render(); fire(); } }),
     ]),
     h('div', { style: { marginTop: '12px' } }, [
       h('label', { i18n: 'settings.restarts.warn' }),
       warnInput,
       h('small', { class: 'hint', i18n: 'settings.restarts.warn.hint' }),
+      (!(c.rconPassword || '').trim())
+        ? h('small', { class: 'hint', style: { color: 'var(--warn)' }, i18n: 'settings.restarts.warn.rcon' })
+        : null,
     ]),
   ]);
 }
 
-function announcementsCard() {
+function announcementsCard(c, F, onChange) {
+  const fire = () => onChange && onChange();
+  // Seed from the loaded config (single source of truth) — NOT a separate
+  // /api/announcements fetch. Announcements are now persisted by the main
+  // Settings save via the F getter below, so there's no second "Save" button
+  // to forget (and no desync that used to wipe them, item #2).
+  const state = {
+    items: (c.scheduledAnnouncements || []).map(a => ({
+      time: a.time || '', message: a.message || '', enabled: !!a.enabled,
+    })),
+  };
+
   const card = h('div', { class: 'card' }, [
     h('h3', { i18n: 'settings.announcements' }),
     h('p', { class: 'hint', i18n: 'settings.announcements.hint' }),
   ]);
+  // #4 — announcements broadcast via RCon, so they need an RCon password.
+  if (!(c.rconPassword || '').trim()) {
+    card.append(h('p', { class: 'warning-bar', i18n: 'settings.rconNeeded' }));
+  }
   const list = h('div');
   card.append(list);
-
-  const state = { items: [] };
-
-  async function reload() {
-    try {
-      const r = await api.get('/api/announcements');
-      state.items = r.announcements || [];
-    } catch { state.items = []; }
-    render();
-  }
 
   function render() {
     list.innerHTML = '';
@@ -2464,35 +2641,51 @@ function announcementsCard() {
         time, msg,
         h('label', {}, [en, h('span', { text: ' on' })]),
         h('button', { class: 'danger', text: '×',
-          onclick: () => { state.items.splice(i, 1); render(); } }),
+          onclick: () => { state.items.splice(i, 1); render(); fire(); } }),
       ]);
       time.onchange = () => { state.items[i].time = time.value.trim(); };
-      msg.oninput   = () => { state.items[i].message = msg.value; };
+      msg.oninput   = () => { state.items[i].message = msg.value; fire(); };
       en.onchange   = () => { state.items[i].enabled = en.checked; };
       list.append(row);
     });
   }
+  render();
+
+  // The main Settings save reads this getter (same pattern as scheduledRestarts).
+  F.scheduledAnnouncements = {
+    type: 'list-announcements',
+    get value() {
+      return state.items
+        .map(a => ({ time: (a.time || '').trim(), message: a.message || '', enabled: !!a.enabled }))
+        .filter(a => a.time);
+    },
+  };
 
   card.append(
     h('div', { class: 'actions' }, [
       h('button', { i18n: 'settings.announcements.add',
-        onclick: () => { state.items.push({ time: '12:00', message: '', enabled: true }); render(); }
-      }),
-      h('button', { class: 'primary', i18n: 'action.save',
-        onclick: async () => {
-          try {
-            await api.post('/api/announcements', { announcements: state.items });
-            toast('saved', 'ok');
-          } catch (e) { handleErr(e); }
-        }
+        onclick: () => { state.items.push({ time: '12:00', message: '', enabled: true }); render(); fire(); }
       }),
     ]),
   );
-  reload();
   return card;
 }
 
 // --------------------------------------------------------------------- weather & time
+
+// Line-style weather icons (stroke=currentColor so they inherit text/accent
+// colour and match the manager's design — no emoji).
+const WICON = {
+  clear:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>',
+  cloudy:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h9.5a3.5 3.5 0 0 0 .4-7 5.2 5.2 0 0 0-10-1.3A3.9 3.9 0 0 0 7 18z"/></svg>',
+  foggy:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13h9.5a3.4 3.4 0 0 0 .4-6.8 5 5 0 0 0-9.6-1.2A3.7 3.7 0 0 0 7 13z"/><path d="M5 17h14M7 20.5h10"/></svg>',
+  rainy:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14h9.5a3.4 3.4 0 0 0 .4-6.8 5 5 0 0 0-9.6-1.2A3.7 3.7 0 0 0 7 14z"/><path d="M8.5 17l-1 3M12 17l-1 3M15.5 17l-1 3"/></svg>',
+  storm:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14h9.5a3.4 3.4 0 0 0 .4-6.8 5 5 0 0 0-9.6-1.2A3.7 3.7 0 0 0 7 14z"/><path d="M12.5 15l-2.5 4h3l-2.5 4"/></svg>',
+  snowy:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13h9.5a3.4 3.4 0 0 0 .4-6.8 5 5 0 0 0-9.6-1.2A3.7 3.7 0 0 0 7 13z"/><path d="M9 17v.01M13 17v.01M11 20v.01M15 20v.01"/></svg>',
+  dynamic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 0 1 14.5-6M18.5 3v3.5H15"/><path d="M20.5 12a8.5 8.5 0 0 1-14.5 6M5.5 21v-3.5H9"/></svg>',
+  off:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M6.2 6.2l11.6 11.6"/></svg>',
+  wind:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h10a2.6 2.6 0 1 0-2.6-2.6"/><path d="M3 15h13a2.6 2.6 0 1 1-2.6 2.6"/><path d="M3 12h7"/></svg>',
+};
 
 Views.weather = async (root) => {
   await refreshStatus();
@@ -2511,9 +2704,8 @@ Views.weather = async (root) => {
   // "Enabled" (not mere file existence) decides whether the manager controls
   // weather — the vanilla cfgweather.xml ships present but with enable="0".
   const enabled = !!params.enable;
-  const PIC = { clear: '☀️', cloudy: '☁️', foggy: '🌫️', rainy: '🌧️', storm: '⛈️', snowy: '❄️', dynamic: '🔄', off: '🚫' };
   const matchedBadge = h('span', { class: 'badge ' + (enabled ? 'ok' : 'mute'),
-    text: enabled ? ((PIC[d.matched] || '') + ' ' + (t('weather.preset.' + d.matched) || d.matched)) : '—' });
+    text: enabled ? (t('weather.preset.' + d.matched) || d.matched) : '—' });
 
   const applyPreset = async (name) => {
     try { await api.post('/api/weather/preset', { name }); toast(t('action.save'), 'ok'); await navigate('weather'); }
@@ -2523,7 +2715,7 @@ Views.weather = async (root) => {
     class: 'preset-tile' + ((name === d.matched && enabled) ? ' active' : ''),
     disabled: running, onclick: () => applyPreset(name),
   }, [
-    h('span', { class: 'ic', text: PIC[name] || '•' }),
+    h('span', { class: 'ic', html: WICON[name] || '' }),
     h('span', { i18n: 'weather.preset.' + name }),
   ]);
   const tiles = presets.map(presetTile);
@@ -2547,22 +2739,25 @@ Views.weather = async (root) => {
     const step = opts.step || '1';
     const toDisplay = (v) => unit === '%' ? Math.round((v || 0) * 100) : (v || 0);
     const fmt = (n) => unit === '%' ? n + '%' : n + ' m/s';
-    const out = h('span', { class: 'slider-val', text: fmt(toDisplay(val)) });
-    const range = h('input', { type: 'range', min: '0', max: String(max), step,
-      value: String(toDisplay(val)), style: { flex: '1' } });
-    range.oninput = () => { out.textContent = fmt(Number(range.value)); };
-    const row = h('div', { class: 'row', style: { gap: '10px', alignItems: 'center', marginBottom: '10px' } }, [
-      h('span', { class: 'slider-label' }, [h('span', { class: 'ic', text: icon }), h('span', { i18n: labelKey })]),
+    const cur = toDisplay(val);
+    const out = h('span', { class: 'slider-val', text: fmt(cur) });
+    const range = h('input', { type: 'range', class: 'wslider', min: '0', max: String(max), step,
+      value: String(cur), style: { flex: '1' } });
+    const fill = () => range.style.setProperty('--val', (Number(range.value) / max * 100) + '%');
+    range.oninput = () => { out.textContent = fmt(Number(range.value)); fill(); };
+    fill();
+    const row = h('div', { class: 'wrow' }, [
+      h('span', { class: 'slider-label' }, [h('span', { class: 'ic', html: WICON[icon] || '' }), h('span', { i18n: labelKey })]),
       range, out,
     ]);
     return { row, get: () => unit === '%' ? Number(range.value) / 100 : Number(range.value) };
   };
-  const oc = sliderRow('weather.overcast', '☁️', params.overcast);
-  const fog = sliderRow('weather.fog', '🌫️', params.fog);
-  const rain = sliderRow('weather.rain', '🌧️', params.rain);
-  const snow = sliderRow('weather.snowfall', '❄️', params.snowfall);
-  const storm = sliderRow('weather.storm', '⚡', params.stormDensity);
-  const wind = sliderRow('weather.wind', '🌬️', params.wind, { unit: 'm/s', max: 20, step: '0.5' });
+  const oc = sliderRow('weather.overcast', 'cloudy', params.overcast);
+  const fog = sliderRow('weather.fog', 'foggy', params.fog);
+  const rain = sliderRow('weather.rain', 'rainy', params.rain);
+  const snow = sliderRow('weather.snowfall', 'snowy', params.snowfall);
+  const storm = sliderRow('weather.storm', 'storm', params.stormDensity);
+  const wind = sliderRow('weather.wind', 'wind', params.wind, { unit: 'm/s', max: 20, step: '0.5' });
   const dynChk = h('input', { type: 'checkbox', class: 'switch' });
   dynChk.checked = !!params.dynamic;
 
@@ -2650,7 +2845,7 @@ Views.wipe = async (root) => {
     list.append(h('p', { class: 'hint', i18n: 'wipe.nothing' }));
   } else {
     const tbl = h('table');
-    tbl.append(h('thead', {}, h('tr', {}, [h('th', { text: 'storage' }), h('th', { text: 'Size' })])));
+    tbl.append(h('thead', {}, h('tr', {}, [h('th', { i18n: 'col.storage' }), h('th', { i18n: 'col.size' })])));
     const tb = h('tbody');
     for (const f of folders) {
       tb.append(h('tr', {}, [h('td', { text: f.name }), h('td', { text: bytes(f.sizeBytes) })]));
@@ -2692,7 +2887,7 @@ Views.wipe = async (root) => {
 Views.settings = async (root) => {
   const c = State.config;
   const F = {
-    language:        h('select', {}, [h('option', { value: 'en', text: 'English' }), h('option', { value: 'ru', text: 'Русский' })]),
+    language:        h('select', {}),
     vanillaDayZPath: h('input',  { type: 'text', value: c.vanillaDayZPath || '' }),
     exposure:        h('select', {}, [
                        h('option', { value: 'local',    i18n: 'settings.exposure.local' }),
@@ -2714,7 +2909,7 @@ Views.settings = async (root) => {
     freezeCheck:  h('input', { type: 'checkbox', class: 'switch' }),
     filePatching: h('input', { type: 'checkbox', class: 'switch' }),
   };
-  F.language.value = c.language;
+  fillLangSelect(F.language, c.language, false);
   F.exposure.value = c.exposure || 'local';
   for (const k of ['autoRestartEnabled','autoUpdateModsOnRestart','doLogs','adminLog','netLog','freezeCheck','filePatching']) {
     F[k].checked = !!c[k];
@@ -2728,6 +2923,7 @@ Views.settings = async (root) => {
       // Prefer an install that has !Workshop; fall back to the first hit.
       const hit = installs.find(i => i.hasWorkshop) || installs[0];
       F.vanillaDayZPath.value = hit.path;
+      F.vanillaDayZPath.dispatchEvent(new Event('change', { bubbles: true })); // trigger auto-save
       toast(hit.path, 'ok');
     } catch (e) { handleErr(e); }
   }});
@@ -2743,9 +2939,42 @@ Views.settings = async (root) => {
   themeSel.value = localStorage.getItem('theme') || 'dark';
   themeSel.onchange = () => setTheme(themeSel.value);
 
-  root.append(
-    pageHeader('nav.settings', 'settings.subtitle'),
+  // ---- Auto-save: no manual Save button. Field changes persist on their own
+  // (item #2) — kills the whole class of "forgot to save / save reset X" bugs.
+  const savedNote = h('span', { class: 'saved-note', i18n: 'settings.saved' });
+  const gather = () => {
+    const next = { ...State.config };
+    for (const [k, el] of Object.entries(F)) {
+      if (el.type === 'checkbox') next[k] = el.checked;
+      else if (el.type === 'number') next[k] = Number(el.value);
+      else next[k] = el.value; // text/select + the list getters (restarts/announcements)
+    }
+    return next;
+  };
+  const save = async () => {
+    const next = gather();
+    const langChanged = next.language !== State.config.language;
+    try {
+      State.config = await api.post('/api/config', next);
+      savedNote.classList.add('show');
+      clearTimeout(save._t); save._t = setTimeout(() => savedNote.classList.remove('show'), 1500);
+      if (langChanged) {
+        await loadI18n(next.language);
+        const ls = document.getElementById('lang-switch'); if (ls) ls.value = next.language;
+      }
+    } catch (e) { handleErr(e); }
+  };
+  let _dbT;
+  const autoSave = () => { clearTimeout(_dbT); _dbT = setTimeout(save, 600); };
+  root._save = save; // Ctrl+S still saves immediately
 
+  const body = h('div');
+  // One delegated listener catches every field change in Settings — inputs in
+  // the schedule/announcement cards bubble here too, so no per-field wiring.
+  body.addEventListener('change', (e) => {
+    if (e.target && e.target.matches('input, select, textarea')) autoSave();
+  });
+  body.append(
     section('settings.title', [
       row('settings.language', F.language),
       row('settings.theme', themeSel),
@@ -2803,36 +3032,77 @@ Views.settings = async (root) => {
 
     networkCard(),
 
-    scheduledRestartsCard(c, F),
+    scheduledRestartsCard(c, F, autoSave),
 
-    announcementsCard(),
+    announcementsCard(c, F, autoSave),
+
+    intervalAnnouncementsCard(c, F, autoSave),
 
     backupCard(),
+  );
 
-    h('div', { class: 'actions' }, [
-      h('button', { class: 'primary', i18n: 'action.save',
-        onclick: async () => {
-          const next = { ...c };
-          for (const [k, el] of Object.entries(F)) {
-            if (el.type === 'checkbox') next[k] = el.checked;
-            else if (el.type === 'number') next[k] = Number(el.value);
-            else if (el.type === 'list-times' || el.type === 'list-numbers') next[k] = el.value;
-            else next[k] = el.value;
-          }
-          try {
-            State.config = await api.post('/api/config', next);
-            if (next.language !== c.language) {
-              await loadI18n(next.language);
-              document.getElementById('lang-switch').value = next.language;
-            }
-            toast(t('action.save'), 'ok');
-          } catch (e) { handleErr(e); }
-        }
-      }),
-    ]),
+  root.append(
+    pageHeader('nav.settings', 'settings.subtitle', [savedNote]),
+    body,
   );
   // Support card is appended globally by navigate(), so it isn't repeated here.
 };
+
+// intervalAnnouncementsCard — repeat a message every N minutes while running.
+function intervalAnnouncementsCard(c, F, onChange) {
+  const fire = () => onChange && onChange();
+  const state = {
+    items: (c.intervalAnnouncements || []).map(a => ({
+      intervalMinutes: a.intervalMinutes || 30, message: a.message || '', enabled: !!a.enabled,
+    })),
+  };
+  const card = h('div', { class: 'card' }, [
+    h('h3', { i18n: 'settings.intervalAnn' }),
+    h('p', { class: 'hint', i18n: 'settings.intervalAnn.hint' }),
+  ]);
+  if (!(c.rconPassword || '').trim()) {
+    card.append(h('p', { class: 'warning-bar', i18n: 'settings.rconNeeded' }));
+  }
+  const list = h('div');
+  card.append(list);
+
+  function render() {
+    list.innerHTML = '';
+    state.items.forEach((a, i) => {
+      const every = h('input', { type: 'number', min: '1', value: a.intervalMinutes, style: { width: '80px' } });
+      const msg = h('input', { type: 'text', value: a.message || '', style: { flex: '1' } });
+      const en = h('input', { type: 'checkbox', class: 'switch' });
+      en.checked = !!a.enabled;
+      const row = h('div', { class: 'row', style: { gap: '8px', marginBottom: '6px' } }, [
+        h('span', { class: 'k', i18n: 'settings.intervalAnn.every' }), every,
+        h('span', { class: 'k', i18n: 'settings.intervalAnn.min' }),
+        msg,
+        h('label', {}, [en, h('span', { text: ' on' })]),
+        h('button', { class: 'danger', text: '×', onclick: () => { state.items.splice(i, 1); render(); fire(); } }),
+      ]);
+      every.onchange = () => { state.items[i].intervalMinutes = parseInt(every.value, 10) || 0; };
+      msg.oninput = () => { state.items[i].message = msg.value; fire(); };
+      en.onchange = () => { state.items[i].enabled = en.checked; };
+      list.append(row);
+    });
+  }
+  render();
+
+  F.intervalAnnouncements = {
+    type: 'list-interval',
+    get value() {
+      return state.items
+        .map(a => ({ intervalMinutes: parseInt(a.intervalMinutes, 10) || 0, message: a.message || '', enabled: !!a.enabled }))
+        .filter(a => a.intervalMinutes > 0);
+    },
+  };
+
+  card.append(h('div', { class: 'actions' }, [
+    h('button', { i18n: 'settings.intervalAnn.add',
+      onclick: () => { state.items.push({ intervalMinutes: 30, message: '', enabled: true }); render(); fire(); } }),
+  ]));
+  return card;
+}
 
 // networkCard shows how to reach the panel from other devices on the LAN
 // (item 9). Read-only — exposure itself is the select above; this just renders
@@ -3117,7 +3387,7 @@ async function main() {
     if (State.config.language && State.config.language !== State.lang) {
       await loadI18n(State.config.language);
     }
-    document.getElementById('lang-switch').value = State.lang;
+    fillLangSelect(document.getElementById('lang-switch'), State.lang, true);
     document.getElementById('lang-switch').onchange = async e => {
       const v = e.target.value;
       State.config.language = v;
@@ -3174,7 +3444,7 @@ Views.battleye = async (root) => {
   async function doSave() {
     try {
       await api.post('/api/battleye/write', { name: fileSelect.value, content: getValue() });
-      toast('saved', 'ok');
+      toast(t('msg.saved'), 'ok');
     } catch (e) { handleErr(e); }
   }
   root._save = doSave;
@@ -3233,7 +3503,7 @@ Views.missiondb = async (root) => {
   async function doSave() {
     try {
       await api.post('/api/mission/db/write', { path: fileSelect.value, content: getValue() });
-      toast('saved', 'ok');
+      toast(t('msg.saved'), 'ok');
     } catch (e) { handleErr(e); }
   }
   root._save = doSave;

@@ -344,19 +344,10 @@ func SyncKeys(serverDir string, names []string) error {
 		}
 	}
 	for _, name := range names {
-		for _, sub := range []string{"keys", "Keys"} {
-			src := filepath.Join(serverDir, name, sub)
-			entries, err := os.ReadDir(src)
-			if err != nil {
-				continue
-			}
-			for _, e := range entries {
-				if e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".bikey") {
-					continue
-				}
-				if err := copyFile(filepath.Join(src, e.Name()), filepath.Join(keysDir, e.Name())); err != nil {
-					return err
-				}
+		for _, src := range collectKeyFiles(filepath.Join(serverDir, name)) {
+			dst := filepath.Join(keysDir, filepath.Base(src))
+			if err := copyFile(src, dst); err != nil {
+				return err
 			}
 		}
 	}
@@ -365,24 +356,37 @@ func SyncKeys(serverDir string, names []string) error {
 
 // ---------------------------------------------------------------------------
 
+// collectKeyFiles returns the absolute paths of every .bikey under modDir,
+// scanned RECURSIVELY. Mods usually put signing keys in keys/ or Keys/, but
+// some use "key" (singular), other casings, or drop the .bikey in the mod root
+// — so we look everywhere rather than trusting one fixed folder name.
+func collectKeyFiles(modDir string) []string {
+	root := resolveSymlink(modDir) // !Workshop entries are junctions
+	var out []string
+	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info == nil {
+			return nil
+		}
+		if !info.IsDir() && strings.EqualFold(filepath.Ext(info.Name()), ".bikey") {
+			out = append(out, p)
+		}
+		return nil
+	})
+	return out
+}
+
+// collectKeyNames returns just the base file names of every .bikey under modDir.
 func collectKeyNames(modDir string) []string {
-	var names []string
-	for _, sub := range []string{"keys", "Keys"} {
-		entries, err := os.ReadDir(filepath.Join(modDir, sub))
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if !e.IsDir() && strings.EqualFold(filepath.Ext(e.Name()), ".bikey") {
-				names = append(names, e.Name())
-			}
-		}
+	files := collectKeyFiles(modDir)
+	names := make([]string, 0, len(files))
+	for _, f := range files {
+		names = append(names, filepath.Base(f))
 	}
 	return names
 }
 
 func countKeys(modDir string) int {
-	return len(collectKeyNames(modDir))
+	return len(collectKeyFiles(modDir))
 }
 
 // resolveSymlink returns the link target (recursively) if dir is a

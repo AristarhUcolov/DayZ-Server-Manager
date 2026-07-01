@@ -72,6 +72,10 @@ type Manager struct {
 	// schedule. Useful for rules reminders, discord links, event pings.
 	ScheduledAnnouncements []ScheduledAnnouncement `json:"scheduledAnnouncements"`
 
+	// Interval RCon broadcasts — "say all" messages repeated every N minutes
+	// while the server is running (e.g. every 30 min: "Join our Discord").
+	IntervalAnnouncements []IntervalAnnouncement `json:"intervalAnnouncements"`
+
 	// Workshop mod collection URLs users can re-import in one click.
 	// Stored as raw URLs or bare IDs.
 	WorkshopCollections []string `json:"workshopCollections"`
@@ -82,6 +86,14 @@ type ScheduledAnnouncement struct {
 	Time    string `json:"time"`    // "HH:MM"
 	Message string `json:"message"`
 	Enabled bool   `json:"enabled"`
+}
+
+// IntervalAnnouncement repeats Message every IntervalMinutes while the server
+// is running and Enabled (e.g. every 30 minutes).
+type IntervalAnnouncement struct {
+	IntervalMinutes int    `json:"intervalMinutes"`
+	Message         string `json:"message"`
+	Enabled         bool   `json:"enabled"`
 }
 
 func defaultManager() *Manager {

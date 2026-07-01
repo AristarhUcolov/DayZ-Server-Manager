@@ -91,9 +91,6 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/mission/db/read", methods(h.missionDBRead, http.MethodGet))
 	mux.HandleFunc("/api/mission/db/write", methods(h.missionDBWrite, http.MethodPost))
 
-	// Scheduled RCon announcements CRUD (stored in manager config).
-	mux.HandleFunc("/api/announcements", methods(h.announcementsList, http.MethodGet, http.MethodPost))
-
 	// Moded types files.
 	mux.HandleFunc("/api/moded", methods(h.modedList, http.MethodGet))
 	mux.HandleFunc("/api/moded/create", methods(h.modedCreate, http.MethodPost))
@@ -106,6 +103,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 
 	// Validator.
 	mux.HandleFunc("/api/validate", methods(h.validate, http.MethodGet, http.MethodPost))
+	mux.HandleFunc("/api/validate/fix", methods(h.validateFix, http.MethodPost))
 
 	// Self-update check (GitHub Releases).
 	mux.HandleFunc("/api/update/check", methods(h.updateCheck, http.MethodGet))
@@ -199,6 +197,7 @@ func (h *handlers) i18nBundle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{
 		"locale":    code,
 		"supported": i18n.Supported(),
+		"languages": i18n.Languages(),
 		"messages":  i18n.Get(code),
 	})
 }
@@ -208,12 +207,16 @@ func (h *handlers) config(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, h.app.Config)
 		return
 	}
-	var patch config.Manager
-	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+	// Merge into the current config rather than replacing it wholesale: decode
+	// over a copy so any field the client omits keeps its existing value. This
+	// makes partial / auto-saves safe — a stale or partial body can no longer
+	// wipe unrelated fields (which is what used to reset scheduled announcements).
+	merged := *h.app.Config
+	if err := json.NewDecoder(r.Body).Decode(&merged); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	*h.app.Config = patch
+	*h.app.Config = merged
 	if err := h.app.SaveConfig(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -343,9 +346,15 @@ func (h *handlers) serverCfg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for k, v := range patch {
-		// Skip empty-string values so we never overwrite a numeric field
-		// with a blank quoted string when the user leaves the input empty.
 		if s, ok := v.(string); ok && strings.TrimSpace(s) == "" {
+			// Empty value. Clear it only for string fields (password,
+			// passwordAdmin, description, ...) so the user can actually REMOVE
+			// a password — it used to stick around because we skipped blanks
+			// wholesale. Numeric fields left blank are still skipped so we never
+			// write maxPlayers = "".
+			if cfg.IsQuoted(k) {
+				cfg.Set(k, "")
+			}
 			continue
 		}
 		cfg.Set(k, v)
@@ -1468,6 +1477,28 @@ func (h *handlers) validate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]interface{}{"issues": issues, "count": len(issues)})
+}
+
+// validateFix applies the safe auto-fixes (whitelist unknown loot flags into
+// cfglimitsdefinition.xml) and returns what it changed. Requires the server
+// stopped — it edits a mission file.
+func (h *handlers) validateFix(w http.ResponseWriter, r *http.Request) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
+		return
+	}
+	defer unlock()
+	mission, err := h.missionTemplate()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	fixed, err := validator.AutoFix(h.app.ServerDir, mission)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"fixed": fixed, "count": len(fixed)})
 }
 
 // ---------------------------------------------------------------------------

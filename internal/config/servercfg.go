@@ -166,6 +166,20 @@ func (c *ServerCfg) Get(key string) (string, bool) {
 	return "", false
 }
 
+// IsQuoted reports whether the existing value for key is a quoted string (e.g.
+// password, passwordAdmin, description) as opposed to a bare number/bool. The
+// editor uses this so it can CLEAR a string field to "" without clobbering a
+// numeric field that was simply left blank.
+func (c *ServerCfg) IsQuoted(key string) bool {
+	for _, e := range c.Entries {
+		if e.Kind == EntryKV && e.Key == key {
+			v := strings.TrimSpace(e.Value)
+			return len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"'
+		}
+	}
+	return false
+}
+
 // Set updates or inserts a key=value pair. When val is a string it is quoted;
 // ints/bools are rendered bare.
 func (c *ServerCfg) Set(key string, val interface{}) {

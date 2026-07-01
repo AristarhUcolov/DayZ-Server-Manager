@@ -506,6 +506,19 @@ tbody td {
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover td { background: var(--surface-hover); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+th.sortable:hover { color: var(--accent); }
+
+/* Inline-editable table cells (Types, item #8). */
+.inline-cell {
+  width: 100%; min-width: 60px;
+  padding: 4px 8px; font-size: 12.5px;
+  background: transparent; border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.inline-cell:hover { border-color: var(--border); }
+.inline-cell:focus { background: var(--bg-soft); border-color: var(--accent); box-shadow: var(--focus-ring); }
+td.num .inline-cell { text-align: right; }
+tbody tr.dirty td { background: var(--warn-soft); }
 td.mono, th.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
 
 /* ============================================================
@@ -534,10 +547,36 @@ td.mono, th.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospa
 
 /* Weather slider value badge (Weather & Time, item #16). */
 .slider-val {
-  min-width: 56px; text-align: right;
+  min-width: 58px; text-align: center;
   font-variant-numeric: tabular-nums;
-  color: var(--text-secondary); font-size: 13px;
+  color: var(--accent); font-weight: 600; font-size: 12.5px;
+  background: var(--accent-soft); border-radius: 999px;
+  padding: 3px 8px;
 }
+/* Weather slider row: icon+label | slider | value, neatly aligned. */
+.wrow {
+  display: grid; grid-template-columns: 190px 1fr auto;
+  gap: 12px; align-items: center; margin-bottom: 14px;
+}
+/* Custom range slider with an accent-filled track (--val set in JS). */
+input[type=range].wslider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 6px; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(to right,
+    var(--accent) 0%, var(--accent) var(--val, 0%),
+    var(--surface-2) var(--val, 0%), var(--surface-2) 100%);
+}
+input[type=range].wslider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+}
+input[type=range].wslider::-moz-range-thumb {
+  width: 16px; height: 16px; border: 2px solid var(--surface);
+  border-radius: 50%; background: var(--accent);
+}
+input[type=range].wslider:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* Weather preset tiles — scannable icon + label cards. */
 .preset-grid {
@@ -557,10 +596,21 @@ td.mono, th.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospa
   color: var(--accent); font-weight: 600; box-shadow: var(--focus-ring);
 }
 .preset-tile:disabled { opacity: .5; cursor: not-allowed; }
-.preset-tile .ic { font-size: 25px; line-height: 1; }
+.preset-tile .ic { display: inline-flex; color: var(--text-secondary); }
+.preset-tile .ic svg { width: 26px; height: 26px; }
+.preset-tile:hover .ic, .preset-tile.active .ic { color: var(--accent); }
 /* Weather slider label: icon + text on one line. */
-.slider-label { width: 180px; display: inline-flex; align-items: center; gap: 8px; }
-.slider-label .ic { font-size: 16px; line-height: 1; }
+.slider-label { display: inline-flex; align-items: center; gap: 9px; color: var(--text-secondary); }
+.slider-label .ic { display: inline-flex; color: var(--text-tertiary); }
+.slider-label .ic svg { width: 18px; height: 18px; }
+
+/* Settings auto-save indicator (item #2). */
+.saved-note {
+  opacity: 0; transition: opacity .2s;
+  color: var(--ok); font-weight: 600; font-size: 13px;
+  align-self: center;
+}
+.saved-note.show { opacity: 1; }
 
 /* ============================================================
    10. MODAL

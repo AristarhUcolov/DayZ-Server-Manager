@@ -9,27 +9,74 @@ import "strings"
 
 type Bundle map[string]string
 
-// Returns the canonical locale name or empty for unknown.
+// Language is a selectable UI locale (code + native display name).
+type Language struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// localeOrder is the order languages appear in the picker. en/ru are fully
+// translated; the rest have their core UI translated and fall back to English
+// for the long, rarely-seen strings (see Get's merge).
+var localeOrder = []Language{
+	{"en", "English"},
+	{"ru", "Русский"},
+	{"es", "Español"},
+	{"fr", "Français"},
+	{"de", "Deutsch"},
+	{"it", "Italiano"},
+	{"pt", "Português"},
+	{"ro", "Moldovenească"},
+	{"zh", "中文"},
+	{"ja", "日本語"},
+	{"ko", "한국어"},
+}
+
+var locales = map[string]Bundle{
+	"en": en, "ru": ru, "es": es, "fr": fr, "de": de, "it": it,
+	"pt": pt, "ro": ro, "zh": zh, "ja": ja, "ko": ko,
+}
+
+// Name returns the native display name for a locale code (empty if unknown).
 func Name(code string) string {
-	switch strings.ToLower(code) {
-	case "en":
-		return "English"
-	case "ru":
-		return "Русский"
+	code = strings.ToLower(code)
+	for _, l := range localeOrder {
+		if l.Code == code {
+			return l.Name
+		}
 	}
 	return ""
 }
 
-func Supported() []string { return []string{"en", "ru"} }
+// Languages returns the selectable languages in display order.
+func Languages() []Language { return append([]Language(nil), localeOrder...) }
 
-// Get returns the dictionary for a locale, falling back to English.
+func Supported() []string {
+	out := make([]string, 0, len(localeOrder))
+	for _, l := range localeOrder {
+		out = append(out, l.Code)
+	}
+	return out
+}
+
+// Get returns the dictionary for a locale. Non-English locales are returned as
+// English overlaid with whatever the locale translates, so a partially
+// translated language never shows raw keys — missing strings fall back to
+// English transparently.
 func Get(code string) Bundle {
-	switch strings.ToLower(code) {
-	case "ru":
-		return ru
-	default:
+	code = strings.ToLower(code)
+	loc, ok := locales[code]
+	if !ok || code == "en" {
 		return en
 	}
+	m := make(Bundle, len(en))
+	for k, v := range en {
+		m[k] = v
+	}
+	for k, v := range loc {
+		m[k] = v
+	}
+	return m
 }
 
 var en = Bundle{
@@ -101,6 +148,9 @@ var en = Bundle{
 	"mods.collection.missing":      "Not in your Workshop — subscribe in Steam first:",
 
 	"types.bulk":                   "Bulk edit",
+	"types.saveChanges":           "Save changes",
+	"types.discard":               "Discard",
+	"types.inline.hint":           "Edit nominal / min / lifetime / category right in the table, then Save changes. Use the full editor (Edit) for usages, values, tags and flags. Saving requires the server stopped.",
 	"types.bulk.hint":              "Select multiple rows in the table, then set fields below and apply.",
 	"types.bulk.apply":             "Apply to selected",
 
@@ -109,6 +159,11 @@ var en = Bundle{
 	"settings.announcements":       "Scheduled announcements",
 	"settings.announcements.hint":  "Broadcast a message via RCon at a daily time. Requires the server running and RCon connected.",
 	"settings.announcements.add":   "+ Add",
+	"settings.intervalAnn":         "Interval announcements",
+	"settings.intervalAnn.hint":    "Repeat a message every N minutes while the server runs (broadcast via RCon). Great for Discord links and rules.",
+	"settings.intervalAnn.every":   "Every",
+	"settings.intervalAnn.min":     "min",
+	"settings.intervalAnn.add":     "+ Add",
 
 	"nav.admlog":                   "Admin log",
 	"admlog.title":                 "Admin log",
@@ -164,6 +219,7 @@ var en = Bundle{
 	"missions.active":               "active",
 
 
+	"settings.saved":                "Saved ✓",
 	"settings.title":                "Settings",
 	"settings.language":             "Language",
 	"settings.vanillaPath":          "DayZ client folder (mod source)",
@@ -187,6 +243,8 @@ var en = Bundle{
 	"settings.restarts.add":         "+ Add time",
 	"settings.restarts.warn":        "Warn-minutes (RCon countdown)",
 	"settings.restarts.warn.hint":   "Comma-separated. Example: 5,3,1 → broadcast 5, 3 and 1 minutes before each restart.",
+	"settings.restarts.warn.rcon":   "Warnings are sent via RCon — they need an RCon password (RCon section). The restart itself still happens without one.",
+	"settings.rconNeeded":           "Announcements are broadcast via RCon — set an RCon password in the RCon section, otherwise they won't be sent.",
 	"status.nextRestart":            "Next restart in",
 	"status.notRunning":             "—",
 	"rcon.notConfigured.hint":       "Enter an RCon password — the manager writes it into battleye/beserver_x64.cfg (creating the file if needed) so BattlEye enables RCon. Takes effect on the next server start. Port defaults to ServerPort + 4 if left blank.",
@@ -198,6 +256,51 @@ var en = Bundle{
 	"rcon.showPassword":             "Show password",
 	"rcon.savedRestart":             "Saved — restart the server for RCon to take effect.",
 	"rcon.notActiveYet":             "RCon password isn't active yet — set it above, then start/restart the server.",
+	"rcon.refresh":                  "Refresh",
+	"rcon.broadcast":                "Broadcast to all",
+	"rcon.broadcast.ph":             "Message to all players",
+	"rcon.say":                      "Send",
+	"rcon.rawCommand":               "Raw command",
+	"rcon.rawCommand.ph":            "Raw RCon command, e.g. #shutdown",
+	"rcon.send":                     "Send",
+	"action.kick":                   "Kick",
+	"action.ban":                    "Ban",
+	"col.mod":                       "Mod",
+	"col.status":                    "Status",
+	"col.workshop":                  "Workshop",
+	"col.keys":                      "Keys",
+	"col.size":                      "Size",
+	"col.active":                    "Mods",
+	"col.serverMod":                 "Server-side",
+	"mods.serverMod.confirm":        "Add this as a SERVER-side mod (-serverMod)? Use this only for server-only mods (e.g. admin tools), not for client mods.",
+	"col.name":                      "Name",
+	"col.id":                        "ID",
+	"col.guid":                      "GUID",
+	"col.ping":                      "Ping",
+	"col.file":                      "File",
+	"col.line":                      "Line",
+	"col.message":                   "Message",
+	"col.severity":                  "Severity",
+	"msg.installed":                 "Installed",
+	"msg.updated":                   "Updated",
+	"msg.removed":                   "Removed",
+	"msg.sent":                      "Sent",
+	"msg.saved":                     "Saved",
+	"msg.keysSynced":                "Keys synced",
+	"confirm.title":                 "Confirm",
+	"confirm.uninstall":             "Uninstall {mod}?",
+	"confirm.delete":                "Delete {name}?",
+	"confirm.deleteEvent":           "Delete event {name}?",
+	"msg.deleted":                   "Deleted",
+	"msg.selectFirst":               "Select types first",
+	"msg.patched":                   "Patched {n} type(s)",
+	"msg.setOneField":               "Set at least one field",
+	"col.registered":                "Registered",
+	"col.storage":                   "Storage",
+	"files.selectFile":              "Select a file",
+	"types.selectPage":              "Select page",
+	"rcon.ban.minutes":              "Minutes (0 = permanent)",
+	"rcon.reason":                   "Reason:",
 	"settings.exposure":             "Panel exposure",
 	"settings.exposure.local":       "Local only (127.0.0.1)",
 	"settings.exposure.internet":    "LAN / Internet (0.0.0.0)",
@@ -376,6 +479,10 @@ var en = Bundle{
 
 	"validator.title":                "Validator",
 	"validator.none":                 "No issues found.",
+	"validator.fix":                   "Auto-fix",
+	"validator.fix.hint":              "Auto-fix whitelists every unknown usage/value/tag/category referenced by your types into cfglimitsdefinition.xml (a .bak is kept) — the fix for modded loot that DayZ silently drops. Requires the server stopped.",
+	"validator.fix.none":              "Nothing to auto-fix.",
+	"validator.fix.done":              "Auto-fixed {n} item(s). Re-validating…",
 	"validator.severity.error":       "Error",
 	"validator.severity.warning":     "Warning",
 	"validator.severity.info":        "Info",
@@ -457,6 +564,9 @@ var ru = Bundle{
 	"mods.collection.missing":      "Не найдено в !Workshop — сначала подпишитесь в Steam:",
 
 	"types.bulk":                   "Массовое редактирование",
+	"types.saveChanges":           "Сохранить изменения",
+	"types.discard":               "Отменить",
+	"types.inline.hint":           "Редактируйте nominal / min / lifetime / категорию прямо в таблице, затем «Сохранить изменения». Полный редактор (Изм.) — для usages, values, tags и флагов. Сохранение требует остановленного сервера.",
 	"types.bulk.hint":              "Отметьте несколько типов в таблице, задайте поля ниже и примените.",
 	"types.bulk.apply":             "Применить к выбранным",
 
@@ -465,6 +575,11 @@ var ru = Bundle{
 	"settings.announcements":       "Расписание анонсов",
 	"settings.announcements.hint":  "Сообщения через RCon в заданное время. Нужен запущенный сервер и подключение RCon.",
 	"settings.announcements.add":   "+ Добавить",
+	"settings.intervalAnn":         "Анонсы по интервалу",
+	"settings.intervalAnn.hint":    "Повторять сообщение каждые N минут, пока сервер работает (рассылка через RCon). Удобно для ссылки на Discord и правил.",
+	"settings.intervalAnn.every":   "Каждые",
+	"settings.intervalAnn.min":     "мин",
+	"settings.intervalAnn.add":     "+ Добавить",
 
 	"nav.admlog":                   "Админ-лог",
 	"admlog.title":                 "Админ-лог",
@@ -520,6 +635,7 @@ var ru = Bundle{
 	"missions.active":               "активна",
 
 
+	"settings.saved":                "Сохранено ✓",
 	"settings.title":                "Настройки",
 	"settings.language":             "Язык",
 	"settings.vanillaPath":          "Папка клиента DayZ (источник модов)",
@@ -543,6 +659,8 @@ var ru = Bundle{
 	"settings.restarts.add":         "+ Добавить время",
 	"settings.restarts.warn":        "Предупреждения (минуты до рестарта)",
 	"settings.restarts.warn.hint":   "Через запятую. Пример: 5,3,1 → рассылка по RCon за 5, 3 и 1 минуту до рестарта.",
+	"settings.restarts.warn.rcon":   "Предупреждения идут через RCon — нужен пароль RCon (раздел RCon). Сам рестарт произойдёт и без него.",
+	"settings.rconNeeded":           "Анонсы рассылаются через RCon — задайте пароль RCon в разделе RCon, иначе они не отправятся.",
 	"status.nextRestart":            "Следующий рестарт через",
 	"status.notRunning":             "—",
 	"rcon.notConfigured.hint":       "Введите пароль RCon — менеджер запишет его в battleye/beserver_x64.cfg (создаст файл, если нужно), чтобы BattlEye включил RCon. Применится при следующем старте сервера. Порт по умолчанию = ServerPort + 4.",
@@ -554,6 +672,51 @@ var ru = Bundle{
 	"rcon.showPassword":             "Показать пароль",
 	"rcon.savedRestart":             "Сохранено — перезапустите сервер, чтобы RCon заработал.",
 	"rcon.notActiveYet":             "Пароль RCon ещё не активен — задайте его выше и запустите/перезапустите сервер.",
+	"rcon.refresh":                  "Обновить",
+	"rcon.broadcast":                "Сообщение всем",
+	"rcon.broadcast.ph":             "Сообщение всем игрокам",
+	"rcon.say":                      "Отправить",
+	"rcon.rawCommand":               "Прямая команда",
+	"rcon.rawCommand.ph":            "RCon-команда, напр. #shutdown",
+	"rcon.send":                     "Отправить",
+	"action.kick":                   "Кикнуть",
+	"action.ban":                    "Забанить",
+	"col.mod":                       "Мод",
+	"col.status":                    "Статус",
+	"col.workshop":                  "Workshop",
+	"col.keys":                      "Ключи",
+	"col.size":                      "Размер",
+	"col.active":                    "Моды",
+	"col.serverMod":                 "Серверный",
+	"mods.serverMod.confirm":        "Добавить как СЕРВЕРНЫЙ мод (-serverMod)? Только для серверных модов (напр. админ-инструменты), не для клиентских.",
+	"col.name":                      "Имя",
+	"col.id":                        "ID",
+	"col.guid":                      "GUID",
+	"col.ping":                      "Пинг",
+	"col.file":                      "Файл",
+	"col.line":                      "Строка",
+	"col.message":                   "Сообщение",
+	"col.severity":                  "Важность",
+	"msg.installed":                 "Установлено",
+	"msg.updated":                   "Обновлено",
+	"msg.removed":                   "Удалено",
+	"msg.sent":                      "Отправлено",
+	"msg.saved":                     "Сохранено",
+	"msg.keysSynced":                "Ключи синхронизированы",
+	"confirm.title":                 "Подтверждение",
+	"confirm.uninstall":             "Удалить {mod}?",
+	"confirm.delete":                "Удалить {name}?",
+	"confirm.deleteEvent":           "Удалить событие {name}?",
+	"msg.deleted":                   "Удалено",
+	"msg.selectFirst":               "Сначала выберите типы",
+	"msg.patched":                   "Изменено типов: {n}",
+	"msg.setOneField":               "Задайте хотя бы одно поле",
+	"col.registered":                "Зарегистрирован",
+	"col.storage":                   "Хранилище",
+	"files.selectFile":              "Выберите файл",
+	"types.selectPage":              "Выбрать страницу",
+	"rcon.ban.minutes":              "Минут (0 = навсегда)",
+	"rcon.reason":                   "Причина:",
 	"settings.exposure":             "Доступ к панели",
 	"settings.exposure.local":       "Только локально (127.0.0.1)",
 	"settings.exposure.internet":    "LAN / Интернет (0.0.0.0)",
@@ -732,6 +895,10 @@ var ru = Bundle{
 
 	"validator.title":                "Валидатор",
 	"validator.none":                 "Ошибок не найдено.",
+	"validator.fix":                   "Авто-исправление",
+	"validator.fix.hint":              "Авто-исправление вносит все неизвестные usage/value/tag/category из ваших types в cfglimitsdefinition.xml (сохраняется .bak) — это чинит модовский лут, который DayZ иначе молча выкидывает. Требуется остановленный сервер.",
+	"validator.fix.none":              "Нечего исправлять.",
+	"validator.fix.done":              "Исправлено: {n}. Перепроверяю…",
 	"validator.severity.error":       "Ошибка",
 	"validator.severity.warning":     "Предупреждение",
 	"validator.severity.info":        "Инфо",

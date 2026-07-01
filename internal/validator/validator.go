@@ -12,6 +12,7 @@ package validator
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"strings"
 
 	dztypes "dayzmanager/internal/types"
+	"dayzmanager/internal/util"
 )
 
 type Severity string
@@ -94,6 +96,7 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 		// dropped by DayZ at runtime, which makes for confusing loot bugs.
 		limitsPath := filepath.Join(dztypes.MissionDir(serverDir, missionTemplate), "db", "cfglimitsdefinition.xml")
 		limits, _ := loadLimits(limitsPath)
+		mergeUserLimits(limits, filepath.Join(dztypes.MissionDir(serverDir, missionTemplate), "db", "cfglimitsdefinitionuser.xml"))
 
 		// Duplicate type names across types.xml + moded_types/*.xml.
 		seen := map[string]string{}
@@ -257,6 +260,168 @@ func checkLimits(path string, t *dztypes.Type, l *limits) []Issue {
 	check(l.values, "value", t.Values)
 	check(l.tags, "tag", t.Tags)
 	return out
+}
+
+// mergeUserLimits folds cfglimitsdefinitionuser.xml `<user name="X">` groups
+// into the limits sets. Those user names are legal usage/value references in
+// types.xml, so counting them avoids false "unknown usage/value" warnings.
+func mergeUserLimits(l *limits, userPath string) {
+	if l == nil || !l.loaded {
+		return
+	}
+	data, err := os.ReadFile(userPath)
+	if err != nil {
+		return
+	}
+	type named struct {
+		Name string `xml:"name,attr"`
+	}
+	type doc struct {
+		User []named `xml:"user"`
+	}
+	var d doc
+	if xml.Unmarshal(data, &d) != nil {
+		return
+	}
+	for _, u := range d.User {
+		if u.Name == "" {
+			continue
+		}
+		key := strings.ToLower(u.Name)
+		l.usages[key] = true
+		l.values[key] = true
+	}
+}
+
+// AutoFix applies the safe, reversible validator fixes and returns a
+// human-readable list of what it did. Currently: whitelist every unknown
+// usage/value/tag/category referenced by types into cfglimitsdefinition.xml
+// (the canonical way to stop DayZ silently dropping modded loot). A .bak is
+// written before the file is touched. Server must be stopped (caller enforces).
+func AutoFix(serverDir, missionTemplate string) ([]string, error) {
+	if missionTemplate == "" {
+		return nil, errors.New("no mission configured")
+	}
+	missionDir := dztypes.MissionDir(serverDir, missionTemplate)
+	limitsPath := filepath.Join(missionDir, "db", "cfglimitsdefinition.xml")
+	limits, err := loadLimits(limitsPath)
+	if err != nil || !limits.loaded {
+		return nil, fmt.Errorf("cannot read cfglimitsdefinition.xml: %w", err)
+	}
+	mergeUserLimits(limits, filepath.Join(missionDir, "db", "cfglimitsdefinitionuser.xml"))
+
+	// Collect unknown names per kind (preserve original casing for writing).
+	miss := map[string]map[string]string{ // kind -> lower -> original
+		"category": {}, "usage": {}, "value": {}, "tag": {},
+	}
+	consider := func(set map[string]bool, kind, name string) {
+		if name == "" {
+			return
+		}
+		if !set[strings.ToLower(name)] {
+			miss[kind][strings.ToLower(name)] = name
+		}
+	}
+	scan := func(doc *dztypes.TypesDoc) {
+		for i := range doc.Types {
+			t := &doc.Types[i]
+			if t.Category != nil {
+				consider(limits.categories, "category", t.Category.Name)
+			}
+			for _, r := range t.Usages {
+				consider(limits.usages, "usage", r.Name)
+			}
+			for _, r := range t.Values {
+				consider(limits.values, "value", r.Name)
+			}
+			for _, r := range t.Tags {
+				consider(limits.tags, "tag", r.Name)
+			}
+		}
+	}
+	if doc, err := dztypes.Load(filepath.Join(missionDir, "db", "types.xml")); err == nil {
+		scan(doc)
+	}
+	moded := dztypes.ModedDir(serverDir, missionTemplate)
+	if entries, err := os.ReadDir(moded); err == nil {
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".xml") {
+				continue
+			}
+			if doc, err := dztypes.Load(filepath.Join(moded, e.Name())); err == nil {
+				scan(doc)
+			}
+		}
+	}
+
+	total := 0
+	for _, m := range miss {
+		total += len(m)
+	}
+	if total == 0 {
+		return nil, nil
+	}
+	if err := whitelistLimits(limitsPath, miss); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, kind := range []string{"category", "usage", "value", "tag"} {
+		for _, name := range miss[kind] {
+			out = append(out, fmt.Sprintf("added %s %q to cfglimitsdefinition.xml", kind, name))
+		}
+	}
+	return out, nil
+}
+
+// whitelistLimits inserts the missing names into the right section of
+// cfglimitsdefinition.xml, before that section's closing tag. Backs up first.
+func whitelistLimits(path string, miss map[string]map[string]string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	s := string(data)
+	// kind -> (element tag, section closing tag)
+	sections := []struct{ kind, elem, closeTag string }{
+		{"category", "category", "</categories>"},
+		{"usage", "usage", "</usageflags>"},
+		{"value", "value", "</valueflags>"},
+		{"tag", "tag", "</tags>"},
+	}
+	for _, sec := range sections {
+		names := miss[sec.kind]
+		if len(names) == 0 {
+			continue
+		}
+		var b strings.Builder
+		for _, orig := range names {
+			b.WriteString(fmt.Sprintf("\t\t<%s name=\"%s\"/>\n", sec.elem, xmlEscapeAttr(orig)))
+		}
+		if idx := strings.LastIndex(s, sec.closeTag); idx != -1 {
+			s = s[:idx] + b.String() + "\t" + s[idx:]
+		} else if end := strings.LastIndex(s, "</lists>"); end != -1 {
+			// Section missing entirely — create it.
+			plural := map[string]string{"category": "categories", "usage": "usageflags", "value": "valueflags", "tag": "tags"}[sec.kind]
+			block := fmt.Sprintf("\t<%s>\n%s\t</%s>\n", plural, b.String(), plural)
+			s = s[:end] + block + s[end:]
+		}
+	}
+	if err := util.BackupBeforeWrite(path); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(s), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func xmlEscapeAttr(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
 }
 
 func validateCFG(path string) *Issue {
