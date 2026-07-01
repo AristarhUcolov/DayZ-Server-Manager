@@ -15,9 +15,10 @@ type Language struct {
 	Name string `json:"name"`
 }
 
-// localeOrder is the order languages appear in the picker. en/ru are fully
-// translated; the rest have their core UI translated and fall back to English
-// for the long, rarely-seen strings (see Get's merge).
+// localeOrder is the order languages appear in the picker. Every locale is
+// fully translated; Get still overlays on English defensively so a newly added
+// key can never surface as a raw key before its translations land.
+// Moldovan uses code "md" (with a "ro" backward-compat alias in normalize).
 var localeOrder = []Language{
 	{"en", "English"},
 	{"ru", "Русский"},
@@ -26,7 +27,7 @@ var localeOrder = []Language{
 	{"de", "Deutsch"},
 	{"it", "Italiano"},
 	{"pt", "Português"},
-	{"ro", "Moldovenească"},
+	{"md", "Moldovenească"},
 	{"zh", "中文"},
 	{"ja", "日本語"},
 	{"ko", "한국어"},
@@ -34,12 +35,23 @@ var localeOrder = []Language{
 
 var locales = map[string]Bundle{
 	"en": en, "ru": ru, "es": es, "fr": fr, "de": de, "it": it,
-	"pt": pt, "ro": ro, "zh": zh, "ja": ja, "ko": ko,
+	"pt": pt, "md": md, "zh": zh, "ja": ja, "ko": ko,
+}
+
+// normalize maps legacy/alias codes to their canonical locale code. "ro" was the
+// original code for the Moldovan bundle before it moved to "md"; keep resolving
+// it so anyone who already saved "ro" doesn't silently drop to English.
+func normalize(code string) string {
+	code = strings.ToLower(code)
+	if code == "ro" {
+		return "md"
+	}
+	return code
 }
 
 // Name returns the native display name for a locale code (empty if unknown).
 func Name(code string) string {
-	code = strings.ToLower(code)
+	code = normalize(code)
 	for _, l := range localeOrder {
 		if l.Code == code {
 			return l.Name
@@ -64,7 +76,7 @@ func Supported() []string {
 // translated language never shows raw keys — missing strings fall back to
 // English transparently.
 func Get(code string) Bundle {
-	code = strings.ToLower(code)
+	code = normalize(code)
 	loc, ok := locales[code]
 	if !ok || code == "en" {
 		return en

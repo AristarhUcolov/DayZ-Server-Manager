@@ -2,6 +2,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,10 @@ import (
 	"dayzmanager/internal/rcon"
 	"dayzmanager/internal/server"
 )
+
+// ErrConfigSave wraps a persistence failure from MutateConfig so callers can map
+// it to a 500 while treating fn's own errors (bad input) as a 400.
+var ErrConfigSave = errors.New("save config")
 
 // App is the shared application context passed to every subsystem.
 type App struct {
@@ -187,6 +192,27 @@ func (a *App) SaveConfig() error {
 	a.configMu.Lock()
 	defer a.configMu.Unlock()
 	return config.SaveManager(a.configPath, a.Config)
+}
+
+// MutateConfig atomically applies fn to a working copy of the config under
+// configMu and, when fn succeeds, commits the copy and persists it. Serializing
+// the read-modify-write under the same lock as SaveConfig/ReloadConfig means the
+// wholesale `*a.Config = ...` replace can no longer tear against a concurrent
+// save, reload, or another mutation. fn must not retain the pointer past return.
+// A persistence failure is wrapped in ErrConfigSave; fn's own error is returned
+// as-is so handlers can distinguish bad input (400) from a save failure (500).
+func (a *App) MutateConfig(fn func(*config.Manager) error) error {
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
+	working := *a.Config
+	if err := fn(&working); err != nil {
+		return err
+	}
+	*a.Config = working
+	if err := config.SaveManager(a.configPath, a.Config); err != nil {
+		return fmt.Errorf("%w: %v", ErrConfigSave, err)
+	}
+	return nil
 }
 
 // ReloadConfig re-reads manager.json from disk and replaces the in-memory

@@ -81,9 +81,10 @@ func (h *handlers) admlogRecent(w http.ResponseWriter, r *http.Request) {
 // at most once per window instead of on every 5s poll. The stored map is
 // replaced wholesale (never mutated), so sharing it across requests is safe.
 var dashMods struct {
-	mu  sync.Mutex
-	at  time.Time
-	val map[string]interface{}
+	mu         sync.Mutex
+	at         time.Time
+	val        map[string]interface{}
+	refreshing bool
 }
 
 func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
@@ -101,36 +102,52 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 	if h.app.Config.VanillaDayZPath != "" {
 		dashMods.mu.Lock()
 		stale := dashMods.val == nil || time.Since(dashMods.at) > 15*time.Second
+		start := stale && !dashMods.refreshing
+		if start {
+			dashMods.refreshing = true
+		}
+		cur := dashMods.val
 		dashMods.mu.Unlock()
-		if stale {
-			if list, err := mods.List(h.app.ServerDir, h.app.Config.VanillaDayZPath); err == nil {
-				active := map[string]bool{}
-				for _, name := range h.app.Config.Mods {
-					active[name] = true
-				}
-				for _, name := range h.app.Config.ServerMods {
-					active[name] = true
-				}
-				installed, enabled := 0, 0
-				for _, m := range list {
-					if m.InstalledInServer {
-						installed++
-					}
-					if active[m.Name] {
-						enabled++
-					}
-				}
-				v := map[string]interface{}{"total": len(list), "installed": installed, "active": enabled}
-				dashMods.mu.Lock()
-				dashMods.val, dashMods.at = v, time.Now()
-				dashMods.mu.Unlock()
+
+		if start {
+			// Refresh in the background: mods.List walks the whole mod tree and
+			// !Workshop, which can take seconds on large modpacks. Running it in
+			// the request stalled one dashboard poll every 15s; the refreshing
+			// guard also collapses concurrent pollers into a single walk.
+			serverDir, vanilla := h.app.ServerDir, h.app.Config.VanillaDayZPath
+			active := map[string]bool{}
+			for _, name := range h.app.Config.Mods {
+				active[name] = true
 			}
+			for _, name := range h.app.Config.ServerMods {
+				active[name] = true
+			}
+			go func() {
+				var v map[string]interface{}
+				if list, err := mods.List(serverDir, vanilla); err == nil {
+					installed, enabled := 0, 0
+					for _, m := range list {
+						if m.InstalledInServer {
+							installed++
+						}
+						if active[m.Name] {
+							enabled++
+						}
+					}
+					v = map[string]interface{}{"total": len(list), "installed": installed, "active": enabled}
+				}
+				dashMods.mu.Lock()
+				if v != nil {
+					dashMods.val = v
+				}
+				dashMods.at = time.Now() // throttle retries to the window even on error
+				dashMods.refreshing = false
+				dashMods.mu.Unlock()
+			}()
 		}
-		dashMods.mu.Lock()
-		if dashMods.val != nil {
-			out["mods"] = dashMods.val
+		if cur != nil {
+			out["mods"] = cur
 		}
-		dashMods.mu.Unlock()
 	}
 
 	// Disk free on the drive holding the server dir.

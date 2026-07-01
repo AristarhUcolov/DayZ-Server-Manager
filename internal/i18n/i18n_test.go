@@ -38,6 +38,20 @@ func TestGetFallsBackToEnglish(t *testing.T) {
 	}
 }
 
+// TestMoldovanAlias verifies the legacy "ro" code still resolves to the Moldovan
+// ("md") bundle so a saved "ro" preference doesn't silently drop to English.
+func TestMoldovanAlias(t *testing.T) {
+	if Name("ro") != "Moldovenească" {
+		t.Errorf(`Name("ro") = %q, want "Moldovenească"`, Name("ro"))
+	}
+	if Get("ro")["nav.dashboard"] != Get("md")["nav.dashboard"] {
+		t.Errorf("Get(\"ro\") did not resolve to the md bundle")
+	}
+	if Get("md")["nav.settings"] == en["nav.settings"] {
+		t.Errorf("md bundle looks untranslated for nav.settings")
+	}
+}
+
 // TestNoEnglishFallbackLeftover spot-checks a few of the long, hard hints across
 // every non-English locale: they must differ from the English text, proving the
 // translation is real and not the English overlay showing through.

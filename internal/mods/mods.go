@@ -63,13 +63,14 @@ func List(serverDir, vanillaDayZPath string) ([]Mod, error) {
 		if !isDirOrJunction(e, p) {
 			continue
 		}
+		size, keys, newest := scanTree(p)
 		byName[e.Name()] = &Mod{
 			Name:              e.Name(),
 			InstalledInServer: true,
 			ServerPath:        p,
-			SizeBytes:         dirSize(p),
-			KeyCount:          countKeys(p),
-			ServerModifiedAt:  newestMTime(p),
+			SizeBytes:         size,
+			KeyCount:          keys,
+			ServerModifiedAt:  newest,
 		}
 	}
 
@@ -95,10 +96,14 @@ func List(serverDir, vanillaDayZPath string) ([]Mod, error) {
 			}
 			m.AvailableInWorkshop = true
 			m.WorkshopPath = p
-			m.WorkshopModifiedAt = newestMTime(p)
-			if !m.InstalledInServer {
-				m.SizeBytes = dirSize(p)
-				m.KeyCount = countKeys(p)
+			if m.InstalledInServer {
+				m.WorkshopModifiedAt = newestMTime(p)
+			} else {
+				// Not on the server yet — one walk fills size, keys and mtime.
+				size, keys, newest := scanTree(p)
+				m.SizeBytes = size
+				m.KeyCount = keys
+				m.WorkshopModifiedAt = newest
 			}
 		}
 	}
@@ -385,10 +390,6 @@ func collectKeyNames(modDir string) []string {
 	return names
 }
 
-func countKeys(modDir string) int {
-	return len(collectKeyFiles(modDir))
-}
-
 // resolveSymlink returns the link target (recursively) if dir is a
 // junction/symlink, otherwise dir itself. filepath.Walk will not descend
 // into a symlink at its root, so we have to resolve before walking — DayZ
@@ -398,6 +399,29 @@ func resolveSymlink(dir string) string {
 		return r
 	}
 	return dir
+}
+
+// scanTree walks dir once and returns the total file size, the number of
+// .bikey files, and the newest modification time. List needs all three per mod;
+// computing them with three separate filepath.Walk calls (dirSize + countKeys +
+// newestMTime) tripled the directory-scan cost on large modpacks, which is what
+// made the Mods page slow to open.
+func scanTree(dir string) (size int64, keyCount int, newest time.Time) {
+	dir = resolveSymlink(dir)
+	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() {
+			return nil
+		}
+		size += info.Size()
+		if strings.EqualFold(filepath.Ext(info.Name()), ".bikey") {
+			keyCount++
+		}
+		if info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+		return nil
+	})
+	return
 }
 
 func dirSize(dir string) int64 {

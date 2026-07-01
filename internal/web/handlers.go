@@ -3,6 +3,7 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -211,14 +212,16 @@ func (h *handlers) config(w http.ResponseWriter, r *http.Request) {
 	// over a copy so any field the client omits keeps its existing value. This
 	// makes partial / auto-saves safe — a stale or partial body can no longer
 	// wipe unrelated fields (which is what used to reset scheduled announcements).
-	merged := *h.app.Config
-	if err := json.NewDecoder(r.Body).Decode(&merged); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	*h.app.Config = merged
-	if err := h.app.SaveConfig(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	// MutateConfig does the read-modify-write under configMu so the replace can't
+	// tear against a concurrent save/reload.
+	if err := h.app.MutateConfig(func(c *config.Manager) error {
+		return json.NewDecoder(r.Body).Decode(c)
+	}); err != nil {
+		code := http.StatusBadRequest
+		if errors.Is(err, app.ErrConfigSave) {
+			code = http.StatusInternalServerError
+		}
+		http.Error(w, err.Error(), code)
 		return
 	}
 	// Refresh the scheduler's snapshot so changed restart times / announcements
@@ -244,9 +247,9 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if req.Language != "" {
-		h.app.Config.Language = req.Language
-	}
+	// Validate the path outside the lock (os.Stat), then apply every field
+	// atomically — so a validation failure leaves the in-memory config untouched
+	// (it used to leave Language/VanillaDayZPath half-applied on error).
 	if req.VanillaDayZPath != "" {
 		st, err := os.Stat(req.VanillaDayZPath)
 		if err != nil || !st.IsDir() {
@@ -259,12 +262,17 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	h.app.Config.VanillaDayZPath = req.VanillaDayZPath
-	if req.Exposure != "" {
-		h.app.Config.Exposure = req.Exposure
-	}
-	h.app.Config.FirstRunDone = true
-	if err := h.app.SaveConfig(); err != nil {
+	if err := h.app.MutateConfig(func(c *config.Manager) error {
+		if req.Language != "" {
+			c.Language = req.Language
+		}
+		c.VanillaDayZPath = req.VanillaDayZPath
+		if req.Exposure != "" {
+			c.Exposure = req.Exposure
+		}
+		c.FirstRunDone = true
+		return nil
+	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2012,7 +2020,11 @@ func (h *handlers) resolve(rel string) (string, error) {
 	full := filepath.Join(h.app.ServerDir, clean)
 	absBase, _ := filepath.Abs(h.app.ServerDir)
 	absFull, _ := filepath.Abs(full)
-	if !strings.HasPrefix(absFull, absBase) {
+	// Confinement check. The Clean("/"+rel) trick above already collapses any
+	// ".." against the root, so `clean` can't escape — but compare with a
+	// trailing separator anyway so a sibling like "<serverdir>-secret" can never
+	// satisfy a bare prefix match. Allow absFull == absBase (the dir itself).
+	if absFull != absBase && !strings.HasPrefix(absFull, absBase+string(filepath.Separator)) {
 		return "", fmt.Errorf("path escapes server dir")
 	}
 	return full, nil

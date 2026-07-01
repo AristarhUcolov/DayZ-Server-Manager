@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Aristarh Ucolov.
 package i18n
 
-// ro — Moldovenească / Română (full translation)
-var ro = Bundle{
+// md — Moldovenească (full translation)
+var md = Bundle{
 	"app.name":      "DayZ Server Manager",
 	"app.author":    "de Aristarh Ucolov",
 	"app.copyright": "© 2026 Aristarh Ucolov. Toate drepturile rezervate.",

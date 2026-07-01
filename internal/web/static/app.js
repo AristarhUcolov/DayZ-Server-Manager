@@ -854,6 +854,32 @@ function confirmModal(message, opts = {}) {
   });
 }
 
+// promptModal replaces the native prompt(): a styled single-input dialog.
+// Resolves to the trimmed value on confirm, or null on Esc / backdrop / Cancel /
+// empty. Enter in the field confirms.
+function promptModal(message, opts = {}) {
+  return new Promise((resolve) => {
+    let result = null;
+    const m = openModal({ title: opts.title || t('confirm.title'), onClose: () => resolve(result) });
+    const input = h('input', { type: 'text', value: opts.value || '',
+      placeholder: opts.placeholder || '', style: { width: '100%', marginBottom: '10px' } });
+    const done = (v) => { result = v; m.close(); };
+    const submit = () => { const v = input.value.trim(); done(v || null); };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); submit(); }
+    });
+    m.body.append(
+      h('p', { text: message, style: { marginBottom: '8px' } }),
+      input,
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'primary', text: opts.okText || t('action.create'), onclick: submit }),
+        h('button', { i18n: 'action.cancel', onclick: () => done(null) }),
+      ]),
+    );
+    setTimeout(() => input.focus(), 0);
+  });
+}
+
 function admEventRow(e) {
   const typeClass = 'adm-type adm-' + (e.type || 'other');
   const pieces = [
@@ -927,10 +953,10 @@ Views.server = async (root) => {
             onclick: async () => {
               const src = missionSelect.value.trim();
               if (!src) return;
-              const tgt = prompt(t('mission.duplicate.prompt'), `${src}.copy`);
+              const tgt = await promptModal(t('mission.duplicate.prompt'), { value: `${src}.copy`, title: t('mission.duplicate') });
               if (!tgt) return;
               try {
-                await api.post('/api/missions/duplicate', { source: src, target: tgt.trim() });
+                await api.post('/api/missions/duplicate', { source: src, target: tgt });
                 toast('duplicated', 'ok');
                 await navigate('server');
               } catch (e) { handleErr(e); }
@@ -2182,11 +2208,17 @@ Views.admlog = async (root) => {
 // --------------------------------------------------------------------- rcon
 
 Views.rcon = async (root) => {
+  // Capture the navigation sequence up front. This view awaits before it starts
+  // its 5s poll; if the user navigates away during those awaits, navigate() has
+  // already torn down and moved on, so we must not start (or leave) a timer that
+  // would leak and write into detached DOM. _navSeq changing means superseded.
+  const myNav = _navSeq;
   await refreshStatus();
   // Pull current RCon settings so the access form is prefilled and the status
   // badge is accurate regardless of whether the server is running.
   let cfg = State.config || {};
   try { cfg = await api.get('/api/config'); State.config = cfg; } catch {}
+  if (myNav !== _navSeq) return; // navigated away while awaiting — bail cleanly
 
   const card = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.rcon' })]);
   const status = h('div', { class: 'hint' });
@@ -2196,7 +2228,10 @@ Views.rcon = async (root) => {
   const cmdOut = h('pre', { class: 'log-pane', style: { height: '180px' } });
 
   let timer = 0;
-  const startPolling = () => { if (!timer) timer = setInterval(refresh, 5000); };
+  // Never arm the poll if this view has been superseded (navigated away) — the
+  // interval would outlive the view and write into detached DOM until the next
+  // navigation cleared it.
+  const startPolling = () => { if (myNav !== _navSeq) return; if (!timer) timer = setInterval(refresh, 5000); };
   const stopPolling  = () => { if (timer) { clearInterval(timer); timer = 0; } };
 
   // --- Always-visible access card. The RCon password can be set/changed at

@@ -226,6 +226,12 @@ func (c *Conn) readLoop() {
 			dbg("drop packet (%d bytes): %v", n, err)
 			continue
 		}
+		// parseHeader returns a slice that aliases the reusable read buffer.
+		// handleCommandReply hands the payload to another goroutine (the waiting
+		// Command) and stores multipart fragments for later assembly — both
+		// outlive this iteration, so the next ReadFromUDP would overwrite them.
+		// Copy once here so every downstream owner has a private buffer.
+		pkt = append([]byte(nil), pkt...)
 		dbg("recv pkt type=0x%02x payloadLen=%d", pkt[0], len(pkt))
 		switch pkt[0] {
 		case 0x01:
@@ -295,6 +301,17 @@ func (c *Conn) keepAlive() {
 	for range t.C {
 		if c.closed.Load() {
 			return
+		}
+		// Skip the keep-alive if a command is in flight. Keep-alive is an empty
+		// command packet whose echo comes back on the same 0x01 seq channel; if
+		// its seq happened to match a pending command's, the empty echo would
+		// resolve that command with a blank reply. Active command traffic keeps
+		// the link warm anyway, so a keep-alive is only needed when idle.
+		c.mu.Lock()
+		busy := len(c.pending) > 0
+		c.mu.Unlock()
+		if busy {
+			continue
 		}
 		seq := byte(atomic.AddUint32(&c.seq, 1) - 1) // BE spec: sequence starts at 0
 		_ = c.sendFrame([]byte{0x01, seq})
