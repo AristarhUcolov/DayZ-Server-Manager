@@ -993,8 +993,12 @@ Views.mods = async (root) => {
       const activeCb = h('input', { type: 'checkbox', class: 'switch' });
       activeCb.checked = d.activeMods.includes(m.name);
       activeCb.onchange = async () => {
-        try { await api.post('/api/mods/enable', { mod: m.name, enabled: activeCb.checked }); }
-        catch (e) { handleErr(e); activeCb.checked = !activeCb.checked; }
+        try {
+          const r = await api.post('/api/mods/enable', { mod: m.name, enabled: activeCb.checked });
+          // Keep State.config in sync so a later config POST (language switch,
+          // Settings save) can never send a stale mod list back (hotfix).
+          if (r) { State.config.mods = r.active; State.config.serverMods = r.server; }
+        } catch (e) { handleErr(e); activeCb.checked = !activeCb.checked; }
       };
       activeControl = activeCb;
     } else {
@@ -1014,7 +1018,8 @@ Views.mods = async (root) => {
       srvCb.onchange = async () => {
         if (srvCb.checked && !(await confirmModal(t('mods.serverMod.confirm'), { danger: true, okText: t('action.save') }))) { srvCb.checked = false; return; }
         try {
-          await api.post('/api/mods/enable', { mod: m.name, enabled: srvCb.checked, serverSide: true });
+          const r = await api.post('/api/mods/enable', { mod: m.name, enabled: srvCb.checked, serverSide: true });
+          if (r) { State.config.mods = r.active; State.config.serverMods = r.server; }
           toast(t('action.save'), 'ok');
         } catch (e) { handleErr(e); srvCb.checked = !srvCb.checked; }
       };
@@ -2943,7 +2948,11 @@ Views.settings = async (root) => {
   // (item #2) — kills the whole class of "forgot to save / save reset X" bugs.
   const savedNote = h('span', { class: 'saved-note', i18n: 'settings.saved' });
   const gather = () => {
-    const next = { ...State.config };
+    // Send ONLY the fields this form owns — never spread State.config, which can
+    // hold stale values for state changed elsewhere (e.g. mods toggled via
+    // /api/mods/enable). The merge backend preserves every field we omit, so a
+    // Settings save can no longer reset mods (critical hotfix).
+    const next = {};
     for (const [k, el] of Object.entries(F)) {
       if (el.type === 'checkbox') next[k] = el.checked;
       else if (el.type === 'number') next[k] = Number(el.value);
@@ -3390,9 +3399,13 @@ async function main() {
     fillLangSelect(document.getElementById('lang-switch'), State.lang, true);
     document.getElementById('lang-switch').onchange = async e => {
       const v = e.target.value;
-      State.config.language = v;
       localStorage.setItem('lang', v);
-      try { await api.post('/api/config', State.config); } catch (err) {}
+      // Send ONLY the language field. Posting the whole State.config here would
+      // clobber fields changed elsewhere (e.g. mods toggled via /api/mods/enable
+      // that never updated State.config) — the merge backend preserves the rest.
+      // The response is the full merged config, so State.config re-syncs to truth.
+      try { State.config = await api.post('/api/config', { language: v }); }
+      catch (err) { State.config.language = v; }
       await loadI18n(v);
       await navigate(currentRoute());
     };
