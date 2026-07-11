@@ -22,7 +22,7 @@ import (
 
 const (
 	appName    = "DayZ Server Manager"
-	appVersion = "0.12.2"
+	appVersion = "0.13.0"
 	appAuthor  = "Aristarh Ucolov"
 )
 
@@ -62,12 +62,16 @@ func main() {
 	if effectiveBind == "" {
 		// "lan" and "internet" both expose the panel on all interfaces so
 		// other devices on the network can reach it; only "local" stays
-		// loopback-only.
+		// loopback-only. An empty host (":port") listens dual-stack — binding
+		// "0.0.0.0" was IPv4-only, so http://localhost (which Windows resolves
+		// to ::1 first) landed on a dead socket and the tab never loaded.
 		if a.Config.Exposure == "internet" || a.Config.Exposure == "lan" {
-			effectiveBind = "0.0.0.0"
+			effectiveBind = ""
 		} else {
 			effectiveBind = "127.0.0.1"
 		}
+	} else if effectiveBind == "0.0.0.0" {
+		effectiveBind = "" // dual-stack for explicit -bind 0.0.0.0 too
 	}
 
 	srv := web.New(a, effectiveBind, *webPort)
@@ -109,9 +113,13 @@ func sniffDayZ(dir string) bool {
 	return err == nil
 }
 
+// displayHost picks the address shown in the log and opened in the browser.
+// Always loopback IP, never the hostname "localhost": Windows resolves
+// localhost to ::1 first, and with the old IPv4-only listener that produced a
+// tab that never loaded.
 func displayHost(bind string) string {
-	if bind == "0.0.0.0" {
-		return "localhost"
+	if bind == "" || bind == "0.0.0.0" || bind == "::" {
+		return "127.0.0.1"
 	}
 	return bind
 }
@@ -120,7 +128,10 @@ func openBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		// `cmd /c start "" <url>` is the reliable way to open the default
+		// browser exactly once — rundll32 FileProtocolHandler is known to
+		// occasionally spawn a duplicate tab.
+		cmd = exec.Command("cmd", "/c", "start", "", url)
 	case "darwin":
 		cmd = exec.Command("open", url)
 	default:

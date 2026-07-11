@@ -107,17 +107,42 @@ function applyI18n() {
 
 // --------------------------------------------------------------------- toast
 
+// Stacked toasts: each call appends its own element to #toast-region so a
+// success can no longer overwrite an in-flight error. Errors stay longer and
+// every toast is click-to-dismiss.
 function toast(msg, kind = '') {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = `toast visible ${kind}`;
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => { el.className = 'toast'; }, 3500);
+  const region = document.getElementById('toast-region');
+  if (!region) return;
+  while (region.children.length >= 3) region.firstChild.remove();
+  const el = h('div', { class: `toast ${kind}`, role: kind === 'error' ? 'alert' : undefined, text: msg });
+  const dismiss = () => {
+    el.classList.remove('visible');
+    setTimeout(() => el.remove(), 250);
+  };
+  el.onclick = dismiss;
+  region.append(el);
+  requestAnimationFrame(() => el.classList.add('visible'));
+  setTimeout(dismiss, kind === 'error' ? 8000 : 3500);
 }
 
 function handleErr(err) {
   console.error(err);
-  toast(String(err.message || err), 'error');
+  let msg = String(err && err.message || err);
+  // Backend errors can be whole Go error chains or HTML pages — keep the toast
+  // readable, full detail stays in the console.
+  if (msg.length > 220) msg = msg.slice(0, 220) + '…';
+  toast(msg, 'error');
+}
+
+// withBusy wraps an async button action: disables the button and shows the
+// design-system spinner (.loading) until the action settles. Prevents
+// double-submits on every long operation (server start, mod installs, wipe).
+async function withBusy(btn, fn) {
+  if (!btn || btn.classList.contains('loading')) return;
+  btn.classList.add('loading');
+  btn.disabled = true;
+  try { return await fn(); }
+  finally { btn.classList.remove('loading'); btn.disabled = false; }
 }
 
 // --------------------------------------------------------------------- router
@@ -126,7 +151,9 @@ const Views = {};
 
 function setActiveRoute(name) {
   document.querySelectorAll('.nav a').forEach(a => {
-    a.classList.toggle('active', a.dataset.route === name);
+    const on = a.dataset.route === name;
+    a.classList.toggle('active', on);
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
 }
 
@@ -155,7 +182,9 @@ async function navigate(name) {
   const view = Views[name] || Views.dashboard;
   const root = document.getElementById('view');
   if (root._teardown) { try { root._teardown(); } catch {} root._teardown = null; }
+  root._save = null; // stale Ctrl+S handlers must not survive navigation
   root.innerHTML = '';
+  window.scrollTo(0, 0); // a new section always starts at the top
   try {
     await view(root);
     if (myNav !== _navSeq) return; // superseded by a newer navigation
@@ -163,7 +192,14 @@ async function navigate(name) {
   } catch (err) {
     if (myNav !== _navSeq) return;
     handleErr(err);
-    root.innerHTML = `<div class="card"><p>${err.message || err}</p></div>`;
+    // Build the fallback with textContent — error bodies can contain markup.
+    root.innerHTML = '';
+    root.append(h('div', { class: 'card' }, [
+      h('p', { text: String(err && err.message || err) }),
+      h('div', { class: 'actions' }, [
+        h('button', { i18n: 'action.reload', onclick: () => navigate(name) }),
+      ]),
+    ]));
   }
 }
 
@@ -196,9 +232,11 @@ document.addEventListener('keydown', e => {
   const meta = e.ctrlKey || e.metaKey;
   if (!meta) return;
   if (e.key === 's' || e.key === 'S') {
+    // Always swallow the browser's Save-Page dialog, even on views without a
+    // registered save handler — it is never what the user wants here.
+    e.preventDefault();
     const root = document.getElementById('view');
     if (root && typeof root._save === 'function') {
-      e.preventDefault();
       Promise.resolve(root._save()).catch(handleErr);
     }
   } else if (e.key === 'k' || e.key === 'K') {
@@ -323,17 +361,29 @@ const CM = {
 
 // --------------------------------------------------------------------- status
 
+let _statusFails = 0;
 async function refreshStatus() {
+  const chip = document.getElementById('server-indicator');
+  const txt = document.getElementById('server-indicator-text');
   try {
     const s = await api.get('/api/server/status');
     State.serverStatus = s;
-    const chip = document.getElementById('server-indicator');
-    const txt = document.getElementById('server-indicator-text');
+    _statusFails = 0;
+    chip.classList.remove('offline');
     chip.classList.toggle('running', s.running);
     chip.classList.toggle('stopped', !s.running);
     txt.dataset.i18n = s.running ? 'status.running' : 'status.stopped';
     txt.textContent = t(txt.dataset.i18n);
-  } catch (err) { /* ignore */ }
+  } catch (err) {
+    // After a few consecutive failures the manager itself is unreachable —
+    // show that instead of freezing on the last known Running/Stopped forever.
+    if (++_statusFails >= 3 && chip) {
+      chip.classList.remove('running', 'stopped');
+      chip.classList.add('offline');
+      txt.dataset.i18n = 'status.offline';
+      txt.textContent = t('status.offline');
+    }
+  }
 }
 
 // --------------------------------------------------------------------- first-run
@@ -413,7 +463,7 @@ async function ensureFirstRunDone() {
   }
   refreshMissionsPreview();
 
-  document.getElementById('fr-finish').onclick = async () => {
+  document.getElementById('fr-finish').onclick = (e) => withBusy(e.currentTarget, async () => {
     const exposure = document.querySelector('input[name=fr-exposure]:checked').value;
     const body = {
       language: document.getElementById('fr-lang').value,
@@ -427,8 +477,9 @@ async function ensureFirstRunDone() {
       modal.classList.add('hidden');
       await navigate('dashboard');
     } catch (err) { handleErr(err); }
-  };
+  });
   document.getElementById('fr-lang').addEventListener('change', async e => {
+    localStorage.setItem('lang', e.target.value); // reload mid-wizard keeps the picked language
     await loadI18n(e.target.value);
   });
 }
@@ -446,10 +497,13 @@ Views.dashboard = async (root) => {
   (async () => {
     try {
       const u = await api.get('/api/update/check');
-      if (u.updateAvailable && u.latest) {
-        const banner = h('div', { class: 'warning-bar' }, [
-          h('span', { text: `Update available: ${u.current} → ${u.latest}. ` }),
-          u.releaseUrl ? h('a', { href: u.releaseUrl, target: '_blank', rel: 'noopener', text: 'Open release' }) : null,
+      // A dismissed version stays dismissed — the banner is a nudge, not a nag.
+      if (u.updateAvailable && u.latest && localStorage.getItem('skipVersion') !== u.latest) {
+        const banner = h('div', { class: 'warning-bar', style: { display: 'flex', gap: '10px', alignItems: 'center' } }, [
+          h('span', { style: { flex: '1' }, text: `${t('update.available')}: ${u.current} → ${u.latest}` }),
+          u.releaseUrl ? h('a', { href: u.releaseUrl, target: '_blank', rel: 'noopener', i18n: 'update.open' }) : null,
+          h('button', { text: '×', 'aria-label': 'dismiss', style: { padding: '2px 9px' },
+            onclick: () => { localStorage.setItem('skipVersion', u.latest); banner.remove(); } }),
         ]);
         root.prepend(banner);
       }
@@ -480,13 +534,25 @@ Views.dashboard = async (root) => {
     }
     const nextRestart = nextRestartLabel(s.running, s.uptime);
 
+    if (s.loopPaused) {
+      metricsHost.append(h('div', { class: 'warning-bar', style: { display: 'flex', gap: '10px', alignItems: 'center' } }, [
+        h('span', { style: { flex: '1' }, i18n: 'status.crashLoop' }),
+        h('button', { i18n: 'action.resume', onclick: async (e) => {
+          await withBusy(e.currentTarget, async () => {
+            try { await api.post('/api/server/clear-crash-loop'); toast(t('msg.saved'), 'ok'); await navigate('dashboard'); }
+            catch (err) { handleErr(err); }
+          });
+        }}),
+      ]));
+    }
+
     metricsHost.append(
       h('div', { class: 'grid-4' }, [
         h('div', { class: 'card' }, [
           h('h3', { i18n: 'nav.server' }),
           h('div', { class: 'kv' }, [
             h('div', { class: 'k', i18n: 'status.running' }),
-            h('div', { text: s.running ? 'YES' : 'NO' }),
+            h('div', { text: s.running ? t('status.yes') : t('status.no') }),
             h('div', { class: 'k', i18n: 'status.pid' }),
             h('div', { text: s.pid || '—' }),
             h('div', { class: 'k', i18n: 'status.uptime' }),
@@ -503,11 +569,18 @@ Views.dashboard = async (root) => {
           h('div', { class: 'actions' }, [
             s.running
               ? h('button', { class: 'danger', i18n: 'action.stop',
-                  onclick: async () => { try { await api.post('/api/server/stop'); await navigate('dashboard'); } catch(e){handleErr(e);} }})
+                  onclick: async (e) => {
+                    // Players online — a mis-click kills their session; confirm.
+                    if (players > 0 && !(await confirmModal(t('confirm.playersOnline').replace('{n}', players), { danger: true, okText: t('action.stop') }))) return;
+                    await withBusy(e.currentTarget, async () => { try { await api.post('/api/server/stop'); await navigate('dashboard'); } catch(err){handleErr(err);} });
+                  }})
               : h('button', { class: 'primary', i18n: 'action.start',
-                  onclick: async () => { try { await api.post('/api/server/start'); await navigate('dashboard'); } catch(e){handleErr(e);} }}),
+                  onclick: (e) => withBusy(e.currentTarget, async () => { try { await api.post('/api/server/start'); await navigate('dashboard'); } catch(err){handleErr(err);} })}),
             h('button', { i18n: 'action.restart',
-              onclick: async () => { try { await api.post('/api/server/restart'); await navigate('dashboard'); } catch(e){handleErr(e);} }}),
+              onclick: async (e) => {
+                if (players > 0 && !(await confirmModal(t('confirm.playersOnline').replace('{n}', players), { danger: true, okText: t('action.restart') }))) return;
+                await withBusy(e.currentTarget, async () => { try { await api.post('/api/server/restart'); await navigate('dashboard'); } catch(err){handleErr(err);} });
+              }}),
           ]),
         ]),
         h('div', { class: 'card' }, [
@@ -517,7 +590,7 @@ Views.dashboard = async (root) => {
             h('div', { text: String(mods.active) }),
             h('div', { class: 'k', i18n: 'dashboard.mods.installed' }),
             h('div', { text: String(mods.installed) }),
-            h('div', { class: 'k', text: 'total' }),
+            h('div', { class: 'k', i18n: 'dashboard.mods.total' }),
             h('div', { text: String(mods.total) }),
           ]),
           h('div', { class: 'actions' }, [
@@ -842,15 +915,15 @@ function confirmModal(message, opts = {}) {
     const m = openModal({ title: opts.title || t('confirm.title'), onClose: () => resolve(result) });
     const done = (v) => { result = v; m.close(); };
     const okBtn = h('button', { class: opts.danger ? 'danger' : 'primary',
-      text: opts.okText || t('action.delete'), onclick: () => done(true) });
+      text: opts.okText || t('action.confirm'), onclick: () => done(true) });
+    const cancelBtn = h('button', { i18n: 'action.cancel', onclick: () => done(false) });
     m.body.append(
       h('p', { text: message, style: { marginBottom: '4px' } }),
-      h('div', { class: 'actions' }, [
-        okBtn,
-        h('button', { i18n: 'action.cancel', onclick: () => done(false) }),
-      ]),
+      h('div', { class: 'actions' }, [okBtn, cancelBtn]),
     );
-    setTimeout(() => okBtn.focus(), 0);
+    // Destructive confirms default-focus Cancel so a stray Enter can't destroy
+    // anything; harmless confirms keep the fast path on OK.
+    setTimeout(() => (opts.danger ? cancelBtn : okBtn).focus(), 0);
   });
 }
 
@@ -968,10 +1041,16 @@ Views.server = async (root) => {
       h('div', { class: 'actions' }, [
         h('button', { class: 'primary', i18n: 'action.save',
           onclick: async () => {
+            const NUMERIC = new Set(['maxPlayers','serverTimeAcceleration','serverNightTimeAcceleration',
+              'serverTimePersistent','enableWhitelist','disableVoN','vonCodecQuality','disable3rdPerson',
+              'disableCrosshair','disablePersonalLight','verifySignatures','forceSameBuild','instanceId',
+              'storageAutoFix','loginQueueConcurrentPlayers','loginQueueMaxPlayers','steamProtocolMaxDataSize']);
             const patch = {};
             for (const k of KEYS) {
               const v = bag[k].value.trim();
-              patch[k] = isNaN(Number(v)) || v === '' ? v : Number(v);
+              // Coerce ONLY known-numeric keys — hostname "123", a numeric
+              // password or a zero-padded value must survive as strings.
+              patch[k] = (NUMERIC.has(k) && v !== '' && !isNaN(Number(v))) ? Number(v) : v;
             }
             try {
               await api.post('/api/servercfg', patch);
@@ -1019,12 +1098,15 @@ Views.mods = async (root) => {
       const activeCb = h('input', { type: 'checkbox', class: 'switch' });
       activeCb.checked = d.activeMods.includes(m.name);
       activeCb.onchange = async () => {
+        const prev = !activeCb.checked; // value before this toggle
+        activeCb.disabled = true;
         try {
           const r = await api.post('/api/mods/enable', { mod: m.name, enabled: activeCb.checked });
           // Keep State.config in sync so a later config POST (language switch,
           // Settings save) can never send a stale mod list back (hotfix).
           if (r) { State.config.mods = r.active; State.config.serverMods = r.server; }
-        } catch (e) { handleErr(e); activeCb.checked = !activeCb.checked; }
+        } catch (e) { handleErr(e); activeCb.checked = prev; }
+        finally { activeCb.disabled = false; }
       };
       activeControl = activeCb;
     } else {
@@ -1043,11 +1125,14 @@ Views.mods = async (root) => {
       srvCb.checked = (d.serverMods || []).includes(m.name);
       srvCb.onchange = async () => {
         if (srvCb.checked && !(await confirmModal(t('mods.serverMod.confirm'), { danger: true, okText: t('action.save') }))) { srvCb.checked = false; return; }
+        const prev = !srvCb.checked;
+        srvCb.disabled = true;
         try {
           const r = await api.post('/api/mods/enable', { mod: m.name, enabled: srvCb.checked, serverSide: true });
           if (r) { State.config.mods = r.active; State.config.serverMods = r.server; }
-          toast(t('action.save'), 'ok');
-        } catch (e) { handleErr(e); srvCb.checked = !srvCb.checked; }
+          toast(t('msg.saved'), 'ok');
+        } catch (e) { handleErr(e); srvCb.checked = prev; }
+        finally { srvCb.disabled = false; }
       };
       serverControl = srvCb;
     } else {
@@ -1057,16 +1142,16 @@ Views.mods = async (root) => {
     const actions = h('div', { class: 'actions', style: { margin: 0 } });
     if (!m.installedInServer && m.availableInWorkshop) {
       actions.append(h('button', { class: 'primary', i18n: 'action.install',
-        onclick: async () => { try { await api.post('/api/mods/install', { mod: m.name }); toast(t('msg.installed'),'ok'); await navigate('mods'); } catch (e) { handleErr(e); } }}));
+        onclick: (e) => withBusy(e.currentTarget, async () => { try { await api.post('/api/mods/install', { mod: m.name }); toast(t('msg.installed'),'ok'); await navigate('mods'); } catch (err) { handleErr(err); } })}));
     }
     if (m.installedInServer && m.availableInWorkshop) {
       actions.append(h('button', {
         class: m.updateAvailable ? 'primary' : '',
         i18n: 'action.update',
-        onclick: async () => {
+        onclick: (e) => withBusy(e.currentTarget, async () => {
           try { await api.post('/api/mods/update', { mod: m.name }); toast(t('msg.updated'),'ok'); await navigate('mods'); }
-          catch (e) { handleErr(e); }
-        }
+          catch (err) { handleErr(err); }
+        })
       }));
     }
     if (m.installedInServer) {
@@ -1080,9 +1165,11 @@ Views.mods = async (root) => {
           } catch (e) { handleErr(e); }
         }}));
       actions.append(h('button', { class: 'danger', i18n: 'action.uninstall',
-        onclick: async () => {
-          if (!(await confirmModal(t('confirm.uninstall').replace('{mod}', m.name), { danger: true }))) return;
-          try { await api.post('/api/mods/uninstall', { mod: m.name }); toast(t('msg.removed'),'ok'); await navigate('mods'); } catch (e) { handleErr(e); }
+        onclick: async (ev) => {
+          if (!(await confirmModal(t('confirm.uninstall').replace('{mod}', m.name), { danger: true, okText: t('action.delete') }))) return;
+          await withBusy(ev.currentTarget, async () => {
+            try { await api.post('/api/mods/uninstall', { mod: m.name }); toast(t('msg.removed'),'ok'); await navigate('mods'); } catch (e) { handleErr(e); }
+          });
         }}));
     }
 
@@ -1115,6 +1202,15 @@ Views.mods = async (root) => {
     ]);
     if (m.publishedId) tr.dataset.published = m.publishedId;
     tbody.append(tr);
+  }
+  // Empty state: a fresh setup with zero mods otherwise renders a bare header
+  // row with no explanation of what to do next.
+  if (!d.mods.length) {
+    tbody.append(h('tr', {}, h('td', { colspan: '8' },
+      h('div', { class: 'empty-state' }, [
+        h('div', { class: 'es-title', i18n: 'mods.title' }),
+        h('div', { class: 'es-hint', i18n: 'mods.syncAll.empty.hint' }),
+      ]))));
   }
   tbl.append(tbody);
 
@@ -1259,13 +1355,38 @@ Views.mods = async (root) => {
   const orderList = h('div', { class: 'order-list' });
   const order = [...(d.activeMods || [])];
 
+  // applyMove persists a reorder; on failure the previous order is restored so
+  // the UI never silently diverges from what the server actually launches.
+  async function applyMove(from, to) {
+    if (isNaN(from) || isNaN(to) || from === to || to < 0 || to >= order.length) return;
+    const before = [...order];
+    const [moved] = order.splice(from, 1);
+    order.splice(to, 0, moved);
+    renderOrder();
+    try {
+      await api.post('/api/mods/order', { mods: order, serverSide: false });
+      toast(t('msg.saved'), 'ok');
+    } catch (err) {
+      handleErr(err);
+      order.length = 0; order.push(...before);
+      renderOrder();
+    }
+  }
+
   function renderOrder() {
     orderList.innerHTML = '';
     for (let i = 0; i < order.length; i++) {
       const name = order[i];
+      // Up/down buttons work everywhere HTML5 drag-and-drop doesn't: touch
+      // screens and keyboards.
+      const arrows = h('span', { class: 'order-arrows' }, [
+        h('button', { text: '↑', 'aria-label': 'up', onclick: () => applyMove(i, i - 1) }),
+        h('button', { text: '↓', 'aria-label': 'down', onclick: () => applyMove(i, i + 1) }),
+      ]);
       const row = h('div', { class: 'order-row', draggable: 'true' }, [
         h('span', { class: 'drag-handle', text: '⋮⋮' }),
         h('span', { text: `${i + 1}. ${name}` }),
+        arrows,
       ]);
       row.dataset.index = String(i);
       row.addEventListener('dragstart', e => {
@@ -1275,18 +1396,9 @@ Views.mods = async (root) => {
       });
       row.addEventListener('dragend', () => row.classList.remove('dragging'));
       row.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
-      row.addEventListener('drop', async e => {
+      row.addEventListener('drop', e => {
         e.preventDefault();
-        const from = Number(e.dataTransfer.getData('text/plain'));
-        const to = Number(row.dataset.index);
-        if (isNaN(from) || isNaN(to) || from === to) return;
-        const [moved] = order.splice(from, 1);
-        order.splice(to, 0, moved);
-        renderOrder();
-        try {
-          await api.post('/api/mods/order', { mods: order, serverSide: false });
-          toast('order saved', 'ok');
-        } catch (err) { handleErr(err); }
+        applyMove(Number(e.dataTransfer.getData('text/plain')), Number(row.dataset.index));
       });
       orderList.append(row);
     }
@@ -1637,7 +1749,7 @@ Views.types = async (root) => {
         }),
         h('button', { class: 'danger', i18n: 'action.delete',
           onclick: async () => {
-            if (!(await confirmModal(t('confirm.delete').replace('{name}', name), { danger: true }))) return;
+            if (!(await confirmModal(t('confirm.delete').replace('{name}', name), { danger: true, okText: t('action.delete') }))) return;
             try {
               await api.del(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
               toast(t('msg.deleted'), 'ok');
@@ -1652,7 +1764,8 @@ Views.types = async (root) => {
   }
 
   fileSelect.onchange = () => { clearDirty(); currentPage = 1; refreshTable(); };
-  search.oninput = () => { currentPage = 1; refreshTable(); };
+  let _searchT = 0;
+  search.oninput = () => { clearTimeout(_searchT); _searchT = setTimeout(() => { currentPage = 1; refreshTable(); }, 250); };
 
   if (State.serverStatus.running) root.append(runningBanner());
   root.append(
@@ -1696,7 +1809,7 @@ Views.moded = async (root) => {
       h('td', {}, f.registered ? h('span', { class: 'badge ok', text: '✓' }) : h('span', { class: 'badge warn', text: '!' })),
       h('td', {}, h('button', { class: 'danger', i18n: 'action.delete',
         onclick: async () => {
-          if (!(await confirmModal(t('confirm.delete').replace('{name}', f.name), { danger: true }))) return;
+          if (!(await confirmModal(t('confirm.delete').replace('{name}', f.name), { danger: true, okText: t('action.delete') }))) return;
           try { await api.post('/api/moded/delete', { fileName: f.name }); toast(t('msg.deleted'),'ok'); await navigate('moded'); }
           catch (e) { handleErr(e); }
         }
@@ -2094,9 +2207,18 @@ Views.logs = async (root) => {
   const autoScroll = h('input', { type: 'checkbox' });
   autoScroll.checked = true;
   const paused = h('input', { type: 'checkbox' });
+  const streamBadge = h('span', { class: 'badge mute', style: { display: 'none' } });
 
   let source;
   const MAX_CHARS = 200_000;
+
+  // Sticky-bottom autoscroll: scrolling up suspends following so the user can
+  // read; scrolling back to the bottom resumes it. The checkbox is the master
+  // switch.
+  let stickBottom = true;
+  pane.addEventListener('scroll', () => {
+    stickBottom = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 24;
+  });
 
   // Buffer incoming chunks and flush at most every 200 ms so a chatty RPT
   // does not produce hundreds of DOM mutations per second (which is what
@@ -2113,9 +2235,12 @@ Views.logs = async (root) => {
       pending = '';
       if (next.length > MAX_CHARS) next = next.slice(-MAX_CHARS);
       pane.textContent = next;
-      if (autoScroll.checked) pane.scrollTop = pane.scrollHeight;
+      if (autoScroll.checked && stickBottom) pane.scrollTop = pane.scrollHeight;
     }, 200);
   }
+  // Un-pausing must flush whatever buffered while paused — otherwise the pane
+  // stays frozen until the next incoming chunk (possibly never on a quiet log).
+  paused.onchange = () => { if (!paused.checked) scheduleFlush(); };
   function append(text) {
     pending += text;
     if (pending.length > MAX_CHARS) pending = pending.slice(-MAX_CHARS);
@@ -2126,14 +2251,21 @@ Views.logs = async (root) => {
     if (source) { source.close(); source = null; }
     pending = '';
     pane.textContent = '';
+    stickBottom = true;
     try {
       const r = await api.get(`/api/logs/read?id=${encodeURIComponent(id)}`);
       append(r.content || '');
     } catch (e) { append(`[snapshot failed: ${e.message}]\n`); }
 
     source = new EventSource(`/api/logs/stream?id=${encodeURIComponent(id)}`, { withCredentials: true });
-    source.onmessage = ev => { append(ev.data + '\n'); };
-    source.onerror = () => { append('\n[stream disconnected — reconnecting...]\n'); };
+    // Connection state lives in a badge, not injected into the log text —
+    // a stopped server otherwise steadily fills the pane with reconnect noise.
+    source.onopen = () => { streamBadge.style.display = 'none'; };
+    source.onmessage = ev => { streamBadge.style.display = 'none'; append(ev.data + '\n'); };
+    source.onerror = () => {
+      streamBadge.textContent = t('logs.reconnecting');
+      streamBadge.style.display = '';
+    };
   }
 
   picker.onchange = () => attach(picker.value);
@@ -2143,17 +2275,21 @@ Views.logs = async (root) => {
       h('h2', { i18n: 'nav.logs' }),
       h('div', { class: 'toolbar' }, [
         picker,
-        h('label', {}, [autoScroll, h('span', { text: ' autoscroll' })]),
-        h('label', {}, [paused, h('span', { text: ' pause' })]),
-        h('button', { text: 'Clear', onclick: () => { pane.textContent = ''; pending = ''; } }),
+        h('label', {}, [autoScroll, h('span', { i18n: 'logs.autoscroll' })]),
+        h('label', {}, [paused, h('span', { i18n: 'logs.pause' })]),
+        h('button', { i18n: 'logs.clear', onclick: () => { pane.textContent = ''; pending = ''; } }),
+        streamBadge,
         h('span', { class: 'spacer' }),
-        h('small', { class: 'hint', text: 'Tail capped at 200 KB on screen' }),
+        h('small', { class: 'hint', i18n: 'logs.capHint' }),
       ]),
       pane,
     ]),
   );
 
-  if (sources.length) await attach(sources[0].id);
+  // Attach to the first source that actually has a file — sources[0] may be a
+  // placeholder ("no file yet") while a later entry holds real content.
+  const first = sources.find(s => s.exists) || sources[0];
+  if (first) { picker.value = first.id; await attach(first.id); }
 
   // Tear down EventSource on navigation away.
   root._teardown = () => { if (source) source.close(); };
@@ -2283,7 +2419,6 @@ Views.rcon = async (root) => {
     }
     try {
       const d = await api.get('/api/rcon/players');
-      startPolling();
       players.innerHTML = '';
       players.append(
         h('div', { class: 'head', i18n: 'col.id' }),
@@ -2305,7 +2440,7 @@ Views.rcon = async (root) => {
           ]),
         );
       }
-      status.textContent = `${d.count || 0} player(s)`;
+      status.textContent = `${t('status.players')}: ${d.count || 0}`;
     } catch (e) {
       const msg = e.message || '';
       if (/not configured|password|auth/i.test(msg)) {
@@ -2318,6 +2453,11 @@ Views.rcon = async (root) => {
         // Transient (timeout, BattlEye still loading). Keep polling quietly.
         status.textContent = `RCon: ${msg}`;
       }
+    } finally {
+      // Poll regardless of the first outcome — a transient failure right after
+      // server start (BattlEye still booting) used to leave the page dead
+      // until a manual refresh, because polling only armed on success.
+      startPolling();
     }
   }
 
@@ -2369,26 +2509,46 @@ Views.rcon = async (root) => {
       h('h3', { i18n: 'rcon.broadcast' }),
       h('div', { class: 'row' }, [
         sayInp,
-        h('button', { class: 'primary', i18n: 'rcon.say', onclick: async () => {
-          if (!sayInp.value.trim()) return;
-          try { await api.post('/api/rcon/say', { message: sayInp.value }); sayInp.value = ''; toast(t('msg.sent'),'ok'); }
-          catch (e) { handleErr(e); }
-        }}),
+        h('button', { class: 'primary', i18n: 'rcon.say', onclick: doSay }),
       ]),
     ]),
     h('div', { style: { marginTop: '22px' } }, [
       h('h3', { i18n: 'rcon.rawCommand' }),
       h('div', { class: 'row' }, [
         cmdInp,
-        h('button', { i18n: 'rcon.send', onclick: async () => {
-          if (!cmdInp.value.trim()) return;
-          try { const r = await api.post('/api/rcon/command', { command: cmdInp.value }); cmdOut.textContent = r.output || '(empty)'; }
-          catch (e) { cmdOut.textContent = `ERR: ${e.message}`; }
-        }}),
+        h('button', { i18n: 'rcon.send', onclick: doCmd }),
       ]),
       h('div', { style: { marginTop: '10px' } }, [cmdOut]),
     ]),
   );
+
+  async function doSay() {
+    if (!sayInp.value.trim()) return;
+    try { await api.post('/api/rcon/say', { message: sayInp.value }); sayInp.value = ''; toast(t('msg.sent'), 'ok'); }
+    catch (e) { handleErr(e); }
+  }
+  // Raw console keeps an echoed transcript + ArrowUp/Down history, like a
+  // real terminal — output no longer overwrites the previous command's.
+  const cmdHist = [];
+  let histIdx = -1;
+  async function doCmd() {
+    const cmd = cmdInp.value.trim();
+    if (!cmd) return;
+    cmdHist.push(cmd); histIdx = cmdHist.length;
+    cmdInp.value = '';
+    cmdOut.textContent += (cmdOut.textContent ? '\n' : '') + '> ' + cmd + '\n';
+    try {
+      const r = await api.post('/api/rcon/command', { command: cmd });
+      cmdOut.textContent += (r.output || '(empty)') + '\n';
+    } catch (e) { cmdOut.textContent += `ERR: ${e.message}\n`; }
+    cmdOut.scrollTop = cmdOut.scrollHeight;
+  }
+  sayInp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doSay(); } });
+  cmdInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doCmd(); }
+    else if (e.key === 'ArrowUp' && cmdHist.length) { e.preventDefault(); histIdx = Math.max(0, histIdx - 1); cmdInp.value = cmdHist[histIdx] || ''; }
+    else if (e.key === 'ArrowDown' && cmdHist.length) { e.preventDefault(); histIdx = Math.min(cmdHist.length, histIdx + 1); cmdInp.value = cmdHist[histIdx] || ''; }
+  });
 
   // Access card first (always usable), then the live console below it.
   root.append(accessCard, card);
@@ -2552,7 +2712,7 @@ Views.events = async (root) => {
         }),
         h('button', { class: 'danger', i18n: 'action.delete',
           onclick: async () => {
-            if (!(await confirmModal(t('confirm.deleteEvent').replace('{name}', name), { danger: true }))) return;
+            if (!(await confirmModal(t('confirm.deleteEvent').replace('{name}', name), { danger: true, okText: t('action.delete') }))) return;
             try {
               await api.del(`/api/events/item?name=${encodeURIComponent(name)}`);
               toast(t('msg.deleted'), 'ok');
@@ -2567,7 +2727,8 @@ Views.events = async (root) => {
     applyI18n();
   }
 
-  search.oninput = () => { currentPage = 1; refreshTable(); };
+  let _searchT = 0;
+  search.oninput = () => { clearTimeout(_searchT); _searchT = setTimeout(() => { currentPage = 1; refreshTable(); }, 250); };
 
   if (State.serverStatus.running) root.append(runningBanner());
   root.append(
@@ -2679,7 +2840,7 @@ function announcementsCard(c, F, onChange) {
       en.checked = !!a.enabled;
       const row = h('div', { class: 'row', style: { gap: '8px', marginBottom: '6px' } }, [
         time, msg,
-        h('label', {}, [en, h('span', { text: ' on' })]),
+        h('label', {}, [en]),
         h('button', { class: 'danger', text: '×',
           onclick: () => { state.items.splice(i, 1); render(); fire(); } }),
       ]);
@@ -2748,7 +2909,7 @@ Views.weather = async (root) => {
     text: enabled ? (t('weather.preset.' + d.matched) || d.matched) : '—' });
 
   const applyPreset = async (name) => {
-    try { await api.post('/api/weather/preset', { name }); toast(t('action.save'), 'ok'); await navigate('weather'); }
+    try { await api.post('/api/weather/preset', { name }); toast(t('msg.saved'), 'ok'); await navigate('weather'); }
     catch (e) { handleErr(e); }
   };
   const presetTile = (name) => h('button', {
@@ -2815,7 +2976,7 @@ Views.weather = async (root) => {
               snowfall: snow.get(), stormDensity: storm.get(),
               wind: wind.get(), dynamic: dynChk.checked,
             });
-            toast(t('action.save'), 'ok'); await navigate('weather');
+            toast(t('msg.saved'), 'ok'); await navigate('weather');
           } catch (e) { handleErr(e); }
         } }),
     ]),
@@ -2862,7 +3023,7 @@ Views.weather = async (root) => {
               serverTime: sTime.value.trim() || 'SystemTime',
               serverTimePersistent: persist.checked ? 1 : 0,
             });
-            toast(t('action.save'), 'ok');
+            toast(t('msg.saved'), 'ok');
           } catch (e) { handleErr(e); }
         } }),
     ]),
@@ -2897,12 +3058,17 @@ Views.wipe = async (root) => {
   const confirm = h('input', { type: 'checkbox' });
   const wipeBtn = h('button', { class: 'danger', i18n: 'wipe.button',
     disabled: true,
-    onclick: async () => {
-      try {
-        const r = await api.post('/api/wipe', {});
-        toast(t('wipe.done'), 'ok');
-        await navigate('wipe');
-      } catch (e) { handleErr(e); }
+    onclick: async (e) => {
+      // Checkbox + button + THIS modal: an irreversible multi-folder delete
+      // deserves the same danger confirm as deleting a single event.
+      if (!(await confirmModal(t('wipe.warning'), { danger: true, okText: t('wipe.button') }))) return;
+      await withBusy(e.currentTarget, async () => {
+        try {
+          await api.post('/api/wipe', {});
+          toast(t('wipe.done'), 'ok');
+          await navigate('wipe');
+        } catch (err) { handleErr(err); }
+      });
     } });
   const refreshBtnState = () => {
     wipeBtn.disabled = !(confirm.checked && !d.serverRunning && folders.length > 0);
@@ -2943,6 +3109,11 @@ Views.settings = async (root) => {
     autoRestartEnabled: h('input', { type: 'checkbox', class: 'switch' }),
     autoUpdateCheckMinutes: h('input', { type: 'number', value: c.autoUpdateCheckMinutes ?? 0 }),
     autoUpdateModsOnRestart: h('input', { type: 'checkbox', class: 'switch' }),
+    restartOnCrash: h('input', { type: 'checkbox', class: 'switch' }),
+    backupIntervalHours: h('input', { type: 'number', min: '0', value: c.backupIntervalHours ?? 0 }),
+    backupKeep: h('input', { type: 'number', min: '1', value: c.backupKeep || 10 }),
+    discordEnabled: h('input', { type: 'checkbox', class: 'switch' }),
+    discordWebhookURL: h('input', { type: 'text', value: c.discordWebhookURL || '', placeholder: 'https://discord.com/api/webhooks/…' }),
     doLogs:       h('input', { type: 'checkbox', class: 'switch' }),
     adminLog:     h('input', { type: 'checkbox', class: 'switch' }),
     netLog:       h('input', { type: 'checkbox', class: 'switch' }),
@@ -2951,7 +3122,7 @@ Views.settings = async (root) => {
   };
   fillLangSelect(F.language, c.language, false);
   F.exposure.value = c.exposure || 'local';
-  for (const k of ['autoRestartEnabled','autoUpdateModsOnRestart','doLogs','adminLog','netLog','freezeCheck','filePatching']) {
+  for (const k of ['autoRestartEnabled','autoUpdateModsOnRestart','restartOnCrash','discordEnabled','doLogs','adminLog','netLog','freezeCheck','filePatching']) {
     F[k].checked = !!c[k];
   }
 
@@ -2990,7 +3161,14 @@ Views.settings = async (root) => {
     const next = {};
     for (const [k, el] of Object.entries(F)) {
       if (el.type === 'checkbox') next[k] = el.checked;
-      else if (el.type === 'number') next[k] = Number(el.value);
+      else if (el.type === 'number') {
+        // A field cleared mid-edit must NOT auto-save as 0 (imagine serverPort
+        // becoming 0 six hundred ms after you select-all-delete). Omitting the
+        // key keeps the old value via the merge backend.
+        const v = el.value.trim();
+        if (v === '' || Number.isNaN(Number(v))) continue;
+        next[k] = Number(v);
+      }
       else next[k] = el.value; // text/select + the list getters (restarts/announcements)
     }
     return next;
@@ -3061,6 +3239,8 @@ Views.settings = async (root) => {
         row('settings.autorestart', F.autoRestartSeconds),
       ]),
       h('p', { class: 'hint', i18n: 'settings.autorestart.hint' }),
+      h('label', {}, [F.restartOnCrash, h('span', { i18n: 'settings.watchdog' })]),
+      h('small', { class: 'hint', i18n: 'settings.watchdog.hint' }),
     ]),
 
     section('settings.autoupdate.title', [
@@ -3081,6 +3261,36 @@ Views.settings = async (root) => {
     announcementsCard(c, F, autoSave),
 
     intervalAnnouncementsCard(c, F, autoSave),
+
+    section('settings.autobackup.title', [
+      h('p', { class: 'hint', i18n: 'settings.autobackup.hint' }),
+      h('div', { class: 'grid-2' }, [
+        row('settings.autobackup.every', F.backupIntervalHours),
+        row('settings.autobackup.keep', F.backupKeep),
+      ]),
+      h('div', { class: 'actions' }, [
+        h('button', { i18n: 'settings.autobackup.now', onclick: (e) => withBusy(e.currentTarget, async () => {
+          try {
+            const r = await api.post('/api/backup/run', {});
+            toast(`${t('msg.saved')} — ${r.path}`, 'ok');
+          } catch (err) { handleErr(err); }
+        })}),
+      ]),
+    ]),
+
+    section('settings.discord.title', [
+      h('p', { class: 'hint', i18n: 'settings.discord.hint' }),
+      h('label', {}, [F.discordEnabled, h('span', { i18n: 'settings.discord.enable' })]),
+      row('settings.discord.url', F.discordWebhookURL),
+      h('div', { class: 'actions' }, [
+        h('button', { i18n: 'settings.discord.test', onclick: (e) => withBusy(e.currentTarget, async () => {
+          const url = F.discordWebhookURL.value.trim();
+          if (!url) return;
+          try { await api.post('/api/discord/test', { url }); toast(t('msg.sent'), 'ok'); }
+          catch (err) { handleErr(err); }
+        })}),
+      ]),
+    ]),
 
     backupCard(),
   );
@@ -3121,7 +3331,7 @@ function intervalAnnouncementsCard(c, F, onChange) {
         h('span', { class: 'k', i18n: 'settings.intervalAnn.every' }), every,
         h('span', { class: 'k', i18n: 'settings.intervalAnn.min' }),
         msg,
-        h('label', {}, [en, h('span', { text: ' on' })]),
+        h('label', {}, [en]),
         h('button', { class: 'danger', text: '×', onclick: () => { state.items.splice(i, 1); render(); fire(); } }),
       ]);
       every.onchange = () => { state.items[i].intervalMinutes = parseInt(every.value, 10) || 0; };
@@ -3205,7 +3415,7 @@ function backupCard() {
       if (!r.ok) throw new Error(await r.text());
       const data = await r.json();
       resultBox.textContent = `restored: ${(data.restored || []).length}, skipped: ${(data.skipped || []).length}`;
-      toast(t('action.save'), 'ok');
+      toast(t('msg.saved'), 'ok');
       // Refresh config view so restored values surface.
       State.config = await api.get('/api/config');
     } catch (e) { handleErr(e); }
@@ -3246,6 +3456,9 @@ function setTheme(mode) {
   document.documentElement.setAttribute('data-theme', applied);
   const btn = document.querySelector('#theme-toggle .theme-icon');
   if (btn) btn.textContent = applied === 'light' ? '☀' : '☾';
+  // Keep mobile browser chrome in sync with the panel background.
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', applied === 'light' ? '#f4f6fa' : '#0c0f16');
 }
 
 // --------------------------------------------------------------------- sync / import
@@ -3382,9 +3595,17 @@ Views.profiles = async (root) => {
 
 async function main() {
   try {
-    // Apply theme as early as possible so the login/first-run modals don't
-    // flash dark-on-light. Reads the same key the Settings page writes to.
-    setTheme(localStorage.getItem('theme') || 'dark');
+    // Apply theme as early as possible so the first-run modal doesn't flash
+    // dark-on-light. First visit follows the OS preference; an explicit choice
+    // (topbar toggle / Settings) is remembered and wins afterwards.
+    setTheme(localStorage.getItem('theme') ||
+      (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+    // Topbar elevation on scroll — glass strip gains a shadow once content
+    // slides underneath it.
+    const tb = document.querySelector('.topbar');
+    if (tb) window.addEventListener('scroll', () => {
+      tb.classList.toggle('scrolled', window.scrollY > 2);
+    }, { passive: true });
     const themeBtn = document.getElementById('theme-toggle');
     if (themeBtn) {
       themeBtn.onclick = () => {
@@ -3508,8 +3729,71 @@ Views.battleye = async (root) => {
     editorHost,
     h('p', { class: 'hint', i18n: 'battleye.hint' }),
   ]));
+
+  // ---- Structured bans.txt editor. Hand-editing the `GUID minutes reason`
+  // format is the #1 way admins silently break every ban; saving here also
+  // issues RCon `loadBans` so changes apply to a live server.
+  const bansCard = h('div', { class: 'card' }, [
+    h('h3', { i18n: 'battleye.bans.title' }),
+    h('p', { class: 'hint', i18n: 'battleye.bans.hint' }),
+  ]);
+  const bansHost = h('div');
+  bansCard.append(bansHost);
+  let bans = [];
+  function renderBans() {
+    bansHost.innerHTML = '';
+    const tbl = h('table');
+    tbl.append(h('thead', {}, h('tr', {}, [
+      h('th', { i18n: 'battleye.bans.id' }),
+      h('th', { i18n: 'rcon.ban.minutes' }),
+      h('th', { i18n: 'rcon.reason' }),
+      h('th', { text: '' }),
+    ])));
+    const tb = h('tbody');
+    bans.forEach((ban, i) => {
+      const idInp = h('input', { class: 'inline-cell mono', type: 'text', value: ban.id });
+      const minInp = h('input', { class: 'inline-cell', type: 'text', value: ban.minutes, style: { maxWidth: '90px' } });
+      const rsnInp = h('input', { class: 'inline-cell', type: 'text', value: ban.reason });
+      idInp.onchange = () => { ban.id = idInp.value.trim(); };
+      minInp.onchange = () => { ban.minutes = minInp.value.trim(); };
+      rsnInp.onchange = () => { ban.reason = rsnInp.value; };
+      tb.append(h('tr', {}, [
+        h('td', {}, idInp),
+        h('td', {}, minInp),
+        h('td', {}, rsnInp),
+        h('td', {}, h('button', { class: 'danger', text: '×', onclick: () => { bans.splice(i, 1); renderBans(); } })),
+      ]));
+    });
+    tbl.append(tb);
+    if (!bans.length) {
+      bansHost.append(h('p', { class: 'hint', text: '—' }));
+    } else {
+      bansHost.append(h('div', { class: 'table-scroll' }, tbl));
+    }
+    bansHost.append(h('div', { class: 'actions' }, [
+      h('button', { i18n: 'battleye.bans.add', onclick: () => { bans.push({ id: '', minutes: '0', reason: '' }); renderBans(); applyI18n(); } }),
+      h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => withBusy(e.currentTarget, async () => {
+        try {
+          const r = await api.post('/api/battleye/bans', { bans });
+          toast(r.reloaded ? t('battleye.bans.reloaded') : t('msg.saved'), 'ok');
+          await loadBans();
+        } catch (err) { handleErr(err); }
+      })}),
+    ]));
+  }
+  async function loadBans() {
+    try {
+      const r = await api.get('/api/battleye/bans');
+      bans = r.bans || [];
+      renderBans();
+      applyI18n();
+    } catch (e) { bansHost.textContent = e.message; }
+  }
+  wrap.append(bansCard);
+
   root.append(wrap);
   await load();
+  await loadBans();
 
   try {
     cm = await CM.mount(editorHost, { mode: null, lineWrapping: true });

@@ -43,6 +43,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/server/start", methods(h.serverStart, http.MethodPost))
 	mux.HandleFunc("/api/server/stop", methods(h.serverStop, http.MethodPost))
 	mux.HandleFunc("/api/server/restart", methods(h.serverRestart, http.MethodPost))
+	mux.HandleFunc("/api/server/clear-crash-loop", methods(h.serverClearCrashLoop, http.MethodPost))
 
 	// server.cfg.
 	mux.HandleFunc("/api/servercfg", methods(h.serverCfg, http.MethodGet, http.MethodPost, http.MethodPut))
@@ -84,6 +85,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/battleye/list", methods(h.battleyeList, http.MethodGet))
 	mux.HandleFunc("/api/battleye/read", methods(h.battleyeRead, http.MethodGet))
 	mux.HandleFunc("/api/battleye/write", methods(h.battleyeWrite, http.MethodPost))
+	mux.HandleFunc("/api/battleye/bans", methods(h.battleyeBans, http.MethodGet, http.MethodPost))
 
 	// Mission central-economy files (globals.xml, economy.xml, types.xml,
 	// events.xml, cfgspawnabletypes.xml, ...). Read-only listing +
@@ -140,6 +142,8 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// Config zip backup (export / import).
 	mux.HandleFunc("/api/backup/export", methods(h.backupExport, http.MethodGet))
 	mux.HandleFunc("/api/backup/import", methods(h.backupImport, http.MethodPost))
+	mux.HandleFunc("/api/backup/run", methods(h.backupRun, http.MethodPost))
+	mux.HandleFunc("/api/discord/test", methods(h.discordTest, http.MethodPost))
 
 	// Dashboard live metrics.
 	mux.HandleFunc("/api/dashboard/metrics", methods(h.dashboardMetrics, http.MethodGet))
@@ -288,6 +292,10 @@ func (h *handlers) serverStatus(w http.ResponseWriter, r *http.Request) {
 		"pid":     h.app.Server.PID(),
 		"uptime":  h.app.Server.Uptime().Round(time.Second).String(),
 		"port":    h.app.Config.ServerPort,
+		// Crash-loop protection state: the loop pauses auto-restart after
+		// repeated fast exits; without surfacing it the server just looks
+		// mysteriously "down despite auto-restart". UI shows a resume banner.
+		"loopPaused": h.app.Server.LoopPaused(),
 	})
 }
 
@@ -309,7 +317,20 @@ func (h *handlers) serverStop(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]string{"status": "stopped"})
+	// Wait (bounded) for the process to actually exit so the next status poll
+	// doesn't flash "running" after a successful stop — which invited
+	// double-clicks and a confusing "server already running" on quick Start.
+	for i := 0; i < 30 && h.app.Server.IsRunning(); i++ {
+		time.Sleep(100 * time.Millisecond)
+	}
+	writeJSON(w, map[string]interface{}{"status": "stopped", "running": h.app.Server.IsRunning()})
+}
+
+// serverClearCrashLoop resumes auto-restart after crash-loop protection
+// paused it (3 exits in 5 minutes).
+func (h *handlers) serverClearCrashLoop(w http.ResponseWriter, r *http.Request) {
+	h.app.Server.ClearLoopPause()
+	writeJSON(w, map[string]string{"status": "resumed"})
 }
 
 func (h *handlers) serverRestart(w http.ResponseWriter, r *http.Request) {
@@ -559,10 +580,13 @@ func (h *handlers) modsUninstall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// Also drop from active mod list.
-	h.app.Config.Mods = removeOnce(h.app.Config.Mods, name)
-	h.app.Config.ServerMods = removeOnce(h.app.Config.ServerMods, name)
-	_ = h.app.SaveConfig()
+	// Also drop from active mod list — atomically, so a concurrent config POST
+	// can't write back a copy that still contains the uninstalled mod.
+	_ = h.app.MutateConfig(func(c *config.Manager) error {
+		c.Mods = removeOnce(c.Mods, name)
+		c.ServerMods = removeOnce(c.ServerMods, name)
+		return nil
+	})
 	writeJSON(w, map[string]string{"status": "uninstalled", "mod": name})
 }
 
@@ -629,10 +653,6 @@ func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "mod required", http.StatusBadRequest)
 		return
 	}
-	target := &h.app.Config.Mods
-	if req.ServerSide {
-		target = &h.app.Config.ServerMods
-	}
 	if req.Enabled {
 		// Guard: never add a mod to the launch args unless it is actually
 		// installed in the server dir. Enabling a not-yet-installed mod would
@@ -647,13 +667,23 @@ func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "mod is not installed in the server directory: "+req.Mod, http.StatusBadRequest)
 			return
 		}
-		if !contains(*target, req.Mod) {
-			*target = append(*target, req.Mod)
-		}
-	} else {
-		*target = removeOnce(*target, req.Mod)
 	}
-	if err := h.app.SaveConfig(); err != nil {
+	// MutateConfig: a settings auto-save racing this toggle used to write back
+	// its pre-toggle copy of the mod lists, silently reverting the change.
+	if err := h.app.MutateConfig(func(c *config.Manager) error {
+		target := &c.Mods
+		if req.ServerSide {
+			target = &c.ServerMods
+		}
+		if req.Enabled {
+			if !contains(*target, req.Mod) {
+				*target = append(append([]string(nil), *target...), req.Mod)
+			}
+		} else {
+			*target = removeOnce(*target, req.Mod)
+		}
+		return nil
+	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -674,29 +704,31 @@ func (h *handlers) modsOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	known := map[string]bool{}
-	current := h.app.Config.Mods
-	if req.ServerSide {
-		current = h.app.Config.ServerMods
-	}
-	for _, m := range current {
-		known[m] = true
-	}
-	clean := make([]string, 0, len(req.Mods))
-	seen := map[string]bool{}
-	for _, m := range req.Mods {
-		if !known[m] || seen[m] {
-			continue
+	if err := h.app.MutateConfig(func(c *config.Manager) error {
+		known := map[string]bool{}
+		current := c.Mods
+		if req.ServerSide {
+			current = c.ServerMods
 		}
-		seen[m] = true
-		clean = append(clean, m)
-	}
-	if req.ServerSide {
-		h.app.Config.ServerMods = clean
-	} else {
-		h.app.Config.Mods = clean
-	}
-	if err := h.app.SaveConfig(); err != nil {
+		for _, m := range current {
+			known[m] = true
+		}
+		clean := make([]string, 0, len(req.Mods))
+		seen := map[string]bool{}
+		for _, m := range req.Mods {
+			if !known[m] || seen[m] {
+				continue
+			}
+			seen[m] = true
+			clean = append(clean, m)
+		}
+		if req.ServerSide {
+			c.ServerMods = clean
+		} else {
+			c.Mods = clean
+		}
+		return nil
+	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1765,9 +1797,6 @@ func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
 				}
 				if err := copyDirTree(filepath.Join(src, e.Name()), dst); err == nil {
 					copied = append(copied, e.Name())
-					if !contains(h.app.Config.Mods, e.Name()) {
-						h.app.Config.Mods = append(h.app.Config.Mods, e.Name())
-					}
 				}
 			}
 		}
@@ -1791,7 +1820,15 @@ func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
 			_ = cfg.Save(cfgPath)
 		}
 	}
-	if err := h.app.SaveConfig(); err != nil {
+	// Register the copied mods atomically after the file copies finish.
+	if err := h.app.MutateConfig(func(c *config.Manager) error {
+		for _, name := range copied {
+			if !contains(c.Mods, name) {
+				c.Mods = append(c.Mods, name)
+			}
+		}
+		return nil
+	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"dayzmanager/internal/battleye"
+	"dayzmanager/internal/config"
 	"dayzmanager/internal/mods"
 	dztypes "dayzmanager/internal/types"
 	"dayzmanager/internal/util"
@@ -78,10 +79,12 @@ func (h *handlers) modsCollectionResolve(w http.ResponseWriter, r *http.Request)
 	}
 	res.CollectionID = id
 	if req.Save {
-		if !contains(h.app.Config.WorkshopCollections, req.URL) {
-			h.app.Config.WorkshopCollections = append(h.app.Config.WorkshopCollections, req.URL)
-			_ = h.app.SaveConfig()
-		}
+		_ = h.app.MutateConfig(func(c *config.Manager) error {
+			if !contains(c.WorkshopCollections, req.URL) {
+				c.WorkshopCollections = append(c.WorkshopCollections, req.URL)
+			}
+			return nil
+		})
 	}
 	writeJSON(w, res)
 }
@@ -129,6 +132,121 @@ func (h *handlers) battleyeWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]string{"status": "saved"})
+}
+
+// ---------------------------------------------------------------------------
+// BattlEye bans editor (bans.txt).
+//
+// Line format: `<GUID|IP> <minutes> <reason>` — minutes 0/perm = permanent.
+// Hand-editing this file is the #1 way admins silently break every ban, so the
+// panel provides a structured table. After a save, if the server is running,
+// we issue RCon `loadBans` so changes apply without a restart.
+
+type banEntry struct {
+	ID      string `json:"id"`      // GUID or IP
+	Minutes string `json:"minutes"` // raw token: number, "0", "perm", "-1"
+	Reason  string `json:"reason"`
+}
+
+func (h *handlers) bansPath() string {
+	return filepath.Join(h.beDir(), "bans.txt")
+}
+
+func parseBans(data string) (bans []banEntry, comments []string) {
+	for _, line := range strings.Split(data, "\n") {
+		line = strings.TrimRight(line, "\r")
+		trim := strings.TrimSpace(line)
+		if trim == "" {
+			continue
+		}
+		if strings.HasPrefix(trim, "//") || strings.HasPrefix(trim, "#") {
+			comments = append(comments, line)
+			continue
+		}
+		fields := strings.Fields(trim)
+		b := banEntry{ID: fields[0]}
+		if len(fields) > 1 {
+			b.Minutes = fields[1]
+		}
+		if len(fields) > 2 {
+			b.Reason = strings.Join(fields[2:], " ")
+		}
+		bans = append(bans, b)
+	}
+	return
+}
+
+func (h *handlers) battleyeBans(w http.ResponseWriter, r *http.Request) {
+	path := h.bansPath()
+	if r.Method == http.MethodGet {
+		data, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		bans, _ := parseBans(string(data))
+		if bans == nil {
+			bans = []banEntry{}
+		}
+		writeJSON(w, map[string]interface{}{"path": path, "bans": bans})
+		return
+	}
+
+	// POST: full-list replace. Unlike mission files this is safe while the
+	// server runs — BattlEye re-reads bans.txt on `loadBans`.
+	var req struct {
+		Bans []banEntry `json:"bans"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Preserve any comment lines the admin keeps at the top of the file.
+	var comments []string
+	if data, err := os.ReadFile(path); err == nil {
+		_, comments = parseBans(string(data))
+	}
+	var b strings.Builder
+	for _, c := range comments {
+		b.WriteString(c)
+		b.WriteString("\r\n")
+	}
+	for _, ban := range req.Bans {
+		id := strings.TrimSpace(ban.ID)
+		if id == "" || strings.ContainsAny(id, " \t") {
+			continue
+		}
+		mins := strings.TrimSpace(ban.Minutes)
+		if mins == "" {
+			mins = "0" // permanent
+		}
+		reason := strings.ReplaceAll(strings.TrimSpace(ban.Reason), "\n", " ")
+		b.WriteString(id)
+		b.WriteString(" ")
+		b.WriteString(mins)
+		if reason != "" {
+			b.WriteString(" ")
+			b.WriteString(reason)
+		}
+		b.WriteString("\r\n")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = util.BackupBeforeWrite(path)
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Apply live when possible.
+	reloaded := false
+	if h.app.ServerIsRunning() {
+		if _, err := h.app.RCon.Command("loadBans"); err == nil {
+			reloaded = true
+		}
+	}
+	writeJSON(w, map[string]interface{}{"status": "saved", "reloaded": reloaded, "count": len(req.Bans)})
 }
 
 // ---------------------------------------------------------------------------

@@ -33,6 +33,12 @@
 - **Авто-обновление модов.** Можно обновлять моды перед каждым рестартом и
   периодически проверять `!Workshop` — если подписанный мод там новее,
   сервер обновится и перезапустится с обычным обратным отсчётом.
+- **Watchdog.** Если сервер упал сам — менеджер поднимет его через
+  10 секунд. Защита от crash-loop (3 падения за 5 минут) приостанавливает
+  авто-рестарты и показывает баннер с кнопкой «Возобновить».
+- **Уведомления Discord.** События сервера (запуск, краш, рестарты,
+  обновления модов, бэкапы) отправляются в канал Discord через вебхук —
+  на языке панели.
 - **Порядок загрузки и серверные моды.** Порядок `-mod=` меняется
   перетаскиванием (зависимости вроде `@CF` — первыми). Отдельный тумблер для
   серверных модов (`-serverMod=`).
@@ -76,7 +82,11 @@
   событий админ-лога (коннекты, убийства, чат) с фильтрами.
 - **Бэкап/восстановление.** Скачать zip с `manager.json`, `serverDZ.cfg`,
   BE-конфигами и файлами миссии — или восстановить из него. Каждая перезапись
-  DayZ-файла делает `.bak` (хранятся 5 последних).
+  DayZ-файла делает `.bak` (хранятся 5 последних). **Авто-бэкапы**: тот же
+  zip по расписанию (каждые N часов) в `.dayz-manager/backups/` с ротацией.
+- **Редактор банов BattlEye.** Таблица `bans.txt` (GUID/IP, минуты,
+  причина) вместо ручного редактирования; при сохранении на работающем
+  сервере баны перезагружаются через RCon `loadBans` — без рестарта.
 - **Автопроверка/защита от повреждений.** Все write-операции возвращают
   409 Conflict, если сервер запущен (DayZ держит блокировки на свои файлы).
   В UI сверху показывается баннер-предупреждение.
@@ -196,6 +206,12 @@ panels.
 - **Mod auto-update.** Optionally refresh mods before every restart and
   poll `!Workshop` periodically — when a subscribed mod is newer there, the
   server updates and restarts with the usual countdown.
+- **Watchdog.** If the server exits on its own, the manager brings it back
+  up after 10 seconds. Crash-loop protection (3 exits in 5 minutes) pauses
+  auto-restarts and shows a resume banner on the dashboard.
+- **Discord notifications.** Server events (start, crash, restarts, mod
+  updates, backups) are pushed to a Discord channel via webhook — in the
+  panel's language.
 - **Load order & server-side mods.** The `-mod=` order is drag-to-reorder
   (dependencies like `@CF` first). A separate toggle marks server-only mods
   (`-serverMod=`).
@@ -241,7 +257,12 @@ panels.
   admin-log events (connects, kills, chat) with filters.
 - **Backup / restore.** Download a zip of `manager.json`, `serverDZ.cfg`,
   BE configs and mission files — or restore from one. Every overwrite of a
-  DayZ file keeps a `.bak` (5 most recent).
+  DayZ file keeps a `.bak` (5 most recent). **Automatic backups**: the same
+  zip on a schedule (every N hours) into `.dayz-manager/backups/` with
+  rotation.
+- **BattlEye bans editor.** A structured `bans.txt` table (GUID/IP,
+  minutes, reason) instead of hand-editing; saving on a running server
+  reloads bans via RCon `loadBans` — no restart needed.
 - **Write-safety guard.** All file-writing endpoints return `409 Conflict`
   while the server is running (DayZ holds file locks on its working set).
   A warning banner is shown in the UI.

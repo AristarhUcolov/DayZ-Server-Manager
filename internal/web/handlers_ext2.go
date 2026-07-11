@@ -7,6 +7,7 @@ package web
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,13 +15,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"dayzmanager/internal/admlog"
+	"dayzmanager/internal/i18n"
 	dzlogs "dayzmanager/internal/logs"
+	"dayzmanager/internal/notify"
 	"dayzmanager/internal/mods"
 	"dayzmanager/internal/util"
 )
@@ -251,7 +255,13 @@ func (h *handlers) backupExport(w http.ResponseWriter, r *http.Request) {
 	fname := fmt.Sprintf("dayz-manager-backup-%s.zip", time.Now().Format("20060102-150405"))
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+fname+`"`)
+	_ = h.writeBackupZip(w)
+}
 
+// writeBackupZip streams the standard backup zip (configs + mission economy
+// files + manifest) to any writer — shared by the download endpoint and the
+// scheduled/on-demand disk backups.
+func (h *handlers) writeBackupZip(w io.Writer) error {
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 
@@ -288,6 +298,125 @@ func (h *handlers) backupExport(w http.ResponseWriter, r *http.Request) {
 	}
 	if mf, err := zw.Create("manifest.json"); err == nil {
 		_ = json.NewEncoder(mf).Encode(manifest)
+	}
+	return zw.Close()
+}
+
+// runBackupToDisk writes a backup zip into .dayz-manager/backups/ and prunes
+// old ones down to `keep`. Returns the created file path.
+func (h *handlers) runBackupToDisk(keep int) (string, error) {
+	dir := filepath.Join(h.app.ManagerDir, "backups")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, fmt.Sprintf("backup-%s.zip", time.Now().Format("20060102-150405")))
+	tmp := path + ".tmp"
+	f, err := os.Create(tmp)
+	if err != nil {
+		return "", err
+	}
+	if err := h.writeBackupZip(f); err != nil {
+		f.Close()
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return "", err
+	}
+	// Prune: newest `keep` stay.
+	if keep < 1 {
+		keep = 10
+	}
+	entries, _ := os.ReadDir(dir)
+	type bak struct {
+		name string
+		mod  time.Time
+	}
+	var list []bak
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), "backup-") || !strings.HasSuffix(e.Name(), ".zip") {
+			continue
+		}
+		if info, err := e.Info(); err == nil {
+			list = append(list, bak{e.Name(), info.ModTime()})
+		}
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].mod.After(list[j].mod) })
+	for i := keep; i < len(list); i++ {
+		_ = os.Remove(filepath.Join(dir, list[i].name))
+	}
+	return path, nil
+}
+
+// discordTest sends a test message to the webhook from the request body (NOT
+// the saved config) so the user can verify a URL before enabling it.
+func (h *handlers) discordTest(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	b := i18n.Get(h.app.Config.Language)
+	if err := notify.Discord(req.URL, b["discord.test"]); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "sent"})
+}
+
+// backupRun creates an on-demand disk backup (same zip as the download).
+func (h *handlers) backupRun(w http.ResponseWriter, r *http.Request) {
+	path, err := h.runBackupToDisk(h.app.Config.BackupKeep)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok", "path": path})
+}
+
+// autoBackupLoop writes a scheduled backup every BackupIntervalHours. The
+// cadence derives from the newest existing backup file, so manager restarts
+// don't reset the clock. Runs for the process lifetime; exits with ctx.
+func (h *handlers) autoBackupLoop(ctx context.Context) {
+	dir := filepath.Join(h.app.ManagerDir, "backups")
+	newest := func() time.Time {
+		var t time.Time
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasPrefix(e.Name(), "backup-") {
+				continue
+			}
+			if info, err := e.Info(); err == nil && info.ModTime().After(t) {
+				t = info.ModTime()
+			}
+		}
+		return t
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Minute):
+		}
+		hours := h.app.Config.BackupIntervalHours
+		if hours <= 0 {
+			continue
+		}
+		if time.Since(newest()) < time.Duration(hours)*time.Hour {
+			continue
+		}
+		if path, err := h.runBackupToDisk(h.app.Config.BackupKeep); err != nil {
+			h.app.Log.Printf("auto-backup: %v", err)
+		} else {
+			h.app.Log.Printf("auto-backup written: %s", path)
+			go h.app.NotifyDiscord("backup")
+		}
 	}
 }
 

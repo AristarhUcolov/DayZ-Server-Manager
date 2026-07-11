@@ -79,6 +79,22 @@ type Manager struct {
 	// Workshop mod collection URLs users can re-import in one click.
 	// Stored as raw URLs or bare IDs.
 	WorkshopCollections []string `json:"workshopCollections"`
+
+	// Crash watchdog: when the DayZ process exits WITHOUT the manager asking
+	// it to (crash), start it again after a short grace period. Crash-loop
+	// protection (3 exits / 5 min) still pauses everything.
+	RestartOnCrash bool `json:"restartOnCrash"`
+
+	// Automatic backups: write the same zip the manual "Download backup"
+	// produces into .dayz-manager/backups/ every N hours (0 = off), keeping
+	// the newest BackupKeep files.
+	BackupIntervalHours int `json:"backupIntervalHours"`
+	BackupKeep          int `json:"backupKeep"`
+
+	// Discord notifications: POST server lifecycle events (started, crashed,
+	// restarts, mod updates, backups) to a webhook URL.
+	DiscordWebhookURL string `json:"discordWebhookURL"`
+	DiscordEnabled    bool   `json:"discordEnabled"`
 }
 
 // ScheduledAnnouncement fires once a day at Time (HH:MM, local) when Enabled.

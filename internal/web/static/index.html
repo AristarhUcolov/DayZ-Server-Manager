@@ -6,14 +6,43 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0c0f16" />
   <title>DayZ Server Manager</title>
+  <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%236366f1'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='5.5' y='6' width='13' height='5' rx='1.5'/%3E%3Crect x='5.5' y='13' width='13' height='5' rx='1.5'/%3E%3Ccircle cx='8.5' cy='8.5' r='.2'/%3E%3Ccircle cx='8.5' cy='15.5' r='.2'/%3E%3C/g%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/app.css" />
 </head>
 <body>
-  <div id="first-run" class="modal hidden">
+  <!-- Inline SVG sprite — Lucide-style 24px stroke icons referenced via <use>.
+       Replaces the old Unicode glyph nav icons, which rendered differently on
+       every OS/font. currentColor keeps them token-driven. -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <defs>
+      <g id="i-dashboard"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 12 17 7"/><path d="M12 21a9 9 0 0 0 9-9h-9z" opacity=".35"/></g>
+      <g id="i-server"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></g>
+      <g id="i-mods"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></g>
+      <g id="i-events"><path d="M12 3v2M5.6 5.6l1.4 1.4M3 12h2M5.6 18.4l1.4-1.4M12 19v2M18.4 18.4l-1.4-1.4M19 12h2M18.4 5.6l-1.4 1.4"/><circle cx="12" cy="12" r="3.5"/></g>
+      <g id="i-weather"><path d="M12 2v2M4.9 4.9l1.4 1.4M2 12h2M20 12h2M17.7 6.3l1.4-1.4"/><path d="M15.9 12.1A4 4 0 1 0 9 15"/><path d="M13 22H7a4 4 0 1 1 .6-7.9 5 5 0 0 1 9.3 2A3 3 0 0 1 16 22h-3"/></g>
+      <g id="i-types"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></g>
+      <g id="i-moded"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M12 12v6M9 15h6"/></g>
+      <g id="i-missiondb"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></g>
+      <g id="i-files"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></g>
+      <g id="i-profiles"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M2 14h4M10 8h4M18 16h4"/></g>
+      <g id="i-battleye"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z"/></g>
+      <g id="i-logs"><path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M15 8h-5M15 12h-5"/></g>
+      <g id="i-admlog"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></g>
+      <g id="i-rcon"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></g>
+      <g id="i-validator"><path d="M21.8 10A10 10 0 1 1 17 3.34"/><path d="m9 11 3 3L22 4"/></g>
+      <g id="i-sync"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></g>
+      <g id="i-wipe"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></g>
+      <g id="i-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></g>
+    </defs>
+  </svg>
+
+  <div id="first-run" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="fr-title">
     <div class="modal-card">
-      <div class="modal-header"><h3 data-i18n="firstRun.title"></h3></div>
+      <div class="modal-header"><h3 id="fr-title" data-i18n="firstRun.title"></h3></div>
       <div class="modal-body">
         <label data-i18n="firstRun.lang"></label>
         <select id="fr-lang">
@@ -33,6 +62,7 @@
         <label data-i18n="firstRun.exposure"></label>
         <div class="row">
           <label><input type="radio" name="fr-exposure" value="local" checked /> <span data-i18n="firstRun.exposure.local"></span></label>
+          <label><input type="radio" name="fr-exposure" value="lan" /> <span data-i18n="settings.exposure.lan"></span></label>
           <label><input type="radio" name="fr-exposure" value="internet" /> <span data-i18n="firstRun.exposure.internet"></span></label>
         </div>
         <small class="hint" data-i18n="firstRun.exposure.hint"></small>
@@ -64,46 +94,46 @@
 
       <nav class="nav">
         <div class="nav-group">
-          <a data-route="dashboard" class="active">
-            <span class="nav-icon">◉</span><span data-i18n="nav.dashboard"></span>
+          <a href="#dashboard" data-route="dashboard" class="active">
+            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-dashboard"/></svg></span><span data-i18n="nav.dashboard"></span>
           </a>
         </div>
 
         <div class="nav-group">
           <div class="nav-group-label" data-i18n="nav.group.server"></div>
-          <a data-route="server"><span class="nav-icon">⌂</span><span data-i18n="nav.server"></span></a>
-          <a data-route="mods"><span class="nav-icon">▦</span><span data-i18n="nav.mods"></span></a>
-          <a data-route="events"><span class="nav-icon">★</span><span data-i18n="nav.events"></span></a>
-          <a data-route="weather"><span class="nav-icon">☼</span><span data-i18n="nav.weather"></span></a>
+          <a href="#server" data-route="server"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-server"/></svg></span><span data-i18n="nav.server"></span></a>
+          <a href="#mods" data-route="mods"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-mods"/></svg></span><span data-i18n="nav.mods"></span></a>
+          <a href="#events" data-route="events"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-events"/></svg></span><span data-i18n="nav.events"></span></a>
+          <a href="#weather" data-route="weather"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-weather"/></svg></span><span data-i18n="nav.weather"></span></a>
         </div>
 
         <div class="nav-group">
           <div class="nav-group-label" data-i18n="nav.group.economy"></div>
-          <a data-route="types"><span class="nav-icon">≡</span><span data-i18n="nav.types"></span></a>
-          <a data-route="moded"><span class="nav-icon">≢</span><span data-i18n="nav.modedTypes"></span></a>
-          <a data-route="missiondb"><span class="nav-icon">⛶</span><span data-i18n="nav.missionDb"></span></a>
+          <a href="#types" data-route="types"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-types"/></svg></span><span data-i18n="nav.types"></span></a>
+          <a href="#moded" data-route="moded"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-moded"/></svg></span><span data-i18n="nav.modedTypes"></span></a>
+          <a href="#missiondb" data-route="missiondb"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-missiondb"/></svg></span><span data-i18n="nav.missionDb"></span></a>
         </div>
 
         <div class="nav-group">
           <div class="nav-group-label" data-i18n="nav.group.config"></div>
-          <a data-route="files"><span class="nav-icon">▤</span><span data-i18n="nav.files"></span></a>
-          <a data-route="profiles"><span class="nav-icon">⊟</span><span data-i18n="nav.profiles"></span></a>
-          <a data-route="battleye"><span class="nav-icon">⊕</span><span data-i18n="nav.battleye"></span></a>
+          <a href="#files" data-route="files"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-files"/></svg></span><span data-i18n="nav.files"></span></a>
+          <a href="#profiles" data-route="profiles"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-profiles"/></svg></span><span data-i18n="nav.profiles"></span></a>
+          <a href="#battleye" data-route="battleye"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-battleye"/></svg></span><span data-i18n="nav.battleye"></span></a>
         </div>
 
         <div class="nav-group">
           <div class="nav-group-label" data-i18n="nav.group.live"></div>
-          <a data-route="logs"><span class="nav-icon">◷</span><span data-i18n="nav.logs"></span></a>
-          <a data-route="admlog"><span class="nav-icon">◑</span><span data-i18n="nav.admlog"></span></a>
-          <a data-route="rcon"><span class="nav-icon">⌘</span><span data-i18n="nav.rcon"></span></a>
-          <a data-route="validator"><span class="nav-icon">✓</span><span data-i18n="nav.validator"></span></a>
+          <a href="#logs" data-route="logs"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-logs"/></svg></span><span data-i18n="nav.logs"></span></a>
+          <a href="#admlog" data-route="admlog"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-admlog"/></svg></span><span data-i18n="nav.admlog"></span></a>
+          <a href="#rcon" data-route="rcon"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-rcon"/></svg></span><span data-i18n="nav.rcon"></span></a>
+          <a href="#validator" data-route="validator"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-validator"/></svg></span><span data-i18n="nav.validator"></span></a>
         </div>
 
         <div class="nav-group">
           <div class="nav-group-label" data-i18n="nav.group.system"></div>
-          <a data-route="sync"><span class="nav-icon">↻</span><span data-i18n="nav.sync"></span></a>
-          <a data-route="wipe"><span class="nav-icon">⊘</span><span data-i18n="nav.wipe"></span></a>
-          <a data-route="settings"><span class="nav-icon">⚙</span><span data-i18n="nav.settings"></span></a>
+          <a href="#sync" data-route="sync"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sync"/></svg></span><span data-i18n="nav.sync"></span></a>
+          <a href="#wipe" data-route="wipe"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-wipe"/></svg></span><span data-i18n="nav.wipe"></span></a>
+          <a href="#settings" data-route="settings"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-settings"/></svg></span><span data-i18n="nav.settings"></span></a>
         </div>
       </nav>
 
@@ -116,13 +146,13 @@
 
     <div class="main-col">
       <header class="topbar">
-        <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">≡</button>
+        <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">≡</button>
         <button id="cmdp-btn" class="kbd-hint" title="Open command palette (Ctrl+K)" aria-label="Open command palette">
           <span class="kbd">Ctrl</span><span class="kbd">K</span>
           <span class="kbd-hint-label" data-i18n="cmdp.search"></span>
         </button>
         <span class="grow"></span>
-        <span id="server-indicator" class="chip stopped">
+        <span id="server-indicator" class="chip stopped" role="status">
           <span class="dot"></span>
           <span id="server-indicator-text" data-i18n="status.stopped"></span>
         </span>
@@ -144,7 +174,7 @@
     <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
   </div>
 
-  <div id="toast" class="toast"></div>
+  <div id="toast-region" role="status" aria-live="polite"></div>
 
   <script src="/app.js"></script>
 </body>

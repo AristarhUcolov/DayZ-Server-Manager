@@ -10,7 +10,9 @@ import (
 	"sync"
 
 	"dayzmanager/internal/config"
+	"dayzmanager/internal/i18n"
 	"dayzmanager/internal/mods"
+	"dayzmanager/internal/notify"
 	"dayzmanager/internal/rcon"
 	"dayzmanager/internal/server"
 )
@@ -101,6 +103,11 @@ func New(serverDir, name, version, author string) (*App, error) {
 		Server:     ctrl,
 		RCon:       rc,
 	}
+
+	// Lifecycle events → Discord. The controller calls this from its own
+	// goroutines; the HTTP POST runs detached so nothing in server management
+	// ever waits on Discord.
+	ctrl.Notify = func(event string) { go a.NotifyDiscord(event) }
 
 	// Configure RCon from beserver_x64.cfg / manager.json up front so the
 	// scheduler's countdown warnings and announcements can connect without
@@ -212,6 +219,10 @@ func (a *App) MutateConfig(fn func(*config.Manager) error) error {
 	if err := config.SaveManager(a.configPath, a.Config); err != nil {
 		return fmt.Errorf("%w: %v", ErrConfigSave, err)
 	}
+	// Refresh the controller's race-safe snapshot on EVERY commit — buildArgs
+	// and the scheduler loops read only the snapshot, so a mutation that skips
+	// this would launch/schedule with stale values.
+	a.Server.SetScheduleConfig(a.Config)
 	return nil
 }
 
@@ -229,6 +240,28 @@ func (a *App) ReloadConfig() error {
 	// Keep the scheduler snapshot in sync with the restored config.
 	a.Server.SetScheduleConfig(a.Config)
 	return nil
+}
+
+// NotifyDiscord sends a localized lifecycle message to the configured Discord
+// webhook. Reads the webhook/language under configMu (all writers hold it), so
+// it can be called from any goroutine. No-op when disabled or unconfigured.
+func (a *App) NotifyDiscord(event string) {
+	a.configMu.Lock()
+	enabled := a.Config.DiscordEnabled
+	url := a.Config.DiscordWebhookURL
+	lang := a.Config.Language
+	a.configMu.Unlock()
+	if !enabled || url == "" {
+		return
+	}
+	b := i18n.Get(lang)
+	msg, ok := b["discord."+event]
+	if !ok {
+		msg = event
+	}
+	if err := notify.Discord(url, msg); err != nil {
+		a.Log.Printf("discord notify (%s): %v", event, err)
+	}
 }
 
 func (a *App) Close() error {

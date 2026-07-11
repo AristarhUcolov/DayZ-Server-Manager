@@ -44,6 +44,17 @@ type Controller struct {
 	// scheduled/auto restarts with a countdown.
 	Broadcast Broadcaster
 
+	// Optional lifecycle-event sink — set by app wiring (Discord webhooks).
+	// Called with a short event key ("started", "stopped", "crashed",
+	// "crashloop", "modupdate"). Implementations must not block: the app
+	// layer fires the actual HTTP POST in a goroutine.
+	Notify func(event string)
+
+	// stopRequested distinguishes a manager-initiated Stop/Restart from a
+	// crash in wait(): only unrequested exits count as crashes for the
+	// watchdog and notifications.
+	stopRequested atomic.Bool
+
 	// Mod auto-update hooks — set by app wiring so the server package doesn't
 	// import mods. Both take the client !Workshop's owning DayZ path. Nil = the
 	// feature is unavailable (no-op). UpdateMods copies newer mod files into the
@@ -87,6 +98,28 @@ type scheduleConfig struct {
 	autoUpdateOnRestart    bool
 	autoUpdateCheckMinutes int
 	vanillaPath            string
+
+	// Crash watchdog.
+	restartOnCrash bool
+
+	// Launch parameters — buildArgs reads these instead of the live shared
+	// *config.Manager. Start() runs from scheduler goroutines concurrently
+	// with web config POSTs (App.MutateConfig replaces *Config wholesale), so
+	// reading c.cfg there was the same class of data race the snapshot was
+	// introduced to kill; a restart mid-save could even launch DayZ with
+	// half-old/half-new args.
+	serverCfg    string
+	serverPort   int
+	cpuCount     int
+	doLogs       bool
+	adminLog     bool
+	netLog       bool
+	freezeCheck  bool
+	filePatching bool
+	bePath       string
+	profilesDir  string
+	mods         []string
+	serverMods   []string
 }
 
 func NewController(serverDir string, cfg *config.Manager, logger *log.Logger) *Controller {
@@ -112,6 +145,20 @@ func (c *Controller) SetScheduleConfig(cfg *config.Manager) {
 		autoUpdateOnRestart:    cfg.AutoUpdateModsOnRestart,
 		autoUpdateCheckMinutes: cfg.AutoUpdateCheckMinutes,
 		vanillaPath:            cfg.VanillaDayZPath,
+		restartOnCrash:         cfg.RestartOnCrash,
+
+		serverCfg:    cfg.ServerCfg,
+		serverPort:   cfg.ServerPort,
+		cpuCount:     cfg.CPUCount,
+		doLogs:       cfg.DoLogs,
+		adminLog:     cfg.AdminLog,
+		netLog:       cfg.NetLog,
+		freezeCheck:  cfg.FreezeCheck,
+		filePatching: cfg.FilePatching,
+		bePath:       cfg.BEPath,
+		profilesDir:  cfg.ProfilesDir,
+		mods:         append([]string(nil), cfg.Mods...),
+		serverMods:   append([]string(nil), cfg.ServerMods...),
 	}
 }
 
@@ -175,7 +222,15 @@ func (c *Controller) Start() error {
 	c.running.Store(true)
 
 	go c.wait(cmd, out)
+	c.notify("started")
 	return nil
+}
+
+// notify fires the lifecycle sink if wired. Never blocks the caller.
+func (c *Controller) notify(event string) {
+	if c.Notify != nil {
+		c.Notify(event)
+	}
 }
 
 func (c *Controller) wait(cmd *exec.Cmd, out *os.File) {
@@ -194,18 +249,44 @@ func (c *Controller) wait(cmd *exec.Cmd, out *os.File) {
 		}
 	}
 	c.recentExits = keep
-	if len(c.recentExits) >= 3 {
+	loopJustPaused := false
+	if len(c.recentExits) >= 3 && !c.loopPaused.Load() {
 		c.loopPaused.Store(true)
+		loopJustPaused = true
 		c.log.Printf("crash-loop detected: %d exits in 5m — auto-restart paused", len(c.recentExits))
 	}
 	c.mu.Unlock()
 	if out != nil {
 		_ = out.Close()
 	}
+	requested := c.stopRequested.Swap(false)
 	if err != nil {
 		c.log.Printf("server exited: %v", err)
 	} else {
 		c.log.Printf("server exited cleanly")
+	}
+	switch {
+	case loopJustPaused:
+		c.notify("crashloop")
+	case requested:
+		c.notify("stopped")
+	default:
+		c.notify("crashed")
+	}
+	// Crash watchdog: bring an unrequested-exit server back up after a short
+	// grace period (lets BattlEye/locks settle). Crash-loop pause wins.
+	if !requested && !c.loopPaused.Load() && c.schedSnapshot().restartOnCrash {
+		c.log.Printf("watchdog: server exited unexpectedly — restarting in 10s")
+		go func() {
+			time.Sleep(10 * time.Second)
+			if c.IsRunning() || c.loopPaused.Load() || !c.schedSnapshot().restartOnCrash {
+				return
+			}
+			c.beforeRestart()
+			if err := c.Start(); err != nil {
+				c.log.Printf("watchdog restart failed: %v", err)
+			}
+		}()
 	}
 }
 
@@ -229,6 +310,7 @@ func (c *Controller) Stop() error {
 	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
+	c.stopRequested.Store(true)
 	if runtime.GOOS == "windows" {
 		pid := strconv.Itoa(cmd.Process.Pid)
 		_ = exec.Command("taskkill", "/PID", pid, "/T", "/F").Run()
@@ -273,6 +355,7 @@ func (c *Controller) beforeRestart() {
 	}
 	if len(updated) > 0 {
 		c.log.Printf("auto-update: refreshed %d mod(s): %s", len(updated), strings.Join(updated, ", "))
+		c.notify("modupdate")
 	}
 }
 
@@ -584,39 +667,41 @@ func (c *Controller) StopAutoRestartLoop() {
 	}
 }
 
-// buildArgs mirrors the reference .bat launch line.
+// buildArgs mirrors the reference .bat launch line. It reads the race-safe
+// snapshot, never the live shared config (see scheduleConfig's launch fields).
 func (c *Controller) buildArgs() []string {
+	s := c.schedSnapshot()
 	args := []string{
-		"-config=" + c.cfg.ServerCfg,
-		"-port=" + strconv.Itoa(c.cfg.ServerPort),
-		"-cpuCount=" + strconv.Itoa(c.cfg.CPUCount),
+		"-config=" + s.serverCfg,
+		"-port=" + strconv.Itoa(s.serverPort),
+		"-cpuCount=" + strconv.Itoa(s.cpuCount),
 	}
-	if c.cfg.DoLogs {
+	if s.doLogs {
 		args = append(args, "-dologs")
 	}
-	if c.cfg.AdminLog {
+	if s.adminLog {
 		args = append(args, "-adminlog")
 	}
-	if c.cfg.NetLog {
+	if s.netLog {
 		args = append(args, "-netlog")
 	}
-	if c.cfg.FreezeCheck {
+	if s.freezeCheck {
 		args = append(args, "-freezecheck")
 	}
-	if c.cfg.FilePatching {
+	if s.filePatching {
 		args = append(args, "-filePatching")
 	}
-	if p := c.cfg.BEPath; p != "" {
+	if p := s.bePath; p != "" {
 		args = append(args, "-BEpath="+absOrRel(c.serverDir, p))
 	}
-	if p := c.cfg.ProfilesDir; p != "" {
+	if p := s.profilesDir; p != "" {
 		args = append(args, "-profiles="+absOrRel(c.serverDir, p))
 	}
-	if len(c.cfg.Mods) > 0 {
-		args = append(args, "-mod="+strings.Join(c.cfg.Mods, ";"))
+	if len(s.mods) > 0 {
+		args = append(args, "-mod="+strings.Join(s.mods, ";"))
 	}
-	if len(c.cfg.ServerMods) > 0 {
-		args = append(args, "-serverMod="+strings.Join(c.cfg.ServerMods, ";"))
+	if len(s.serverMods) > 0 {
+		args = append(args, "-serverMod="+strings.Join(s.serverMods, ";"))
 	}
 	return args
 }
