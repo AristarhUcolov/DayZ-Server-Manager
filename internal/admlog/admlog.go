@@ -29,7 +29,9 @@ type Event struct {
 	Time     string  `json:"time"`               // "HH:MM:SS" as-is from the log
 	Type     string  `json:"type"`               // connect/disconnect/kill/hit/chat/death/other
 	Player   string  `json:"player,omitempty"`   // subject
+	ID       string  `json:"id,omitempty"`       // subject's id= (BE GUID) when present
 	Target   string  `json:"target,omitempty"`   // victim/attacker for hit/kill
+	TargetID string  `json:"targetId,omitempty"` // target's id= when present
 	Weapon   string  `json:"weapon,omitempty"`   // "with MP5K" → "MP5K"
 	Distance string  `json:"distance,omitempty"` // "from 123.4 meters" → "123.4"
 	Message  string  `json:"message,omitempty"`  // chat text or raw tail
@@ -39,10 +41,12 @@ type Event struct {
 
 var (
 	reLine     = regexp.MustCompile(`^(\d{2}:\d{2}:\d{2})\s*\|\s*(.*)$`)
-	rePlayer   = regexp.MustCompile(`^Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(id=[^)]*pos=<([^>]*)>\)\s*(.*)$`)
+	rePlayer   = regexp.MustCompile(`^Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(id=([^)]*?)\s*pos=<([^>]*)>\)\s*(.*)$`)
+	// Disconnect lines (and some mods) omit pos: Player "X"(id=ABC) has been disconnected
+	rePlayerNP = regexp.MustCompile(`^Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(\s*id=([^)]*)\)\s*(.*)$`)
 	reChat     = regexp.MustCompile(`^Chat\("([^"]*)"\):\s*(.*)$`)
 	reHitBy    = regexp.MustCompile(`^(hit by|killed by)\s+(.*)$`)
-	reByPlayer = regexp.MustCompile(`Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(id=[^)]*pos=<[^>]*>\)\s*(.*)$`)
+	reByPlayer = regexp.MustCompile(`Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(id=([^)]*?)\s*(?:pos=<[^>]*>)?\)\s*(.*)$`)
 	reWithWpn  = regexp.MustCompile(`(?:with|into)\s+([A-Za-z0-9_\-]+)`)
 	reDistance = regexp.MustCompile(`from ([\d.]+)\s*meters?`)
 	reCommas   = regexp.MustCompile(`\s*,\s*`)
@@ -63,14 +67,21 @@ func ParseLine(s string) (Event, bool) {
 	body := strings.TrimSpace(m[2])
 
 	pm := rePlayer.FindStringSubmatch(body)
-	if pm == nil {
+	var tail string
+	if pm != nil {
+		ev.Player = pm[1]
+		ev.ID = strings.TrimSpace(pm[2])
+		ev.Pos = parsePos(pm[3])
+		tail = strings.TrimSpace(pm[4])
+	} else if pm = rePlayerNP.FindStringSubmatch(body); pm != nil {
+		ev.Player = pm[1]
+		ev.ID = strings.TrimSpace(pm[2])
+		tail = strings.TrimSpace(pm[3])
+	} else {
 		ev.Type = "other"
 		ev.Message = body
 		return ev, true
 	}
-	ev.Player = pm[1]
-	ev.Pos = parsePos(pm[2])
-	tail := strings.TrimSpace(pm[3])
 
 	switch {
 	case tail == "connected":
@@ -92,7 +103,8 @@ func ParseLine(s string) (Event, bool) {
 			rest := hm[2]
 			if bm := reByPlayer.FindStringSubmatch(rest); bm != nil {
 				ev.Target = bm[1]
-				rest = bm[2]
+				ev.TargetID = strings.TrimSpace(bm[2])
+				rest = bm[3]
 			}
 			if wm := reWithWpn.FindStringSubmatch(rest); wm != nil {
 				ev.Weapon = wm[1]

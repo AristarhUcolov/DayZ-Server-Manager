@@ -138,7 +138,11 @@ function handleErr(err) {
 // design-system spinner (.loading) until the action settles. Prevents
 // double-submits on every long operation (server start, mod installs, wipe).
 async function withBusy(btn, fn) {
-  if (!btn || btn.classList.contains('loading')) return;
+  // A missing button (e.g. currentTarget read after an await) must NEVER
+  // swallow the action — run it without the spinner instead. This exact
+  // mistake once made "Uninstall mod" a silent no-op.
+  if (!btn) return fn();
+  if (btn.classList.contains('loading')) return;
   btn.classList.add('loading');
   btn.disabled = true;
   try { return await fn(); }
@@ -570,16 +574,20 @@ Views.dashboard = async (root) => {
             s.running
               ? h('button', { class: 'danger', i18n: 'action.stop',
                   onclick: async (e) => {
+                    // Capture the button BEFORE any await — e.currentTarget is
+                    // only valid during dispatch and turns null after it.
+                    const btn = e.currentTarget;
                     // Players online — a mis-click kills their session; confirm.
                     if (players > 0 && !(await confirmModal(t('confirm.playersOnline').replace('{n}', players), { danger: true, okText: t('action.stop') }))) return;
-                    await withBusy(e.currentTarget, async () => { try { await api.post('/api/server/stop'); await navigate('dashboard'); } catch(err){handleErr(err);} });
+                    await withBusy(btn, async () => { try { await api.post('/api/server/stop'); await navigate('dashboard'); } catch(err){handleErr(err);} });
                   }})
               : h('button', { class: 'primary', i18n: 'action.start',
                   onclick: (e) => withBusy(e.currentTarget, async () => { try { await api.post('/api/server/start'); await navigate('dashboard'); } catch(err){handleErr(err);} })}),
             h('button', { i18n: 'action.restart',
               onclick: async (e) => {
+                const btn = e.currentTarget;
                 if (players > 0 && !(await confirmModal(t('confirm.playersOnline').replace('{n}', players), { danger: true, okText: t('action.restart') }))) return;
-                await withBusy(e.currentTarget, async () => { try { await api.post('/api/server/restart'); await navigate('dashboard'); } catch(err){handleErr(err);} });
+                await withBusy(btn, async () => { try { await api.post('/api/server/restart'); await navigate('dashboard'); } catch(err){handleErr(err);} });
               }}),
           ]),
         ]),
@@ -648,8 +656,48 @@ Views.dashboard = async (root) => {
   // Register teardown + interval BEFORE the first await so navigating away
   // during the initial fetch can't leak the interval (which kept hammering
   // /api/dashboard/metrics — and thus RCon — from detached pages).
+  // ---- Performance history card (CPU / RAM / players over time). Lives
+  // outside the 5s metrics tick — charts refetch on their own 60s cadence.
+  const perfCard = h('div', { class: 'card' }, [h('h3', { i18n: 'perf.title' })]);
+  const perfRange = h('div', { class: 'chart-range' });
+  const perfHost = h('div', { class: 'perf-grid' });
+  perfCard.append(perfRange, perfHost);
+  root.append(perfCard);
+  let perfSec = Number(localStorage.getItem('perfRange')) || 3600;
+  const RANGES = [[3600, '1h'], [21600, '6h'], [86400, '24h']];
+  function renderRangeButtons() {
+    perfRange.innerHTML = '';
+    for (const [sec, label] of RANGES) {
+      perfRange.append(h('button', {
+        class: sec === perfSec ? 'primary' : '',
+        text: label,
+        onclick: () => { perfSec = sec; localStorage.setItem('perfRange', String(sec)); renderRangeButtons(); loadPerf(); },
+      }));
+    }
+  }
+  async function loadPerf() {
+    try {
+      const d = await api.get(`/api/metrics/history?seconds=${perfSec}`);
+      const samples = d.samples || [];
+      perfHost.innerHTML = '';
+      if (samples.length < 2) {
+        perfHost.append(h('p', { class: 'hint', i18n: 'perf.empty' }));
+        applyI18n();
+        return;
+      }
+      perfHost.append(
+        perfChart(samples, { label: t('dashboard.process.cpu'), val: x => x.running ? x.cpu : null, fmt: v => v.toFixed(1) + '%' }),
+        perfChart(samples, { label: t('dashboard.process.mem'), val: x => x.running ? x.mem : null, fmt: v => bytes(v) }),
+        perfChart(samples, { label: t('perf.players'), val: x => x.players, fmt: v => String(Math.round(v)) }),
+      );
+    } catch (e) { console.warn('perf history', e); }
+  }
+  renderRangeButtons();
+  loadPerf();
+  const perfIv = setInterval(loadPerf, 60000);
+
   const iv = setInterval(tick, 5000);
-  root._teardown = () => { stopped = true; clearInterval(iv); };
+  root._teardown = () => { stopped = true; clearInterval(iv); clearInterval(perfIv); };
   await tick();
 };
 
@@ -764,11 +812,13 @@ function openCommandPalette() {
     { kind: 'route', label: t('nav.battleye')  || 'BattlEye',   route: 'battleye' },
     { kind: 'route', label: t('nav.logs')      || 'Logs',       route: 'logs' },
     { kind: 'route', label: t('nav.admlog')    || 'ADM log',    route: 'admlog' },
+    { kind: 'route', label: t('nav.players')   || 'Players',    route: 'players' },
     { kind: 'route', label: t('nav.rcon')      || 'RCon',       route: 'rcon' },
     { kind: 'route', label: t('nav.validator') || 'Validator',  route: 'validator' },
     { kind: 'route', label: t('nav.weather')   || 'Weather & Time', route: 'weather' },
     { kind: 'route', label: t('nav.sync')      || 'Sync',       route: 'sync' },
     { kind: 'route', label: t('nav.wipe')      || 'Wipe',       route: 'wipe' },
+    { kind: 'route', label: t('nav.gameplay')  || 'Gameplay',   route: 'gameplay' },
     { kind: 'route', label: t('nav.settings')  || 'Settings',   route: 'settings' },
     { kind: 'action', label: (t('action.start') || 'Start server'),
       run: async () => { try { await api.post('/api/server/start'); toast('starting', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
@@ -951,6 +1001,110 @@ function promptModal(message, opts = {}) {
     );
     setTimeout(() => input.focus(), 0);
   });
+}
+
+// perfChart renders one single-series time chart (SVG line + soft area) with
+// a crosshair tooltip. Gaps (null values — e.g. server stopped for CPU/RAM)
+// break the line instead of drawing to zero. Single series → the card title
+// names it, no legend needed.
+function perfChart(samples, opts) {
+  const W = 560, H = 120, PAD_L = 6, PAD_R = 6, PAD_T = 8, PAD_B = 18;
+  const vals = samples.map(opts.val);
+  let min = Infinity, max = -Infinity;
+  for (const v of vals) { if (v == null) continue; if (v < min) min = v; if (v > max) max = v; }
+  if (!isFinite(min)) { min = 0; max = 1; }
+  if (min === max) { max = min + 1; min = Math.max(0, min - 1); }
+  // Zero-based when the data starts near zero — bars/areas mislead otherwise.
+  if (min > 0 && min < max * 0.5) min = 0;
+  const t0 = samples[0].t, t1 = samples[samples.length - 1].t || t0 + 1;
+  const X = t => PAD_L + (W - PAD_L - PAD_R) * (t - t0) / Math.max(1, t1 - t0);
+  const Y = v => PAD_T + (H - PAD_T - PAD_B) * (1 - (v - min) / (max - min));
+
+  // Build path segments, breaking at nulls.
+  let line = '', area = '', segStart = null;
+  for (let i = 0; i < samples.length; i++) {
+    const v = vals[i];
+    if (v == null) {
+      if (segStart != null) { area += ` L ${X(samples[i - 1].t).toFixed(1)} ${Y(min).toFixed(1)} Z`; segStart = null; }
+      continue;
+    }
+    const x = X(samples[i].t).toFixed(1), y = Y(v).toFixed(1);
+    if (segStart == null) {
+      line += ` M ${x} ${y}`;
+      area += ` M ${x} ${Y(min).toFixed(1)} L ${x} ${y}`;
+      segStart = i;
+    } else {
+      line += ` L ${x} ${y}`;
+      area += ` L ${x} ${y}`;
+    }
+  }
+  if (segStart != null) area += ` L ${X(t1).toFixed(1)} ${Y(min).toFixed(1)} Z`;
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'chart-svg');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  const mk = (tag, attrs) => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    return el;
+  };
+  // Recessive grid: 3 horizontal hairlines.
+  for (const f of [0, 0.5, 1]) {
+    const y = (PAD_T + (H - PAD_T - PAD_B) * f).toFixed(1);
+    svg.append(mk('line', { x1: PAD_L, x2: W - PAD_R, y1: y, y2: y, class: 'chart-grid' }));
+  }
+  svg.append(mk('path', { d: area || 'M0 0', class: 'chart-area' }));
+  svg.append(mk('path', { d: line || 'M0 0', class: 'chart-line' }));
+  const cross = mk('line', { x1: 0, x2: 0, y1: PAD_T, y2: H - PAD_B, class: 'chart-cross', style: 'display:none' });
+  const dot = mk('circle', { r: 3, class: 'chart-dot', style: 'display:none' });
+  svg.append(cross, dot);
+
+  const tip = h('div', { class: 'chart-tip', style: { display: 'none' } });
+  const head = h('div', { class: 'chart-head' }, [
+    h('span', { class: 'chart-label', text: opts.label }),
+    h('span', { class: 'chart-minmax', text: `${opts.fmt(min)} – ${opts.fmt(max)}` }),
+  ]);
+  const timeAxis = h('div', { class: 'chart-x' }, [
+    h('span', { text: fmtClock(t0) }), h('span', { text: fmtClock((t0 + t1) / 2) }), h('span', { text: fmtClock(t1) }),
+  ]);
+  const box = h('div', { class: 'chart-box' }, [head, svg, timeAxis, tip]);
+
+  // Crosshair + tooltip: nearest sample to the pointer.
+  svg.addEventListener('mousemove', ev => {
+    const r = svg.getBoundingClientRect();
+    const frac = (ev.clientX - r.left) / r.width;
+    const tt = t0 + frac * (t1 - t0);
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < samples.length; i++) {
+      const d = Math.abs(samples[i].t - tt);
+      if (d < bd) { bd = d; best = i; }
+    }
+    const v = vals[best];
+    const x = X(samples[best].t);
+    cross.setAttribute('x1', x); cross.setAttribute('x2', x);
+    cross.style.display = '';
+    if (v != null) {
+      dot.setAttribute('cx', x); dot.setAttribute('cy', Y(v));
+      dot.style.display = '';
+      tip.textContent = `${fmtClock(samples[best].t)} — ${opts.fmt(v)}`;
+    } else {
+      dot.style.display = 'none';
+      tip.textContent = `${fmtClock(samples[best].t)} — ${t('status.stopped')}`;
+    }
+    tip.style.display = '';
+    const px = (x / W) * r.width;
+    tip.style.left = Math.min(Math.max(px, 40), r.width - 60) + 'px';
+  });
+  svg.addEventListener('mouseleave', () => {
+    cross.style.display = 'none'; dot.style.display = 'none'; tip.style.display = 'none';
+  });
+  return box;
+}
+
+function fmtClock(unixSec) {
+  const d = new Date(unixSec * 1000);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function admEventRow(e) {
@@ -1166,8 +1320,9 @@ Views.mods = async (root) => {
         }}));
       actions.append(h('button', { class: 'danger', i18n: 'action.uninstall',
         onclick: async (ev) => {
+          const btn = ev.currentTarget; // must be captured before the await
           if (!(await confirmModal(t('confirm.uninstall').replace('{mod}', m.name), { danger: true, okText: t('action.delete') }))) return;
-          await withBusy(ev.currentTarget, async () => {
+          await withBusy(btn, async () => {
             try { await api.post('/api/mods/uninstall', { mod: m.name }); toast(t('msg.removed'),'ok'); await navigate('mods'); } catch (e) { handleErr(e); }
           });
         }}));
@@ -3059,10 +3214,11 @@ Views.wipe = async (root) => {
   const wipeBtn = h('button', { class: 'danger', i18n: 'wipe.button',
     disabled: true,
     onclick: async (e) => {
+      const btn = e.currentTarget; // before the await — null afterwards
       // Checkbox + button + THIS modal: an irreversible multi-folder delete
       // deserves the same danger confirm as deleting a single event.
       if (!(await confirmModal(t('wipe.warning'), { danger: true, okText: t('wipe.button') }))) return;
-      await withBusy(e.currentTarget, async () => {
+      await withBusy(btn, async () => {
         try {
           await api.post('/api/wipe', {});
           toast(t('wipe.done'), 'ok');
@@ -3864,6 +4020,231 @@ Views.missiondb = async (root) => {
   } catch (e) { console.warn('CodeMirror load failed', e); }
 
   if (firstExisting) await load();
+};
+
+// --------------------------------------------------------------------- players
+
+Views.players = async (root) => {
+  root.append(pageHeader('nav.players', 'players.subtitle'));
+  let d;
+  try { d = await api.get('/api/players'); }
+  catch (e) { handleErr(e); return; }
+
+  // Summary tiles.
+  root.append(h('div', { class: 'grid-4' }, [
+    h('div', { class: 'card' }, [
+      h('h3', { i18n: 'players.total' }),
+      h('div', { class: 'metric-num', text: String(d.total || 0) }),
+    ]),
+    h('div', { class: 'card' }, [
+      h('h3', { i18n: 'players.online' }),
+      h('div', { class: 'metric-num', text: String(d.online || 0) }),
+    ]),
+  ]));
+
+  // Player table.
+  const tbl = h('table');
+  tbl.append(h('thead', {}, h('tr', {}, [
+    h('th', { i18n: 'col.name' }),
+    h('th', { i18n: 'col.guid' }),
+    h('th', { i18n: 'col.lastSeen' }),
+    h('th', { class: 'num', i18n: 'col.sessions' }),
+    h('th', { class: 'num', i18n: 'col.playtime' }),
+    h('th', { class: 'num', i18n: 'col.kills' }),
+    h('th', { class: 'num', i18n: 'col.deaths' }),
+  ])));
+  const tb = h('tbody');
+  const list = d.players || [];
+  for (const p of list.slice(0, 500)) {
+    const nameCell = h('td', {}, [
+      h('div', { style: { fontWeight: '600', display: 'flex', gap: '8px', alignItems: 'center' } }, [
+        h('span', { text: p.name || '—' }),
+        p.online ? h('span', { class: 'badge ok', i18n: 'players.onlineBadge' }) : null,
+      ]),
+      p.aliases && p.aliases.length
+        ? h('div', { class: 'hint', text: t('players.aliases') + ': ' + p.aliases.join(', ') })
+        : null,
+    ]);
+    tb.append(h('tr', {}, [
+      nameCell,
+      h('td', { class: 'mono', text: p.id ? p.id.slice(0, 12) + (p.id.length > 12 ? '…' : '') : '—', title: p.id || '' }),
+      h('td', { text: fmtWhen(p.lastSeen) }),
+      h('td', { class: 'num', text: String(p.sessions || 0) }),
+      h('td', { class: 'num', text: fmtMinutes(p.playtimeMinutes || 0) }),
+      h('td', { class: 'num', text: String(p.kills || 0) }),
+      h('td', { class: 'num', text: String(p.deaths || 0) }),
+    ]));
+  }
+  const tableCard = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.players' })]);
+  if (!list.length) {
+    tableCard.append(h('div', { class: 'empty-state' }, [
+      h('div', { class: 'es-hint', i18n: 'players.noData' }),
+    ]));
+  } else {
+    tbl.append(tb);
+    tableCard.append(h('div', { class: 'table-scroll' }, tbl));
+  }
+  root.append(tableCard);
+
+  // Killfeed.
+  const kfCard = h('div', { class: 'card' }, [h('h3', { i18n: 'players.killfeed' })]);
+  const kf = d.killfeed || [];
+  if (!kf.length) {
+    kfCard.append(h('p', { class: 'hint', i18n: 'admlog.noEvents' }));
+  } else {
+    const listEl = h('div', { class: 'adm-list' });
+    for (const k of kf) {
+      const pieces = [
+        h('span', { class: 'adm-time', text: k.time || '' }),
+        h('span', { class: 'adm-type adm-kill', text: 'KILL' }),
+      ];
+      if (k.killer && !k.suicide) {
+        pieces.push(h('span', { class: 'adm-player', text: k.killer }));
+        pieces.push(h('span', { class: 'adm-arrow', text: '→' }));
+      }
+      pieces.push(h('span', { class: 'adm-player', text: k.victim }));
+      const meta = [];
+      if (k.weapon) meta.push(k.weapon);
+      if (k.distance) meta.push(k.distance + 'm');
+      if (k.suicide && !k.killer) meta.push(t('admlog.type.death'));
+      if (meta.length) pieces.push(h('span', { class: 'adm-meta', text: '(' + meta.join(', ') + ')' }));
+      listEl.append(h('div', { class: 'adm-row' }, pieces));
+    }
+    kfCard.append(listEl);
+  }
+  root.append(kfCard);
+};
+
+function fmtWhen(rfc) {
+  if (!rfc) return '—';
+  const d = new Date(rfc);
+  if (isNaN(d)) return rfc;
+  return d.toLocaleDateString() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function fmtMinutes(min) {
+  if (min < 60) return min + 'm';
+  return Math.floor(min / 60) + 'h ' + (min % 60) + 'm';
+}
+
+// --------------------------------------------------------------------- gameplay
+
+Views.gameplay = async (root) => {
+  root.append(pageHeader('nav.gameplay', 'gameplay.subtitle'));
+  if (State.serverStatus.running) root.append(runningBanner());
+  let d;
+  try { d = await api.get('/api/gameplay'); }
+  catch (e) { handleErr(e); return; }
+
+  const card = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.gameplay' }),
+    h('p', { class: 'hint', text: d.path })]);
+  root.append(card);
+
+  if (!d.exists) {
+    card.append(h('div', { class: 'empty-state' }, [
+      h('div', { class: 'es-hint', i18n: 'gameplay.missing' }),
+    ]));
+    return;
+  }
+
+  let obj;
+  try { obj = JSON.parse(d.content); }
+  catch (e) {
+    // The file on disk is broken JSON — offer the raw editor only.
+    card.append(h('p', { class: 'warning-bar', text: t('gameplay.invalid') + ' ' + e.message }));
+    obj = null;
+  }
+
+  const formHost = h('div');
+  const rawHost = h('textarea', { rows: 26, style: { display: 'none', width: '100%' } });
+  rawHost.value = d.content;
+  let rawMode = !obj;
+  const modeBtn = h('button', {});
+
+  // Generic recursive form: booleans → switches, numbers → number inputs,
+  // strings → text, arrays → JSON one-liners, objects → collapsible groups.
+  // Schema-free, so every key of every DayZ version is editable.
+  function fieldFor(parent, key) {
+    const val = parent[key];
+    if (typeof val === 'boolean') {
+      const cb = h('input', { type: 'checkbox', class: 'switch' });
+      cb.checked = val;
+      cb.onchange = () => { parent[key] = cb.checked; };
+      return h('label', {}, [cb, h('span', { text: key })]);
+    }
+    if (typeof val === 'number') {
+      const inp = h('input', { type: 'number', step: 'any', value: String(val) });
+      inp.onchange = () => { const n = Number(inp.value); if (!Number.isNaN(n)) parent[key] = n; };
+      return h('div', {}, [h('label', { text: key }), inp]);
+    }
+    if (typeof val === 'string') {
+      const inp = h('input', { type: 'text', value: val });
+      inp.onchange = () => { parent[key] = inp.value; };
+      return h('div', {}, [h('label', { text: key }), inp]);
+    }
+    if (Array.isArray(val)) {
+      const inp = h('input', { type: 'text', value: JSON.stringify(val), class: 'mono' });
+      inp.onchange = () => {
+        try { const v = JSON.parse(inp.value); if (Array.isArray(v)) { parent[key] = v; inp.style.borderColor = ''; return; } } catch {}
+        inp.style.borderColor = 'var(--error)';
+      };
+      return h('div', {}, [h('label', { text: key + ' []' }), inp]);
+    }
+    if (val && typeof val === 'object') {
+      const det = h('details', { class: 'gp-group' }, [h('summary', { text: key })]);
+      const inner = h('div', { class: 'gp-grid' });
+      for (const k of Object.keys(val)) inner.append(fieldFor(val, k));
+      det.append(inner);
+      return det;
+    }
+    return h('div', { class: 'hint', text: key + ': null' });
+  }
+
+  function renderForm() {
+    formHost.innerHTML = '';
+    if (!obj) return;
+    for (const k of Object.keys(obj)) {
+      const f = fieldFor(obj, k);
+      if (f.tagName === 'DETAILS') formHost.append(f);
+      else formHost.append(h('div', { class: 'gp-grid', style: { marginBottom: '6px' } }, f));
+    }
+  }
+  renderForm();
+
+  function setMode(raw) {
+    rawMode = raw;
+    formHost.style.display = raw ? 'none' : '';
+    rawHost.style.display = raw ? '' : 'none';
+    modeBtn.textContent = raw ? t('gameplay.form') : t('gameplay.raw');
+    if (raw && obj) rawHost.value = JSON.stringify(obj, null, 4);
+    if (!raw) {
+      try { obj = JSON.parse(rawHost.value); renderForm(); }
+      catch (e) { toast(t('gameplay.invalid') + ' ' + e.message, 'error'); rawMode = true; formHost.style.display = 'none'; rawHost.style.display = ''; modeBtn.textContent = t('gameplay.form'); }
+    }
+  }
+  modeBtn.onclick = () => setMode(!rawMode);
+  modeBtn.textContent = rawMode ? t('gameplay.form') : t('gameplay.raw');
+
+  async function doSave() {
+    const content = rawMode ? rawHost.value : JSON.stringify(obj, null, 4);
+    try { JSON.parse(content); }
+    catch (e) { toast(t('gameplay.invalid') + ' ' + e.message, 'error'); return; }
+    try {
+      await api.post('/api/gameplay', { content });
+      toast(t('msg.saved'), 'ok');
+    } catch (e) { handleErr(e); }
+  }
+  root._save = doSave;
+
+  card.append(
+    h('div', { class: 'toolbar' }, [
+      modeBtn,
+      h('span', { class: 'grow' }),
+      h('button', { class: 'primary', i18n: 'action.save', title: 'Ctrl+S', onclick: (e) => withBusy(e.currentTarget, doSave) }),
+    ]),
+    formHost,
+    rawHost,
+    h('p', { class: 'hint', i18n: 'gameplay.enabledNote' }),
+  );
 };
 
 main();

@@ -80,6 +80,15 @@
   показывает моды/миссию/serverDZ.cfg и даёт перенять что нужно.
 - **Логи и админ-лог.** Просмотр `.RPT`/`.ADM` с хвостовым стримом; разбор
   событий админ-лога (коннекты, убийства, чат) с фильтрами.
+- **База игроков + killfeed.** Менеджер копит из админ-лога постоянную базу:
+  ники (с историей переименований), GUID, первое/последнее посещение,
+  сессии, наигранное время, убийства/смерти — плюс живой killfeed с оружием
+  и дистанцией.
+- **Редактор cfggameplay.json.** Автогенерируемая форма по содержимому файла
+  (стамина, строительство, мир, интерфейс) + режим raw JSON с проверкой
+  синтаксиса; `enableCfgGameplayFile=1` проставляется автоматически.
+- **Графики производительности.** CPU/память процесса и онлайн игроков во
+  времени (1ч/6ч/24ч) прямо на дашборде.
 - **Бэкап/восстановление.** Скачать zip с `manager.json`, `serverDZ.cfg`,
   BE-конфигами и файлами миссии — или восстановить из него. Каждая перезапись
   DayZ-файла делает `.bak` (хранятся 5 последних). **Авто-бэкапы**: тот же
@@ -255,6 +264,15 @@ panels.
   what you want.
 - **Logs & admin log.** View `.RPT`/`.ADM` with a tailing stream; parse
   admin-log events (connects, kills, chat) with filters.
+- **Player database + killfeed.** The manager builds a persistent database
+  from the admin log: names (with rename history), GUIDs, first/last seen,
+  sessions, playtime, kills/deaths — plus a live killfeed with weapon and
+  distance.
+- **cfggameplay.json editor.** A form auto-generated from the file's own
+  content (stamina, base building, world, UI) plus a raw-JSON mode with
+  syntax validation; `enableCfgGameplayFile=1` is set automatically.
+- **Performance charts.** Process CPU/memory and players online over time
+  (1h/6h/24h) right on the dashboard.
 - **Backup / restore.** Download a zip of `manager.json`, `serverDZ.cfg`,
   BE configs and mission files — or restore from one. Every overwrite of a
   DayZ file keeps a `.bak` (5 most recent). **Automatic backups**: the same

@@ -144,6 +144,9 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/backup/import", methods(h.backupImport, http.MethodPost))
 	mux.HandleFunc("/api/backup/run", methods(h.backupRun, http.MethodPost))
 	mux.HandleFunc("/api/discord/test", methods(h.discordTest, http.MethodPost))
+	mux.HandleFunc("/api/players", methods(h.playersList, http.MethodGet))
+	mux.HandleFunc("/api/gameplay", methods(h.gameplay, http.MethodGet, http.MethodPost))
+	mux.HandleFunc("/api/metrics/history", methods(h.metricsHistory, http.MethodGet))
 
 	// Dashboard live metrics.
 	mux.HandleFunc("/api/dashboard/metrics", methods(h.dashboardMetrics, http.MethodGet))

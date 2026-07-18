@@ -51,6 +51,10 @@ func (s *Server) Start(ctx context.Context) error {
 	// Scheduled config backups (Settings → Automatic backups). Lives with the
 	// web server because the zip layout is defined by the handlers.
 	go s.h.autoBackupLoop(ctx)
+	// 30s CPU/RAM/players sampler for the dashboard performance charts.
+	go s.h.metricsSampler(ctx)
+	// Keep the player DB ingesting ADM lines even with no page open.
+	go s.h.playersIngestLoop(ctx)
 	go func() {
 		<-ctx.Done()
 		sdCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
