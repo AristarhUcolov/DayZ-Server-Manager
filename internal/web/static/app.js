@@ -538,7 +538,7 @@ Views.dashboard = async (root) => {
     }
     const nextRestart = nextRestartLabel(s.running, s.uptime);
 
-    if (s.loopPaused) {
+    if (State.serverStatus.loopPaused) {
       metricsHost.append(h('div', { class: 'warning-bar', style: { display: 'flex', gap: '10px', alignItems: 'center' } }, [
         h('span', { style: { flex: '1' }, i18n: 'status.crashLoop' }),
         h('button', { i18n: 'action.resume', onclick: async (e) => {
@@ -749,11 +749,14 @@ function nextRestartLabel(running, uptimeStr) {
   if (candidates.length === 0) return '—';
   let s = Math.min(...candidates);
   if (s < 0) s = 0;
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
+  // Never name locals h/t here — they shadow the global DOM builder and the
+  // i18n function for this whole scope (a `let t` bug already cost us a
+  // broken Types editor).
+  const hrs = Math.floor(s / 3600);
+  const mins = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(h)}:${pad(m)}:${pad(sec)}`;
+  return `${pad(hrs)}:${pad(mins)}:${pad(sec)}`;
 }
 
 // sparkline renders an SVG polyline from a numeric series.
@@ -819,6 +822,7 @@ function openCommandPalette() {
     { kind: 'route', label: t('nav.sync')      || 'Sync',       route: 'sync' },
     { kind: 'route', label: t('nav.wipe')      || 'Wipe',       route: 'wipe' },
     { kind: 'route', label: t('nav.gameplay')  || 'Gameplay',   route: 'gameplay' },
+    { kind: 'route', label: t('nav.attach')    || 'Attachments', route: 'attachments' },
     { kind: 'route', label: t('nav.settings')  || 'Settings',   route: 'settings' },
     { kind: 'action', label: (t('action.start') || 'Start server'),
       run: async () => { try { await api.post('/api/server/start'); toast('starting', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
@@ -1017,7 +1021,7 @@ function perfChart(samples, opts) {
   // Zero-based when the data starts near zero — bars/areas mislead otherwise.
   if (min > 0 && min < max * 0.5) min = 0;
   const t0 = samples[0].t, t1 = samples[samples.length - 1].t || t0 + 1;
-  const X = t => PAD_L + (W - PAD_L - PAD_R) * (t - t0) / Math.max(1, t1 - t0);
+  const X = ts => PAD_L + (W - PAD_L - PAD_R) * (ts - t0) / Math.max(1, t1 - t0);
   const Y = v => PAD_T + (H - PAD_T - PAD_B) * (1 - (v - min) / (max - min));
 
   // Build path segments, breaking at nulls.
@@ -1220,6 +1224,9 @@ Views.server = async (root) => {
 // --------------------------------------------------------------------- mods
 
 Views.mods = async (root) => {
+  // Heavy fetch ahead — remember which navigation we are. If the user
+  // switches section while it runs, we must not append into their new page.
+  const myNav = _navSeq;
   const d = await api.get('/api/mods');
   root.append(pageHeader('nav.mods', 'mods.subtitle'));
   const wrap = h('div');
@@ -1250,7 +1257,7 @@ Views.mods = async (root) => {
     let activeControl;
     if (m.installedInServer) {
       const activeCb = h('input', { type: 'checkbox', class: 'switch' });
-      activeCb.checked = d.activeMods.includes(m.name);
+      activeCb.checked = (d.activeMods || []).includes(m.name);
       activeCb.onchange = async () => {
         const prev = !activeCb.checked; // value before this toggle
         activeCb.disabled = true;
@@ -1495,6 +1502,7 @@ Views.mods = async (root) => {
     collectionResults,
   ]);
 
+  if (myNav !== _navSeq) return; // superseded while /api/mods was loading
   wrap.append(h('div', { class: 'card' }, [
     h('h2', { i18n: 'mods.title' }),
     toolbar,
@@ -1569,6 +1577,9 @@ Views.mods = async (root) => {
 // --------------------------------------------------------------------- types
 
 Views.types = async (root) => {
+  // Heavy fetch ahead — remember which navigation we are. If the user
+  // switches section while it runs, we must not append into their new page.
+  const myNav = _navSeq;
   const fileSelect = h('select', {});
   fileSelect.append(h('option', { value: '', text: 'types.xml (base)' }));
   try {
@@ -1632,7 +1643,7 @@ Views.types = async (root) => {
       pills.append(h('button', {
         class: 'pill', text: State.lang === 'ru' ? p.labelRu : p.label,
         onclick: async () => {
-          const selected = [...tableWrap.querySelectorAll('input[type=checkbox]:checked')]
+          const selected = [...tableWrap.querySelectorAll('input[type=checkbox][data-name]:checked')]
             .map(cb => cb.dataset.name);
           if (!selected.length) { toast(t('msg.selectFirst')); return; }
           try {
@@ -1652,7 +1663,7 @@ Views.types = async (root) => {
   // Bulk-edit modal — opened from the toolbar when at least one row is
   // selected. Scalar fields only; per-type editor handles usages/values/tags.
   function openBulkEdit() {
-    const selected = [...tableWrap.querySelectorAll('input[type=checkbox]:checked')]
+    const selected = [...tableWrap.querySelectorAll('input[type=checkbox][data-name]:checked')]
       .map(cb => cb.dataset.name);
     if (!selected.length) { toast(t('msg.selectFirst')); return; }
     const fields = {
@@ -1813,20 +1824,23 @@ Views.types = async (root) => {
   }
 
   async function openEditor(name) {
-    let t;
+    // NOTE: never name a local `t` — that shadows the global i18n t() for the
+    // whole function scope and every t('key') call inside throws
+    // "t is not a function" (this broke Save/Delete in this very editor).
+    let item;
     try {
-      t = await api.get(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
+      item = await api.get(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
     } catch (e) { handleErr(e); return; }
     const m = openModal({ title: name, wide: true });
     const fields = {
-      nominal: h('input', { type: 'number', value: t.nominal ?? '' }),
-      min: h('input', { type: 'number', value: t.min ?? '' }),
-      lifetime: h('input', { type: 'number', value: t.lifetime ?? '' }),
-      restock: h('input', { type: 'number', value: t.restock ?? '' }),
-      quantmin: h('input', { type: 'number', value: t.quantmin ?? '' }),
-      quantmax: h('input', { type: 'number', value: t.quantmax ?? '' }),
-      cost: h('input', { type: 'number', value: t.cost ?? '' }),
-      category: h('input', { type: 'text',   value: t.category?.name || '' }),
+      nominal: h('input', { type: 'number', value: item.nominal ?? '' }),
+      min: h('input', { type: 'number', value: item.min ?? '' }),
+      lifetime: h('input', { type: 'number', value: item.lifetime ?? '' }),
+      restock: h('input', { type: 'number', value: item.restock ?? '' }),
+      quantmin: h('input', { type: 'number', value: item.quantmin ?? '' }),
+      quantmax: h('input', { type: 'number', value: item.quantmax ?? '' }),
+      cost: h('input', { type: 'number', value: item.cost ?? '' }),
+      category: h('input', { type: 'text',   value: item.category?.name || '' }),
     };
     const grid = h('div', { class: 'grid-3' });
     grid.append(
@@ -1856,9 +1870,9 @@ Views.types = async (root) => {
       return h('div', {}, [h('label', { text: label }), wrap]);
     }
 
-    const usages = t.usages || [];
-    const values = t.values || [];
-    const tags = t.tags || [];
+    const usages = item.usages || [];
+    const values = item.values || [];
+    const tags = item.tags || [];
     const lists = h('div', { class: 'grid-3' }, [
       editableList('usages', usages, v => {}),
       editableList('values', values, v => {}),
@@ -1866,7 +1880,7 @@ Views.types = async (root) => {
     ]);
 
     // Flags.
-    const flags = t.flags || {};
+    const flags = item.flags || {};
     const flagInputs = {};
     const flagGrid = h('div', { class: 'grid-3' });
     for (const key of ['countInCargo','countInHoarder','countInMap','countInPlayer','crafted','deloot']) {
@@ -1922,6 +1936,7 @@ Views.types = async (root) => {
   let _searchT = 0;
   search.oninput = () => { clearTimeout(_searchT); _searchT = setTimeout(() => { currentPage = 1; refreshTable(); }, 250); };
 
+  if (myNav !== _navSeq) return;
   if (State.serverStatus.running) root.append(runningBanner());
   root.append(
     h('div', { class: 'card' }, [
@@ -2111,13 +2126,17 @@ Views.files = async (root) => {
         text: `${e.isDir ? '📁' : '📄'} ${e.name}`,
       });
       node.onclick = async () => {
-        if (e.isDir) return loadDir(e.path);
+        // Any error here (413 for a >2 MB file, 404 for one that vanished)
+        // used to be an unhandled rejection: no toast, nothing happened.
+        try {
+        if (e.isDir) return await loadDir(e.path);
         const r = await api.get(`/api/files/read?path=${encodeURIComponent(e.path)}`);
         currentPath = e.path;
         setMode(e.name);
         setValue(r.content);
         pathLabel.textContent = e.path;
         await refreshBackups();
+        } catch (err) { handleErr(err); }
       };
       tree.append(node);
     }
@@ -2443,11 +2462,11 @@ Views.logs = async (root) => {
 
   // Attach to the first source that actually has a file — sources[0] may be a
   // placeholder ("no file yet") while a later entry holds real content.
+  // Registered before the await so a fast navigation cannot leave the stream
+  // open on a detached page.
+  root._teardown = () => { if (source) source.close(); };
   const first = sources.find(s => s.exists) || sources[0];
   if (first) { picker.value = first.id; await attach(first.id); }
-
-  // Tear down EventSource on navigation away.
-  root._teardown = () => { if (source) source.close(); };
 };
 
 // --------------------------------------------------------------------- admlog
@@ -2707,8 +2726,8 @@ Views.rcon = async (root) => {
 
   // Access card first (always usable), then the live console below it.
   root.append(accessCard, card);
+  root._teardown = stopPolling; // before the await — see logs/battleye above
   await refresh();
-  root._teardown = stopPolling;
 };
 
 // --------------------------------------------------------------------- events
@@ -3170,17 +3189,31 @@ Views.weather = async (root) => {
     h('label', {}, [persist, h('span', { i18n: 'weather.time.persistent' })]),
     h('div', { class: 'actions' }, [
       h('button', { class: 'primary', i18n: 'weather.time.save', disabled: running,
-        onclick: async () => {
+        onclick: (e) => withBusy(e.currentTarget, async () => {
+          // Validate instead of silently substituting: `Number(x) || 1` used to
+          // turn a typo (or a deliberate 0) into 1 without telling anyone.
+          const clamp = (inp, lo, hi) => {
+            const v = Number(inp.value);
+            if (!Number.isFinite(v) || v < lo || v > hi) {
+              inp.style.borderColor = 'var(--error)';
+              return null;
+            }
+            inp.style.borderColor = '';
+            return v;
+          };
+          const day = clamp(accel, 0.1, 24);
+          const night = clamp(nAccel, 0.1, 64);
+          if (day === null || night === null) { toast(t('weather.time.range'), 'error'); return; }
           try {
             await api.post('/api/weather/time', {
-              serverTimeAcceleration: Number(accel.value) || 1,
-              serverNightTimeAcceleration: Number(nAccel.value) || 1,
+              serverTimeAcceleration: day,
+              serverNightTimeAcceleration: night,
               serverTime: sTime.value.trim() || 'SystemTime',
               serverTimePersistent: persist.checked ? 1 : 0,
             });
             toast(t('msg.saved'), 'ok');
-          } catch (e) { handleErr(e); }
-        } }),
+          } catch (err) { handleErr(err); }
+        }) }),
     ]),
   ]));
 };
@@ -3818,8 +3851,12 @@ async function main() {
       // The response is the full merged config, so State.config re-syncs to truth.
       try { State.config = await api.post('/api/config', { language: v }); }
       catch (err) { State.config.language = v; }
-      await loadI18n(v);
-      await navigate(currentRoute());
+      // Without this guard a failing /api/i18n left the picker on the new
+      // language while nothing re-rendered, with no error shown.
+      try {
+        await loadI18n(v);
+        await navigate(currentRoute());
+      } catch (err) { handleErr(err); }
     };
     await ensureFirstRunDone();
     await refreshStatus();
@@ -3951,11 +3988,13 @@ Views.battleye = async (root) => {
   await load();
   await loadBans();
 
+  // Registered BEFORE the await: navigating away mid-mount must not leave the
+  // next view's teardown overwritten by this one.
+  root._teardown = () => { try { cm && cm.toTextArea(); } catch {} };
   try {
     cm = await CM.mount(editorHost, { mode: null, lineWrapping: true });
     // Re-apply initial value that was set before mount.
     if (editorHost.value && !cm.getValue()) cm.setValue(editorHost.value);
-    root._teardown = () => { try { cm && cm.toTextArea(); } catch {} };
   } catch (e) { console.warn('CodeMirror load failed', e); }
 };
 
@@ -4014,9 +4053,9 @@ Views.missiondb = async (root) => {
   const firstExisting = d.files.find(f => f.exists);
   if (firstExisting) fileSelect.value = firstExisting.path;
 
+  root._teardown = () => { try { cm && cm.toTextArea(); } catch {} };
   try {
     cm = await CM.mount(editorHost, { mode: CM.modeFor(fileSelect.value) });
-    root._teardown = () => { try { cm && cm.toTextArea(); } catch {} };
   } catch (e) { console.warn('CodeMirror load failed', e); }
 
   if (firstExisting) await load();
@@ -4025,10 +4064,12 @@ Views.missiondb = async (root) => {
 // --------------------------------------------------------------------- players
 
 Views.players = async (root) => {
+  const myNav = _navSeq;
   root.append(pageHeader('nav.players', 'players.subtitle'));
   let d;
   try { d = await api.get('/api/players'); }
   catch (e) { handleErr(e); return; }
+  if (myNav !== _navSeq) return; // ADM ingestion can take a moment
 
   // Summary tiles.
   root.append(h('div', { class: 'grid-4' }, [
@@ -4246,5 +4287,268 @@ Views.gameplay = async (root) => {
     h('p', { class: 'hint', i18n: 'gameplay.enabledNote' }),
   );
 };
+
+// --------------------------------------------------------------- attachments
+//
+// cfgspawnabletypes.xml editor. DayZ semantics, which the UI makes explicit:
+//   <attachments chance="0.35">   → this SLOT spawns something 35% of the time
+//     <item name="X" chance="60"/> → relative WEIGHT inside the slot; DayZ
+//     <item name="Y" chance="40"/>   picks exactly ONE of them
+// so the real probability of X is 0.35 * 60/(60+40) = 21%. We compute and show
+// that number next to every item — the raw file makes it far too easy to
+// misread weights as probabilities.
+
+Views.attachments = async (root) => {
+  const myNav = _navSeq;
+  root.append(pageHeader('nav.attach', 'attach.subtitle'));
+  if (State.serverStatus.running) root.append(runningBanner());
+
+  let d, presets = [], classNames = [];
+  try { d = await api.get('/api/spawnable'); }
+  catch (e) { handleErr(e); return; }
+  try { presets = (await api.get('/api/spawnable/presets')).presets || []; } catch {}
+  try { classNames = (await api.get('/api/spawnable/classnames')).names || []; } catch {}
+  if (myNav !== _navSeq) return; // types.xml parsing is not instant
+
+  // A shared <datalist> lets every class-name input autocomplete against the
+  // types actually present on THIS server (vanilla + mods), so typos — the
+  // usual reason an attachment silently never spawns — mostly disappear.
+  const dl = h('datalist', { id: 'dz-classnames' });
+  for (const n of classNames.slice(0, 5000)) dl.append(h('option', { value: n }));
+  root.append(dl);
+
+  const card = h('div', { class: 'card' }, [
+    h('h2', { i18n: 'nav.attach' }),
+    h('p', { class: 'hint', text: d.path || '' }),
+  ]);
+  root.append(card);
+
+  if (!d.exists) {
+    card.append(h('div', { class: 'empty-state' }, [h('div', { class: 'es-hint', i18n: 'attach.missing' })]));
+    return;
+  }
+
+  const search = h('input', { type: 'search', placeholder: t('types.search') });
+  const listHost = h('div');
+
+  const presetSel = h('select', { style: { maxWidth: '220px' } });
+  presetSel.append(h('option', { value: '', text: t('attach.preset.pick') }));
+  for (const p of presets) presetSel.append(h('option', { value: p.id, text: p.label }));
+
+  card.append(
+    h('div', { class: 'toolbar' }, [
+      search,
+      h('span', { class: 'grow' }),
+      presetSel,
+      h('button', { class: 'primary', i18n: 'attach.add', onclick: () => {
+        const p = presets.find(x => x.id === presetSel.value);
+        // Deep-copy the preset so editing never mutates the cached template.
+        const seed = p ? JSON.parse(JSON.stringify(p.type)) : { name: '', attachments: [] };
+        openAttachEditor(seed, true);
+      }}),
+    ]),
+    listHost,
+  );
+
+  let all = d.types || [];
+  function renderList() {
+    listHost.innerHTML = '';
+    const q = search.value.trim().toLowerCase();
+    const rows = q ? all.filter(x => x.name.toLowerCase().includes(q)) : all;
+    if (!rows.length) {
+      listHost.append(h('div', { class: 'empty-state' }, [h('div', { class: 'es-hint', i18n: 'attach.none' })]));
+      applyI18n();
+      return;
+    }
+    const tbl = h('table');
+    tbl.append(h('thead', {}, h('tr', {}, [
+      h('th', { i18n: 'col.name' }),
+      h('th', { class: 'num', i18n: 'attach.slots' }),
+      h('th', { i18n: 'attach.summary' }),
+      h('th', { text: '' }),
+    ])));
+    const tb = h('tbody');
+    for (const st of rows.slice(0, 400)) {
+      const groups = st.attachments || [];
+      const summary = groups.slice(0, 3)
+        .map(g => (g.preset ? `preset:${g.preset}` : (g.items || []).map(i => i.name).join(' / ')))
+        .filter(Boolean).join('  •  ');
+      tb.append(h('tr', {}, [
+        h('td', { text: st.name, style: { fontWeight: '600' } }),
+        h('td', { class: 'num', text: String(groups.length) }),
+        h('td', { class: 'hint', text: summary + (groups.length > 3 ? ' …' : '') }),
+        h('td', {}, h('button', { i18n: 'action.edit', onclick: () => openAttachEditor(st, false) })),
+      ]));
+    }
+    tbl.append(tb);
+    listHost.append(h('div', { class: 'table-scroll' }, tbl));
+    applyI18n();
+  }
+  let _t = 0;
+  search.oninput = () => { clearTimeout(_t); _t = setTimeout(renderList, 200); };
+  renderList();
+
+  async function reload() {
+    try {
+      const fresh = await api.get('/api/spawnable');
+      all = fresh.types || [];
+      renderList();
+    } catch (e) { handleErr(e); }
+  }
+
+  // ---- editor modal -------------------------------------------------------
+  function openAttachEditor(seed, isNew) {
+    // Work on a private copy; nothing touches the table until a successful save.
+    const model = {
+      name: seed.name || '',
+      attachments: JSON.parse(JSON.stringify(seed.attachments || [])),
+      cargo: JSON.parse(JSON.stringify(seed.cargo || [])),
+      hoarder: !!seed.hoarder,
+      damageMin: seed.damageMin || '',
+      damageMax: seed.damageMax || '',
+      tags: (seed.tags || []).slice(),
+    };
+    const m = openModal({ title: isNew ? t('attach.add') : model.name, wide: true });
+
+    const nameInp = h('input', { type: 'text', value: model.name, list: 'dz-classnames',
+      placeholder: 'AKM' });
+    nameInp.oninput = () => { model.name = nameInp.value.trim(); };
+
+    const groupsHost = h('div');
+
+    function renderGroups() {
+      groupsHost.innerHTML = '';
+      model.attachments.forEach((g, gi) => {
+        const items = g.items || (g.items = []);
+
+        const chanceInp = h('input', { type: 'text', value: g.chance ?? '1.00',
+          style: { width: '90px' }, title: t('attach.slotChance') });
+        const slotBadge = h('span', { class: 'badge info' });
+
+        const head = h('div', { class: 'row', style: { gap: '8px', marginBottom: '8px' } }, [
+          h('span', { class: 'attach-slot-no', text: '#' + (gi + 1) }),
+          h('span', { class: 'k', i18n: 'attach.slotChance' }),
+          chanceInp,
+          slotBadge,
+          h('span', { class: 'grow' }),
+          h('button', { class: 'danger', text: '×', title: t('action.delete'),
+            onclick: () => { model.attachments.splice(gi, 1); renderGroups(); } }),
+        ]);
+
+        // Badges update IN PLACE. Re-rendering the group on every keystroke
+        // detached the focused input mid-typing, so only the first character
+        // ever landed and the field ended up holding garbage.
+        const itemBadges = [];
+        const recalc = () => {
+          const slot = parseFloat(g.chance);
+          const slotPct = Number.isFinite(slot) ? slot : 1;
+          const total = items.reduce((a, it) => a + (parseFloat(it.chance) || 0), 0);
+          slotBadge.textContent = fmtPct(slotPct);
+          for (const b of itemBadges) {
+            const w = parseFloat(b.it.chance) || 0;
+            const real = total > 0 ? slotPct * (w / total) : 0;
+            b.el.textContent = fmtPct(real);
+            b.el.className = 'badge ' + (real > 0 ? 'ok' : 'mute');
+          }
+        };
+        chanceInp.oninput = () => { g.chance = chanceInp.value.trim(); recalc(); };
+
+        const itemsHost = h('div');
+        items.forEach((it, ii) => {
+          const nameIn = h('input', { type: 'text', value: it.name || '', list: 'dz-classnames',
+            placeholder: t('attach.itemName'), style: { flex: '1', minWidth: '160px' } });
+          const wIn = h('input', { type: 'text', value: it.chance ?? '1.00', style: { width: '80px' },
+            title: t('attach.weight') });
+          const pctBadge = h('span', { class: 'badge mute', title: t('attach.realChance') });
+          const warnBadge = h('span', { class: 'badge warn', text: '?', title: t('attach.unknownClass'),
+            style: { display: 'none' } });
+          const row = h('div', { class: 'row attach-item', style: { gap: '8px', marginBottom: '4px' } }, [
+            nameIn, wIn, pctBadge, warnBadge,
+            h('button', { class: 'danger', text: '×',
+              onclick: () => { items.splice(ii, 1); renderGroups(); } }),
+          ]);
+          // A class absent from types.xml is the #1 reason an attachment
+          // silently never spawns — flag it live as the name is typed.
+          const checkName = () => {
+            const unknown = !!it.name && classNames.length > 0 && !classNames.includes(it.name);
+            row.classList.toggle('unknown', unknown);
+            warnBadge.style.display = unknown ? '' : 'none';
+          };
+          nameIn.oninput = () => { it.name = nameIn.value.trim(); checkName(); };
+          wIn.oninput = () => { it.chance = wIn.value.trim(); recalc(); };
+          checkName();
+          itemBadges.push({ it, el: pctBadge });
+          itemsHost.append(row);
+        });
+        recalc();
+
+        groupsHost.append(h('div', { class: 'card flat attach-group' }, [
+          head,
+          itemsHost,
+          h('div', { class: 'actions', style: { marginTop: '6px' } }, [
+            h('button', { i18n: 'attach.addItem',
+              onclick: () => { items.push({ name: '', chance: '1.00' }); renderGroups(); applyI18n(); } }),
+          ]),
+        ]));
+      });
+      if (!model.attachments.length) {
+        groupsHost.append(h('p', { class: 'hint', i18n: 'attach.noSlots' }));
+      }
+      applyI18n();
+    }
+    renderGroups();
+
+    m.body.append(
+      h('div', {}, [h('label', { i18n: 'attach.weapon' }), nameInp]),
+      h('p', { class: 'hint', i18n: 'attach.help' }),
+      groupsHost,
+      h('div', { class: 'actions' }, [
+        h('button', { i18n: 'attach.addSlot',
+          onclick: () => { model.attachments.push({ chance: '1.00', items: [{ name: '', chance: '1.00' }] }); renderGroups(); applyI18n(); } }),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => withBusy(e.currentTarget, doSave) }),
+        !isNew ? h('button', { class: 'danger', i18n: 'action.delete', onclick: async (e) => {
+          const btn = e.currentTarget; // capture BEFORE the await
+          if (!(await confirmModal(t('confirm.delete').replace('{name}', model.name), { danger: true, okText: t('action.delete') }))) return;
+          await withBusy(btn, async () => {
+            try {
+              await api.del('/api/spawnable/item?name=' + encodeURIComponent(model.name));
+              toast(t('msg.deleted'), 'ok');
+              m.close();
+              await reload();
+            } catch (err) { handleErr(err); }
+          });
+        }}) : null,
+        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+      ]),
+    );
+
+    async function doSave() {
+      if (!model.name) { toast(t('attach.needName'), 'error'); return; }
+      const payload = {
+        name: model.name,
+        hoarder: model.hoarder,
+        damageMin: model.damageMin,
+        damageMax: model.damageMax,
+        tags: model.tags,
+        attachments: model.attachments,
+        cargo: model.cargo,
+      };
+      try {
+        await api.post('/api/spawnable/item', payload);
+        toast(t('msg.saved'), 'ok');
+        m.close();
+        await reload();
+      } catch (e) { handleErr(e); }
+    }
+  }
+};
+
+// fmtPct renders a 0..1 probability as a percentage with sane precision.
+function fmtPct(v) {
+  if (!Number.isFinite(v) || v <= 0) return '0%';
+  const pct = v * 100;
+  return (pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)) + '%';
+}
 
 main();

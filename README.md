@@ -60,6 +60,13 @@
 - **Свои types (moded_types).** Создаёшь новый файл своих types; манагер
   **автоматически** вписывает его в `cfgeconomycore.xml`. Можно
   импортировать `*_types.xml` прямо из установленного мода.
+- **Редактор обвесов (cfgspawnabletypes.xml).** Задаёшь, с чем спавнится
+  оружие: магазин, прицел, приклад, цевьё — слотами с вероятностями.
+  Панель показывает **реальный шанс** каждого предмета (шанс слота × вес ÷
+  сумма весов) — в сыром XML это легко прочитать неверно. Есть шаблоны
+  популярного оружия (AKM, AK-74, AKS-74U, M4-A1, Mosin, SVD), автодополнение
+  классов из твоего `types.xml` (включая моды) и подсветка классов, которых
+  в `types.xml` нет — обычная причина, почему обвес «не спавнится».
 - **Валидатор с авто-исправлением.** Сканирует все `.xml` под `mpmissions/`,
   балансирует скобки в `.cfg`, проверяет существование файлов из
   `cfgeconomycore.xml`, ловит дубликаты types. **Авто-исправление** вносит
@@ -242,6 +249,14 @@ panels.
 - **Custom types (moded_types).** Create a new types file; the manager
   **auto-registers** it in `cfgeconomycore.xml`. You can also import
   `*_types.xml` straight out of an installed mod.
+- **Attachments editor (cfgspawnabletypes.xml).** Define what a weapon
+  spawns with — magazine, optic, buttstock, handguard — as slots with
+  probabilities. The panel shows each item's **real spawn chance** (slot
+  chance × weight ÷ total weight), which the raw XML makes very easy to
+  misread. Ships templates for popular weapons (AKM, AK-74, AKS-74U, M4-A1,
+  Mosin, SVD), autocompletes class names from your own `types.xml` (mods
+  included) and flags classes missing from it — the usual reason an
+  attachment never spawns.
 - **Validator with auto-fix.** Scans every `.xml` under `mpmissions/`,
   checks brace balance in `.cfg`, verifies files referenced by
   `cfgeconomycore.xml` exist, flags duplicate types. **Auto-fix**
