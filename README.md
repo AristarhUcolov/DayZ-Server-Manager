@@ -156,14 +156,25 @@
 GitHub Releases — см. ниже.)
 
 ```bash
-# из корня проекта
+# из корня проекта — сборка для разработки
 go build -o dayz-manager.exe ./cmd/manager
+```
+
+Сборка релиза. Флаги `-s -w` убирают таблицу символов и отладочные данные
+DWARF — это ~3,4 МБ, которые не нужны при запуске. На поведение и на
+трассировку паники они не влияют (Go берёт имена функций и номера строк из
+`pclntab`, а его эти флаги не трогают), поэтому отчёт о падении от
+пользователя остаётся таким же подробным. **Файлы в GitHub Releases собраны
+именно так** — собирайте релизы этой командой, иначе exe вырастет на треть:
+
+```bash
+go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
 ```
 
 Кросс-сборка под Windows из Linux/macOS:
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -o dayz-manager.exe ./cmd/manager
+GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
 ```
 
 Готовый exe полностью самодостаточен — весь веб-интерфейс встроен в бинарь
@@ -384,14 +395,25 @@ panels.
 Requires Go 1.22+. (Pre-built binaries are on the GitHub Releases page.)
 
 ```bash
-# from the project root
+# from the project root — development build
 go build -o dayz-manager.exe ./cmd/manager
+```
+
+Release build. `-s -w` drop the symbol table and DWARF debug info — about
+3.4 MB that is never read at runtime. They do not affect behaviour or panic
+tracebacks (Go takes function names and line numbers from `pclntab`, which
+these flags leave alone), so a crash report from a user is just as detailed.
+**The binaries on GitHub Releases are built this way** — use this command for
+releases or the exe grows by a third:
+
+```bash
+go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
 ```
 
 Cross-compiling to Windows from Linux/macOS:
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -o dayz-manager.exe ./cmd/manager
+GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
 ```
 
 The resulting binary is fully self-contained — the web UI is embedded via
