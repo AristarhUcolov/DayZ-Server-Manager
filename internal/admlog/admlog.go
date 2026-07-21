@@ -34,6 +34,7 @@ type Event struct {
 	TargetID string  `json:"targetId,omitempty"` // target's id= when present
 	Weapon   string  `json:"weapon,omitempty"`   // "with MP5K" → "MP5K"
 	Distance string  `json:"distance,omitempty"` // "from 123.4 meters" → "123.4"
+	Source   string  `json:"source,omitempty"`   // non-player killer: "ZmbM_HermitSkinny_Beard", "FallDamage"
 	Message  string  `json:"message,omitempty"`  // chat text or raw tail
 	Pos      []float64 `json:"pos,omitempty"`    // [x,y,z]
 	Raw      string  `json:"raw"`
@@ -48,6 +49,11 @@ var (
 	reHitBy    = regexp.MustCompile(`^(hit by|killed by)\s+(.*)$`)
 	reByPlayer = regexp.MustCompile(`Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(id=([^)]*?)\s*(?:pos=<[^>]*>)?\)\s*(.*)$`)
 	reWithWpn  = regexp.MustCompile(`(?:with|into)\s+([A-Za-z0-9_\-]+)`)
+	// Non-player killers: "killed by ZmbM_HermitSkinny_Beard with …",
+	// "killed by Animal_UrsusArctos", "killed by FallDamage". Without this the
+	// killfeed labelled every zombie, animal and fall death a suicide — which
+	// on a normal server is most deaths.
+	reSource   = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_]*)`)
 	reDistance = regexp.MustCompile(`from ([\d.]+)\s*meters?`)
 	reCommas   = regexp.MustCompile(`\s*,\s*`)
 )
@@ -105,6 +111,8 @@ func ParseLine(s string) (Event, bool) {
 				ev.Target = bm[1]
 				ev.TargetID = strings.TrimSpace(bm[2])
 				rest = bm[3]
+			} else if sm := reSource.FindStringSubmatch(rest); sm != nil {
+				ev.Source = sm[1]
 			}
 			if wm := reWithWpn.FindStringSubmatch(rest); wm != nil {
 				ev.Weapon = wm[1]

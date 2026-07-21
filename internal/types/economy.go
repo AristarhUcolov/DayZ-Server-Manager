@@ -27,6 +27,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"dayzmanager/internal/util"
 )
 
 const ModedFolder = "moded_types"
@@ -41,8 +43,26 @@ type EcoFileRef struct {
 var (
 	reModedCE = regexp.MustCompile(`(?s)<ce\s+folder="moded_types"\s*>(.*?)</ce>`)
 	reAnyCE   = regexp.MustCompile(`(?s)<ce\s+folder="([^"]+)"\s*>(.*?)</ce>`)
-	reFile    = regexp.MustCompile(`<file\s+name="([^"]+)"\s+type="([^"]+)"\s*/?>`)
+	// Attribute order is not significant in XML, and mod installers do write
+	// `<file type="types" name="x.xml"/>`. Requiring name-before-type meant
+	// those entries were invisible: the validator skipped them, and the Moded
+	// page showed a red "not registered" badge for a file that IS registered.
+	reFileTag = regexp.MustCompile(`<file\b((?:\s+[A-Za-z_][\w.-]*\s*=\s*"[^"]*")+)\s*/?>`)
+	reAttr    = regexp.MustCompile(`([A-Za-z_][\w.-]*)\s*=\s*"([^"]*)"`)
 )
+
+// fileAttrs pulls name and type out of a <file …> tag whatever their order.
+func fileAttrs(tag string) (name, typ string) {
+	for _, a := range reAttr.FindAllStringSubmatch(tag, -1) {
+		switch strings.ToLower(a[1]) {
+		case "name":
+			name = a[2]
+		case "type":
+			typ = a[2]
+		}
+	}
+	return name, typ
+}
 
 // MissionDir returns the mission directory given a server dir and mission template
 // like "dayzOffline.chernarusplus" → <serverDir>/mpmissions/dayzOffline.chernarusplus.
@@ -64,8 +84,12 @@ func ListEconomyCE(path string) ([]EcoFileRef, error) {
 	var out []EcoFileRef
 	for _, ce := range reAnyCE.FindAllStringSubmatch(string(data), -1) {
 		folder := ce[1]
-		for _, f := range reFile.FindAllStringSubmatch(ce[2], -1) {
-			out = append(out, EcoFileRef{Folder: folder, Name: f[1], Type: f[2]})
+		for _, f := range reFileTag.FindAllStringSubmatch(ce[2], -1) {
+			name, typ := fileAttrs(f[1])
+			if name == "" {
+				continue
+			}
+			out = append(out, EcoFileRef{Folder: folder, Name: name, Type: typ})
 		}
 	}
 	return out, nil
@@ -130,7 +154,13 @@ func UnregisterModedFile(ecoPath, fileName string) (bool, error) {
 		return false, nil
 	}
 	inner := s[m[2]:m[3]]
-	lineRe := regexp.MustCompile(`[^\S\n]*<file\s+name="` + regexp.QuoteMeta(fileName) + `"[^/]*/?>[^\S\n]*\n?`)
+	// Match the whole element, in either attribute order and whether or not it
+	// is self-closing. The old `<file\s+name="X"[^/]*/?>` required name first,
+	// so unregistering a `<file type="types" name="X"/>` silently did nothing —
+	// and against the non-self-closing `<file …></file>` form it matched only
+	// the opening tag and left an orphan `</file>` behind, which makes
+	// cfgeconomycore.xml malformed and the server refuse the mission.
+	lineRe := regexp.MustCompile(`[^\S\n]*<file\b[^>]*\bname="` + regexp.QuoteMeta(fileName) + `"[^>]*(?:/>|>\s*</file>)[^\S\n]*\n?`)
 	if !lineRe.MatchString(inner) {
 		return false, nil
 	}
@@ -158,6 +188,10 @@ var ErrNoMission = errors.New("no mission template configured in server.cfg")
 // ---------------------------------------------------------------------------
 
 func atomicWriteFile(path string, data []byte) error {
+	// cfgeconomycore.xml gates the entire central economy: a bad write here
+	// stops the mission loading. Every other writer in the codebase backs up
+	// first — this one did not.
+	_ = util.BackupBeforeWrite(path)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err

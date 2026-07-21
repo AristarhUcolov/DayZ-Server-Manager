@@ -38,19 +38,74 @@ type Params struct {
 	Snowfall     float64 `json:"snowfall"`     // 0..1 (snow worlds, e.g. Sakhal)
 	StormDensity float64 `json:"stormDensity"` // 0..1 lightning density
 	Dynamic      bool    `json:"dynamic"`      // weather drifts vs stays pinned
+	Transition   string  `json:"transition"`   // smooth | normal | fast (see transitions)
+}
+
+// Transition presets control how GRADUALLY weather moves.
+//
+// Three XML knobs decide this, and getting them wrong is why weather can feel
+// like a light switch:
+//
+//	<current time="…">   seconds to ramp to a newly chosen value
+//	<timelimits min max> seconds between weather re-rolls
+//	<changelimits min max> how far a channel may move in one re-roll
+//
+// Vanilla DayZ ramps over ~30 minutes with small steps. "fast" reproduces the
+// old behaviour of this manager (2-minute ramps, full-range steps), which is
+// what made dynamic weather change abruptly.
+type transitionProfile struct {
+	Time     int // <current time="">
+	Duration int // <current duration="">
+	TimeMin  int // <timelimits min="">
+	TimeMax  int // <timelimits max="">
+	// Per-channel maximum step for <changelimits max="">.
+	StepOvercast float64
+	StepFog      float64
+	StepRain     float64
+	StepWind     float64
+	StepSnow     float64
+}
+
+const (
+	TransitionSmooth = "smooth"
+	TransitionNormal = "normal"
+	TransitionFast   = "fast"
+)
+
+// TransitionOrder is the display order for the UI picker.
+var TransitionOrder = []string{TransitionSmooth, TransitionNormal, TransitionFast}
+
+var transitions = map[string]transitionProfile{
+	// Vanilla-like: long ramps, gentle steps — weather creeps in.
+	TransitionSmooth: {Time: 1800, Duration: 600, TimeMin: 1800, TimeMax: 3600,
+		StepOvercast: 0.3, StepFog: 0.1, StepRain: 0.4, StepWind: 4, StepSnow: 0.2},
+	// Noticeable but not jarring.
+	TransitionNormal: {Time: 600, Duration: 300, TimeMin: 900, TimeMax: 1800,
+		StepOvercast: 0.5, StepFog: 0.2, StepRain: 0.6, StepWind: 8, StepSnow: 0.3},
+	// The pre-0.16 behaviour: swings the whole range in two minutes.
+	TransitionFast: {Time: 120, Duration: 240, TimeMin: 300, TimeMax: 600,
+		StepOvercast: 1, StepFog: 0.3, StepRain: 1, StepWind: 20, StepSnow: 0.3},
+}
+
+// profileFor resolves a Transition name, defaulting to smooth.
+func profileFor(name string) transitionProfile {
+	if p, ok := transitions[strings.ToLower(strings.TrimSpace(name))]; ok {
+		return p
+	}
+	return transitions[TransitionSmooth]
 }
 
 // presetOrder fixes the display order; presets holds the values.
 var presetOrder = []string{"clear", "cloudy", "foggy", "rainy", "storm", "snowy", "dynamic"}
 
 var presets = map[string]Params{
-	"clear":   {Enable: true, Overcast: 0.0, Fog: 0.0, Rain: 0.0, Wind: 3, StormDensity: 0.0},
-	"cloudy":  {Enable: true, Overcast: 0.6, Fog: 0.05, Rain: 0.0, Wind: 6, StormDensity: 0.0},
-	"foggy":   {Enable: true, Overcast: 0.5, Fog: 0.7, Rain: 0.0, Wind: 2, StormDensity: 0.0},
-	"rainy":   {Enable: true, Overcast: 0.9, Fog: 0.1, Rain: 0.8, Wind: 10, StormDensity: 0.3},
-	"storm":   {Enable: true, Overcast: 1.0, Fog: 0.15, Rain: 1.0, Wind: 18, StormDensity: 1.0},
-	"snowy":   {Enable: true, Overcast: 0.8, Fog: 0.2, Rain: 0.0, Wind: 8, Snowfall: 0.8, StormDensity: 0.0},
-	"dynamic": {Enable: true, Overcast: 0.45, Fog: 0.05, Rain: 0.0, Wind: 8, StormDensity: 1.0, Dynamic: true},
+	"clear":   {Enable: true, Overcast: 0.0, Fog: 0.0, Rain: 0.0, Wind: 3, StormDensity: 0.0, Transition: TransitionSmooth},
+	"cloudy":  {Enable: true, Overcast: 0.6, Fog: 0.05, Rain: 0.0, Wind: 6, StormDensity: 0.0, Transition: TransitionSmooth},
+	"foggy":   {Enable: true, Overcast: 0.5, Fog: 0.7, Rain: 0.0, Wind: 2, StormDensity: 0.0, Transition: TransitionSmooth},
+	"rainy":   {Enable: true, Overcast: 0.9, Fog: 0.1, Rain: 0.8, Wind: 10, StormDensity: 0.3, Transition: TransitionSmooth},
+	"storm":   {Enable: true, Overcast: 1.0, Fog: 0.15, Rain: 1.0, Wind: 18, StormDensity: 1.0, Transition: TransitionSmooth},
+	"snowy":   {Enable: true, Overcast: 0.8, Fog: 0.2, Rain: 0.0, Wind: 8, Snowfall: 0.8, StormDensity: 0.0, Transition: TransitionSmooth},
+	"dynamic": {Enable: true, Overcast: 0.45, Fog: 0.05, Rain: 0.0, Wind: 8, StormDensity: 1.0, Dynamic: true, Transition: TransitionSmooth},
 }
 
 // Presets returns the preset names in display order.
@@ -99,7 +154,20 @@ func Parse(path string) (Params, error) {
 		Snowfall:     sectionActual(s, "snowfall"),
 		StormDensity: parseFloatAttr(reStormDensity.FindStringSubmatch(s)),
 	}
+	p.Transition = detectTransition(sectionCurrentTime(s, "overcast"))
 	return p, nil
+}
+
+// detectTransition maps an overcast ramp time back onto the nearest profile so
+// the UI shows what the file actually does.
+func detectTransition(rampSeconds float64) string {
+	best, bestDist := TransitionSmooth, math.Inf(1)
+	for _, name := range TransitionOrder {
+		if d := math.Abs(rampSeconds - float64(transitions[name].Time)); d < bestDist {
+			best, bestDist = name, d
+		}
+	}
+	return best
 }
 
 // Write regenerates cfgweather.xml from p, backing up the existing file first.
@@ -133,66 +201,70 @@ func Render(p Params) string {
 		return v, v
 	}
 	// change builds a "<changelimits>" pair: 0 when static (no drift), a band
-	// when dynamic.
-	change := func(lo, hi float64) (float64, float64) {
+	// capped by the transition profile when dynamic. The cap is what makes the
+	// difference between weather easing in and weather flipping like a switch.
+	change := func(step float64) (float64, float64) {
 		if p.Dynamic {
-			return lo, hi
+			return 0, step
 		}
 		return 0, 0
 	}
 
+	tp := profileFor(p.Transition)
+
 	ocMin, ocMax := limit(oc, 0, 1)
-	ocCMin, ocCMax := change(0, 1)
+	ocCMin, ocCMax := change(tp.StepOvercast)
 	fogMin, fogMax := limit(fog, 0, 1)
-	fogCMin, fogCMax := change(0, 0.3)
+	fogCMin, fogCMax := change(tp.StepFog)
 	rainMin, rainMax := limit(rain, 0, 1)
-	rainCMin, rainCMax := change(0, 1)
+	rainCMin, rainCMax := change(tp.StepRain)
 	windMin, windMax := limit(wind, 0, 20)
-	windCMin, windCMax := change(0, 20)
+	windCMin, windCMax := change(tp.StepWind)
 	snowMin, snowMax := limit(snow, 0, 1)
-	snowCMin, snowCMax := change(0, 0.3)
+	snowCMin, snowCMax := change(tp.StepSnow)
 
 	en := boolAttr(p.Enable)
 	f := func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
+	d := func(v int) string { return strconv.Itoa(v) }
 
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <!-- Generated by DayZ Server Manager. 'enable' must be 1 for this file to apply. -->
 <weather reset="0" enable="%s">
     <overcast>
-        <current actual="%s" time="120" duration="240" />
+        <current actual="%s" time="%s" duration="%s" />
         <limits min="%s" max="%s" />
-        <timelimits min="600" max="900" />
+        <timelimits min="%s" max="%s" />
         <changelimits min="%s" max="%s" />
     </overcast>
     <fog>
-        <current actual="%s" time="120" duration="240" />
+        <current actual="%s" time="%s" duration="%s" />
         <limits min="%s" max="%s" />
-        <timelimits min="900" max="900" />
+        <timelimits min="%s" max="%s" />
         <changelimits min="%s" max="%s" />
     </fog>
     <rain>
-        <current actual="%s" time="60" duration="120" />
+        <current actual="%s" time="%s" duration="%s" />
         <limits min="%s" max="%s" />
-        <timelimits min="60" max="120" />
+        <timelimits min="%s" max="%s" />
         <changelimits min="%s" max="%s" />
         <thresholds min="0.6" max="1.0" end="60" />
     </rain>
     <windMagnitude>
-        <current actual="%s" time="120" duration="240" />
+        <current actual="%s" time="%s" duration="%s" />
         <limits min="%s" max="%s" />
-        <timelimits min="120" max="240" />
+        <timelimits min="%s" max="%s" />
         <changelimits min="%s" max="%s" />
     </windMagnitude>
     <windDirection>
-        <current actual="0.0" time="120" duration="240" />
+        <current actual="0.0" time="%s" duration="%s" />
         <limits min="-3.14" max="3.14" />
-        <timelimits min="60" max="120" />
+        <timelimits min="%s" max="%s" />
         <changelimits min="-1.0" max="1.0" />
     </windDirection>
     <snowfall>
-        <current actual="%s" time="120" duration="240" />
+        <current actual="%s" time="%s" duration="%s" />
         <limits min="%s" max="%s" />
-        <timelimits min="300" max="3600" />
+        <timelimits min="%s" max="%s" />
         <changelimits min="%s" max="%s" />
         <thresholds min="1.0" max="1.0" end="120" />
     </snowfall>
@@ -200,11 +272,12 @@ func Render(p Params) string {
 </weather>
 `,
 		en,
-		f(oc), f(ocMin), f(ocMax), f(ocCMin), f(ocCMax),
-		f(fog), f(fogMin), f(fogMax), f(fogCMin), f(fogCMax),
-		f(rain), f(rainMin), f(rainMax), f(rainCMin), f(rainCMax),
-		f(wind), f(windMin), f(windMax), f(windCMin), f(windCMax),
-		f(snow), f(snowMin), f(snowMax), f(snowCMin), f(snowCMax),
+		f(oc), d(tp.Time), d(tp.Duration), f(ocMin), f(ocMax), d(tp.TimeMin), d(tp.TimeMax), f(ocCMin), f(ocCMax),
+		f(fog), d(tp.Time), d(tp.Duration), f(fogMin), f(fogMax), d(tp.TimeMin), d(tp.TimeMax), f(fogCMin), f(fogCMax),
+		f(rain), d(tp.Time), d(tp.Duration), f(rainMin), f(rainMax), d(tp.TimeMin), d(tp.TimeMax), f(rainCMin), f(rainCMax),
+		f(wind), d(tp.Time), d(tp.Duration), f(windMin), f(windMax), d(tp.TimeMin), d(tp.TimeMax), f(windCMin), f(windCMax),
+		d(tp.Time), d(tp.Duration), d(tp.TimeMin), d(tp.TimeMax),
+		f(snow), d(tp.Time), d(tp.Duration), f(snowMin), f(snowMax), d(tp.TimeMin), d(tp.TimeMax), f(snowCMin), f(snowCMax),
 		f(storm),
 	)
 }
@@ -220,6 +293,12 @@ var (
 // block (e.g. "overcast"), returning 0 if absent.
 func sectionActual(xml, section string) float64 {
 	re := regexp.MustCompile(`(?s)<` + section + `>.*?<current[^>]*\bactual\s*=\s*"([^"]*)"`)
+	return parseFloatAttr(re.FindStringSubmatch(xml))
+}
+
+// sectionCurrentTime pulls <current time="..."> from a named channel block.
+func sectionCurrentTime(xml, section string) float64 {
+	re := regexp.MustCompile(`(?s)<` + section + `>.*?<current[^>]*\btime\s*=\s*"([^"]*)"`)
 	return parseFloatAttr(re.FindStringSubmatch(xml))
 }
 

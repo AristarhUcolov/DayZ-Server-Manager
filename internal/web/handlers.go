@@ -16,6 +16,7 @@ import (
 
 	"dayzmanager/internal/app"
 	"dayzmanager/internal/config"
+	"dayzmanager/internal/guide"
 	"dayzmanager/internal/i18n"
 	dzlogs "dayzmanager/internal/logs"
 	"dayzmanager/internal/mods"
@@ -151,6 +152,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/spawnable/item", methods(h.spawnableItem, http.MethodGet, http.MethodPost, http.MethodDelete))
 	mux.HandleFunc("/api/spawnable/presets", methods(h.spawnablePresets, http.MethodGet))
 	mux.HandleFunc("/api/spawnable/classnames", methods(h.spawnableClassNames, http.MethodGet))
+	mux.HandleFunc("/api/guide", methods(h.guideGet, http.MethodGet))
 
 	// Dashboard live metrics.
 	mux.HandleFunc("/api/dashboard/metrics", methods(h.dashboardMetrics, http.MethodGet))
@@ -211,6 +213,10 @@ func (h *handlers) i18nBundle(w http.ResponseWriter, r *http.Request) {
 		"supported": i18n.Supported(),
 		"languages": i18n.Languages(),
 		"messages":  i18n.Get(code),
+		// Hover-help rides along with the bundle so tooltips are ready before
+		// the first hover. It lives in internal/guide, not i18n: it is
+		// documentation, and a new language must not have to write a manual.
+		"help": guide.Help(code),
 	})
 }
 
@@ -393,6 +399,14 @@ func (h *handlers) serverCfg(w http.ResponseWriter, r *http.Request) {
 			}
 			continue
 		}
+		// Decide by what the file already holds, not by what the value looks
+		// like. Otherwise a numeric password ("1234") is written bare —
+		// `password = 1234;` — which BattlEye reads as no password at all and
+		// locks everyone out, while the panel cheerfully reports "saved".
+		if s, ok := v.(string); ok && (cfg.IsQuoted(k) || quotedCfgKeys[k]) {
+			cfg.SetString(k, s)
+			continue
+		}
 		cfg.Set(k, v)
 	}
 	if err := cfg.Save(cfgPath); err != nil {
@@ -400,6 +414,16 @@ func (h *handlers) serverCfg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]string{"status": "saved"})
+}
+
+// quotedCfgKeys are serverDZ.cfg keys that must be written as quoted strings
+// even when the file does not define them yet — so a first-time numeric
+// password or a purely numeric hostname still lands correctly.
+var quotedCfgKeys = map[string]bool{
+	"password": true, "passwordAdmin": true, "hostname": true,
+	"serverName": true, "description": true, "motd": true,
+	"shardId": true, "template": true, "instanceId": true,
+	"steamQueryPort": false,
 }
 
 func (h *handlers) serverCfgMission(w http.ResponseWriter, r *http.Request) {
@@ -1472,8 +1496,25 @@ func (h *handlers) eventsItem(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "event name required", http.StatusBadRequest)
 			return
 		}
-		doc.Upsert(e)
-		if err := doc.Save(path); err != nil {
+		// Surgical: patch the edited numbers in place. A full re-encode used to
+		// strip <flags>, <position>, <limit>, <secondary> and the three radii
+		// from every event in the file — see internal/types/events_write.go.
+		if doc.Find(e.Name) != nil {
+			fields := map[string]int{}
+			for tag, v := range map[string]*int{
+				"nominal": e.Nominal, "min": e.Min, "max": e.Max,
+				"lifetime": e.Lifetime, "restock": e.Restock,
+				"saveable": e.Saveable, "active": e.Active,
+			} {
+				if v != nil {
+					fields[tag] = *v
+				}
+			}
+			if _, err := dztypes.PatchEvent(path, e.Name, fields); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else if err := dztypes.AppendEvent(path, &e); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -1482,13 +1523,13 @@ func (h *handlers) eventsItem(w http.ResponseWriter, r *http.Request) {
 		if !h.requireStopped(w) {
 			return
 		}
-		n := doc.Remove(name)
-		if n == 0 {
-			http.Error(w, "not found", http.StatusNotFound)
+		n, err := dztypes.DeleteEventBlock(path, name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if err := doc.Save(path); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if n == 0 {
+			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 		writeJSON(w, map[string]interface{}{"removed": n})

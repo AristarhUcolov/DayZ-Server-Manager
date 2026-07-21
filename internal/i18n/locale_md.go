@@ -479,6 +479,23 @@ var md = Bundle{
 	// v0.15.0: attachments editor (cfgspawnabletypes.xml).
 	"nav.attach": "Accesorii",
 	"attach.subtitle": "cfgspawnabletypes.xml — cu ce încărcător, lunetă sau pat apare o armă",
+
+	// --- v0.16.0: beginner's guide + weather transition speed ---
+	"nav.guide": "Instrucțiuni",
+	"kill.kind.pvp": "UCIDERE",
+	"kill.kind.env": "DECES",
+	"kill.kind.suicide": "SINUCIDERE",
+	"guide.subtitle": "Tot ce face managerul, explicat pas cu pas",
+	"guide.contents": "Cuprins",
+	"guide.chapter": "Capitolul",
+	"guide.tips": "Merită știut",
+	"guide.open": "Deschide secțiunea",
+	"guide.empty": "Instrucțiunile nu au putut fi încărcate.",
+	"weather.trans.title": "Viteza tranziției",
+	"weather.trans.hint": "Cât de treptat se schimbă vremea. „Lin” corespunde DayZ-ului original; „Rapid” poate parcurge tot intervalul în două minute.",
+	"weather.trans.smooth": "Lin — circa 30 de minute, pași mici",
+	"weather.trans.normal": "Normal — circa 10 minute",
+	"weather.trans.fast": "Rapid — circa 2 minute, pași mari",
 	"attach.missing": "cfgspawnabletypes.xml nu a fost găsit în misiunea activă. Copiază-l din șablonul de misiune vanilla și reîncarcă pagina.",
 	"attach.none": "Încă nimic — alege un șablon de armă mai sus și apasă Adaugă.",
 	"attach.add": "Adaugă armă",

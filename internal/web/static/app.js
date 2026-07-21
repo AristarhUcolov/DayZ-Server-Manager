@@ -82,6 +82,7 @@ async function loadI18n(lang) {
   const data = await api.get(`/api/i18n?lang=${encodeURIComponent(lang)}`);
   State.lang = data.locale;
   State.i18n = data.messages || {};
+  State.help = data.help || {}; // hover-help travels with the bundle
   if (data.languages) State.languages = data.languages;
   document.documentElement.lang = State.lang;
   applyI18n();
@@ -104,6 +105,71 @@ function applyI18n() {
     el.textContent = t(el.dataset.i18n);
   });
 }
+
+
+// --------------------------------------------------------------------- help
+//
+// Hover-help. `help('key')` returns a small ⓘ marker whose tooltip text comes
+// from i18n key `help.<key>`; `withHelp(node, 'key')` attaches one to any
+// element. One delegated listener drives them all, and focus works too so the
+// explanations are reachable by keyboard, not just by mouse.
+
+let _helpTip = null;
+function helpTip() {
+  if (!_helpTip) {
+    _helpTip = h('div', { class: 'help-tip', role: 'tooltip' });
+    document.body.append(_helpTip);
+  }
+  return _helpTip;
+}
+
+function showHelp(anchor) {
+  const key = anchor.dataset.help;
+  if (!key) return;
+  const text = (State.help || {})[key];
+  if (!text) return; // no explanation written for this key
+  const tip = helpTip();
+  tip.textContent = text;
+  tip.classList.add('visible');
+  // Place above the anchor when there is room, otherwise below; always keep
+  // the bubble fully on screen.
+  const r = anchor.getBoundingClientRect();
+  const tr = tip.getBoundingClientRect();
+  let top = r.top - tr.height - 10;
+  if (top < 8) top = r.bottom + 10;
+  let left = r.left + r.width / 2 - tr.width / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - tr.width - 8));
+  tip.style.top = Math.round(top + window.scrollY) + 'px';
+  tip.style.left = Math.round(left) + 'px';
+}
+function hideHelp() { if (_helpTip) _helpTip.classList.remove('visible'); }
+
+document.addEventListener('mouseover', e => {
+  const a = e.target.closest && e.target.closest('[data-help]');
+  if (a) showHelp(a);
+});
+document.addEventListener('mouseout', e => {
+  if (e.target.closest && e.target.closest('[data-help]')) hideHelp();
+});
+document.addEventListener('focusin', e => {
+  const a = e.target.closest && e.target.closest('[data-help]');
+  if (a) showHelp(a);
+});
+document.addEventListener('focusout', hideHelp);
+window.addEventListener('scroll', hideHelp, { passive: true });
+
+// help returns the ⓘ marker element for an i18n help key.
+function help(key) {
+  return h('span', { class: 'help-mark', 'data-help': key, tabindex: '0',
+    'aria-label': 'help', text: 'i' });
+}
+// withHelp wraps a label/heading so the marker sits right after it.
+function withHelp(node, key) {
+  return h('span', { class: 'with-help' }, [node, help(key)]);
+}
+// hlp tags an element in place, with no wrapper — use this wherever an extra
+// <span> would be invalid markup (a <th> inside <tr>, an <option>, an input).
+function hlp(node, key) { node.dataset.help = key; return node; }
 
 // --------------------------------------------------------------------- toast
 
@@ -1245,7 +1311,7 @@ Views.mods = async (root) => {
       h('th', { i18n: 'col.keys' }),
       h('th', { i18n: 'col.size' }),
       h('th', { i18n: 'col.active' }),
-      h('th', { i18n: 'col.serverMod' }),
+      h('th', {}, [h('span', { i18n: 'col.serverMod' }), help('mods.serverSide')]),
       h('th', { text: '' }),
     ]))
   );
@@ -1512,7 +1578,7 @@ Views.mods = async (root) => {
 
   // Load-order (drag-to-reorder) panel. Reflects the current config.mods list.
   const orderWrap = h('div', { class: 'card' }, [
-    h('h3', { i18n: 'mods.loadOrder' }),
+    withHelp(h('h3', { i18n: 'mods.loadOrder' }), 'mods.order'),
     h('p', { class: 'hint', i18n: 'mods.loadOrder.hint' }),
   ]);
   const orderList = h('div', { class: 'order-list' });
@@ -1754,9 +1820,9 @@ Views.types = async (root) => {
     tbl.append(h('thead', {}, h('tr', {}, [
       h('th', {}, headCb),
       sortTh(t('col.name'), 'name', false),
-      sortTh(t('types.field.nominal'), 'nominal', true),
-      sortTh(t('types.field.min'), 'min', true),
-      sortTh(t('types.field.lifetime'), 'lifetime', true),
+      hlp(sortTh(t('types.field.nominal'), 'nominal', true), 'types.nominal'),
+      hlp(sortTh(t('types.field.min'), 'min', true), 'types.min'),
+      hlp(sortTh(t('types.field.lifetime'), 'lifetime', true), 'types.lifetime'),
       sortTh(t('types.field.category'), 'category', false),
       h('th', { text: '' }),
     ])));
@@ -1833,7 +1899,7 @@ Views.types = async (root) => {
     } catch (e) { handleErr(e); return; }
     const m = openModal({ title: name, wide: true });
     const fields = {
-      nominal: h('input', { type: 'number', value: item.nominal ?? '' }),
+      nominal: h('input', { type: 'number', value: item.nominal ?? '', 'data-help': 'types.nominal' }),
       min: h('input', { type: 'number', value: item.min ?? '' }),
       lifetime: h('input', { type: 'number', value: item.lifetime ?? '' }),
       restock: h('input', { type: 'number', value: item.restock ?? '' }),
@@ -2086,7 +2152,7 @@ Views.files = async (root) => {
   async function refreshBackups() {
     backupList.innerHTML = '';
     if (!currentPath) return;
-    backupList.append(h('h3', { i18n: 'backup.title' }));
+    backupList.append(withHelp(h('h3', { i18n: 'backup.title' }), 'settings.backup'));
     try {
       const d = await api.get('/api/backups/list?path=' + encodeURIComponent(currentPath));
       const baks = d.backups || [];
@@ -2356,7 +2422,7 @@ Views.validator = async (root) => {
       h('h2', { i18n: 'validator.title' }),
       h('div', { class: 'actions' }, [
         h('button', { class: 'primary', i18n: 'action.validate', onclick: run }),
-        h('button', { i18n: 'validator.fix', onclick: autofix }),
+        h('button', { i18n: 'validator.fix', onclick: autofix, 'data-help': 'validator.autofix' }),
       ]),
       h('p', { class: 'hint', i18n: 'validator.fix.hint' }),
       listEl,
@@ -2549,7 +2615,8 @@ Views.rcon = async (root) => {
   // reads beserver_x64.cfg at launch). Saving POSTs the config, which writes
   // beserver_x64.cfg on the backend; it takes effect on the next server start.
   const passInp = h('input', { type: 'password', value: cfg.rconPassword || '',
-    placeholder: t('rcon.password'), style: { flex: '1', minWidth: '180px' } });
+    placeholder: t('rcon.password'), 'data-help': 'rcon.password',
+    style: { flex: '1', minWidth: '180px' } });
   const showChk = h('input', { type: 'checkbox' });
   showChk.onchange = () => { passInp.type = showChk.checked ? 'text' : 'password'; };
   const portInp = h('input', { type: 'number', value: cfg.rconPort || '',
@@ -2964,7 +3031,7 @@ function scheduledRestartsCard(c, F, onChange) {
   };
 
   return h('div', { class: 'card' }, [
-    h('h3', { i18n: 'settings.restarts.title' }),
+    withHelp(h('h3', { i18n: 'settings.restarts.title' }), 'settings.restart'),
     h('p', { class: 'hint', i18n: 'settings.restarts.hint' }),
     list,
     h('div', { class: 'actions' }, [
@@ -3046,6 +3113,91 @@ function announcementsCard(c, F, onChange) {
   return card;
 }
 
+
+// --------------------------------------------------------------------- guide
+//
+// The beginner's guide. Content comes from /api/guide rather than the i18n
+// bundle — see internal/guide for why. Each chapter renders as numbered steps
+// with a "gotchas" list, and steps that name a route get a button that takes
+// you straight there, so reading and doing are one click apart.
+
+Views.guide = async (root) => {
+  const myNav = _navSeq;
+  root.append(pageHeader('nav.guide', 'guide.subtitle'));
+
+  let chapters = [];
+  // Ask for the language the UI is actually showing, not the stored config —
+  // the two differ for a moment right after the topbar picker is used.
+  try { chapters = (await api.get('/api/guide?lang=' + encodeURIComponent(State.lang || ''))).chapters || []; }
+  catch (e) { handleErr(e); return; }
+  if (myNav !== _navSeq) return;
+
+  if (!chapters.length) {
+    root.append(h('div', { class: 'card empty-state' }, [h('p', { i18n: 'guide.empty' })]));
+    return;
+  }
+
+  // Contents strip: on a long page the jump list is what makes it usable.
+  const toc = h('div', { class: 'guide-toc' }, chapters.map((c, i) =>
+    h('button', {
+      class: 'guide-toc-item', type: 'button',
+      onclick: () => {
+        const el = document.getElementById('guide-' + c.id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+    }, [
+      h('span', { class: 'guide-toc-num', text: String(i + 1) }),
+      h('span', { text: c.title }),
+    ])));
+  root.append(h('div', { class: 'card' }, [
+    h('h3', { i18n: 'guide.contents' }),
+    toc,
+  ]));
+
+  chapters.forEach((c, ci) => {
+    const steps = (c.steps || []).map((st, si) => h('li', { class: 'guide-step' }, [
+      h('span', { class: 'guide-step-num', text: String(si + 1) }),
+      h('div', { class: 'guide-step-body' }, [
+        h('strong', { text: st.title }),
+        h('p', { text: st.body }),
+        st.route ? h('button', {
+          class: 'secondary guide-jump', type: 'button',
+          text: t('guide.open'),
+          onclick: () => { location.hash = '#' + st.route; },
+        }) : null,
+      ]),
+    ]));
+
+    const tips = (c.tips || []).map(x => h('li', { text: x }));
+
+    root.append(h('section', { class: 'card guide-chapter', id: 'guide-' + c.id }, [
+      h('div', { class: 'guide-head' }, [
+        // Must go through innerHTML: h() uses createElement, which cannot
+        // build a real SVG element (wrong namespace — it renders as nothing).
+        h('span', { class: 'guide-badge', html:
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"' +
+          ' stroke-linecap="round" stroke-linejoin="round"><use href="#' +
+          (c.icon || 'i-guide').replace(/[^a-z0-9-]/gi, '') + '"/></svg>' }),
+        h('div', {}, [
+          h('div', { class: 'guide-kicker', text: t('guide.chapter') + ' ' + (ci + 1) }),
+          h('h2', { text: c.title }),
+        ]),
+      ]),
+      h('p', { class: 'guide-intro', text: c.intro }),
+      // Screenshot of the real section. loading="lazy" so eight of them do not
+      // all decode on first paint.
+      c.image ? h('figure', { class: 'guide-shot' }, [
+        h('img', { src: c.image, alt: c.title, loading: 'lazy', decoding: 'async' }),
+      ]) : null,
+      steps.length ? h('ol', { class: 'guide-steps' }, steps) : null,
+      tips.length ? h('div', { class: 'guide-tips' }, [
+        h('div', { class: 'guide-tips-title', i18n: 'guide.tips' }),
+        h('ul', {}, tips),
+      ]) : null,
+    ]));
+  });
+};
+
 // --------------------------------------------------------------------- weather & time
 
 // Line-style weather icons (stroke=currentColor so they inherit text/accent
@@ -3083,7 +3235,13 @@ Views.weather = async (root) => {
     text: enabled ? (t('weather.preset.' + d.matched) || d.matched) : '—' });
 
   const applyPreset = async (name) => {
-    try { await api.post('/api/weather/preset', { name }); toast(t('msg.saved'), 'ok'); await navigate('weather'); }
+    try {
+      // Carry the current smoothness through so clicking a preset doesn't
+      // quietly revert it.
+      const tr = (document.querySelector('#weather-trans') || {}).value || (params.transition || 'smooth');
+      await api.post('/api/weather/preset', { name, transition: tr });
+      toast(t('msg.saved'), 'ok'); await navigate('weather');
+    }
     catch (e) { handleErr(e); }
   };
   const presetTile = (name) => h('button', {
@@ -3122,7 +3280,11 @@ Views.weather = async (root) => {
     range.oninput = () => { out.textContent = fmt(Number(range.value)); fill(); };
     fill();
     const row = h('div', { class: 'wrow' }, [
-      h('span', { class: 'slider-label' }, [h('span', { class: 'ic', html: WICON[icon] || '' }), h('span', { i18n: labelKey })]),
+      h('span', { class: 'slider-label' }, [
+        h('span', { class: 'ic', html: WICON[icon] || '' }),
+        h('span', { i18n: labelKey }),
+        opts.help ? help(opts.help) : null,
+      ]),
       range, out,
     ]);
     return { row, get: () => unit === '%' ? Number(range.value) / 100 : Number(range.value) };
@@ -3131,16 +3293,29 @@ Views.weather = async (root) => {
   const fog = sliderRow('weather.fog', 'foggy', params.fog);
   const rain = sliderRow('weather.rain', 'rainy', params.rain);
   const snow = sliderRow('weather.snowfall', 'snowy', params.snowfall);
-  const storm = sliderRow('weather.storm', 'storm', params.stormDensity);
+  const storm = sliderRow('weather.storm', 'storm', params.stormDensity, { help: 'weather.storm' });
   const wind = sliderRow('weather.wind', 'wind', params.wind, { unit: 'm/s', max: 20, step: '0.5' });
   const dynChk = h('input', { type: 'checkbox', class: 'switch' });
   dynChk.checked = !!params.dynamic;
+  // How gradually weather moves. The old build hard-coded 2-minute ramps with
+  // full-range steps, which is why changes felt like a light switch.
+  const transSel = h('select', { id: 'weather-trans', style: { maxWidth: '260px' } }, [
+    h('option', { value: 'smooth', i18n: 'weather.trans.smooth' }),
+    h('option', { value: 'normal', i18n: 'weather.trans.normal' }),
+    h('option', { value: 'fast',   i18n: 'weather.trans.fast' }),
+  ]);
+  transSel.value = params.transition || 'smooth';
 
   wrap.append(h('div', { class: 'card' }, [
     h('h3', { i18n: 'weather.custom.title' }),
     h('p', { class: 'hint', i18n: 'weather.custom.hint' }),
     oc.row, fog.row, rain.row, wind.row, snow.row, storm.row,
-    h('label', {}, [dynChk, h('span', { i18n: 'weather.preset.dynamic' })]),
+    h('label', {}, [dynChk, h('span', { i18n: 'weather.preset.dynamic' }), help('weather.dynamic')]),
+    h('div', { style: { marginTop: '10px' } }, [
+      withHelp(h('label', { i18n: 'weather.trans.title', style: { display: 'inline-block' } }), 'weather.transition'),
+      transSel,
+      h('small', { class: 'hint', i18n: 'weather.trans.hint' }),
+    ]),
     h('div', { class: 'actions' }, [
       h('button', { class: 'primary', i18n: 'weather.apply', disabled: running,
         onclick: async () => {
@@ -3149,6 +3324,7 @@ Views.weather = async (root) => {
               overcast: oc.get(), fog: fog.get(), rain: rain.get(),
               snowfall: snow.get(), stormDensity: storm.get(),
               wind: wind.get(), dynamic: dynChk.checked,
+              transition: transSel.value,
             });
             toast(t('msg.saved'), 'ok'); await navigate('weather');
           } catch (e) { handleErr(e); }
@@ -3267,7 +3443,7 @@ Views.wipe = async (root) => {
 
   wrap.append(h('div', { class: 'card', style: { borderColor: 'var(--error)' } }, [
     h('h3', { i18n: 'nav.wipe' }),
-    h('p', { class: 'warning-bar', i18n: 'wipe.warning' }),
+    h('p', { class: 'warning-bar', i18n: 'wipe.warning', 'data-help': 'wipe' }),
     h('p', { class: 'hint', i18n: 'wipe.whatItDoes' }),
     h('p', { class: 'hint', i18n: 'wipe.backupNote' }),
     d.instanceId ? h('p', { class: 'hint', text: 'instanceId: ' + d.instanceId }) : null,
@@ -3394,7 +3570,7 @@ Views.settings = async (root) => {
         h('div', { class: 'row' }, [F.vanillaDayZPath, detectBtn]),
       ]),
       h('div', {}, [
-        h('label', { i18n: 'settings.exposure' }),
+        withHelp(h('label', { i18n: 'settings.exposure' }), 'settings.exposure'),
         F.exposure,
         h('small', { class: 'hint', i18n: 'settings.exposure.hint' }),
       ]),
@@ -3428,7 +3604,7 @@ Views.settings = async (root) => {
         row('settings.autorestart', F.autoRestartSeconds),
       ]),
       h('p', { class: 'hint', i18n: 'settings.autorestart.hint' }),
-      h('label', {}, [F.restartOnCrash, h('span', { i18n: 'settings.watchdog' })]),
+      h('label', {}, [F.restartOnCrash, h('span', { i18n: 'settings.watchdog' }), help('settings.watchdog')]),
       h('small', { class: 'hint', i18n: 'settings.watchdog.hint' }),
     ]),
 
@@ -4135,19 +4311,23 @@ Views.players = async (root) => {
   } else {
     const listEl = h('div', { class: 'adm-list' });
     for (const k of kf) {
+      // kind is "pvp" | "env" | "suicide". Older data has no kind, so fall
+      // back to the old suicide flag.
+      const kind = k.kind || (k.suicide ? 'suicide' : (k.killer ? 'pvp' : 'env'));
       const pieces = [
         h('span', { class: 'adm-time', text: k.time || '' }),
-        h('span', { class: 'adm-type adm-kill', text: 'KILL' }),
+        h('span', { class: 'adm-type adm-kill', text: t('kill.kind.' + kind) }),
       ];
-      if (k.killer && !k.suicide) {
-        pieces.push(h('span', { class: 'adm-player', text: k.killer }));
+      // Whoever did it: a player, or the zombie/animal/fall that the log named.
+      const by = kind === 'pvp' ? k.killer : (kind === 'env' ? k.source : '');
+      if (by) {
+        pieces.push(h('span', { class: kind === 'pvp' ? 'adm-player' : 'adm-meta', text: by }));
         pieces.push(h('span', { class: 'adm-arrow', text: '→' }));
       }
       pieces.push(h('span', { class: 'adm-player', text: k.victim }));
       const meta = [];
       if (k.weapon) meta.push(k.weapon);
       if (k.distance) meta.push(k.distance + 'm');
-      if (k.suicide && !k.killer) meta.push(t('admlog.type.death'));
       if (meta.length) pieces.push(h('span', { class: 'adm-meta', text: '(' + meta.join(', ') + ')' }));
       listEl.append(h('div', { class: 'adm-row' }, pieces));
     }
@@ -4428,6 +4608,7 @@ Views.attachments = async (root) => {
         const head = h('div', { class: 'row', style: { gap: '8px', marginBottom: '8px' } }, [
           h('span', { class: 'attach-slot-no', text: '#' + (gi + 1) }),
           h('span', { class: 'k', i18n: 'attach.slotChance' }),
+          help('attach.slotChance'),
           chanceInp,
           slotBadge,
           h('span', { class: 'grow' }),

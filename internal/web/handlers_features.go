@@ -77,6 +77,9 @@ func (h *handlers) weatherPreset(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Name string `json:"name"`
+		// Optional: keep the smoothness the user picked instead of resetting it
+		// to the preset's default on every preset click.
+		Transition string `json:"transition"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -94,6 +97,9 @@ func (h *handlers) weatherPreset(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unknown preset: "+req.Name, http.StatusBadRequest)
 			return
 		}
+	}
+	if strings.TrimSpace(req.Transition) != "" {
+		p.Transition = req.Transition
 	}
 	if err := h.writeWeather(p); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

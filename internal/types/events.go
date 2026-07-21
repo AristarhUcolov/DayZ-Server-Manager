@@ -22,8 +22,6 @@ package types
 import (
 	"encoding/xml"
 	"os"
-
-	"dayzmanager/internal/util"
 )
 
 type EventsDoc struct {
@@ -67,19 +65,10 @@ func LoadEvents(path string) (*EventsDoc, error) {
 	return doc, nil
 }
 
-func (d *EventsDoc) Save(path string) error {
-	out, err := xml.MarshalIndent(d, "", "    ")
-	if err != nil {
-		return err
-	}
-	out = append([]byte(xml.Header), out...)
-	_ = util.BackupBeforeWrite(path)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, out, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
-}
+// NOTE: there is deliberately no EventsDoc.Save. This struct models only the
+// seven numbers the editor exposes; marshalling it back out deleted <flags>,
+// <position>, <limit>, <secondary> and the three radii from every event in the
+// file. Writes go through the surgical helpers in events_write.go.
 
 func (d *EventsDoc) Find(name string) *Event {
 	for i := range d.Events {
@@ -90,26 +79,3 @@ func (d *EventsDoc) Find(name string) *Event {
 	return nil
 }
 
-func (d *EventsDoc) Upsert(e Event) {
-	for i := range d.Events {
-		if d.Events[i].Name == e.Name {
-			d.Events[i] = e
-			return
-		}
-	}
-	d.Events = append(d.Events, e)
-}
-
-func (d *EventsDoc) Remove(name string) int {
-	n := 0
-	kept := d.Events[:0]
-	for _, e := range d.Events {
-		if e.Name == name {
-			n++
-			continue
-		}
-		kept = append(kept, e)
-	}
-	d.Events = kept
-	return n
-}

@@ -48,7 +48,14 @@ type KillEvent struct {
 	Victim   string `json:"victim"`
 	Weapon   string `json:"weapon,omitempty"`
 	Distance string `json:"distance,omitempty"`
-	Suicide  bool   `json:"suicide,omitempty"`
+	// Source names a non-player killer as written in the log
+	// ("ZmbM_HermitSkinny_Beard", "Animal_UrsusArctos", "FallDamage").
+	Source string `json:"source,omitempty"`
+	// Kind is what actually happened: "pvp", "env" (infected/animal/fall/
+	// starvation) or "suicide". Everything without a player killer used to be
+	// reported as a suicide, which on a normal server is most deaths.
+	Kind    string `json:"kind"`
+	Suicide bool   `json:"suicide,omitempty"` // kept for older UI builds
 }
 
 type db struct {
@@ -260,11 +267,20 @@ func (s *Store) apply(ev admlog.Event, stamp string, at time.Time) bool {
 				killerName = killer.Name
 			}
 		}
+		kind := "env"
+		switch {
+		case killerName != "" && killerName != ev.Player:
+			kind = "pvp"
+		case killerName == ev.Player && killerName != "",
+			strings.Contains(strings.ToLower(ev.Message), "suicide"):
+			kind = "suicide"
+		}
 		s.pushKill(KillEvent{
 			At: stamp, Time: ev.Time,
 			Killer: killerName, Victim: ev.Player,
 			Weapon: ev.Weapon, Distance: ev.Distance,
-			Suicide: killerName == "" || killerName == ev.Player,
+			Source: ev.Source, Kind: kind,
+			Suicide: kind == "suicide",
 		})
 		return true
 	case "death":
@@ -273,7 +289,14 @@ func (s *Store) apply(ev admlog.Event, stamp string, at time.Time) bool {
 			return false
 		}
 		p.Deaths++
-		s.pushKill(KillEvent{At: stamp, Time: ev.Time, Victim: ev.Player, Suicide: true})
+		// A bare death line is bleeding, starvation, hypothermia — environment,
+		// not a suicide, unless the log says so.
+		kind := "env"
+		if strings.Contains(strings.ToLower(ev.Message), "suicide") {
+			kind = "suicide"
+		}
+		s.pushKill(KillEvent{At: stamp, Time: ev.Time, Victim: ev.Player,
+			Kind: kind, Suicide: kind == "suicide", Source: ev.Source})
 		return true
 	case "hit", "chat":
 		return s.player(ev.ID, ev.Player, stamp) != nil

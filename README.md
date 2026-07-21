@@ -14,7 +14,31 @@
 и превращает обычный сервер в удобную панель управления в браузере. Никаких
 `Notepad`, никаких `.bat` — всё через приятный веб-интерфейс. Вдохновлён
 панелями хостингов GTA SA:MP.
-<img width="1914" height="893" alt="{295FFA97-BA29-411B-8868-ECC23DE34220}" src="https://github.com/user-attachments/assets/bae4cc20-936a-47e8-8251-2e8948987e87" />
+
+<p align="center">
+  <img src="docs/img/dashboard.webp" alt="Панель управления DayZ Server Manager" width="900">
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/img/guide.webp" alt="Инструкция для новичков"><br>
+      <b>Инструкция</b> — восемь глав с пошаговыми объяснениями и переходом прямо в нужный раздел</td>
+    <td width="50%"><img src="docs/img/attachments.webp" alt="Редактор обвесов"><br>
+      <b>Обвесы</b> — cfgspawnabletypes.xml с реальными процентами спавна вместо сырых весов</td>
+  </tr>
+  <tr>
+    <td><img src="docs/img/types.webp" alt="Редактор types.xml"><br>
+      <b>Лут</b> — types.xml с поиском, правкой в таблице и массовыми заготовками</td>
+    <td><img src="docs/img/weather.webp" alt="Погода и время"><br>
+      <b>Погода</b> — пресеты, ручная настройка и плавность перехода</td>
+  </tr>
+  <tr>
+    <td><img src="docs/img/mods.webp" alt="Моды"><br>
+      <b>Моды</b> — установка из !Workshop, ключи, порядок загрузки, авто-обновление</td>
+    <td><img src="docs/img/validator.webp" alt="Валидатор"><br>
+      <b>Валидатор</b> — проверка XML, ссылок между файлами и значений с авто-исправлением</td>
+  </tr>
+</table>
 
 ## Что умеет
 
@@ -106,6 +130,18 @@
 - **Автопроверка/защита от повреждений.** Все write-операции возвращают
   409 Conflict, если сервер запущен (DayZ держит блокировки на свои файлы).
   В UI сверху показывается баннер-предупреждение.
+- **Инструкция для новичков.** Восемь глав прямо в панели: с чего начать,
+  моды, лут и экономика, обвесы, RCon, погода, обслуживание, доступ с
+  телефона. Каждая — с пошаговыми действиями, скриншотом раздела, блоком
+  «полезно знать» и кнопкой, которая открывает нужную страницу панели.
+- **Подсказки при наведении.** У ключевых полей есть значок «i»: наведи —
+  и получишь объяснение, что именно делает `nominal`, чем `min` отличается
+  от него, почему вес обвеса — не проценты, и почему новый пароль RCon
+  начинает работать только после рестарта. Работает и с клавиатуры.
+- **Плавная смена погоды.** Появился выбор плавности перехода: «Плавно»
+  (~30 минут мелкими шагами, как в ванильном DayZ), «Обычно» (~10 минут)
+  и «Быстро» (~2 минуты). Раньше менеджер всегда писал двухминутный переход
+  с полным диапазоном изменения — отсюда и ощущение выключателя.
 - **11 языков интерфейса** с переключением на лету: English, Русский,
   Español, Français, Deutsch, Italiano, Português, Moldovenească, 中文,
   日本語, 한국어. Мастер первого запуска с выбором языка.
@@ -203,7 +239,31 @@ dedicated server. Drop it into your DayZ Server folder and a browser-based
 admin panel opens. No more Notepad, no more fiddling with `.bat` files —
 everything through a clean web UI. Inspired by classic GTA SA:MP hosting
 panels.
-<img width="1912" height="897" alt="{6C2F5542-BC13-48A3-9B8E-670671B97C7C}" src="https://github.com/user-attachments/assets/408af898-ad66-4de2-b176-f0b703d6dcf1" />
+
+<p align="center">
+  <img src="docs/img/dashboard.webp" alt="DayZ Server Manager dashboard" width="900">
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/img/guide.webp" alt="Beginner's guide"><br>
+      <b>Guide</b> — eight chapters of step-by-step explanations, each jumping straight to the section</td>
+    <td width="50%"><img src="docs/img/attachments.webp" alt="Attachments editor"><br>
+      <b>Attachments</b> — cfgspawnabletypes.xml showing real spawn percentages instead of raw weights</td>
+  </tr>
+  <tr>
+    <td><img src="docs/img/types.webp" alt="types.xml editor"><br>
+      <b>Loot</b> — types.xml with search, in-table editing and bulk spawn presets</td>
+    <td><img src="docs/img/weather.webp" alt="Weather and time"><br>
+      <b>Weather</b> — presets, manual tuning and transition smoothness</td>
+  </tr>
+  <tr>
+    <td><img src="docs/img/mods.webp" alt="Mods"><br>
+      <b>Mods</b> — install from !Workshop, keys, load order, auto-update</td>
+    <td><img src="docs/img/validator.webp" alt="Validator"><br>
+      <b>Validator</b> — XML, cross-file references and value checks with auto-fix</td>
+  </tr>
+</table>
 
 ## What it does
 
@@ -299,6 +359,18 @@ panels.
 - **Write-safety guard.** All file-writing endpoints return `409 Conflict`
   while the server is running (DayZ holds file locks on its working set).
   A warning banner is shown in the UI.
+- **Beginner's guide.** Eight chapters inside the panel: getting started,
+  mods, loot and economy, attachments, RCon, weather, maintenance, remote
+  access. Each has numbered steps, a screenshot of the section, a
+  "worth knowing" box, and a button that opens the page it describes.
+- **Hover help.** Key fields carry an "i" marker: hover it to read what
+  `nominal` actually does, how `min` differs from it, why an attachment
+  weight is not a percentage, and why a new RCon password only takes effect
+  after a restart. Keyboard-reachable too.
+- **Smooth weather transitions.** A transition-speed picker: Smooth
+  (~30 minutes in small steps, like vanilla DayZ), Normal (~10 minutes) and
+  Fast (~2 minutes). Earlier builds always wrote a two-minute ramp with
+  full-range steps, which is what made weather feel like a light switch.
 - **11-language UI** with an on-the-fly switcher: English, Русский, Español,
   Français, Deutsch, Italiano, Português, Moldovenească, 中文, 日本語, 한국어.
   A language picker in the first-run wizard.

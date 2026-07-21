@@ -479,6 +479,23 @@ var zh = Bundle{
 	// v0.15.0: attachments editor (cfgspawnabletypes.xml).
 	"nav.attach": "配件",
 	"attach.subtitle": "cfgspawnabletypes.xml —— 决定武器生成时自带哪种弹匣、瞄具或枪托",
+
+	// --- v0.16.0: beginner's guide + weather transition speed ---
+	"nav.guide": "新手指南",
+	"kill.kind.pvp": "击杀",
+	"kill.kind.env": "死亡",
+	"kill.kind.suicide": "自杀",
+	"guide.subtitle": "逐步讲解管理器的每一项功能",
+	"guide.contents": "目录",
+	"guide.chapter": "第",
+	"guide.tips": "值得注意",
+	"guide.open": "打开该页",
+	"guide.empty": "无法加载指南。",
+	"weather.trans.title": "过渡速度",
+	"weather.trans.hint": "天气变化的渐进程度。「平缓」与原版 DayZ 一致；「快速」可能在两分钟内跑完整个范围。",
+	"weather.trans.smooth": "平缓 — 约 30 分钟，小幅变化",
+	"weather.trans.normal": "普通 — 约 10 分钟",
+	"weather.trans.fast": "快速 — 约 2 分钟，大幅变化",
 	"attach.missing": "在当前任务中未找到 cfgspawnabletypes.xml。请从原版任务模板复制它，然后刷新本页。",
 	"attach.none": "这里还是空的——在上方选择一个武器模板并点击添加。",
 	"attach.add": "添加武器",

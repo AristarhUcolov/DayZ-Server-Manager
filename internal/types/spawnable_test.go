@@ -147,16 +147,96 @@ func TestSaveSpawnableTypeAppendsNew(t *testing.T) {
 
 func TestDeleteSpawnableType(t *testing.T) {
 	p := writeSample(t)
-	ok, err := DeleteSpawnableType(p, "Barrel_Green")
-	if err != nil || !ok {
-		t.Fatalf("delete: ok=%v err=%v", ok, err)
+	n, err := DeleteSpawnableType(p, "Barrel_Green")
+	if err != nil || n != 1 {
+		t.Fatalf("delete: n=%d err=%v", n, err)
 	}
 	list, _ := LoadSpawnable(p)
 	if len(list) != 2 {
 		t.Errorf("types = %d, want 2", len(list))
 	}
-	if ok, _ := DeleteSpawnableType(p, "NotThere"); ok {
+	if n, _ := DeleteSpawnableType(p, "NotThere"); n != 0 {
 		t.Error("deleting a missing type reported success")
+	}
+}
+
+// A <type> an admin commented out to disable it is not a live entry. Editing
+// the same name must rewrite the LIVE block, not splice a copy inside the
+// comment — which is what v0.15.0 did, producing a save that appeared to work
+// while the weapon spawned with nothing.
+func TestCommentedOutBlocksAreNotTouched(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "c.xml")
+	src := `<spawnabletypes>
+    <!-- disabled for now
+    <type name="AKM">
+        <attachments chance="1.00"><item name="OLD" chance="1.00"/></attachments>
+    </type>
+    -->
+    <type name="AKM">
+        <attachments chance="1.00"><item name="LIVE" chance="1.00"/></attachments>
+    </type>
+</spawnabletypes>
+`
+	if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only the live entry is visible.
+	list, err := LoadSpawnable(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Attachments[0].Items[0].Name != "LIVE" {
+		t.Fatalf("commented-out block leaked into the parse: %+v", list)
+	}
+
+	st := &SpawnableType{Name: "AKM", Attachments: []SpawnGroup{
+		{Chance: "1.00", Items: []SpawnItem{{Name: "NEW", Chance: "1.00"}}},
+	}}
+	if err := SaveSpawnableType(p, st); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := os.ReadFile(p)
+	got := string(out)
+	if !strings.Contains(got, `name="OLD"`) {
+		t.Error("the commented-out block was modified")
+	}
+	if strings.Contains(got, `name="LIVE"`) {
+		t.Error("the live block was not replaced")
+	}
+	if !strings.Contains(got, `name="NEW"`) {
+		t.Error("the new block was not written")
+	}
+	// Exactly one live entry must remain — not an appended duplicate.
+	after, err := LoadSpawnable(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != 1 {
+		t.Fatalf("live types = %d, want 1:\n%s", len(after), got)
+	}
+}
+
+// Vanilla Livonia writes `-------` inside a comment, which is illegal XML.
+// DayZ ignores comments; so must we, or the whole editor is dead on that map.
+func TestLoadSpawnableSurvivesIllegalComments(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "c.xml")
+	src := `<spawnabletypes>
+    <!--------- weapons ---------->
+    <type name="AKM">
+        <attachments chance="1.00"><item name="Mag_AKM_30Rnd" chance="1.00"/></attachments>
+    </type>
+</spawnabletypes>
+`
+	os.WriteFile(p, []byte(src), 0o644)
+	list, err := LoadSpawnable(p)
+	if err != nil {
+		t.Fatalf("illegal comment broke the parse: %v", err)
+	}
+	if len(list) != 1 || list[0].Name != "AKM" {
+		t.Fatalf("got %+v", list)
 	}
 }
 

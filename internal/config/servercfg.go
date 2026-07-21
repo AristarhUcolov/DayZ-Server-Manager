@@ -158,8 +158,11 @@ func (c *ServerCfg) Save(path string) error {
 
 // Get returns the value (unquoted if it was quoted) and whether the key was found.
 func (c *ServerCfg) Get(key string) (string, bool) {
+	// Case-insensitive: serverDZ.cfg keys are, and a config spelling
+	// `enablecfggameplayfile` used to read as absent and then get appended a
+	// second time by Set.
 	for _, e := range c.Entries {
-		if e.Kind == EntryKV && e.Key == key {
+		if e.Kind == EntryKV && strings.EqualFold(e.Key, key) {
 			return unquote(e.Value), true
 		}
 	}
@@ -172,7 +175,7 @@ func (c *ServerCfg) Get(key string) (string, bool) {
 // numeric field that was simply left blank.
 func (c *ServerCfg) IsQuoted(key string) bool {
 	for _, e := range c.Entries {
-		if e.Kind == EntryKV && e.Key == key {
+		if e.Kind == EntryKV && strings.EqualFold(e.Key, key) {
 			v := strings.TrimSpace(e.Value)
 			return len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"'
 		}
@@ -183,14 +186,23 @@ func (c *ServerCfg) IsQuoted(key string) bool {
 // Set updates or inserts a key=value pair. When val is a string it is quoted;
 // ints/bools are rendered bare.
 func (c *ServerCfg) Set(key string, val interface{}) {
-	rendered := renderValue(val)
+	c.setRendered(key, renderValue(val))
+}
+
+// setRendered updates EVERY entry with this key (a file that defines a key
+// twice used to keep the second, stale definition, which is the one the server
+// actually reads) and appends only when there is none.
+func (c *ServerCfg) setRendered(key, rendered string) {
+	found := false
 	for i := range c.Entries {
-		if c.Entries[i].Kind == EntryKV && c.Entries[i].Key == key {
+		if c.Entries[i].Kind == EntryKV && strings.EqualFold(c.Entries[i].Key, key) {
 			c.Entries[i].Value = rendered
-			return
+			found = true
 		}
 	}
-	c.Entries = append(c.Entries, ServerCfgEntry{Kind: EntryKV, Key: key, Value: rendered})
+	if !found {
+		c.Entries = append(c.Entries, ServerCfgEntry{Kind: EntryKV, Key: key, Value: rendered})
+	}
 }
 
 // SetMissionTemplate rewrites the template="..." line inside class Missions/class DayZ.
@@ -274,6 +286,21 @@ func unquote(v string) string {
 	return v
 }
 
+// quoteCfg wraps a value in quotes for server.cfg. Enfusion escapes an
+// embedded quote by DOUBLING it, not with a backslash — a backslash-escaped
+// quote is parsed as a literal backslash followed by the end of the string.
+func quoteCfg(v string) string {
+	return `"` + strings.ReplaceAll(v, `"`, `""`) + `"`
+}
+
+// SetString writes a value that must stay a quoted string no matter what it
+// looks like. renderValue un-quotes anything that parses as a number, which
+// turned a numeric password ("1234") into a bare `password = 1234;` and locked
+// every player out of the server while the panel reported success.
+func (c *ServerCfg) SetString(key, val string) {
+	c.setRendered(key, quoteCfg(val))
+}
+
 func renderValue(val interface{}) string {
 	switch v := val.(type) {
 	case string:
@@ -287,7 +314,7 @@ func renderValue(val interface{}) string {
 		if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
 			return v
 		}
-		return `"` + strings.ReplaceAll(v, `"`, `\"`) + `"`
+		return quoteCfg(v)
 	case int:
 		return strconv.Itoa(v)
 	case int64:

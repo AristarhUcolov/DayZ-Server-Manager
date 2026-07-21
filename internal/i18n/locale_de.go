@@ -479,6 +479,23 @@ var de = Bundle{
 	// v0.15.0: attachments editor (cfgspawnabletypes.xml).
 	"nav.attach": "Anbauteile",
 	"attach.subtitle": "cfgspawnabletypes.xml — mit welchem Magazin, Visier oder Schaft eine Waffe spawnt",
+
+	// --- v0.16.0: beginner's guide + weather transition speed ---
+	"nav.guide": "Anleitung",
+	"kill.kind.pvp": "KILL",
+	"kill.kind.env": "TOD",
+	"kill.kind.suicide": "SUIZID",
+	"guide.subtitle": "Alles, was der Manager kann, Schritt für Schritt erklärt",
+	"guide.contents": "Inhalt",
+	"guide.chapter": "Kapitel",
+	"guide.tips": "Gut zu wissen",
+	"guide.open": "Bereich öffnen",
+	"guide.empty": "Die Anleitung konnte nicht geladen werden.",
+	"weather.trans.title": "Übergangsgeschwindigkeit",
+	"weather.trans.hint": "Wie allmählich sich das Wetter ändert. „Sanft“ entspricht dem Vanilla-DayZ; „Schnell“ durchläuft den vollen Bereich in zwei Minuten.",
+	"weather.trans.smooth": "Sanft — etwa 30 Minuten, kleine Schritte",
+	"weather.trans.normal": "Normal — etwa 10 Minuten",
+	"weather.trans.fast": "Schnell — etwa 2 Minuten, große Schritte",
 	"attach.missing": "cfgspawnabletypes.xml wurde in der aktiven Mission nicht gefunden. Kopiere sie aus der Vanilla-Missionsvorlage und lade die Seite neu.",
 	"attach.none": "Noch nichts da — wähle oben eine Waffenvorlage und klicke auf Hinzufügen.",
 	"attach.add": "Waffe hinzufügen",

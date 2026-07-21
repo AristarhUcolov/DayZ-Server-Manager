@@ -479,6 +479,23 @@ var ja = Bundle{
 	// v0.15.0: attachments editor (cfgspawnabletypes.xml).
 	"nav.attach": "アタッチメント",
 	"attach.subtitle": "cfgspawnabletypes.xml — 武器がどのマガジン・光学機器・ストックを付けてスポーンするか",
+
+	// --- v0.16.0: beginner's guide + weather transition speed ---
+	"nav.guide": "初心者ガイド",
+	"kill.kind.pvp": "キル",
+	"kill.kind.env": "死亡",
+	"kill.kind.suicide": "自殺",
+	"guide.subtitle": "マネージャーの機能を手順ごとに解説",
+	"guide.contents": "目次",
+	"guide.chapter": "第",
+	"guide.tips": "知っておくと便利",
+	"guide.open": "この項目を開く",
+	"guide.empty": "ガイドを読み込めませんでした。",
+	"weather.trans.title": "変化の滑らかさ",
+	"weather.trans.hint": "天候がどれだけ緩やかに変化するか。「なめらか」はバニラの DayZ と同じ挙動、「速い」は 2 分で全範囲を動くことがあります。",
+	"weather.trans.smooth": "なめらか — 約30分、小刻みに変化",
+	"weather.trans.normal": "ふつう — 約10分",
+	"weather.trans.fast": "速い — 約2分、大きく変化",
 	"attach.missing": "アクティブなミッションに cfgspawnabletypes.xml が見つかりません。バニラのミッションテンプレートからコピーして、このページを再読み込みしてください。",
 	"attach.none": "まだ何もありません — 上で武器テンプレートを選んで「追加」を押してください。",
 	"attach.add": "武器を追加",

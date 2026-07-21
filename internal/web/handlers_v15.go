@@ -129,11 +129,13 @@ func (h *handlers) spawnableItem(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if !removed {
+		if removed == 0 {
 			http.Error(w, "type not found: "+name, http.StatusNotFound)
 			return
 		}
-		writeJSON(w, map[string]string{"status": "deleted", "name": name})
+		// removed > 1 means the file carried duplicate entries — worth saying,
+		// because DayZ was silently using only one of them.
+		writeJSON(w, map[string]interface{}{"status": "deleted", "name": name, "removed": removed})
 		return
 	}
 

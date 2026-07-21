@@ -479,6 +479,23 @@ var fr = Bundle{
 	// v0.15.0: attachments editor (cfgspawnabletypes.xml).
 	"nav.attach": "Accessoires",
 	"attach.subtitle": "cfgspawnabletypes.xml — avec quel chargeur, optique ou crosse une arme apparaît",
+
+	// --- v0.16.0: beginner's guide + weather transition speed ---
+	"nav.guide": "Guide",
+	"kill.kind.pvp": "KILL",
+	"kill.kind.env": "MORT",
+	"kill.kind.suicide": "SUICIDE",
+	"guide.subtitle": "Tout ce que fait le gestionnaire, expliqué étape par étape",
+	"guide.contents": "Sommaire",
+	"guide.chapter": "Chapitre",
+	"guide.tips": "Bon à savoir",
+	"guide.open": "Ouvrir la section",
+	"guide.empty": "Le guide n'a pas pu être chargé.",
+	"weather.trans.title": "Vitesse de transition",
+	"weather.trans.hint": "À quel point la météo change progressivement. « Douce » correspond au DayZ d'origine ; « Rapide » peut parcourir toute la plage en deux minutes.",
+	"weather.trans.smooth": "Douce — environ 30 minutes, petits pas",
+	"weather.trans.normal": "Normale — environ 10 minutes",
+	"weather.trans.fast": "Rapide — environ 2 minutes, grands pas",
 	"attach.missing": "cfgspawnabletypes.xml est introuvable dans la mission active. Copiez-le depuis le modèle de mission vanilla, puis rechargez cette page.",
 	"attach.none": "Rien pour l'instant — choisissez un modèle d'arme ci-dessus et cliquez sur Ajouter.",
 	"attach.add": "Ajouter une arme",

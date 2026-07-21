@@ -1172,6 +1172,130 @@ html[data-theme="light"] .CodeMirror .CodeMirror-gutters { background: #f5f5f7; 
 .attach-item.unknown input[list] { border-color: var(--warn); }
 
 /* ============================================================
+   18d. HOVER HELP
+   ============================================================ */
+
+.with-help { display: inline-flex; align-items: center; gap: 6px; }
+.help-mark {
+  display: inline-grid; place-items: center;
+  width: 15px; height: 15px; flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  color: var(--text-tertiary);
+  font: 700 10px/1 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  cursor: help; user-select: none;
+  transition: color .12s, border-color .12s, background .12s;
+  text-transform: none; letter-spacing: 0;
+}
+.help-mark:hover, .help-mark:focus-visible {
+  color: var(--accent-ink); background: var(--accent); border-color: var(--accent);
+}
+.help-tip {
+  position: absolute; z-index: 400;
+  max-width: 340px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 10px 13px;
+  font-size: 12.5px; line-height: 1.55;
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  opacity: 0; visibility: hidden;
+  transition: opacity .12s;
+  pointer-events: none;
+  text-transform: none; letter-spacing: 0; font-weight: 400;
+}
+.help-tip.visible { opacity: 1; visibility: visible; }
+
+/* ============================================================
+   18e. BEGINNER'S GUIDE
+   ============================================================ */
+
+.guide-toc {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+.guide-toc-item {
+  display: flex; align-items: center; gap: 10px;
+  text-align: left; width: 100%;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  transition: border-color .12s, background .12s, transform .12s;
+}
+.guide-toc-item:hover { border-color: var(--accent); transform: translateY(-1px); }
+/* Long chapter titles must wrap inside the tile, not run past its edge. */
+.guide-toc-item > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.guide-toc-num {
+  display: grid; place-items: center; flex: none;
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 11px; font-weight: 700;
+}
+
+.guide-chapter { scroll-margin-top: 84px; }
+.guide-head { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+.guide-head h2 { margin: 0; }
+.guide-badge {
+  display: grid; place-items: center; flex: none;
+  width: 42px; height: 42px; border-radius: 12px;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid var(--border);
+}
+.guide-badge svg { width: 21px; height: 21px; }
+.guide-kicker {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--text-tertiary);
+}
+.guide-intro { color: var(--text-secondary); line-height: 1.65; margin: 10px 0 4px; }
+
+.guide-shot { margin: 14px 0 0; }
+.guide-shot img {
+  display: block; width: 100%; height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.guide-steps { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 2px; }
+.guide-step { display: flex; gap: 13px; padding: 12px 0; border-top: 1px solid var(--border); }
+.guide-step-num {
+  display: grid; place-items: center; flex: none;
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  font-size: 12px; font-weight: 700;
+}
+.guide-step-body strong { display: block; margin-bottom: 4px; font-size: 14px; }
+.guide-step-body p { margin: 0; color: var(--text-secondary); line-height: 1.62; }
+.guide-jump { margin-top: 9px; padding: 5px 11px; font-size: 12px; }
+
+.guide-tips {
+  margin-top: 16px; padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius);
+}
+.guide-tips-title {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 7px;
+}
+.guide-tips ul { margin: 0; padding-left: 18px; }
+.guide-tips li { color: var(--text-secondary); line-height: 1.6; margin-bottom: 6px; }
+.guide-tips li:last-child { margin-bottom: 0; }
+
+@media (max-width: 640px) {
+  .guide-toc { grid-template-columns: 1fr; }
+  .guide-head { gap: 11px; }
+  .guide-badge { width: 36px; height: 36px; }
+}
+
+/* ============================================================
    19. SIDEBAR DRAWER (mobile) + RESPONSIVE
    ============================================================ */
 

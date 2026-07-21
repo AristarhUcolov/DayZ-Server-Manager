@@ -31,7 +31,6 @@
 package types
 
 import (
-	"bytes"
 	"encoding/xml"
 	"fmt"
 	"os"
@@ -108,14 +107,38 @@ func SpawnablePath(serverDir, missionTemplate string) string {
 	return MissionDir(serverDir, missionTemplate) + string(os.PathSeparator) + "cfgspawnabletypes.xml"
 }
 
-// LoadSpawnable parses every <type> in cfgspawnabletypes.xml.
+// reComment matches a whole <!-- … --> block, newlines included.
+var reComment = regexp.MustCompile(`(?s)<!--.*?-->`)
+
+// maskComments blanks out every comment body while keeping the file's exact
+// length, so an index into the result is a valid index into the original.
+// Everything in this file works on the masked text: a <type> that an admin
+// commented out to disable it is not a live entry, and writing into it (which
+// the v0.15.0 regex did) produces a save that silently does nothing.
+func maskComments(src string) string {
+	return reComment.ReplaceAllStringFunc(src, func(m string) string {
+		b := []byte(m)
+		for i := range b {
+			if b[i] != '\n' && b[i] != '\r' {
+				b[i] = ' '
+			}
+		}
+		return string(b)
+	})
+}
+
+// LoadSpawnable parses every live <type> in cfgspawnabletypes.xml.
 func LoadSpawnable(path string) ([]SpawnableType, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
+	// Vanilla Livonia writes `-------` decorations inside comments, which is
+	// illegal XML: Go's decoder rejects the whole file even in non-strict mode,
+	// so the attachments editor was completely dead on that map. DayZ's own
+	// loader ignores comments, and so do we.
 	var doc xmlSpawnDoc
-	dec := xml.NewDecoder(bytes.NewReader(data))
+	dec := xml.NewDecoder(strings.NewReader(maskComments(string(data))))
 	dec.Strict = false
 	if err := dec.Decode(&doc); err != nil {
 		return nil, fmt.Errorf("parse cfgspawnabletypes.xml: %w", err)
@@ -246,10 +269,14 @@ func SaveSpawnableType(path string, st *SpawnableType) error {
 	src := string(data)
 	block := st.Render() + "\n"
 
-	if re := typeBlockRe(st.Name); re.MatchString(src) {
-		src = re.ReplaceAllLiteralString(src, block)
+	// Match against the masked text so a commented-out <type name="AKM"> is
+	// never mistaken for the live entry. Indices carry over because masking
+	// preserves length.
+	masked := maskComments(src)
+	if loc := typeBlockRe(st.Name).FindStringIndex(masked); loc != nil {
+		src = src[:loc[0]] + block + src[loc[1]:]
 	} else {
-		idx := strings.LastIndex(src, "</spawnabletypes>")
+		idx := strings.LastIndex(masked, "</spawnabletypes>")
 		if idx < 0 {
 			return fmt.Errorf("cfgspawnabletypes.xml: closing </spawnabletypes> not found")
 		}
@@ -258,19 +285,24 @@ func SaveSpawnableType(path string, st *SpawnableType) error {
 	return writeAtomic(path, []byte(src))
 }
 
-// DeleteSpawnableType removes a <type> block by name. Returns false when the
-// entry was not present.
-func DeleteSpawnableType(path, name string) (bool, error) {
+// DeleteSpawnableType removes every live <type> block with this name and
+// returns how many were removed. Commented-out blocks are left alone: an admin
+// who disabled an entry by commenting it out did not ask for it to be erased.
+func DeleteSpawnableType(path, name string) (int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	src := string(data)
-	re := typeBlockRe(name)
-	if !re.MatchString(src) {
-		return false, nil
+	locs := typeBlockRe(name).FindAllStringIndex(maskComments(src), -1)
+	if len(locs) == 0 {
+		return 0, nil
 	}
-	return true, writeAtomic(path, []byte(re.ReplaceAllLiteralString(src, "")))
+	// Splice back to front so earlier indices stay valid.
+	for i := len(locs) - 1; i >= 0; i-- {
+		src = src[:locs[i][0]] + src[locs[i][1]:]
+	}
+	return len(locs), writeAtomic(path, []byte(src))
 }
 
 func writeAtomic(path string, data []byte) error {

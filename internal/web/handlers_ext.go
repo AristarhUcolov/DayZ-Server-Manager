@@ -8,11 +8,13 @@ package web
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -311,6 +313,8 @@ var allowedMissionDBFiles = map[string]bool{
 	"cfglimitsdefinition.xml": true,
 	"cfglimitsdefinitionuser.xml": true,
 	"cfgundergroundtriggers.json": true,
+	"cfgeventgroups.xml":          true,
+	"cfgignorelist.xml":           true,
 }
 
 func (h *handlers) missionDir() (string, error) {
@@ -350,9 +354,14 @@ func (h *handlers) missionDBList(w http.ResponseWriter, r *http.Request) {
 		{"db/economy.xml"},
 		{"db/globals.xml"},
 		{"db/messages.xml"},
-		{"db/cfgeventspawns.xml"},
-		{"db/cfgplayerspawnpoints.xml"},
-		{"db/cfgweather.xml"},
+		// These live at the MISSION ROOT. Listing them under db/ made the
+		// editor mark them missing and disable the option — the event-spawn
+		// table, the spawn points and the weather file were unreachable.
+		{"cfgeventspawns.xml"},
+		{"cfgplayerspawnpoints.xml"},
+		{"cfgweather.xml"},
+		{"cfgeventgroups.xml"},
+		{"cfgignorelist.xml"},
 	}
 	out := make([]entry, 0, len(want))
 	for _, w := range want {
@@ -401,13 +410,54 @@ func (h *handlers) missionDBRead(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 	// 4 MB cap — types.xml is routinely ~1 MB; anything larger is likely
-	// not a hand-editable file.
-	body, err := io.ReadAll(io.LimitReader(f, 4*1024*1024))
+	// not a hand-editable file. REFUSE rather than truncate: the editor posts
+	// its buffer straight back, so serving a truncated file meant saving it
+	// would cut the real one off mid-element.
+	const maxRaw = 4 << 20
+	if st, serr := f.Stat(); serr == nil && st.Size() > maxRaw {
+		http.Error(w, fmt.Sprintf("file is %d bytes — too large for the raw editor (limit %d). Use the Types page for large loot tables.", st.Size(), maxRaw),
+			http.StatusRequestEntityTooLarge)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(f, maxRaw))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, map[string]interface{}{"path": rel, "content": string(body)})
+}
+
+// reRawComment strips XML comments before the well-formedness check. Vanilla
+// BI files put `-------` decorations inside comments, which is illegal XML —
+// rejecting those would mean refusing to save a file we ourselves served.
+var reRawComment = regexp.MustCompile(`(?s)<!--.*?-->`)
+
+// checkSyntax rejects content that DayZ would silently discard in full.
+func checkSyntax(path, content string) error {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".json":
+		var probe interface{}
+		if err := json.Unmarshal([]byte(content), &probe); err != nil {
+			return fmt.Errorf("not valid JSON: %v — DayZ ignores the whole file on a single syntax error", err)
+		}
+	case ".xml":
+		cleaned := reRawComment.ReplaceAllString(content, "")
+		dec := xml.NewDecoder(strings.NewReader(cleaned))
+		for {
+			_, err := dec.Token()
+			if err == nil {
+				continue
+			}
+			if err == io.EOF {
+				break
+			}
+			if se, ok := err.(*xml.SyntaxError); ok {
+				return fmt.Errorf("not valid XML (line %d): %s — DayZ ignores the whole file on a single syntax error", se.Line, se.Msg)
+			}
+			return fmt.Errorf("not valid XML: %v", err)
+		}
+	}
+	return nil
 }
 
 func (h *handlers) missionDBWrite(w http.ResponseWriter, r *http.Request) {
@@ -426,6 +476,14 @@ func (h *handlers) missionDBWrite(w http.ResponseWriter, r *http.Request) {
 	}
 	full, err := h.missionDBResolve(req.Path)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// The typed editors already refuse malformed input; the raw editor writes
+	// to the same files, so it must too. DayZ silently ignores an entire XML or
+	// JSON file on a single syntax error, which turns a typo here into a server
+	// that boots with no loot and no message anywhere.
+	if err := checkSyntax(full, req.Content); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

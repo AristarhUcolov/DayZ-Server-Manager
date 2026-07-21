@@ -479,6 +479,23 @@ var ko = Bundle{
 	// v0.15.0: attachments editor (cfgspawnabletypes.xml).
 	"nav.attach": "부착물",
 	"attach.subtitle": "cfgspawnabletypes.xml — 무기가 어떤 탄창·조준경·개머리판과 함께 생성되는지",
+
+	// --- v0.16.0: beginner's guide + weather transition speed ---
+	"nav.guide": "초보자 안내서",
+	"kill.kind.pvp": "처치",
+	"kill.kind.env": "사망",
+	"kill.kind.suicide": "자살",
+	"guide.subtitle": "매니저의 모든 기능을 단계별로 설명",
+	"guide.contents": "목차",
+	"guide.chapter": "장",
+	"guide.tips": "알아두면 좋은 점",
+	"guide.open": "해당 섹션 열기",
+	"guide.empty": "안내서를 불러오지 못했습니다.",
+	"weather.trans.title": "전환 속도",
+	"weather.trans.hint": "날씨가 얼마나 서서히 바뀌는지. '부드럽게'는 바닐라 DayZ와 같고, '빠르게'는 2분 만에 전 범위를 오갈 수 있습니다.",
+	"weather.trans.smooth": "부드럽게 — 약 30분, 작은 폭",
+	"weather.trans.normal": "보통 — 약 10분",
+	"weather.trans.fast": "빠르게 — 약 2분, 큰 폭",
 	"attach.missing": "활성 미션에서 cfgspawnabletypes.xml을 찾을 수 없습니다. 바닐라 미션 템플릿에서 복사한 뒤 이 페이지를 새로고침하세요.",
 	"attach.none": "아직 아무것도 없습니다 — 위에서 무기 템플릿을 고르고 추가를 누르세요.",
 	"attach.add": "무기 추가",
