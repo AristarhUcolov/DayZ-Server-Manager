@@ -241,6 +241,11 @@
     "validator.severity": "Errors break something now. Warnings are things DayZ tolerates but that usually mean the config does not do what you intended.",
     "backup.restore": "Restores configs and mission files from a zip. The server must be stopped — it holds locks on these files while running.",
     "sync.import": "Copies settings from another manager installation. Existing values are overwritten, so back up first if you are unsure.",
-    "weather.timePreset": "Sets the in-game clock at server start. SystemTime follows your PC's clock; a fixed value always starts the map at the same hour."
+    "weather.timePreset": "Sets the in-game clock at server start. SystemTime follows your PC's clock; a fixed value always starts the map at the same hour.",
+    "attach.class": "The class this entry configures. It does not have to be a weapon — cfgspawnabletypes.xml covers clothing, backpacks, crates, barrels and vehicles too.",
+    "attach.cargo": "Cargo spawns INSIDE the item: a backpack's contents, a crate's loot, a car's boot. Attachments are mounted ON it. Half of the vanilla file is cargo, not attachments.",
+    "attach.hoarder": "Marks the entry as persistent storage — barrels, tents, stashes. DayZ counts what players put inside towards the hoarder limit instead of world loot.",
+    "attach.damage": "Condition the item spawns in, 0.0 (pristine) to 1.0 (ruined). Leave both empty to keep the DayZ default.",
+    "attach.tags": "Restricts where the entry applies, e.g. floor or shelves. Comma-separated. Most entries need none."
   }
 }

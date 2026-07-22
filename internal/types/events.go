@@ -3,20 +3,20 @@
 // events.xml parser/writer. DayZ event definitions (zombie/vehicle/helicrash
 // spawn tables). Structure:
 //
-//   <events>
-//     <event name="AnimalCow">
-//       <nominal>12</nominal>
-//       <min>5</min>
-//       <max>0</max>
-//       <lifetime>300</lifetime>
-//       <restock>0</restock>
-//       <saveable>0</saveable>
-//       <active>1</active>
-//       <children>
-//         <child lootmax="0" lootmin="0" max="-1" min="1" type="Animal_BosTaurus"/>
-//       </children>
-//     </event>
-//   </events>
+//	<events>
+//	  <event name="AnimalCow">
+//	    <nominal>12</nominal>
+//	    <min>5</min>
+//	    <max>0</max>
+//	    <lifetime>300</lifetime>
+//	    <restock>0</restock>
+//	    <saveable>0</saveable>
+//	    <active>1</active>
+//	    <children>
+//	      <child lootmax="0" lootmin="0" max="-1" min="1" type="Animal_BosTaurus"/>
+//	    </children>
+//	  </event>
+//	</events>
 package types
 
 import (
@@ -78,4 +78,3 @@ func (d *EventsDoc) Find(name string) *Event {
 	}
 	return nil
 }
-

@@ -241,6 +241,11 @@
     "logs.rpt": "Ce a făcut serverul însuși: pornire, încărcarea modurilor, erori de script, căderi. Acesta este fișierul de citit când serverul nu pornește.",
     "logs.adm": "Ce au făcut jucătorii: conectări, chat, eliminări, poziții. Necesită parametrul -adminlog; pagina Jucători se construiește din el.",
     "backup.restore": "Restaurează configurațiile și fișierele misiunii dintr-un zip. Serverul trebuie oprit: în funcțiune blochează aceste fișiere.",
-    "sync.import": "Copiază setări de la o altă instalare a managerului. Valorile existente sunt suprascrise, așa că fă o copie mai întâi dacă nu ești sigur."
+    "sync.import": "Copiază setări de la o altă instalare a managerului. Valorile existente sunt suprascrise, așa că fă o copie mai întâi dacă nu ești sigur.",
+    "attach.class": "Clasa pe care o configurează această intrare. Nu trebuie să fie neapărat o armă: cfgspawnabletypes.xml acoperă și îmbrăcămintea, rucsacurile, lăzile, butoaiele și vehiculele.",
+    "attach.cargo": "Cargo apare ÎN interiorul obiectului: conținutul unui rucsac, prada dintr-o ladă, portbagajul unei mașini. Accesoriile se montează PE el. Jumătate din fișierul original este cargo, nu accesorii.",
+    "attach.hoarder": "Marchează intrarea drept depozitare permanentă — butoaie, corturi, ascunzători. DayZ numără ce pun jucătorii înăuntru la limita depozitelor, nu la prada din lume.",
+    "attach.damage": "Starea în care apare obiectul, de la 0.0 (impecabil) la 1.0 (distrus). Lasă ambele goale pentru a păstra valoarea implicită DayZ.",
+    "attach.tags": "Restrânge unde se aplică intrarea, de ex. floor sau shelves. Separate prin virgulă. Majoritatea nu au nevoie de niciuna."
   }
 }

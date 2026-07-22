@@ -15,7 +15,7 @@ import (
 func (h *handlers) guideGet(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("lang")
 	if code == "" {
-		code = h.app.Config.Language
+		code = h.app.Cfg().Language
 	}
 	writeJSON(w, map[string]interface{}{
 		"lang":     code,

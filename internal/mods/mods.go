@@ -3,12 +3,14 @@
 // Steam Workshop mod sync for DayZ.
 //
 // On disk the *client* DayZ install contains:
-//   <DayZ>/!Workshop/@ModName/...            ← here mods are downloaded by Steam
-//   <DayZ>/!Workshop/@ModName/keys/*.bikey   ← BattlEye signing keys
+//
+//	<DayZ>/!Workshop/@ModName/...            ← here mods are downloaded by Steam
+//	<DayZ>/!Workshop/@ModName/keys/*.bikey   ← BattlEye signing keys
 //
 // The dedicated server expects mods sitting at:
-//   <DayZServer>/@ModName/...                ← loaded via -mod=@ModName;@Other
-//   <DayZServer>/keys/*.bikey                ← combined keys folder
+//
+//	<DayZServer>/@ModName/...                ← loaded via -mod=@ModName;@Other
+//	<DayZServer>/keys/*.bikey                ← combined keys folder
 //
 // This package implements the install / uninstall / update / sync-keys flow
 // so users don't have to copy things manually.
@@ -231,13 +233,13 @@ func UpdateAll(serverDir, vanillaDayZPath string) ([]string, error) {
 // SyncAllResult describes what SyncAll did so the UI can show a detailed toast
 // instead of a silent "done".
 type SyncAllResult struct {
-	Installed   []string `json:"installed"`
-	Updated     []string `json:"updated"`
-	Skipped     []string `json:"skipped"` // already up to date
-	WorkshopDir string   `json:"workshopDir"`
-	Total       int      `json:"total"`         // mods seen in !Workshop
-	NotInstalled int     `json:"notInstalled"`  // (before sync) waiting for install
-	OutOfDate    int     `json:"outOfDate"`     // (before sync) update-available count
+	Installed    []string `json:"installed"`
+	Updated      []string `json:"updated"`
+	Skipped      []string `json:"skipped"` // already up to date
+	WorkshopDir  string   `json:"workshopDir"`
+	Total        int      `json:"total"`        // mods seen in !Workshop
+	NotInstalled int      `json:"notInstalled"` // (before sync) waiting for install
+	OutOfDate    int      `json:"outOfDate"`    // (before sync) update-available count
 }
 
 // SyncAll brings the server directory in line with the client !Workshop:
@@ -315,7 +317,8 @@ func Uninstall(serverDir, modName string) error {
 	stillProvided := map[string]bool{}
 	entries, _ := os.ReadDir(serverDir)
 	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), "@") || strings.EqualFold(e.Name(), modName) {
+		if !isDirOrJunction(e, filepath.Join(serverDir, e.Name())) ||
+			!strings.HasPrefix(e.Name(), "@") || strings.EqualFold(e.Name(), modName) {
 			continue
 		}
 		for _, k := range collectKeyNames(filepath.Join(serverDir, e.Name())) {
@@ -343,7 +346,7 @@ func SyncKeys(serverDir string, names []string) error {
 	if len(names) == 0 {
 		entries, _ := os.ReadDir(serverDir)
 		for _, e := range entries {
-			if e.IsDir() && strings.HasPrefix(e.Name(), "@") {
+			if isDirOrJunction(e, filepath.Join(serverDir, e.Name())) && strings.HasPrefix(e.Name(), "@") {
 				names = append(names, e.Name())
 			}
 		}

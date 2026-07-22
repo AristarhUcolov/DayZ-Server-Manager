@@ -25,12 +25,12 @@ var ErrConfigSave = errors.New("save config")
 type App struct {
 	Name, Version, Author string
 
-	ServerDir   string
-	ManagerDir  string
-	Log         *log.Logger
-	Config      *config.Manager
-	configMu    sync.Mutex
-	configPath  string
+	ServerDir  string
+	ManagerDir string
+	Log        *log.Logger
+	Config     *config.Manager
+	configMu   sync.Mutex
+	configPath string
 
 	Server *server.Controller
 	RCon   *rcon.Manager
@@ -199,6 +199,30 @@ func (a *App) SaveConfig() error {
 	a.configMu.Lock()
 	defer a.configMu.Unlock()
 	return config.SaveManager(a.configPath, a.Config)
+}
+
+// Cfg returns a snapshot of the configuration, taken under the same lock that
+// MutateConfig commits under.
+//
+// internal/server solved this for its supervisor loops with schedSnapshot; the
+// web layer had no equivalent and read the shared *config.Manager directly from
+// ~50 places, three of them background goroutines on timers. `go test -race`
+// reported a genuine race between MutateConfig's wholesale replace and
+// dashboardMetrics, which polls every 5s and ranges over the Mods slice — a
+// torn slice header there is a panic, not a stale read.
+//
+// Slices are copied because copying the struct alone shares their backing
+// arrays, which is exactly the dangerous part.
+func (a *App) Cfg() config.Manager {
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
+	c := *a.Config
+	c.Mods = append([]string(nil), a.Config.Mods...)
+	c.ServerMods = append([]string(nil), a.Config.ServerMods...)
+	c.ScheduledRestarts = append([]string(nil), a.Config.ScheduledRestarts...)
+	c.RestartWarnMinutes = append([]int(nil), a.Config.RestartWarnMinutes...)
+	c.WorkshopCollections = append([]string(nil), a.Config.WorkshopCollections...)
+	return c
 }
 
 // MutateConfig atomically applies fn to a working copy of the config under

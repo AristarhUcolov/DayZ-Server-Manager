@@ -185,3 +185,54 @@ func DeleteEventBlock(path, name string) (int, error) {
 	}
 	return len(locs), writeAtomic(path, []byte(src))
 }
+
+// reChildrenBlock matches a whole <children> block inside an event.
+var reChildrenBlock = regexp.MustCompile(`(?s)[ \t]*<children>.*?</children>[ \t]*\r?\n?`)
+
+// PatchEventChildren replaces the <children> block of one event, inserting it
+// before </event> when absent and removing it when kids is empty.
+//
+// The events editor has always drawn a full children table with add and delete
+// buttons, but the handler only ever wrote the seven scalar fields — so editing
+// a helicrash's loot table reported "Saved" and changed nothing.
+func PatchEventChildren(path, name string, kids []EventChild) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	src := string(data)
+	loc := eventBlockRe(name).FindStringIndex(maskComments(src))
+	if loc == nil {
+		return false, nil
+	}
+	block := src[loc[0]:loc[1]]
+
+	var b strings.Builder
+	if len(kids) > 0 {
+		b.WriteString("        <children>\n")
+		for _, c := range kids {
+			if strings.TrimSpace(c.Type) == "" {
+				continue // a blank row in the UI is not an entry
+			}
+			fmt.Fprintf(&b, "            <child lootmax=\"%d\" lootmin=\"%d\" max=\"%d\" min=\"%d\" type=\"%s\"/>\n",
+				c.LootMax, c.LootMin, c.Max, c.Min, xmlAttr(c.Type))
+		}
+		b.WriteString("        </children>\n")
+	}
+
+	switch {
+	case reChildrenBlock.MatchString(block):
+		block = reChildrenBlock.ReplaceAllLiteralString(block, b.String())
+	case b.Len() > 0:
+		idx := strings.LastIndex(block, "</event>")
+		if idx < 0 {
+			return false, fmt.Errorf("event %q has no closing tag", name)
+		}
+		lineStart := strings.LastIndex(block[:idx], "\n")
+		if lineStart < 0 {
+			lineStart = idx - 1
+		}
+		block = block[:lineStart+1] + b.String() + block[lineStart+1:]
+	}
+	return true, writeAtomic(path, []byte(src[:loc[0]]+block+src[loc[1]:]))
+}

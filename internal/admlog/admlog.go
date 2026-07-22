@@ -6,11 +6,11 @@
 // subsequent line starts with "HH:MM:SS |" followed by a free-form event. We
 // recognize a small set that the admin panel cares about:
 //
-//   Player "<name>" (id=<guid> pos=<x,y,z>) connected
-//   Player "<name>" (id=<guid> pos=<x,y,z>) disconnected
-//   Player "<name>" (DEAD) (id=<guid> pos=<x,y,z>) ...          (kills / deaths)
-//   Player "<name>" (id=<guid> pos=<x,y,z>) hit by Player "..."
-//   Player "<name>" (id=<guid> pos=<x,y,z>) Chat("GLOBAL"): msg
+//	Player "<name>" (id=<guid> pos=<x,y,z>) connected
+//	Player "<name>" (id=<guid> pos=<x,y,z>) disconnected
+//	Player "<name>" (DEAD) (id=<guid> pos=<x,y,z>) ...          (kills / deaths)
+//	Player "<name>" (id=<guid> pos=<x,y,z>) hit by Player "..."
+//	Player "<name>" (id=<guid> pos=<x,y,z>) Chat("GLOBAL"): msg
 //
 // Anything that doesn't match falls into event type "other" with the raw tail.
 package admlog
@@ -21,28 +21,29 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type Event struct {
-	Time     string  `json:"time"`               // "HH:MM:SS" as-is from the log
-	Type     string  `json:"type"`               // connect/disconnect/kill/hit/chat/death/other
-	Player   string  `json:"player,omitempty"`   // subject
-	ID       string  `json:"id,omitempty"`       // subject's id= (BE GUID) when present
-	Target   string  `json:"target,omitempty"`   // victim/attacker for hit/kill
-	TargetID string  `json:"targetId,omitempty"` // target's id= when present
-	Weapon   string  `json:"weapon,omitempty"`   // "with MP5K" → "MP5K"
-	Distance string  `json:"distance,omitempty"` // "from 123.4 meters" → "123.4"
-	Source   string  `json:"source,omitempty"`   // non-player killer: "ZmbM_HermitSkinny_Beard", "FallDamage"
-	Message  string  `json:"message,omitempty"`  // chat text or raw tail
-	Pos      []float64 `json:"pos,omitempty"`    // [x,y,z]
-	Raw      string  `json:"raw"`
+	Time     string    `json:"time"`               // "HH:MM:SS" as-is from the log
+	Type     string    `json:"type"`               // connect/disconnect/kill/hit/chat/death/other
+	Player   string    `json:"player,omitempty"`   // subject
+	ID       string    `json:"id,omitempty"`       // subject's id= (BE GUID) when present
+	Target   string    `json:"target,omitempty"`   // victim/attacker for hit/kill
+	TargetID string    `json:"targetId,omitempty"` // target's id= when present
+	Weapon   string    `json:"weapon,omitempty"`   // "with MP5K" → "MP5K"
+	Distance string    `json:"distance,omitempty"` // "from 123.4 meters" → "123.4"
+	Source   string    `json:"source,omitempty"`   // non-player killer: "ZmbM_HermitSkinny_Beard", "FallDamage"
+	Message  string    `json:"message,omitempty"`  // chat text or raw tail
+	Pos      []float64 `json:"pos,omitempty"`      // [x,y,z]
+	Raw      string    `json:"raw"`
 }
 
 var (
-	reLine     = regexp.MustCompile(`^(\d{2}:\d{2}:\d{2})\s*\|\s*(.*)$`)
-	rePlayer   = regexp.MustCompile(`^Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(id=([^)]*?)\s*pos=<([^>]*)>\)\s*(.*)$`)
+	reLine   = regexp.MustCompile(`^(\d{2}:\d{2}:\d{2})\s*\|\s*(.*)$`)
+	rePlayer = regexp.MustCompile(`^Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(id=([^)]*?)\s*pos=<([^>]*)>\)\s*(.*)$`)
 	// Disconnect lines (and some mods) omit pos: Player "X"(id=ABC) has been disconnected
 	rePlayerNP = regexp.MustCompile(`^Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(\s*id=([^)]*)\)\s*(.*)$`)
 	reChat     = regexp.MustCompile(`^Chat\("([^"]*)"\):\s*(.*)$`)
@@ -277,4 +278,40 @@ func Recent(path string, limit int, typeFilter, playerFilter string) ([]Event, e
 		return ring, err
 	}
 	return ring, nil
+}
+
+// reHeaderDate matches the date DayZ writes at the top of every .ADM file:
+//
+//	AdminLog started on 2026-07-20 at 18:00:00
+var reHeaderDate = regexp.MustCompile(`AdminLog started on (\d{4})-(\d{2})-(\d{2})`)
+
+// HeaderDate reads the log's start date. Line timestamps are HH:MM:SS only, so
+// without this a session's real duration cannot be recovered.
+func HeaderDate(line string) (time.Time, bool) {
+	m := reHeaderDate.FindStringSubmatch(line)
+	if m == nil {
+		return time.Time{}, false
+	}
+	y, _ := strconv.Atoi(m[1])
+	mo, _ := strconv.Atoi(m[2])
+	d, _ := strconv.Atoi(m[3])
+	if y < 2000 || mo < 1 || mo > 12 || d < 1 || d > 31 {
+		return time.Time{}, false
+	}
+	return time.Date(y, time.Month(mo), d, 0, 0, 0, 0, time.Local), true
+}
+
+// TimeOfDay parses a "HH:MM:SS" line stamp into an offset from midnight.
+func TimeOfDay(hhmmss string) (time.Duration, bool) {
+	parts := strings.Split(strings.TrimSpace(hhmmss), ":")
+	if len(parts) != 3 {
+		return 0, false
+	}
+	h, err1 := strconv.Atoi(parts[0])
+	m, err2 := strconv.Atoi(parts[1])
+	sec, err3 := strconv.Atoi(parts[2])
+	if err1 != nil || err2 != nil || err3 != nil {
+		return 0, false
+	}
+	return time.Duration(h)*time.Hour + time.Duration(m)*time.Minute + time.Duration(sec)*time.Second, true
 }

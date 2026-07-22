@@ -4,6 +4,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -76,4 +77,34 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// BattlEye writes `Key<TAB>Value` at least as often as with a space. Splitting
+// on a literal space made a tab-separated file read as "not configured", and
+// saving then APPENDED a second RConPassword line — two conflicting
+// credentials, while the panel reported success.
+func TestBEConfigAcceptsTabs(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "beserver_x64.cfg")
+	os.WriteFile(p, []byte("RConPassword\tmysecret\r\nRConPort\t2306\r\nMaxPing\t350\r\n"), 0o644)
+
+	cfg := parseBEConfig(p)
+	if cfg == nil || cfg.RConPassword != "mysecret" {
+		t.Fatalf("password = %+v, want mysecret", cfg)
+	}
+	if cfg.RConPort != 2306 {
+		t.Errorf("port = %d, want 2306", cfg.RConPort)
+	}
+
+	if _, err := EnsureBEConfig(dir, "newpass", 2306); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := os.ReadFile(p)
+	body := string(out)
+	if n := strings.Count(strings.ToLower(body), "rconpassword"); n != 1 {
+		t.Errorf("RConPassword appears %d times, want 1:\n%s", n, body)
+	}
+	if cfg2 := parseBEConfig(p); cfg2 == nil || cfg2.RConPassword != "newpass" {
+		t.Errorf("password after write = %+v, want newpass\n%s", cfg2, body)
+	}
 }

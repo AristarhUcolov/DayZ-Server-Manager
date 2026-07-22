@@ -35,7 +35,7 @@ func (h *handlers) modsSyncAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer unlock()
-	if h.app.Config.VanillaDayZPath == "" {
+	if h.app.Cfg().VanillaDayZPath == "" {
 		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
 		return
 	}
@@ -43,7 +43,7 @@ func (h *handlers) modsSyncAll(w http.ResponseWriter, r *http.Request) {
 		Only []string `json:"only"` // optional filter by @Mod names
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req) // body optional
-	res, err := mods.SyncAll(h.app.ServerDir, h.app.Config.VanillaDayZPath, req.Only)
+	res, err := mods.SyncAll(h.app.ServerDir, h.app.Cfg().VanillaDayZPath, req.Only)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -70,11 +70,11 @@ func (h *handlers) modsCollectionResolve(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	if h.app.Config.VanillaDayZPath == "" {
+	if h.app.Cfg().VanillaDayZPath == "" {
 		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
 		return
 	}
-	res, err := mods.ResolveCollection(r.Context(), h.app.Config.VanillaDayZPath, children)
+	res, err := mods.ResolveCollection(r.Context(), h.app.Cfg().VanillaDayZPath, children)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -95,7 +95,7 @@ func (h *handlers) modsCollectionResolve(w http.ResponseWriter, r *http.Request)
 // BattlEye editor.
 
 func (h *handlers) beDir() string {
-	return battleye.Dir(h.app.ServerDir, h.app.Config.BEPath)
+	return battleye.Dir(h.app.ServerDir, h.app.Cfg().BEPath)
 }
 
 func (h *handlers) battleyeList(w http.ResponseWriter, r *http.Request) {
@@ -279,7 +279,7 @@ func (h *handlers) typesBulkPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	touched := doc.BulkPatch(req.Names, req.Patch)
-	if err := doc.Save(path); err != nil {
+	if err := dztypes.SaveTypes(path, doc); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -523,11 +523,11 @@ func (h *handlers) missionDBWrite(w http.ResponseWriter, r *http.Request) {
 // Mods without a meta.cpp PublishedID are skipped (e.g. hand-rolled @Mods).
 
 func (h *handlers) modsCheckUpdates(w http.ResponseWriter, r *http.Request) {
-	if h.app.Config.VanillaDayZPath == "" {
+	if h.app.Cfg().VanillaDayZPath == "" {
 		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
 		return
 	}
-	list, err := mods.List(h.app.ServerDir, h.app.Config.VanillaDayZPath)
+	list, err := mods.List(h.app.ServerDir, h.app.Cfg().VanillaDayZPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

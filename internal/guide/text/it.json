@@ -241,6 +241,11 @@
     "logs.rpt": "Cosa ha fatto il server stesso: avvio, caricamento mod, errori di script, crash. È il file da leggere quando il server non parte.",
     "logs.adm": "Cosa hanno fatto i giocatori: connessioni, chat, uccisioni, posizioni. Richiede il parametro -adminlog; la pagina Giocatori si basa su di esso.",
     "backup.restore": "Ripristina configurazioni e file di missione da uno zip. Il server deve essere fermo: mentre gira blocca questi file.",
-    "sync.import": "Copia le impostazioni da un'altra installazione del gestore. I valori esistenti vengono sovrascritti, quindi fai prima un backup se hai dubbi."
+    "sync.import": "Copia le impostazioni da un'altra installazione del gestore. I valori esistenti vengono sovrascritti, quindi fai prima un backup se hai dubbi.",
+    "attach.class": "La classe che questa voce configura. Non deve essere per forza un'arma: cfgspawnabletypes.xml copre anche abbigliamento, zaini, casse, barili e veicoli.",
+    "attach.cargo": "Il cargo compare DENTRO l'oggetto: il contenuto di uno zaino, il bottino di una cassa, il bagagliaio di un'auto. Gli accessori si montano SOPRA. Metà del file originale è cargo, non accessori.",
+    "attach.hoarder": "Segna la voce come deposito persistente — barili, tende, nascondigli. DayZ conta ciò che i giocatori ci mettono dentro nel limite dei depositi, non nel bottino del mondo.",
+    "attach.damage": "Condizione in cui l'oggetto compare, da 0.0 (perfetto) a 1.0 (rovinato). Lascia entrambi vuoti per mantenere il valore predefinito di DayZ.",
+    "attach.tags": "Limita dove si applica la voce, ad es. floor o shelves. Separati da virgole. La maggior parte non ne ha bisogno."
   }
 }

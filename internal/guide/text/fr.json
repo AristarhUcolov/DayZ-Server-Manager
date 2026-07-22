@@ -241,6 +241,11 @@
     "logs.rpt": "Ce qu'a fait le serveur lui-même : démarrage, chargement des mods, erreurs de script, plantages. C'est le fichier à lire quand le serveur ne démarre pas.",
     "logs.adm": "Ce qu'ont fait les joueurs : connexions, chat, éliminations, positions. Nécessite le paramètre -adminlog ; la page Joueurs en est issue.",
     "backup.restore": "Restaure configurations et fichiers de mission depuis un zip. Le serveur doit être arrêté : en marche, il verrouille ces fichiers.",
-    "sync.import": "Copie les réglages d'une autre installation du gestionnaire. Les valeurs existantes sont écrasées : sauvegardez d'abord en cas de doute."
+    "sync.import": "Copie les réglages d'une autre installation du gestionnaire. Les valeurs existantes sont écrasées : sauvegardez d'abord en cas de doute.",
+    "attach.class": "La classe que configure cette entrée. Ce n'est pas forcément une arme : cfgspawnabletypes.xml couvre aussi les vêtements, les sacs, les caisses, les barils et les véhicules.",
+    "attach.cargo": "Le cargo apparaît DANS l'objet : le contenu d'un sac, le butin d'une caisse, le coffre d'une voiture. Les accessoires se montent DESSUS. La moitié du fichier d'origine est du cargo, pas des accessoires.",
+    "attach.hoarder": "Marque l'entrée comme stockage persistant — barils, tentes, caches. DayZ compte ce que les joueurs y rangent dans la limite de stockage, pas dans le butin du monde.",
+    "attach.damage": "État dans lequel l'objet apparaît, de 0.0 (impeccable) à 1.0 (ruiné). Laissez les deux vides pour garder la valeur par défaut de DayZ.",
+    "attach.tags": "Restreint où l'entrée s'applique, p. ex. floor ou shelves. Séparés par des virgules. La plupart n'en ont pas besoin."
   }
 }

@@ -28,9 +28,9 @@ import (
 )
 
 type Player struct {
-	Key       string   `json:"key"`             // GUID when known, else "name:<name>"
-	ID        string   `json:"id,omitempty"`    // BE GUID from id=
-	Name      string   `json:"name"`            // most recent name
+	Key       string   `json:"key"`          // GUID when known, else "name:<name>"
+	ID        string   `json:"id,omitempty"` // BE GUID from id=
+	Name      string   `json:"name"`         // most recent name
 	Aliases   []string `json:"aliases,omitempty"`
 	FirstSeen string   `json:"firstSeen"` // RFC3339
 	LastSeen  string   `json:"lastSeen"`
@@ -176,7 +176,12 @@ func (s *Store) ingestFile(path string, size int64, mtime time.Time) bool {
 	chunk := data[:last+1]
 	s.d.Offsets[path] = off + int64(last+1)
 
-	stamp := mtime.Format(time.RFC3339)
+	// Stamping every event with the file's mtime made a connect and its
+	// disconnect share a timestamp, so every session lasted 0 minutes. Rebuild
+	// the real moment from the log's header date plus each line's HH:MM:SS.
+	day := s.headerDay(path, mtime)
+	prev := time.Duration(-1)
+
 	changed := false
 	sc := bufio.NewScanner(bytes.NewReader(chunk))
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
@@ -194,7 +199,17 @@ func (s *Store) ingestFile(path string, size int64, mtime time.Time) bool {
 		if !ok {
 			continue
 		}
-		if s.apply(ev, stamp, mtime) {
+		at := mtime
+		if tod, ok := admlog.TimeOfDay(ev.Time); ok && !day.IsZero() {
+			// A log that runs past midnight wraps back to 00:00 — roll the day
+			// forward when the clock goes backwards.
+			if prev >= 0 && tod < prev {
+				day = day.AddDate(0, 0, 1)
+			}
+			prev = tod
+			at = day.Add(tod)
+		}
+		if s.apply(ev, at.Format(time.RFC3339), at) {
 			changed = true
 		}
 	}
@@ -339,4 +354,21 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// headerDay reads the date from an .ADM header, falling back to the file's
+// mtime when the header is missing or unparseable.
+func (s *Store) headerDay(path string, mtime time.Time) time.Time {
+	f, err := os.Open(path)
+	if err != nil {
+		return time.Date(mtime.Year(), mtime.Month(), mtime.Day(), 0, 0, 0, 0, mtime.Location())
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for i := 0; i < 5 && sc.Scan(); i++ {
+		if d, ok := admlog.HeaderDate(sc.Text()); ok {
+			return d
+		}
+	}
+	return time.Date(mtime.Year(), mtime.Month(), mtime.Day(), 0, 0, 0, 0, mtime.Location())
 }

@@ -206,7 +206,7 @@ func (h *handlers) info(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) i18nBundle(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("lang")
 	if code == "" {
-		code = h.app.Config.Language
+		code = h.app.Cfg().Language
 	}
 	writeJSON(w, map[string]interface{}{
 		"locale":    code,
@@ -304,7 +304,7 @@ func (h *handlers) serverStatus(w http.ResponseWriter, r *http.Request) {
 		"running": h.app.ServerIsRunning(),
 		"pid":     h.app.Server.PID(),
 		"uptime":  h.app.Server.Uptime().Round(time.Second).String(),
-		"port":    h.app.Config.ServerPort,
+		"port":    h.app.Cfg().ServerPort,
 		// Crash-loop protection state: the loop pauses auto-restart after
 		// repeated fast exits; without surfacing it the server just looks
 		// mysteriously "down despite auto-restart". UI shows a resume banner.
@@ -358,7 +358,7 @@ func (h *handlers) serverRestart(w http.ResponseWriter, r *http.Request) {
 // server.cfg editor.
 
 func (h *handlers) serverCfg(w http.ResponseWriter, r *http.Request) {
-	cfgPath := filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)
+	cfgPath := filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)
 	if r.Method == http.MethodGet {
 		cfg, err := config.LoadServerCfg(cfgPath)
 		if err != nil {
@@ -439,7 +439,7 @@ func (h *handlers) serverCfgMission(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "template required", http.StatusBadRequest)
 		return
 	}
-	cfgPath := filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)
+	cfgPath := filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)
 	cfg, err := config.LoadServerCfg(cfgPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -561,16 +561,16 @@ func copyDirTree(src, dst string) error {
 // Mods.
 
 func (h *handlers) modsList(w http.ResponseWriter, r *http.Request) {
-	list, err := mods.List(h.app.ServerDir, h.app.Config.VanillaDayZPath)
+	list, err := mods.List(h.app.ServerDir, h.app.Cfg().VanillaDayZPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, map[string]interface{}{
 		"mods":        list,
-		"activeMods":  h.app.Config.Mods,
-		"serverMods":  h.app.Config.ServerMods,
-		"vanillaPath": h.app.Config.VanillaDayZPath,
+		"activeMods":  h.app.Cfg().Mods,
+		"serverMods":  h.app.Cfg().ServerMods,
+		"vanillaPath": h.app.Cfg().VanillaDayZPath,
 	})
 }
 
@@ -585,11 +585,11 @@ func (h *handlers) modsInstall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if h.app.Config.VanillaDayZPath == "" {
+	if h.app.Cfg().VanillaDayZPath == "" {
 		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := mods.Install(h.app.ServerDir, h.app.Config.VanillaDayZPath, name); err != nil {
+	if err := mods.Install(h.app.ServerDir, h.app.Cfg().VanillaDayZPath, name); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -632,11 +632,11 @@ func (h *handlers) modsUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if h.app.Config.VanillaDayZPath == "" {
+	if h.app.Cfg().VanillaDayZPath == "" {
 		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := mods.Update(h.app.ServerDir, h.app.Config.VanillaDayZPath, name); err != nil {
+	if err := mods.Update(h.app.ServerDir, h.app.Cfg().VanillaDayZPath, name); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -649,11 +649,11 @@ func (h *handlers) modsUpdateAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer unlock()
-	if h.app.Config.VanillaDayZPath == "" {
+	if h.app.Cfg().VanillaDayZPath == "" {
 		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
 		return
 	}
-	updated, err := mods.UpdateAll(h.app.ServerDir, h.app.Config.VanillaDayZPath)
+	updated, err := mods.UpdateAll(h.app.ServerDir, h.app.Cfg().VanillaDayZPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -718,7 +718,7 @@ func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]interface{}{"active": h.app.Config.Mods, "server": h.app.Config.ServerMods})
+	writeJSON(w, map[string]interface{}{"active": h.app.Cfg().Mods, "server": h.app.Cfg().ServerMods})
 }
 
 // modsOrder replaces the active mod list with a caller-supplied ordering.
@@ -763,7 +763,7 @@ func (h *handlers) modsOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]interface{}{"active": h.app.Config.Mods, "server": h.app.Config.ServerMods})
+	writeJSON(w, map[string]interface{}{"active": h.app.Cfg().Mods, "server": h.app.Cfg().ServerMods})
 }
 
 func (h *handlers) modName(r *http.Request) (string, error) {
@@ -848,7 +848,7 @@ func (h *handlers) typesItem(w http.ResponseWriter, r *http.Request) {
 			t.Name = name
 		}
 		doc.Upsert(t)
-		if err := doc.Save(path); err != nil {
+		if err := dztypes.SaveTypes(path, doc); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -864,7 +864,7 @@ func (h *handlers) typesItem(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		if err := doc.Save(path); err != nil {
+		if err := dztypes.SaveTypes(path, doc); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -914,6 +914,10 @@ func (h *handlers) typesApplyPreset(w http.ResponseWriter, r *http.Request) {
 		if t == nil {
 			continue
 		}
+		// Mutating through the Find pointer does not flag the entry, and
+		// SaveTypes only writes flagged ones — without this the preset would
+		// apply in memory and never reach the file.
+		doc.MarkDirty(t.Name)
 		t.Usages = mergeNamed(t.Usages, preset.Usages)
 		t.Values = mergeNamed(t.Values, preset.Values)
 		t.Tags = mergeNamed(t.Tags, preset.Tags)
@@ -934,7 +938,7 @@ func (h *handlers) typesApplyPreset(w http.ResponseWriter, r *http.Request) {
 		}
 		applied++
 	}
-	if err := doc.Save(path); err != nil {
+	if err := dztypes.SaveTypes(path, doc); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1244,7 +1248,7 @@ func (h *handlers) filesWrite(w http.ResponseWriter, r *http.Request) {
 // Logs.
 
 func (h *handlers) logsList(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, dzlogs.Discover(h.app.ServerDir, h.app.Config.ProfilesDir))
+	writeJSON(w, dzlogs.Discover(h.app.ServerDir, h.app.Cfg().ProfilesDir))
 }
 
 // logsRead returns a tail snapshot of a log file. Cap is deliberately tight
@@ -1253,7 +1257,7 @@ func (h *handlers) logsList(w http.ResponseWriter, r *http.Request) {
 // via ?bytes= up to the cap.
 func (h *handlers) logsRead(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
-	path := dzlogs.Resolve(h.app.ServerDir, h.app.Config.ProfilesDir, id)
+	path := dzlogs.Resolve(h.app.ServerDir, h.app.Cfg().ProfilesDir, id)
 	if path == "" {
 		http.Error(w, "unknown log id", http.StatusBadRequest)
 		return
@@ -1310,7 +1314,7 @@ func (h *handlers) logsRead(w http.ResponseWriter, r *http.Request) {
 // keeps the socket open; the server writes "data: <chunk>\n\n" as it reads.
 func (h *handlers) logsStream(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
-	path := dzlogs.Resolve(h.app.ServerDir, h.app.Config.ProfilesDir, id)
+	path := dzlogs.Resolve(h.app.ServerDir, h.app.Cfg().ProfilesDir, id)
 	if path == "" {
 		http.Error(w, "unknown log id", http.StatusBadRequest)
 		return
@@ -1514,6 +1518,15 @@ func (h *handlers) eventsItem(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			// The UI has always posted the children table; the handler used to
+			// drop it and still answer "saved". Loot tables for helicrashes and
+			// vehicle events live here, so that made the whole table decorative.
+			if e.Children != nil {
+				if _, err := dztypes.PatchEventChildren(path, e.Name, e.Children.Child); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
 		} else if err := dztypes.AppendEvent(path, &e); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -1621,8 +1634,8 @@ func (h *handlers) modsScanTypes(w http.ResponseWriter, r *http.Request) {
 	// XML under @Mod/dz/... that the server-side copy may not yet have.
 	dir := filepath.Join(h.app.ServerDir, name)
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-		if h.app.Config.VanillaDayZPath != "" {
-			alt := filepath.Join(h.app.Config.VanillaDayZPath, "!Workshop", name)
+		if h.app.Cfg().VanillaDayZPath != "" {
+			alt := filepath.Join(h.app.Cfg().VanillaDayZPath, "!Workshop", name)
 			if st, err := os.Stat(alt); err == nil && st.IsDir() {
 				dir = alt
 			}
@@ -1832,7 +1845,7 @@ func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var copied []string
+	var copied, failed []string
 	if req.CopyMods {
 		if entries, err := os.ReadDir(src); err == nil {
 			for _, e := range entries {
@@ -1843,9 +1856,24 @@ func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
 				if _, err := os.Stat(dst); err == nil {
 					continue // skip already-present mods
 				}
-				if err := copyDirTree(filepath.Join(src, e.Name()), dst); err == nil {
-					copied = append(copied, e.Name())
+				// Copy aside and rename on success. A failure used to leave a
+				// half-copied folder at the destination: the error was
+				// discarded, the user was told nothing, and the Stat guard
+				// above then skipped that mod on every later import — so a
+				// broken mod stayed broken forever.
+				tmp := dst + ".importing"
+				_ = os.RemoveAll(tmp)
+				if err := copyDirTree(filepath.Join(src, e.Name()), tmp); err != nil {
+					_ = os.RemoveAll(tmp)
+					failed = append(failed, fmt.Sprintf("%s: %v", e.Name(), err))
+					continue
 				}
+				if err := os.Rename(tmp, dst); err != nil {
+					_ = os.RemoveAll(tmp)
+					failed = append(failed, fmt.Sprintf("%s: %v", e.Name(), err))
+					continue
+				}
+				copied = append(copied, e.Name())
 			}
 		}
 	}
@@ -1855,14 +1883,14 @@ func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
 		if _, err := os.Stat(srcCfg); err == nil {
 			data, err := os.ReadFile(srcCfg)
 			if err == nil {
-				dstCfg := filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)
+				dstCfg := filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)
 				_ = util.BackupBeforeWrite(dstCfg)
 				_ = os.WriteFile(dstCfg, data, 0o644)
 			}
 		}
 	}
 	if req.Mission != "" {
-		cfgPath := filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)
+		cfgPath := filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)
 		if cfg, err := config.LoadServerCfg(cfgPath); err == nil {
 			cfg.SetMissionTemplate(req.Mission)
 			_ = cfg.Save(cfgPath)
@@ -1880,7 +1908,7 @@ func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]interface{}{"copiedMods": copied})
+	writeJSON(w, map[string]interface{}{"copiedMods": copied, "failedMods": failed})
 }
 
 // ---------------------------------------------------------------------------
@@ -1972,7 +2000,7 @@ func (h *handlers) backupsRestore(w http.ResponseWriter, r *http.Request) {
 // typical cosmetic settings edits.
 
 func (h *handlers) profilesRoot() string {
-	p := h.app.Config.ProfilesDir
+	p := h.app.Cfg().ProfilesDir
 	if p == "" {
 		p = "profiles"
 	}
@@ -2086,7 +2114,7 @@ func (h *handlers) profilesWrite(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func (h *handlers) missionTemplate() (string, error) {
-	cfgPath := filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)
+	cfgPath := filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)
 	cfg, err := config.LoadServerCfg(cfgPath)
 	if err != nil {
 		return "", fmt.Errorf("read server.cfg: %w", err)

@@ -51,7 +51,7 @@ func (h *handlers) weatherGet(w http.ResponseWriter, r *http.Request) {
 		"mission": mission,
 	}
 
-	if cfg, err := config.LoadServerCfg(filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)); err == nil {
+	if cfg, err := config.LoadServerCfg(filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)); err == nil {
 		get := func(k, def string) string {
 			if v, ok := cfg.Get(k); ok {
 				return v
@@ -157,7 +157,7 @@ func (h *handlers) weatherTime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfgPath := filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)
+	cfgPath := filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)
 	cfg, err := config.LoadServerCfg(cfgPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -238,7 +238,7 @@ func (h *handlers) wipePreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	instanceID := ""
-	if cfg, err := config.LoadServerCfg(filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)); err == nil {
+	if cfg, err := config.LoadServerCfg(filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)); err == nil {
 		if v, ok := cfg.Get("instanceId"); ok {
 			instanceID = v
 		}
@@ -313,7 +313,7 @@ func (h *handlers) networkAddresses(w http.ResponseWriter, r *http.Request) {
 	for _, ip := range ips {
 		urls = append(urls, fmt.Sprintf("http://%s:%s/", ip, port))
 	}
-	exposure := h.app.Config.Exposure
+	exposure := h.app.Cfg().Exposure
 	writeJSON(w, map[string]interface{}{
 		"exposure":   exposure,
 		"port":       port,

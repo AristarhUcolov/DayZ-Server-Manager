@@ -136,3 +136,46 @@ func TestParseDetectsTransition(t *testing.T) {
 		}
 	}
 }
+
+// Parse used to ignore Dynamic entirely and always report false. That turned a
+// harmless action into data loss: the Weather page loaded with the switch OFF
+// on a server whose weather WAS dynamic, and one Apply — changing nothing —
+// wrote min==max limits and froze the weather for good.
+func TestDynamicSurvivesRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "cfgweather.xml")
+
+	dyn, ok := Preset("dynamic")
+	if !ok {
+		t.Fatal("no dynamic preset")
+	}
+	if err := Write(p, dyn); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Parse(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Dynamic {
+		t.Fatal("Dynamic was lost on round-trip")
+	}
+
+	// The scenario that destroyed servers: open the page, touch nothing, Apply.
+	if err := Write(p, got); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(p)
+	if !strings.Contains(string(raw), `<limits min="0" max="1" />`) {
+		t.Errorf("a no-op Apply pinned the limits — weather would stop moving:\n%s", raw)
+	}
+
+	// And a genuinely static preset must still parse as static.
+	clear, _ := Preset("clear")
+	if err := Write(p, clear); err != nil {
+		t.Fatal(err)
+	}
+	got2, _ := Parse(p)
+	if got2.Dynamic {
+		t.Error("a static preset was read back as dynamic")
+	}
+}

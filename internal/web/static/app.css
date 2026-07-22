@@ -1300,6 +1300,55 @@ input.attach-num {
   .support-btn-label { display: none; }
 }
 
+/* --- list page: what each entry IS, not just how many slots it has ------ */
+
+.kind-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+.kind-chip {
+  padding: 5px 11px; font-size: 12px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.kind-chip.active {
+  background: var(--accent); border-color: var(--accent);
+  color: var(--accent-ink); font-weight: 600;
+}
+.kind-count {
+  font: 600 11px ui-monospace, "Cascadia Mono", Consolas, monospace;
+  opacity: .7;
+}
+.kind-chip.active .kind-count { opacity: .85; }
+
+.kind-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  border: 1px solid var(--border-strong); color: var(--text-secondary);
+}
+.kind-badge.k-weapon    { color: #ff9d5c; border-color: rgba(255,157,92,.45); }
+.kind-badge.k-clothing  { color: #6aa8ff; border-color: rgba(106,168,255,.45); }
+.kind-badge.k-container { color: #3ecf8e; border-color: rgba(62,207,142,.45); }
+.kind-badge.k-vehicle   { color: #c89bff; border-color: rgba(200,155,255,.45); }
+
+.attach-table td { vertical-align: middle; }
+.attach-name-cell { font-weight: 600; }
+/* The types.xml category, shown quietly next to the name — it is where the
+   kind badge comes from, so an admin can see why a row is labelled as it is. */
+.attach-cat {
+  display: block; font-size: 11px; color: var(--text-faint);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.attach-table td.num.zero { color: var(--text-faint); }
+.attach-sum { max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- editor: attachments / cargo / properties as separate sections ------- */
+
+.attach-section { margin-top: 18px; }
+.attach-section:first-of-type { margin-top: 10px; }
+.attach-section > h3 { margin-bottom: 6px; }
+.attach-props { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+.attach-prop { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.attach-prop.grow { flex: 1 1 240px; }
+.attach-prop.grow input { flex: 1; }
+
 /* ============================================================
    18d. HOVER HELP
    ============================================================ */

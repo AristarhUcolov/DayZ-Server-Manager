@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"dayzmanager/internal/util"
 )
 
 type BEConfig struct {
@@ -85,8 +87,8 @@ func EnsureBEConfig(beDir, password string, port int) (bool, error) {
 			if t == "" || strings.HasPrefix(t, "//") || strings.HasPrefix(t, "#") {
 				continue
 			}
-			f := strings.SplitN(t, " ", 2)
-			if strings.EqualFold(strings.TrimSpace(f[0]), key) {
+			f := strings.Fields(t)
+			if len(f) > 0 && strings.EqualFold(f[0], key) {
 				return true
 			}
 		}
@@ -98,8 +100,8 @@ func EnsureBEConfig(beDir, password string, port int) (bool, error) {
 			if t == "" || strings.HasPrefix(t, "//") || strings.HasPrefix(t, "#") {
 				continue
 			}
-			f := strings.SplitN(t, " ", 2)
-			if strings.EqualFold(strings.TrimSpace(f[0]), key) {
+			f := strings.Fields(t)
+			if len(f) > 0 && strings.EqualFold(f[0], key) {
 				lines[i] = key + " " + val
 				return
 			}
@@ -119,6 +121,9 @@ func EnsureBEConfig(beDir, password string, port int) (bool, error) {
 		return false, nil
 	}
 	tmp := path + ".tmp"
+	// The only writer in the codebase that did not keep a copy — and it is the
+	// one holding the RCon credentials.
+	_ = util.BackupBeforeWrite(path)
 	if err := os.WriteFile(tmp, []byte(out), 0o644); err != nil {
 		return false, err
 	}
@@ -138,13 +143,14 @@ func parseBEConfig(path string) *BEConfig {
 		if line == "" || strings.HasPrefix(line, "//") || strings.HasPrefix(line, "#") {
 			continue
 		}
-		// BE format is `Key Value` separated by whitespace.
-		fields := strings.SplitN(line, " ", 2)
-		if len(fields) != 2 {
+		// BE format is `Key Value` separated by ANY whitespace — tabs are as
+		// common as spaces in files BattlEye writes itself.
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
 			continue
 		}
-		key := strings.ToLower(strings.TrimSpace(fields[0]))
-		val := strings.TrimSpace(fields[1])
+		key := strings.ToLower(fields[0])
+		val := strings.Join(fields[1:], " ")
 		switch key {
 		case "rconpassword":
 			out.RConPassword = val

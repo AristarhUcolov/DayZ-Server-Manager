@@ -21,11 +21,13 @@ import (
 	"sync"
 	"time"
 
+	dztypes "dayzmanager/internal/types"
+
 	"dayzmanager/internal/admlog"
 	"dayzmanager/internal/i18n"
 	dzlogs "dayzmanager/internal/logs"
-	"dayzmanager/internal/notify"
 	"dayzmanager/internal/mods"
+	"dayzmanager/internal/notify"
 	"dayzmanager/internal/util"
 )
 
@@ -33,7 +35,7 @@ import (
 // ADM log viewer.
 
 func (h *handlers) admlogRecent(w http.ResponseWriter, r *http.Request) {
-	profilesDir := h.app.Config.ProfilesDir
+	profilesDir := h.app.Cfg().ProfilesDir
 	if !filepath.IsAbs(profilesDir) {
 		profilesDir = filepath.Join(h.app.ServerDir, profilesDir)
 	}
@@ -96,14 +98,14 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 		"running": h.app.ServerIsRunning(),
 		"pid":     h.app.Server.PID(),
 		"uptime":  h.app.Server.Uptime().Round(time.Second).String(),
-		"port":    h.app.Config.ServerPort,
+		"port":    h.app.Cfg().ServerPort,
 	}
 
 	// Mods count. mods.List walks the whole mod tree (and !Workshop), which is
 	// too heavy to run on every 5s poll — especially while installing mods. We
 	// cache the counts for a short window; the dashboard only shows totals, not
 	// sizes, so slightly stale numbers are fine.
-	if h.app.Config.VanillaDayZPath != "" {
+	if h.app.Cfg().VanillaDayZPath != "" {
 		dashMods.mu.Lock()
 		stale := dashMods.val == nil || time.Since(dashMods.at) > 15*time.Second
 		start := stale && !dashMods.refreshing
@@ -118,12 +120,15 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 			// !Workshop, which can take seconds on large modpacks. Running it in
 			// the request stalled one dashboard poll every 15s; the refreshing
 			// guard also collapses concurrent pollers into a single walk.
-			serverDir, vanilla := h.app.ServerDir, h.app.Config.VanillaDayZPath
+			// One snapshot for the whole pass: this runs on a 5s poll, and
+			// re-taking it per loop would copy every slice each time.
+			cfg := h.app.Cfg()
+			serverDir, vanilla := h.app.ServerDir, cfg.VanillaDayZPath
 			active := map[string]bool{}
-			for _, name := range h.app.Config.Mods {
+			for _, name := range cfg.Mods {
 				active[name] = true
 			}
-			for _, name := range h.app.Config.ServerMods {
+			for _, name := range cfg.ServerMods {
 				active[name] = true
 			}
 			go func() {
@@ -168,10 +173,10 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 				norm = cpu / float64(cores)
 			}
 			out["proc"] = map[string]interface{}{
-				"cpuPercent":     norm,
-				"cpuPercentRaw":  cpu,
-				"memBytes":       mem,
-				"cores":          cores,
+				"cpuPercent":    norm,
+				"cpuPercentRaw": cpu,
+				"memBytes":      mem,
+				"cores":         cores,
 			}
 		}
 	}
@@ -188,10 +193,10 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log sources with sizes.
-	out["logs"] = dzlogs.Discover(h.app.ServerDir, h.app.Config.ProfilesDir)
+	out["logs"] = dzlogs.Discover(h.app.ServerDir, h.app.Cfg().ProfilesDir)
 
 	// Recent ADM events (last 20) for the activity strip.
-	profilesDir := h.app.Config.ProfilesDir
+	profilesDir := h.app.Cfg().ProfilesDir
 	if !filepath.IsAbs(profilesDir) {
 		profilesDir = filepath.Join(h.app.ServerDir, profilesDir)
 	}
@@ -219,7 +224,7 @@ func (h *handlers) backupItems() [][2]string {
 		{filepath.Join(root, ".dayz-manager", "manager.json"), "manager.json"},
 		{filepath.Join(root, "serverDZ.cfg"), "serverDZ.cfg"},
 	}
-	be := h.app.Config.BEPath
+	be := h.app.Cfg().BEPath
 	if be == "" {
 		be = "battleye"
 	}
@@ -241,12 +246,32 @@ func (h *handlers) backupItems() [][2]string {
 	}
 	for _, rel := range []string{
 		"init.c", "cfgeconomycore.xml", "cfgeventspawns.xml", "cfgspawnabletypes.xml",
-		"cfggameplay.json", "cfgweather.xml",
+		"cfggameplay.json", "cfgweather.xml", "cfgenvironment.xml",
+		"cfgeventgroups.xml", "cfgignorelist.xml", "cfgrandompresets.xml",
+		// The manager's own Auto-fix writes to these two, so a backup that
+		// omitted them could not undo the panel's own edits.
+		"cfglimitsdefinition.xml", "cfglimitsdefinitionuser.xml",
+		// Was "db/playerspawnpoints.xml", a path that exists in no vanilla
+		// mission — spawn points were silently never backed up.
+		"cfgplayerspawnpoints.xml",
+		"cfgundergroundtriggers.json", "cfgeffectarea.json",
 		"db/globals.xml", "db/economy.xml", "db/events.xml", "db/types.xml", "db/messages.xml",
-		"db/playerspawnpoints.xml",
 		"env/zombie_territories.xml",
 	} {
 		items = append(items, [2]string{filepath.Join(mission, rel), "mission/" + rel})
+	}
+	// Custom loot files — the manager creates these itself from the Moded page,
+	// so leaving them out made the backup unable to restore its own work.
+	if entries, err := os.ReadDir(filepath.Join(mission, dztypes.ModedFolder)); err == nil {
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".xml") {
+				continue
+			}
+			items = append(items, [2]string{
+				filepath.Join(mission, dztypes.ModedFolder, e.Name()),
+				"mission/" + dztypes.ModedFolder + "/" + e.Name(),
+			})
+		}
 	}
 	return items
 }
@@ -362,7 +387,7 @@ func (h *handlers) discordTest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	b := i18n.Get(h.app.Config.Language)
+	b := i18n.Get(h.app.Cfg().Language)
 	if err := notify.Discord(req.URL, b["discord.test"]); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -372,7 +397,7 @@ func (h *handlers) discordTest(w http.ResponseWriter, r *http.Request) {
 
 // backupRun creates an on-demand disk backup (same zip as the download).
 func (h *handlers) backupRun(w http.ResponseWriter, r *http.Request) {
-	path, err := h.runBackupToDisk(h.app.Config.BackupKeep)
+	path, err := h.runBackupToDisk(h.app.Cfg().BackupKeep)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -404,14 +429,14 @@ func (h *handlers) autoBackupLoop(ctx context.Context) {
 			return
 		case <-time.After(10 * time.Minute):
 		}
-		hours := h.app.Config.BackupIntervalHours
+		hours := h.app.Cfg().BackupIntervalHours
 		if hours <= 0 {
 			continue
 		}
 		if time.Since(newest()) < time.Duration(hours)*time.Hour {
 			continue
 		}
-		if path, err := h.runBackupToDisk(h.app.Config.BackupKeep); err != nil {
+		if path, err := h.runBackupToDisk(h.app.Cfg().BackupKeep); err != nil {
 			h.app.Log.Printf("auto-backup: %v", err)
 		} else {
 			h.app.Log.Printf("auto-backup written: %s", path)
@@ -544,4 +569,3 @@ func (r *byteReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	}
 	return n, nil
 }
-

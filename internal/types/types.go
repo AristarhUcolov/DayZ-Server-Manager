@@ -3,23 +3,24 @@
 // types.xml parser/editor for DayZ central economy.
 //
 // Schema (simplified):
-//   <types>
-//     <type name="AKM">
-//       <nominal>15</nominal>
-//       <lifetime>14400</lifetime>
-//       <restock>1800</restock>
-//       <min>8</min>
-//       <quantmin>-1</quantmin>
-//       <quantmax>-1</quantmax>
-//       <cost>100</cost>
-//       <flags count_in_cargo="0" count_in_hoarder="0" count_in_map="1" count_in_player="0" crafted="0" deloot="0"/>
-//       <category name="weapons"/>
-//       <usage name="Military"/>
-//       <value name="Tier4"/>
-//       <tag name="..."/>
-//     </type>
-//     ...
-//   </types>
+//
+//	<types>
+//	  <type name="AKM">
+//	    <nominal>15</nominal>
+//	    <lifetime>14400</lifetime>
+//	    <restock>1800</restock>
+//	    <min>8</min>
+//	    <quantmin>-1</quantmin>
+//	    <quantmax>-1</quantmax>
+//	    <cost>100</cost>
+//	    <flags count_in_cargo="0" count_in_hoarder="0" count_in_map="1" count_in_player="0" crafted="0" deloot="0"/>
+//	    <category name="weapons"/>
+//	    <usage name="Military"/>
+//	    <value name="Tier4"/>
+//	    <tag name="..."/>
+//	  </type>
+//	  ...
+//	</types>
 package types
 
 import (
@@ -30,8 +31,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"dayzmanager/internal/util"
 )
 
 type Flags struct {
@@ -67,7 +66,29 @@ type Type struct {
 type TypesDoc struct {
 	XMLName xml.Name `xml:"types"`
 	Types   []Type   `xml:"type"`
+
+	// dirty holds the lower-cased names touched since the document was loaded.
+	// SaveTypes rewrites only these blocks; everything else in the file stays
+	// byte-for-byte, which is how comments survive an edit.
+	dirty map[string]bool
 }
+
+// markDirty records that an entry needs to be written back.
+func (d *TypesDoc) markDirty(name string) {
+	if d.dirty == nil {
+		d.dirty = map[string]bool{}
+	}
+	d.dirty[strings.ToLower(name)] = true
+}
+
+// Dirty reports how many entries are pending a write. Handlers use it to skip
+// a no-op save rather than rewriting the file for nothing.
+func (d *TypesDoc) Dirty() int { return len(d.dirty) }
+
+// MarkDirty flags an entry that was modified through the pointer returned by
+// Find. SaveTypes only writes flagged entries, so a caller that mutates in
+// place MUST call this or the change is silently dropped.
+func (d *TypesDoc) MarkDirty(name string) { d.markDirty(name) }
 
 func Load(path string) (*TypesDoc, error) {
 	data, err := os.ReadFile(path)
@@ -83,25 +104,10 @@ func Load(path string) (*TypesDoc, error) {
 	return &doc, nil
 }
 
-func (d *TypesDoc) Save(path string) error {
-	var buf bytes.Buffer
-	buf.WriteString(xml.Header)
-	enc := xml.NewEncoder(&buf)
-	enc.Indent("", "    ")
-	if err := enc.Encode(d); err != nil {
-		return err
-	}
-	if err := enc.Flush(); err != nil {
-		return err
-	}
-	buf.WriteByte('\n')
-	_ = util.BackupBeforeWrite(path)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, buf.Bytes(), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
-}
+// NOTE: there is deliberately no TypesDoc.Save. Marshalling this struct back
+// out cannot represent comments, so it deleted every one of them — including
+// the commented-out <type> blocks admins use to disable an item. Writes go
+// through SaveTypes in types_write.go, which rewrites only changed entries.
 
 // Find returns the first matching type by name (case-insensitive).
 func (d *TypesDoc) Find(name string) *Type {
@@ -115,6 +121,7 @@ func (d *TypesDoc) Find(name string) *Type {
 
 // Upsert inserts or replaces a type by name.
 func (d *TypesDoc) Upsert(t Type) {
+	d.markDirty(t.Name)
 	for i := range d.Types {
 		if strings.EqualFold(d.Types[i].Name, t.Name) {
 			d.Types[i] = t
@@ -135,6 +142,7 @@ func (d *TypesDoc) Remove(names ...string) int {
 	for _, t := range d.Types {
 		if _, drop := set[strings.ToLower(t.Name)]; drop {
 			removed++
+			d.markDirty(t.Name)
 			continue
 		}
 		out = append(out, t)
@@ -156,13 +164,13 @@ func (d *TypesDoc) Sort() {
 // those is ambiguous at bulk scale and the per-type editor already handles
 // them. Returns the count of types actually touched.
 type BulkFieldPatch struct {
-	Nominal  *int `json:"nominal,omitempty"`
-	Lifetime *int `json:"lifetime,omitempty"`
-	Restock  *int `json:"restock,omitempty"`
-	Min      *int `json:"min,omitempty"`
-	QuantMin *int `json:"quantmin,omitempty"`
-	QuantMax *int `json:"quantmax,omitempty"`
-	Cost     *int `json:"cost,omitempty"`
+	Nominal  *int    `json:"nominal,omitempty"`
+	Lifetime *int    `json:"lifetime,omitempty"`
+	Restock  *int    `json:"restock,omitempty"`
+	Min      *int    `json:"min,omitempty"`
+	QuantMin *int    `json:"quantmin,omitempty"`
+	QuantMax *int    `json:"quantmax,omitempty"`
+	Cost     *int    `json:"cost,omitempty"`
 	Category *string `json:"category,omitempty"`
 }
 
@@ -177,6 +185,7 @@ func (d *TypesDoc) BulkPatch(names []string, patch BulkFieldPatch) int {
 			continue
 		}
 		t := &d.Types[i]
+		d.markDirty(t.Name)
 		if patch.Nominal != nil {
 			v := *patch.Nominal
 			t.Nominal = &v
@@ -222,17 +231,17 @@ func (d *TypesDoc) BulkPatch(names []string, patch BulkFieldPatch) int {
 // from the UI. Kept as a simple built-in list; the UI can extend it later.
 
 type Preset struct {
-	ID          string     `json:"id"`
-	Label       string     `json:"label"`
-	LabelRU     string     `json:"labelRu"`
-	Usages      []NamedRef `json:"usages,omitempty"`
-	Values      []NamedRef `json:"values,omitempty"`
-	Tags        []NamedRef `json:"tags,omitempty"`
-	Category    string     `json:"category,omitempty"`
-	Nominal     *int       `json:"nominal,omitempty"`
-	Min         *int       `json:"min,omitempty"`
-	Lifetime    *int       `json:"lifetime,omitempty"`
-	Restock     *int       `json:"restock,omitempty"`
+	ID       string     `json:"id"`
+	Label    string     `json:"label"`
+	LabelRU  string     `json:"labelRu"`
+	Usages   []NamedRef `json:"usages,omitempty"`
+	Values   []NamedRef `json:"values,omitempty"`
+	Tags     []NamedRef `json:"tags,omitempty"`
+	Category string     `json:"category,omitempty"`
+	Nominal  *int       `json:"nominal,omitempty"`
+	Min      *int       `json:"min,omitempty"`
+	Lifetime *int       `json:"lifetime,omitempty"`
+	Restock  *int       `json:"restock,omitempty"`
 }
 
 func ip(v int) *int { return &v }

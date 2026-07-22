@@ -241,6 +241,11 @@
     "logs.rpt": "Was der Server selbst getan hat: Start, Mod-Laden, Skriptfehler, Abstürze. Diese Datei liest man, wenn der Server nicht startet.",
     "logs.adm": "Was Spieler getan haben: Verbindungen, Chat, Kills, Positionen. Braucht den Parameter -adminlog; die Spielerseite baut darauf auf.",
     "backup.restore": "Stellt Configs und Missionsdateien aus einem Zip wieder her. Der Server muss gestoppt sein — im Betrieb sperrt er diese Dateien.",
-    "sync.import": "Übernimmt Einstellungen aus einer anderen Manager-Installation. Vorhandene Werte werden überschrieben, sichere also vorher."
+    "sync.import": "Übernimmt Einstellungen aus einer anderen Manager-Installation. Vorhandene Werte werden überschrieben, sichere also vorher.",
+    "attach.class": "Die Klasse, die dieser Eintrag konfiguriert. Es muss keine Waffe sein — cfgspawnabletypes.xml deckt auch Kleidung, Rucksäcke, Kisten, Fässer und Fahrzeuge ab.",
+    "attach.cargo": "Cargo spawnt IM Gegenstand: der Inhalt eines Rucksacks, die Beute einer Kiste, der Kofferraum eines Autos. Anbauteile sitzen DARAUF. Die Hälfte der Vanilla-Datei ist Cargo, nicht Anbauteile.",
+    "attach.hoarder": "Kennzeichnet den Eintrag als dauerhaften Speicher — Fässer, Zelte, Verstecke. DayZ rechnet den Inhalt auf das Hoarder-Limit an statt auf den Weltloot.",
+    "attach.damage": "Zustand beim Spawn, 0.0 (neuwertig) bis 1.0 (ruiniert). Beide Felder leer lassen, um DayZ' Standard zu behalten.",
+    "attach.tags": "Schränkt ein, wo der Eintrag gilt, z. B. floor oder shelves. Kommagetrennt. Die meisten Einträge brauchen keine."
   }
 }

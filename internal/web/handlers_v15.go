@@ -44,12 +44,101 @@ func (h *handlers) spawnableList(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(list, func(i, j int) bool {
 		return strings.ToLower(list[i].Name) < strings.ToLower(list[j].Name)
 	})
+
+	// Row is a list entry enriched with what the UI needs to describe it
+	// without re-deriving anything client-side.
+	type Row struct {
+		dztypes.SpawnableType
+		Category   string `json:"category,omitempty"` // from types.xml: weapons, clothes, containers…
+		Kind       string `json:"kind"`               // weapon | clothing | container | vehicle | other
+		AttSlots   int    `json:"attSlots"`
+		CargoSlots int    `json:"cargoSlots"`
+	}
+	cats := h.typeCategories()
+	rows := make([]Row, 0, len(list))
+	counts := map[string]int{}
+	for i := range list {
+		st := list[i]
+		r := Row{
+			SpawnableType: st,
+			Category:      cats[strings.ToLower(st.Name)],
+			AttSlots:      len(st.Attachments),
+			CargoSlots:    len(st.Cargo),
+		}
+		r.Kind = spawnKind(&st, r.Category)
+		counts[r.Kind]++
+		rows = append(rows, r)
+	}
+
 	writeJSON(w, map[string]interface{}{
 		"path":   path,
 		"exists": true,
-		"types":  list,
-		"count":  len(list),
+		"types":  rows,
+		"count":  len(rows),
+		"kinds":  counts,
 	})
+}
+
+// typeCategories maps a lower-cased class name to its types.xml <category>.
+// Vanilla + every registered moded_types file, so modded gear is labelled too.
+func (h *handlers) typeCategories() map[string]string {
+	out := map[string]string{}
+	add := func(file string) {
+		doc, _, err := h.loadTypesFile(file)
+		if err != nil {
+			return
+		}
+		for i := range doc.Types {
+			t := &doc.Types[i]
+			if t.Name == "" || t.Category == nil || t.Category.Name == "" {
+				continue
+			}
+			out[strings.ToLower(t.Name)] = t.Category.Name
+		}
+	}
+	add("")
+	if mission, err := h.missionTemplate(); err == nil {
+		if entries, err := os.ReadDir(dztypes.ModedDir(h.app.ServerDir, mission)); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".xml") {
+					add(e.Name())
+				}
+			}
+		}
+	}
+	return out
+}
+
+// spawnKind labels an entry for the UI. types.xml's category is authoritative
+// where it exists; roughly a third of the entries (vehicles, wrecks, tents)
+// have none, so the shape of the entry itself decides those.
+func spawnKind(st *dztypes.SpawnableType, category string) string {
+	switch strings.ToLower(category) {
+	case "weapons":
+		return "weapon"
+	case "clothes":
+		return "clothing"
+	case "containers":
+		return "container"
+	case "tools", "food", "materials", "explosives":
+		return "other"
+	}
+	name := strings.ToLower(st.Name)
+	switch {
+	case strings.Contains(name, "wreck"), strings.Contains(name, "civiliansedan"),
+		strings.Contains(name, "hatchback"), strings.Contains(name, "offroad"),
+		strings.Contains(name, "truck"), strings.Contains(name, "van_"),
+		strings.Contains(name, "sedan"), strings.Contains(name, "boat"):
+		return "vehicle"
+	case st.Hoarder:
+		// <hoarder> marks persistent storage: barrels, tents, stashes.
+		return "container"
+	case len(st.Cargo) > 0 && len(st.Attachments) == 0:
+		return "container"
+	case len(st.Attachments) > 0:
+		return "weapon"
+	}
+	return "other"
 }
 
 // spawnableClassNames lists item class names from the mission's types.xml so
@@ -186,7 +275,14 @@ type spawnPreset struct {
 	ID     string                `json:"id"`
 	Label  string                `json:"label"`
 	Weapon string                `json:"weapon"`
+	Kind   string                `json:"kind"` // weapon | clothing | container | vehicle
 	Type   dztypes.SpawnableType `json:"type"`
+}
+
+// cargoGrp builds a <cargo> slot — what spawns INSIDE a container, backpack
+// or vehicle, as opposed to what is mounted on it.
+func cargoGrp(chance string, items ...dztypes.SpawnItem) dztypes.SpawnGroup {
+	return dztypes.SpawnGroup{Chance: chance, Items: items}
 }
 
 func grp(chance string, items ...dztypes.SpawnItem) dztypes.SpawnGroup {
@@ -199,7 +295,7 @@ func itm(name, chance string) dztypes.SpawnItem {
 func builtinSpawnPresets() []spawnPreset {
 	return []spawnPreset{
 		{
-			ID: "akm", Label: "AKM", Weapon: "AKM",
+			ID: "akm", Label: "AKM", Weapon: "AKM", Kind: "weapon",
 			Type: dztypes.SpawnableType{
 				Name: "AKM",
 				Attachments: []dztypes.SpawnGroup{
@@ -212,7 +308,7 @@ func builtinSpawnPresets() []spawnPreset {
 			},
 		},
 		{
-			ID: "ak74", Label: "AK-74", Weapon: "AK74",
+			ID: "ak74", Label: "AK-74", Weapon: "AK74", Kind: "weapon",
 			Type: dztypes.SpawnableType{
 				Name: "AK74",
 				Attachments: []dztypes.SpawnGroup{
@@ -225,7 +321,7 @@ func builtinSpawnPresets() []spawnPreset {
 			},
 		},
 		{
-			ID: "aks74u", Label: "AKS-74U", Weapon: "AKS74U",
+			ID: "aks74u", Label: "AKS-74U", Weapon: "AKS74U", Kind: "weapon",
 			Type: dztypes.SpawnableType{
 				Name: "AKS74U",
 				Attachments: []dztypes.SpawnGroup{
@@ -236,7 +332,7 @@ func builtinSpawnPresets() []spawnPreset {
 			},
 		},
 		{
-			ID: "m4a1", Label: "M4-A1", Weapon: "M4A1",
+			ID: "m4a1", Label: "M4-A1", Weapon: "M4A1", Kind: "weapon",
 			Type: dztypes.SpawnableType{
 				Name: "M4A1",
 				Attachments: []dztypes.SpawnGroup{
@@ -249,7 +345,7 @@ func builtinSpawnPresets() []spawnPreset {
 			},
 		},
 		{
-			ID: "mosin", Label: "Mosin 91/30", Weapon: "Mosin9130",
+			ID: "mosin", Label: "Mosin 91/30", Weapon: "Mosin9130", Kind: "weapon",
 			Type: dztypes.SpawnableType{
 				Name: "Mosin9130",
 				Attachments: []dztypes.SpawnGroup{
@@ -260,7 +356,7 @@ func builtinSpawnPresets() []spawnPreset {
 			},
 		},
 		{
-			ID: "svd", Label: "SVD", Weapon: "SVD",
+			ID: "svd", Label: "SVD", Weapon: "SVD", Kind: "weapon",
 			Type: dztypes.SpawnableType{
 				Name: "SVD",
 				Attachments: []dztypes.SpawnGroup{
@@ -269,8 +365,81 @@ func builtinSpawnPresets() []spawnPreset {
 				},
 			},
 		},
+		// --- clothing: vests and jackets carry attachments AND pocket cargo ---
 		{
-			ID: "empty", Label: "Blank template", Weapon: "",
+			ID: "vest", Label: "Plate carrier (vest)", Weapon: "PlateCarrierVest", Kind: "clothing",
+			Type: dztypes.SpawnableType{
+				Name: "PlateCarrierVest",
+				Attachments: []dztypes.SpawnGroup{
+					grp("0.40", itm("PlateCarrierHolster", "0.50"), itm("PlateCarrierPouches", "0.50")),
+				},
+				Cargo: []dztypes.SpawnGroup{
+					cargoGrp("0.30", itm("BandageDressing", "0.60"), itm("Rag", "0.40")),
+				},
+			},
+		},
+		{
+			ID: "jacket", Label: "Jacket (pocket loot)", Weapon: "M65Jacket", Kind: "clothing",
+			Type: dztypes.SpawnableType{
+				Name: "M65Jacket",
+				Cargo: []dztypes.SpawnGroup{
+					cargoGrp("0.25", itm("Rag", "0.40"), itm("BandageDressing", "0.30"), itm("Matchbox", "0.30")),
+				},
+			},
+		},
+		{
+			ID: "backpack", Label: "Backpack", Weapon: "MountainBag_Blue", Kind: "clothing",
+			Type: dztypes.SpawnableType{
+				Name: "MountainBag_Blue",
+				Cargo: []dztypes.SpawnGroup{
+					cargoGrp("0.35", itm("Canteen", "0.35"), itm("TunaCan", "0.35"), itm("Rope", "0.30")),
+				},
+			},
+		},
+		// --- containers: crates, barrels, tents ---
+		{
+			ID: "crate", Label: "Wooden crate", Weapon: "WoodenCrate", Kind: "container",
+			Type: dztypes.SpawnableType{
+				Name: "WoodenCrate",
+				Cargo: []dztypes.SpawnGroup{
+					cargoGrp("1.00", itm("Nail", "0.40"), itm("WoodenPlank", "0.35"), itm("MetalWire", "0.25")),
+					cargoGrp("0.30", itm("Hammer", "0.50"), itm("Screwdriver", "0.50")),
+				},
+			},
+		},
+		{
+			ID: "seachest", Label: "Sea chest", Weapon: "SeaChest", Kind: "container",
+			Type: dztypes.SpawnableType{
+				Name: "SeaChest",
+				Cargo: []dztypes.SpawnGroup{
+					cargoGrp("0.60", itm("BandageDressing", "0.50"), itm("TetracyclineAntibiotics", "0.50")),
+				},
+			},
+		},
+		{
+			ID: "barrel", Label: "Barrel (persistent storage)", Weapon: "Barrel_Green", Kind: "container",
+			Type: dztypes.SpawnableType{
+				Name:    "Barrel_Green",
+				Hoarder: true,
+			},
+		},
+		// --- vehicles: parts are attachments, boot loot is cargo ---
+		{
+			ID: "car", Label: "Car (parts + boot)", Weapon: "Hatchback_02", Kind: "vehicle",
+			Type: dztypes.SpawnableType{
+				Name: "Hatchback_02",
+				Attachments: []dztypes.SpawnGroup{
+					grp("0.50", itm("HatchbackWheel", "1.00")),
+					grp("0.30", itm("CarBattery", "1.00")),
+					grp("0.30", itm("SparkPlug", "1.00")),
+				},
+				Cargo: []dztypes.SpawnGroup{
+					cargoGrp("0.40", itm("Wrench", "0.50"), itm("LugWrench", "0.50")),
+				},
+			},
+		},
+		{
+			ID: "empty", Label: "Blank template", Weapon: "", Kind: "weapon",
 			Type: dztypes.SpawnableType{
 				Attachments: []dztypes.SpawnGroup{grp("1.00", itm("", "1.00"))},
 			},

@@ -183,3 +183,56 @@ func TestAppendEvent(t *testing.T) {
 		t.Error("appending damaged an existing event")
 	}
 }
+
+// The events editor draws a children table with add/delete buttons and posts
+// it, but the handler used to write only the scalar fields — so editing a
+// helicrash's loot table said "Saved" and changed nothing.
+func TestPatchEventChildren(t *testing.T) {
+	p := writeEvents(t)
+
+	ok, err := PatchEventChildren(p, "StaticHeliCrash", []EventChild{
+		{Type: "Wreck_Mi8", LootMin: 5, LootMax: 9, Min: 1, Max: 2},
+		{Type: "Wreck_UH1Y", LootMin: 3, LootMax: 6, Min: 1, Max: 1},
+		{Type: "   "}, // a blank row in the UI must not become an entry
+	})
+	if err != nil || !ok {
+		t.Fatalf("patch: ok=%v err=%v", ok, err)
+	}
+
+	doc, err := LoadEvents(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := doc.Find("StaticHeliCrash")
+	if e == nil || e.Children == nil {
+		t.Fatal("children missing after patch")
+	}
+	if len(e.Children.Child) != 2 {
+		t.Fatalf("children = %d, want 2 (blank row must be dropped)", len(e.Children.Child))
+	}
+	if e.Children.Child[0].Type != "Wreck_Mi8" || e.Children.Child[0].LootMax != 9 {
+		t.Errorf("first child wrong: %+v", e.Children.Child[0])
+	}
+
+	// Everything the Event struct does not model must still be there.
+	out, _ := os.ReadFile(p)
+	for _, want := range []string{
+		"<secondary>InfectedArmy</secondary>",
+		`<flags deletable="1" init_random="0" remove_damaged="0"/>`,
+		"<!-- helicopter crash sites -->",
+		"<saferadius>200</saferadius>", // the other event, untouched
+	} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("lost %q", want)
+		}
+	}
+
+	// An empty list removes the block entirely.
+	if _, err := PatchEventChildren(p, "StaticHeliCrash", nil); err != nil {
+		t.Fatal(err)
+	}
+	out2, _ := os.ReadFile(p)
+	if strings.Contains(string(out2), "<children>") {
+		t.Error("children block was not removed")
+	}
+}

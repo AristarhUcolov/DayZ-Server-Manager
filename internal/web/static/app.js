@@ -557,6 +557,17 @@ async function ensureFirstRunDone() {
 // --------------------------------------------------------------------- dashboard
 
 Views.dashboard = async (root) => {
+  const myNav = _navSeq;
+  // Timers are created much further down, after several awaits. Register the
+  // teardown NOW against mutable refs: navigate() already ran the previous
+  // view's teardown, so assigning later would land on the next view instead
+  // and leak both intervals for the rest of the session.
+  const timers = { tick: 0, perf: 0, stopped: false };
+  root._teardown = () => {
+    timers.stopped = true;
+    if (timers.tick) clearInterval(timers.tick);
+    if (timers.perf) clearInterval(timers.perf);
+  };
   await refreshStatus();
   // Start/Stop/Restart live in the Server card below — no duplicate set in the
   // header (was confusing to have two).
@@ -711,12 +722,12 @@ Views.dashboard = async (root) => {
     );
   };
 
-  let stopped = false;
+  // timers.stopped is set by the teardown registered at the top of this view.
   const tick = async () => {
-    if (stopped) return;
+    if (timers.stopped) return;
     try {
       const m = await api.get('/api/dashboard/metrics');
-      if (!stopped) render(m);
+      if (!timers.stopped) render(m);
     } catch {}
   };
   // Register teardown + interval BEFORE the first await so navigating away
@@ -760,10 +771,8 @@ Views.dashboard = async (root) => {
   }
   renderRangeButtons();
   loadPerf();
-  const perfIv = setInterval(loadPerf, 60000);
-
-  const iv = setInterval(tick, 5000);
-  root._teardown = () => { stopped = true; clearInterval(iv); clearInterval(perfIv); };
+  timers.perf = setInterval(loadPerf, 60000);
+  timers.tick = setInterval(tick, 5000);
   await tick();
 };
 
@@ -2456,7 +2465,15 @@ Views.validator = async (root) => {
 // --------------------------------------------------------------------- logs
 
 Views.logs = async (root) => {
+  // All three MUST come before the first await: navigate() has already run the
+  // previous view's teardown, so a late assignment lands on the NEXT view and
+  // leaks this EventSource for the rest of the session.
+  const myNav = _navSeq;
+  let source;
+  root._teardown = () => { if (source) source.close(); };
+
   const sources = await api.get('/api/logs/list');
+  if (myNav !== _navSeq) return; // superseded while the list was loading
   const picker = h('select', {});
   for (const s of sources) {
     picker.append(h('option', {
@@ -2471,7 +2488,6 @@ Views.logs = async (root) => {
   const paused = h('input', { type: 'checkbox' });
   const streamBadge = h('span', { class: 'badge mute', style: { display: 'none' } });
 
-  let source;
   const MAX_CHARS = 200_000;
 
   // Sticky-bottom autoscroll: scrolling up suspends following so the user can
@@ -2550,9 +2566,6 @@ Views.logs = async (root) => {
 
   // Attach to the first source that actually has a file — sources[0] may be a
   // placeholder ("no file yet") while a later entry holds real content.
-  // Registered before the await so a fast navigation cannot leave the stream
-  // open on a detached page.
-  root._teardown = () => { if (source) source.close(); };
   const first = sources.find(s => s.exists) || sources[0];
   if (first) { picker.value = first.id; await attach(first.id); }
 };
@@ -3923,6 +3936,11 @@ Views.sync = async (root) => {
                   mission: missionSel.value,
                 });
                 status.textContent = t('sync.done') + ' ' + (r.copiedMods || []).join(', ');
+                // A mod that could not be copied used to vanish from the
+                // result with no message at all.
+                if ((r.failedMods || []).length) {
+                  toast(r.failedMods.join('; '), 'error');
+                }
                 State.config = await api.get('/api/config');
               } catch (e) { handleErr(e); }
             }}),
@@ -4570,9 +4588,41 @@ Views.attachments = async (root) => {
   const search = h('input', { type: 'search', placeholder: t('types.search') });
   const listHost = h('div');
 
-  const presetSel = h('select', { style: { maxWidth: '220px' } });
+  // Filter by what an entry is. Counts come from the server so they describe
+  // the whole file, not just the page being shown.
+  let kindFilter = '';
+  const kinds = d.kinds || {};
+  const KIND_ORDER = ['weapon', 'clothing', 'container', 'vehicle', 'other'];
+  const chipHost = h('div', { class: 'kind-chips' });
+  const buildChips = () => {
+    chipHost.innerHTML = '';
+    const mk = (id, label, count) => {
+      const b = h('button', {
+        class: 'kind-chip' + (kindFilter === id ? ' active' : ''),
+        type: 'button',
+        onclick: () => { kindFilter = id; buildChips(); renderList(); },
+      }, [h('span', { text: label }), h('span', { class: 'kind-count', text: String(count) })]);
+      return b;
+    };
+    chipHost.append(mk('', t('attach.kind.all'), (d.types || []).length));
+    for (const k of KIND_ORDER) {
+      if (kinds[k]) chipHost.append(mk(k, t('attach.kind.' + k), kinds[k]));
+    }
+  };
+  buildChips();
+
+  const presetSel = h('select', { style: { maxWidth: '240px' } });
   presetSel.append(h('option', { value: '', text: t('attach.preset.pick') }));
-  for (const p of presets) presetSel.append(h('option', { value: p.id, text: p.label }));
+  // Grouped by kind: the file covers weapons, clothing, containers and
+  // vehicles, and the picker should make that visible rather than implying
+  // the editor is weapons-only.
+  for (const k of ['weapon', 'clothing', 'container', 'vehicle']) {
+    const inKind = presets.filter(p => (p.kind || 'weapon') === k);
+    if (!inKind.length) continue;
+    const g = h('optgroup', { label: t('attach.kind.' + k) });
+    for (const p of inKind) g.append(h('option', { value: p.id, text: p.label }));
+    presetSel.append(g);
+  }
 
   card.append(
     h('div', { class: 'toolbar' }, [
@@ -4586,6 +4636,7 @@ Views.attachments = async (root) => {
         openAttachEditor(seed, true);
       }}),
     ]),
+    chipHost,
     listHost,
   );
 
@@ -4593,34 +4644,59 @@ Views.attachments = async (root) => {
   function renderList() {
     listHost.innerHTML = '';
     const q = search.value.trim().toLowerCase();
-    const rows = q ? all.filter(x => x.name.toLowerCase().includes(q)) : all;
+    let rows = all;
+    if (kindFilter) rows = rows.filter(x => (x.kind || 'other') === kindFilter);
+    if (q) rows = rows.filter(x => x.name.toLowerCase().includes(q));
     if (!rows.length) {
       listHost.append(h('div', { class: 'empty-state' }, [h('div', { class: 'es-hint', i18n: 'attach.none' })]));
       applyI18n();
       return;
     }
-    const tbl = h('table');
+    const tbl = h('table', { class: 'attach-table' });
     tbl.append(h('thead', {}, h('tr', {}, [
       h('th', { i18n: 'col.name' }),
-      h('th', { class: 'num', i18n: 'attach.slots' }),
+      h('th', { i18n: 'attach.col.kind' }),
+      hlp(h('th', { class: 'num', i18n: 'attach.col.on' }), 'attach.slotChance'),
+      hlp(h('th', { class: 'num', i18n: 'attach.col.inside' }), 'attach.cargo'),
       h('th', { i18n: 'attach.summary' }),
       h('th', { text: '' }),
     ])));
     const tb = h('tbody');
+    // Cap the DOM at 400 rows; the file can hold thousands on a modded server.
     for (const st of rows.slice(0, 400)) {
-      const groups = st.attachments || [];
-      const summary = groups.slice(0, 3)
-        .map(g => (g.preset ? `preset:${g.preset}` : (g.items || []).map(i => i.name).join(' / ')))
+      const att = st.attachments || [];
+      const cargo = st.cargo || [];
+      const kind = st.kind || 'other';
+
+      // Summarise whichever side actually has content, so a crate describes
+      // its contents rather than showing an empty attachments column.
+      const describe = (groups) => groups.slice(0, 3)
+        .map(g => g.preset ? '⚙ ' + g.preset : (g.items || []).map(i => i.name).join(' / '))
         .filter(Boolean).join('  •  ');
+      let summary = describe(att.length ? att : cargo);
+      const shown = (att.length ? att : cargo).length;
+      if (shown > 3) summary += ' …';
+      if (!summary && st.hoarder) summary = t('attach.hoarderOnly');
+
+      const num = (v) => h('td', { class: 'num' + (v ? '' : ' zero'), text: v ? String(v) : '—' });
+
       tb.append(h('tr', {}, [
-        h('td', { text: st.name, style: { fontWeight: '600' } }),
-        h('td', { class: 'num', text: String(groups.length) }),
-        h('td', { class: 'hint', text: summary + (groups.length > 3 ? ' …' : '') }),
+        h('td', {}, [
+          h('span', { class: 'attach-name-cell', text: st.name }),
+          st.category ? h('span', { class: 'attach-cat', text: st.category }) : null,
+        ]),
+        h('td', {}, h('span', { class: 'kind-badge k-' + kind, text: t('attach.kind.' + kind) })),
+        num(att.length),
+        num(cargo.length),
+        h('td', { class: 'hint attach-sum', text: summary }),
         h('td', {}, h('button', { i18n: 'action.edit', onclick: () => openAttachEditor(st, false) })),
       ]));
     }
     tbl.append(tb);
     listHost.append(h('div', { class: 'table-scroll' }, tbl));
+    if (rows.length > 400) {
+      listHost.append(h('p', { class: 'hint', text: t('attach.truncated').replace('{n}', rows.length) }));
+    }
     applyI18n();
   }
   let _t = 0;
@@ -4655,9 +4731,12 @@ Views.attachments = async (root) => {
 
     const groupsHost = h('div');
 
-    function renderGroups() {
-      groupsHost.innerHTML = '';
-      model.attachments.forEach((g, gi) => {
+    // Draws one list of slots — <attachments> or <cargo>. They share the exact
+    // same shape in the file, so they share the renderer; only the label and
+    // the array differ.
+    function renderSlots(host, list, kindKey) {
+      host.innerHTML = '';
+      list.forEach((g, gi) => {
         const items = g.items || (g.items = []);
 
         const chanceInp = h('input', { type: 'text', value: g.chance ?? '1.00',
@@ -4673,7 +4752,7 @@ Views.attachments = async (root) => {
           slotBadge,
           h('span', { class: 'grow' }),
           h('button', { class: 'icon-x', text: '\u00d7', title: t('attach.removeSlot'),
-            onclick: () => { model.attachments.splice(gi, 1); renderGroups(); } }),
+            onclick: () => { list.splice(gi, 1); renderAll(); } }),
         ]);
 
         // Badges update IN PLACE. Re-rendering the group on every keystroke
@@ -4681,12 +4760,11 @@ Views.attachments = async (root) => {
         // ever landed and the field ended up holding garbage.
         const itemBadges = [];
         const recalc = () => {
-          const slot = parseFloat(g.chance);
-          const slotPct = Number.isFinite(slot) ? slot : 1;
-          const total = items.reduce((a, it) => a + (parseFloat(it.chance) || 0), 0);
+          const slotPct = chanceOf(g.chance);
+          const total = items.reduce((a, it) => a + chanceOf(it.chance), 0);
           slotBadge.textContent = fmtPct(slotPct);
           for (const b of itemBadges) {
-            const w = parseFloat(b.it.chance) || 0;
+            const w = chanceOf(b.it.chance);
             const real = total > 0 ? slotPct * (w / total) : 0;
             b.el.textContent = fmtPct(real);
             b.el.className = 'attach-pct' + (real > 0 ? '' : ' zero');
@@ -4715,7 +4793,7 @@ Views.attachments = async (root) => {
             h('span', { class: 'attach-name' }, [nameIn, warnBadge]),
             wIn, pctBadge,
             h('button', { class: 'icon-x', text: '\u00d7', title: t('attach.removeItem'),
-              onclick: () => { items.splice(ii, 1); renderGroups(); } }),
+              onclick: () => { items.splice(ii, 1); renderAll(); } }),
           ]);
           // A class absent from types.xml is the #1 reason an attachment
           // silently never spawns — flag it live as the name is typed.
@@ -4732,29 +4810,88 @@ Views.attachments = async (root) => {
         });
         recalc();
 
-        groupsHost.append(h('div', { class: 'attach-group' }, [
+        host.append(h('div', { class: 'attach-group' }, [
           head,
           h('div', { class: 'attach-body' }, [
             itemsHost,
             h('button', { class: 'attach-add', i18n: 'attach.addItem',
-              onclick: () => { items.push({ name: '', chance: '1.00' }); renderGroups(); applyI18n(); } }),
+              onclick: () => { items.push({ name: '', chance: '1.00' }); renderAll(); applyI18n(); } }),
           ]),
         ]));
       });
-      if (!model.attachments.length) {
-        groupsHost.append(h('p', { class: 'hint', i18n: 'attach.noSlots' }));
+      if (!list.length) {
+        host.append(h('p', { class: 'hint', i18n: kindKey === 'cargo' ? 'attach.noCargo' : 'attach.noSlots' }));
       }
+    }
+
+    const cargoHost = h('div');
+    function renderAll() {
+      renderSlots(groupsHost, model.attachments, 'attachments');
+      renderSlots(cargoHost, model.cargo, 'cargo');
       applyI18n();
     }
-    renderGroups();
+    renderAll();
+
+    // <hoarder> marks persistent storage (barrels, tents, stashes): DayZ counts
+    // what is inside towards the hoarder limit instead of world loot.
+    const hoarderChk = h('input', { type: 'checkbox', class: 'switch' });
+    hoarderChk.checked = !!model.hoarder;
+    hoarderChk.onchange = () => { model.hoarder = hoarderChk.checked; };
+
+    // <damage min max>: the condition range the item spawns in, 0..1.
+    const dmgMin = h('input', { type: 'text', class: 'attach-num', value: model.damageMin || '' });
+    const dmgMax = h('input', { type: 'text', class: 'attach-num', value: model.damageMax || '' });
+    dmgMin.oninput = () => { model.damageMin = dmgMin.value.trim(); };
+    dmgMax.oninput = () => { model.damageMax = dmgMax.value.trim(); };
+
+    const tagsInp = h('input', { type: 'text', value: (model.tags || []).join(', '),
+      placeholder: 'floor, shelves' });
+    tagsInp.oninput = () => {
+      model.tags = tagsInp.value.split(',').map(x => x.trim()).filter(Boolean);
+    };
+
+    const addSlot = (list) => {
+      list.push({ chance: '1.00', items: [{ name: '', chance: '1.00' }] });
+      renderAll(); applyI18n();
+    };
 
     m.body.append(
-      h('div', {}, [h('label', { i18n: 'attach.weapon' }), nameInp]),
-      h('p', { class: 'hint', i18n: 'attach.help' }),
-      groupsHost,
+      h('div', {}, [withHelp(h('label', { i18n: 'attach.weapon' }), 'attach.class'), nameInp]),
+
+      // --- attachments: what is mounted ON the item ---
+      h('div', { class: 'attach-section' }, [
+        withHelp(h('h3', { i18n: 'attach.section.attachments' }), 'attach.slotChance'),
+        h('p', { class: 'hint', i18n: 'attach.help' }),
+        groupsHost,
+        h('button', { class: 'attach-add', i18n: 'attach.addSlot', onclick: () => addSlot(model.attachments) }),
+      ]),
+
+      // --- cargo: what is INSIDE it. Half of cfgspawnabletypes.xml is this,
+      // and it was not editable at all before. ---
+      h('div', { class: 'attach-section' }, [
+        withHelp(h('h3', { i18n: 'attach.section.cargo' }), 'attach.cargo'),
+        h('p', { class: 'hint', i18n: 'attach.cargo.help' }),
+        cargoHost,
+        h('button', { class: 'attach-add', i18n: 'attach.addCargo', onclick: () => addSlot(model.cargo) }),
+      ]),
+
+      // --- properties that apply to the whole entry ---
+      h('div', { class: 'attach-section' }, [
+        h('h3', { i18n: 'attach.section.props' }),
+        h('div', { class: 'attach-props' }, [
+          h('label', {}, [hoarderChk, h('span', { i18n: 'attach.hoarder' }), help('attach.hoarder')]),
+          h('div', { class: 'attach-prop' }, [
+            withHelp(h('span', { class: 'k', i18n: 'attach.damage' }), 'attach.damage'),
+            dmgMin, h('span', { class: 'attach-eq', text: '–' }), dmgMax,
+          ]),
+          h('div', { class: 'attach-prop grow' }, [
+            withHelp(h('span', { class: 'k', i18n: 'attach.tags' }), 'attach.tags'),
+            tagsInp,
+          ]),
+        ]),
+      ]),
+
       h('div', { class: 'actions' }, [
-        h('button', { i18n: 'attach.addSlot',
-          onclick: () => { model.attachments.push({ chance: '1.00', items: [{ name: '', chance: '1.00' }] }); renderGroups(); applyI18n(); } }),
         h('span', { class: 'grow' }),
         h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => withBusy(e.currentTarget, doSave) }),
         !isNew ? h('button', { class: 'danger', i18n: 'action.delete', onclick: async (e) => {
@@ -4795,6 +4932,14 @@ Views.attachments = async (root) => {
 };
 
 // fmtPct renders a 0..1 probability as a percentage with sane precision.
+// chanceOf reads a chance/weight the way DayZ does: absent or blank means 1.
+// Reading it as 0 made every badge on a vanilla-formatted entry show 0%.
+function chanceOf(v, dflt = 1) {
+  if (v === undefined || v === null || String(v).trim() === '') return dflt;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : dflt;
+}
+
 function fmtPct(v) {
   if (!Number.isFinite(v) || v <= 0) return '0%';
   const pct = v * 100;

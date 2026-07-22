@@ -155,7 +155,40 @@ func Parse(path string) (Params, error) {
 		StormDensity: parseFloatAttr(reStormDensity.FindStringSubmatch(s)),
 	}
 	p.Transition = detectTransition(sectionCurrentTime(s, "overcast"))
+	p.Dynamic = detectDynamic(s)
 	return p, nil
+}
+
+// detectDynamic works out whether the file lets the weather move.
+//
+// Render writes a static channel as limits min==max with changelimits 0..0,
+// and a dynamic one as a wide band with a non-zero change step. Either signal
+// alone is enough: a hand-written file may widen the limits without touching
+// changelimits, or vice versa. Overcast is the channel every preset writes.
+func detectDynamic(xml string) bool {
+	for _, section := range []string{"overcast", "rain", "fog"} {
+		lo, hi, ok := sectionLimits(xml, section, "limits")
+		if ok && hi > lo {
+			return true
+		}
+		_, chHi, ok := sectionLimits(xml, section, "changelimits")
+		if ok && chHi > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// sectionLimits reads <limits min max> or <changelimits min max> from a named
+// channel block. ok is false when the element is absent.
+func sectionLimits(xml, section, tag string) (min, max float64, ok bool) {
+	re := regexp.MustCompile(`(?s)<` + section + `>.*?<` + tag +
+		`[^>]*\bmin\s*=\s*"([^"]*)"[^>]*\bmax\s*=\s*"([^"]*)"`)
+	m := re.FindStringSubmatch(xml)
+	if len(m) < 3 {
+		return 0, 0, false
+	}
+	return parseFloatAttr([]string{"", m[1]}), parseFloatAttr([]string{"", m[2]}), true
 }
 
 // detectTransition maps an overcast ramp time back onto the nearest profile so

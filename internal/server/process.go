@@ -170,6 +170,18 @@ func (c *Controller) schedSnapshot() scheduleConfig {
 
 func (c *Controller) IsRunning() bool { return c.running.Load() }
 
+// StartedAt reports when the current server process started, or the zero time
+// when it is not running. The auto-restart interval is measured from here so
+// it agrees with the dashboard countdown, which is uptime-based.
+func (c *Controller) StartedAt() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cmd == nil {
+		return time.Time{}
+	}
+	return c.startedAt
+}
+
 func (c *Controller) Uptime() time.Duration {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -322,8 +334,10 @@ func (c *Controller) Stop() error {
 
 func (c *Controller) Restart() error {
 	_ = c.Stop()
-	// wait for wait() to clear the cmd.
-	for i := 0; i < 50; i++ {
+	// Wait for wait() to clear the cmd. 30s, not 5s: BattlEye and the Windows
+	// file cache can hold the process tree well past five seconds, and giving
+	// up early makes Start() fail with "server already running".
+	for i := 0; i < 300; i++ {
 		if !c.IsRunning() {
 			break
 		}
@@ -332,7 +346,35 @@ func (c *Controller) Restart() error {
 	// The server is now stopped and its file locks on the @mod folders are
 	// clear — the only safe window to refresh mods (item 2).
 	c.beforeRestart()
-	return c.Start()
+
+	if err := c.Start(); err != nil {
+		// The server is DOWN and the watchdog will not help: Stop() marked this
+		// exit as requested. Say so loudly and keep trying, because nothing
+		// else will.
+		c.log.Printf("RESTART FAILED — the server is down and will not come back on its own: %v", err)
+		c.notify("restartfailed")
+		go c.retryStart()
+		return err
+	}
+	return nil
+}
+
+// retryStart re-attempts a start after a failed restart. Bounded: five tries
+// over ~75 seconds. A transient lock (antivirus scan, Steam update finishing)
+// clears in that window; anything longer needs a human, and hammering the exe
+// forever would only bury the log line that says so.
+func (c *Controller) retryStart() {
+	for i := 0; i < 5; i++ {
+		time.Sleep(15 * time.Second)
+		if c.IsRunning() || c.loopPaused.Load() {
+			return
+		}
+		if err := c.Start(); err == nil {
+			c.log.Printf("server recovered on retry %d after a failed restart", i+1)
+			return
+		}
+	}
+	c.log.Printf("server did not recover after a failed restart — manual action needed")
 }
 
 // beforeRestart updates mods during the restart down-window when the user opted
@@ -428,7 +470,6 @@ func (c *Controller) StartAutoRestartLoop() {
 
 	// Interval-based auto-restart (the classic .bat behavior).
 	go func() {
-		lastStart := time.Now()
 		for {
 			s := c.schedSnapshot()
 			if !s.autoRestartEnabled || s.autoRestartSeconds <= 0 || c.loopPaused.Load() {
@@ -439,14 +480,29 @@ func (c *Controller) StartAutoRestartLoop() {
 					continue
 				}
 			}
-			elapsed := time.Since(lastStart)
+			// Measure from the running process, not from manager boot, and do
+			// not accumulate while the server is down — otherwise the cycle
+			// fires moments after a start and the countdown lies about it.
+			startedAt := c.StartedAt()
+			if startedAt.IsZero() {
+				select {
+				case <-stop:
+					return
+				case <-time.After(5 * time.Second):
+					continue
+				}
+			}
+			elapsed := time.Since(startedAt)
 			remaining := time.Duration(s.autoRestartSeconds)*time.Second - elapsed
 			if remaining <= 0 {
 				if c.IsRunning() {
 					c.log.Printf("auto-restart: cycling server")
-					_ = c.restartWithCountdown(s.restartWarnMinutes)
+					if err := c.restartWithCountdown(s.restartWarnMinutes); err != nil {
+						c.log.Printf("scheduled restart failed: %v", err)
+					}
 				}
-				lastStart = time.Now()
+				// No reset needed: Restart() sets a fresh startedAt, which is
+				// the clock this loop reads.
 				continue
 			}
 			// Subtract the countdown warning — restartWithCountdown sleeps
@@ -462,9 +518,10 @@ func (c *Controller) StartAutoRestartLoop() {
 			case <-time.After(wait):
 				if c.IsRunning() {
 					c.log.Printf("auto-restart: cycling server")
-					_ = c.restartWithCountdown(s.restartWarnMinutes)
+					if err := c.restartWithCountdown(s.restartWarnMinutes); err != nil {
+						c.log.Printf("interval auto-restart failed: %v", err)
+					}
 				}
-				lastStart = time.Now()
 			}
 		}
 	}()
@@ -586,7 +643,11 @@ func (c *Controller) scheduledRestartLoop(stop <-chan struct{}) {
 			fired[sched] = stamp
 			warnMins := s.restartWarnMinutes
 			c.log.Printf("scheduled restart %s — countdown starting", sched)
-			go func() { _ = c.restartWithCountdown(warnMins) }()
+			go func() {
+				if err := c.restartWithCountdown(warnMins); err != nil {
+					c.log.Printf("restart failed: %v", err)
+				}
+			}()
 			break
 		}
 	}
@@ -632,7 +693,11 @@ func (c *Controller) modUpdateCheckLoop(stop <-chan struct{}) {
 		}
 		c.log.Printf("mod update available — updating and restarting")
 		c.forceModUpdate.Store(true)
-		go func() { _ = c.restartWithCountdown(s.restartWarnMinutes) }()
+		go func() {
+			if err := c.restartWithCountdown(s.restartWarnMinutes); err != nil {
+				c.log.Printf("restart failed: %v", err)
+			}
+		}()
 	}
 }
 

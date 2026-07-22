@@ -39,7 +39,7 @@ func (h *handlers) playersDB() *players.Store {
 }
 
 func (h *handlers) profilesAbs() string {
-	dir := h.app.Config.ProfilesDir
+	dir := h.app.Cfg().ProfilesDir
 	if dir == "" {
 		dir = "profiles"
 	}
@@ -152,7 +152,7 @@ func (h *handlers) gameplay(w http.ResponseWriter, r *http.Request) {
 	// same way cfgeconomycore auto-registration works, so "I edited the file
 	// but nothing changed" can't happen.
 	flagSet := false
-	cfgPath := filepath.Join(h.app.ServerDir, h.app.Config.ServerCfg)
+	cfgPath := filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)
 	if cfg, err := config.LoadServerCfg(cfgPath); err == nil {
 		if v, _ := cfg.Get("enableCfgGameplayFile"); v != "1" {
 			cfg.Set("enableCfgGameplayFile", 1)
