@@ -1,0 +1,246 @@
+{
+  "chapters": [
+    {
+      "id": "start",
+      "title": "Getting started",
+      "intro": "The manager is a single .exe that runs next to your DayZ server and gives you a web panel instead of Notepad and .bat files. It never installs anything system-wide — delete the .exe and everything is as it was.",
+      "steps": [
+        {
+          "title": "Put the exe in the server folder",
+          "body": "Copy dayz-manager.exe next to DayZServer_x64.exe and serverDZ.cfg, then run it. A console window opens and your browser lands on http://127.0.0.1:8787."
+        },
+        {
+          "title": "Point it at your DayZ client",
+          "body": "On first run you are asked for the folder of the DayZ *client* — the game install that contains the !Workshop folder. That is where Steam downloads mods, and it is the only way the manager can copy them into your server."
+        },
+        {
+          "title": "Start the server",
+          "body": "Press Start on the dashboard. If DayZServer_x64.exe is missing or a mod is broken, the server exits and you will see it in the Logs section."
+        }
+      ],
+      "tips": [
+        "The panel has no login. Keep it on Local unless you trust your network; for remote access put a reverse proxy with a password in front of it.",
+        "Almost every file editor refuses to save while the server is running — DayZ holds locks on its own files. Stop the server first; the panel tells you when this is the reason."
+      ]
+    },
+    {
+      "id": "mods",
+      "title": "Mods",
+      "intro": "DayZ mods live in your client's !Workshop folder after you subscribe on Steam. A server needs its own copy of each mod, plus the mod's .bikey in the server's keys folder, plus the mod listed in the -mod launch parameter. The manager does all three.",
+      "steps": [
+        {
+          "title": "Subscribe in Steam first",
+          "body": "The manager copies mods, it does not download them. Subscribe to the mod in the Steam Workshop and let the DayZ launcher pull it into !Workshop."
+        },
+        {
+          "title": "Install into the server",
+          "body": "Open Mods — everything in !Workshop is listed. Install copies the mod into the server folder and syncs its .bikey automatically. Sync all does the whole list in one click."
+        },
+        {
+          "title": "Enable it for launch",
+          "body": "Installing is not the same as loading. Flip the Mods switch on a row to add it to -mod. Use the Server-side switch only for mods that clients must NOT have (admin tools)."
+        },
+        {
+          "title": "Mind the load order",
+          "body": "Drag rows in Load order so frameworks come first — @CF before anything that depends on it, Expansion Core before its addons. Wrong order is a very common cause of a server that will not boot."
+        }
+      ],
+      "tips": [
+        "Update copies the newer files from !Workshop into the server. Turn on Update mods on every restart in Settings to keep them in sync automatically.",
+        "Uninstalling a mod only deletes its .bikey if no other installed mod uses the same key, so shared keys (Expansion) stay intact.",
+        "If a mod ships loot, use Scan for loot types on its row — it finds the mod's types.xml and registers it for you."
+      ]
+    },
+    {
+      "id": "economy",
+      "title": "Loot and economy",
+      "intro": "DayZ's central economy decides what exists in the world and how much of it. types.xml is the master list: one entry per item class, with how many should exist and where they may appear. Getting these numbers wrong is the usual reason a server feels empty or drowning in loot.",
+      "steps": [
+        {
+          "title": "Understand the four numbers",
+          "body": "nominal is the target amount the server tries to keep in the world. min is the floor that triggers a respawn. lifetime is how long an untouched item survives, in seconds. restock is how long the server waits before topping the item back up. Set nominal to 0 and the item never spawns."
+        },
+        {
+          "title": "Edit in the table",
+          "body": "nominal, min, lifetime and category are editable straight in the table — edited rows are highlighted until you press Save changes. Use Edit for the full item: usages, values, tags and flags."
+        },
+        {
+          "title": "Usage and value = where it spawns",
+          "body": "usage is the building type (Military, Police, Farm…), value is the loot tier (Tier1 is coastal, Tier4 is deep inland / military). An item with no usage has nowhere to spawn. Both names must exist in cfglimitsdefinition.xml."
+        },
+        {
+          "title": "Use presets for bulk work",
+          "body": "Select rows, then click a spawn preset to merge its usage/value/tags into all of them at once — far faster than editing hundreds of entries by hand."
+        }
+      ],
+      "tips": [
+        "Keep your own items in a custom types file rather than editing the vanilla types.xml — the manager registers it in cfgeconomycore.xml for you, and a game update cannot overwrite it.",
+        "Run the Validator after any bulk edit. Its Auto-fix adds unknown usage/value/tag names into cfglimitsdefinition.xml, which is exactly what makes modded loot start spawning."
+      ]
+    },
+    {
+      "id": "attachments",
+      "title": "Weapon attachments",
+      "intro": "cfgspawnabletypes.xml decides what a weapon is carrying when it spawns — a magazine, an optic, a buttstock. It is built from slots, and the numbers mean two different things, which is the part everybody gets wrong.",
+      "steps": [
+        {
+          "title": "A slot is one roll of the dice",
+          "body": "Each attachments slot has a chance: 1.0 means it always spawns something, 0.35 means 35% of the time."
+        },
+        {
+          "title": "Items inside a slot compete",
+          "body": "The number on each item is a relative weight, not a percentage — DayZ picks exactly ONE item from the slot. Weights of 60 and 40 inside a 0.35 slot really mean 21% and 14%. The panel shows you that real number so you never have to work it out."
+        },
+        {
+          "title": "Start from a template",
+          "body": "Pick a weapon template (AKM, M4-A1, Mosin…), then adjust. Class names autocomplete from your own types.xml, and anything not found there is flagged — a typo is the usual reason an attachment never appears in game."
+        }
+      ],
+      "tips": [
+        "One slot per part: one for magazines, one for optics, one for the stock. Putting a magazine and an optic in the same slot means the weapon gets one or the other, never both.",
+        "Only the entry you edit is rewritten — your comments and formatting in the rest of the file are preserved."
+      ]
+    },
+    {
+      "id": "rcon",
+      "title": "RCon, players and announcements",
+      "intro": "RCon is BattlEye's remote console: the live player list, kicks, bans and chat broadcasts. It needs a password that BattlEye reads from beserver_x64.cfg when the server starts.",
+      "steps": [
+        {
+          "title": "Set the password",
+          "body": "Type one in the RCon section. The manager writes it into battleye/beserver_x64.cfg for you, creating the file if needed."
+        },
+        {
+          "title": "Restart the server",
+          "body": "BattlEye only reads that file at launch, so a brand-new password does nothing until the next restart. This is normal and not a bug."
+        },
+        {
+          "title": "Announce and schedule",
+          "body": "Scheduled announcements fire at a time of day; interval announcements repeat every N minutes. Both go out over RCon, so they need the password to be live."
+        }
+      ],
+      "tips": [
+        "Restart warnings use RCon too. Without a password the restart still happens — players just get no countdown.",
+        "The Players section builds a history from the admin log: names, GUIDs, playtime, kills. It needs the -adminlog launch flag enabled in Settings."
+      ]
+    },
+    {
+      "id": "weather",
+      "title": "Weather and time",
+      "intro": "Weather is defined in the mission's cfgweather.xml, which DayZ reads once when the mission loads — so weather changes always need a server restart, and there is no vanilla way to schedule 'rain at 20:00' without a mod.",
+      "steps": [
+        {
+          "title": "Pick a preset or tune it by hand",
+          "body": "A static preset pins the weather so it stays put. Dynamic lets it drift on its own."
+        },
+        {
+          "title": "Choose how smoothly it changes",
+          "body": "Transition speed controls how gradually weather moves: Smooth ramps over about half an hour in small steps, like vanilla. Fast swings the full range in two minutes, which is what makes weather feel like a light switch."
+        },
+        {
+          "title": "Set the day length",
+          "body": "Day and night acceleration multiply the passage of in-game time — 12 means a full day takes two real hours. Night acceleration is separate so you can keep nights short."
+        }
+      ],
+      "tips": [
+        "Storm density only matters when there is enough rain and overcast for a storm to trigger at all.",
+        "Snowfall only shows on snow-capable maps such as Sakhal."
+      ]
+    },
+    {
+      "id": "maintenance",
+      "title": "Keeping it healthy",
+      "intro": "Three things save servers: backups, the validator, and actually reading the logs when something breaks.",
+      "steps": [
+        {
+          "title": "Turn on automatic backups",
+          "body": "Settings can write a zip of your configs and mission files on a schedule and keep the newest N. Every single file the panel overwrites also gets a timestamped .bak next to it."
+        },
+        {
+          "title": "Validate before you restart",
+          "body": "The validator parses every mission XML, balances braces in .cfg files, checks that files listed in cfgeconomycore.xml exist and flags duplicate type names."
+        },
+        {
+          "title": "Read the right log",
+          "body": "The .RPT file records what the server itself did — a crash or a mod refusing to load shows up there. The .ADM file records what players did."
+        }
+      ],
+      "tips": [
+        "Wipe deletes saved world state — players, vehicles, bases. Your loot tables and configs are untouched. Folders are moved aside first, so a mistaken wipe can be recovered by hand.",
+        "Crash watchdog restarts the server if it exits on its own. After three crashes in five minutes it stops and shows a banner instead — a crash loop needs a human, not another restart."
+      ]
+    },
+    {
+      "id": "remote",
+      "title": "Access from a phone or another PC",
+      "intro": "By default the panel only answers on this machine. Switching exposure to Local network makes it reachable from anything on the same Wi-Fi.",
+      "steps": [
+        {
+          "title": "Switch exposure",
+          "body": "Settings → Panel exposure → Local network, then restart the manager. The Network access card then lists the exact addresses to open."
+        },
+        {
+          "title": "Allow it through the firewall",
+          "body": "Windows asks once. If a phone cannot connect, allow the manager for Private networks in Windows Firewall."
+        }
+      ],
+      "tips": [
+        "There is still no login. Never expose the panel straight to the internet — put Caddy or nginx with a password in front of it."
+      ]
+    }
+  ],
+  "help": {
+    "attach.itemWeight": "A relative weight, not a percentage — DayZ picks exactly ONE item from the slot. Weights 60 and 40 mean 60% and 40% of the slot's own chance.",
+    "attach.slotChance": "Probability that this slot spawns anything at all. 1.0 = always, 0.35 = 35% of the time.",
+    "mods.order": "DayZ loads mods left to right. Frameworks must come first: @CF before anything depending on it, Expansion Core before its addons. Wrong order is a common reason a server refuses to boot.",
+    "mods.scan": "Looks inside the mod for a types.xml and registers it in cfgeconomycore.xml, so the mod's loot actually spawns.",
+    "mods.serverSide": "Loads the mod with -serverMod instead of -mod: it runs on the server and clients neither need nor get it. For admin tools only — a loot or content mod set server-side will not work.",
+    "mods.update": "Copies newer files from the client's !Workshop into the server. The manager cannot download mods — subscribe in Steam first.",
+    "rcon.password": "Written into battleye/beserver_x64.cfg. BattlEye reads that file only at launch, so a new password does nothing until the next restart.",
+    "settings.adminlog": "Enables -adminlog, which writes the .ADM file. The Players page and the killfeed are built from it and stay empty without it.",
+    "settings.backup": "Zips your configs and mission files on a schedule and keeps the newest N. Separately, every file the panel overwrites gets a timestamped .bak next to it.",
+    "settings.exposure": "Local means only this PC can open the panel. Local network makes it reachable from your phone. The panel has no login — never expose it straight to the internet.",
+    "settings.restart": "Restarts the server on a schedule. Players get RCon warnings beforehand, which needs an RCon password to be set.",
+    "settings.watchdog": "Restarts the server if it exits on its own. After three crashes in five minutes it stops and shows a banner — a crash loop needs a human, not another restart.",
+    "types.bulk": "Applies these values to every selected row at once. Only the fields you fill in are changed.",
+    "types.lifetime": "Seconds an untouched item survives before it despawns. 3888000 is 45 days.",
+    "types.min": "When the count drops to this, the server queues a respawn. Must not exceed nominal — DayZ clamps it and logs a warning.",
+    "types.nominal": "How many of this item the server tries to keep in the world at once. 0 means it never spawns.",
+    "types.quant": "Fill level as a percentage for items with a quantity (drinks, fuel). Use -1 to disable, otherwise 0–100.",
+    "types.restock": "Seconds the server waits before topping this item back up. 0 means immediately.",
+    "types.usage": "Which building types the item may spawn in (Military, Police, Farm…). No usage means no place to spawn.",
+    "types.value": "Loot tier: Tier1 is the coast, Tier4 is deep inland and military. Controls how far from spawn the item appears.",
+    "validator.autofix": "Adds unknown usage/value/tag/category names into cfglimitsdefinition.xml. This is usually what makes modded loot start spawning — the names must exist there or DayZ ignores the entry.",
+    "weather.accel": "Multiplies the passage of in-game time. 12 means a full day takes two real hours. Night is separate so you can keep nights short.",
+    "weather.dynamic": "Off pins the weather where you set it. On lets the server drift it on its own within the limits.",
+    "weather.storm": "Only has an effect when rain and overcast are high enough for a storm to trigger at all.",
+    "weather.transition": "How gradually weather changes. Smooth ramps over about half an hour in small steps, like vanilla DayZ. Fast can swing the full range in two minutes, which is what makes weather feel like a light switch.",
+    "wipe": "Deletes saved world state: players, vehicles, bases. Loot tables and configs are untouched. Folders are moved aside rather than erased, so a mistake can be undone by hand.",
+    "types.category": "Groups the item for the loot system (weapons, food, clothes…). The name must exist in cfglimitsdefinition.xml or DayZ drops the entry.",
+    "types.tag": "Narrows where inside a building the item lands: floor, shelves, ground. An item with no tag can use any surface the usage allows.",
+    "types.cost": "Spawn priority when the server has more candidates than slots. Higher wins. It is not money and players never see it.",
+    "types.flags": "count_in_cargo / count_in_hoarder / count_in_map / count_in_player decide whether items already stored in a tent, a car or a backpack count towards nominal. Turn them off and the server keeps spawning more of an item players have hoarded.",
+    "mods.uninstall": "Removes the mod folder from the server. Its .bikey is deleted only if no other installed mod uses the same key, so shared keys like Expansion's survive.",
+    "mods.profiles": "Saves the current set of enabled mods under a name, so you can switch between a modded and a vanilla line-up without re-toggling everything.",
+    "events.nominal": "How many of this event the server keeps running at once. Vehicles, helicrashes, animal herds and infected packs are all events.",
+    "events.minmax": "min and max bound the group size per spawn. max=0 means unlimited — that is why vanilla ambient events read min=100 max=0.",
+    "events.children": "The object classes this event spawns, with their own loot ranges. Editing them by hand is what the Mission DB editor is for.",
+    "events.active": "0 switches the event off while keeping it configured. That is how seasonal events (Christmas, Halloween) ship in vanilla.",
+    "server.maxPlayers": "Player slots. Raising it does not raise your hardware: each slot costs RAM and CPU, and DayZ gets unstable well before most machines run out.",
+    "server.instanceId": "Which save the server uses. Change it and the server starts on a completely fresh world — the old save stays on disk under its own id.",
+    "server.steamQueryPort": "The port Steam uses to list your server. It must be free and forwarded, or the server runs fine but never appears in the browser.",
+    "server.verifySignatures": "2 means every mod file must be signed by a key in keys/. Lowering it to 0 lets unsigned mods load — and lets modified clients in. Leave it at 2.",
+    "server.thirdPerson": "1 forces first person only. It changes how the game plays more than any other single setting, so decide before you build a playerbase.",
+    "server.von": "Voice over network. Disabling it removes in-game voice chat entirely, including the radio.",
+    "server.respawnTime": "Seconds a player must wait before respawning after death. Long values discourage suicide-respawning to reroll a spawn point.",
+    "server.mission": "Which mission folder under mpmissions/ the server loads. This is how you change the map — chernarusplus, enoch (Livonia), sakhal.",
+    "gameplay.file": "cfggameplay.json overrides gameplay rules — stamina, building, map behaviour. DayZ ignores the whole file on a single syntax error, so it is validated before saving.",
+    "battleye.bans": "One ban per line: GUID or IP, minutes (-1 = permanent), reason. Saving on a running server reloads bans over RCon, so no restart is needed.",
+    "logs.rpt": "What the server itself did: startup, mod loading, script errors, crashes. This is the file to read when the server will not start.",
+    "logs.adm": "What players did: connections, chat, kills, positions. Needs the -adminlog flag; the Players page is built from it.",
+    "validator.severity": "Errors break something now. Warnings are things DayZ tolerates but that usually mean the config does not do what you intended.",
+    "backup.restore": "Restores configs and mission files from a zip. The server must be stopped — it holds locks on these files while running.",
+    "sync.import": "Copies settings from another manager installation. Existing values are overwritten, so back up first if you are unsure.",
+    "weather.timePreset": "Sets the in-game clock at server start. SystemTime follows your PC's clock; a fixed value always starts the map at the same hour."
+  }
+}

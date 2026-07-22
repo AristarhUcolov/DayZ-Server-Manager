@@ -16,26 +16,26 @@
 панелями хостингов GTA SA:MP.
 
 <p align="center">
-  <img src="docs/img/dashboard.webp" alt="Панель управления DayZ Server Manager" width="900">
+  <img src="docs/img/ru/dashboard.webp" alt="Панель управления DayZ Server Manager" width="900">
 </p>
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/img/guide.webp" alt="Инструкция для новичков"><br>
-      <b>Инструкция</b> — восемь глав с пошаговыми объяснениями и переходом прямо в нужный раздел</td>
-    <td width="50%"><img src="docs/img/attachments.webp" alt="Редактор обвесов"><br>
+    <td width="50%"><img src="docs/img/ru/guide.webp" alt="Инструкция для новичков"><br>
+      <b>Инструкция</b> — восемь глав с пошаговыми объяснениями, скриншотом раздела и переходом прямо в нужную страницу</td>
+    <td width="50%"><img src="docs/img/ru/attachments.webp" alt="Редактор обвесов"><br>
       <b>Обвесы</b> — cfgspawnabletypes.xml с реальными процентами спавна вместо сырых весов</td>
   </tr>
   <tr>
-    <td><img src="docs/img/types.webp" alt="Редактор types.xml"><br>
-      <b>Лут</b> — types.xml с поиском, правкой в таблице и массовыми заготовками</td>
-    <td><img src="docs/img/weather.webp" alt="Погода и время"><br>
+    <td><img src="docs/img/ru/types.webp" alt="Редактор types.xml"><br>
+      <b>Лут</b> — types.xml с поиском, правкой прямо в таблице и массовыми заготовками</td>
+    <td><img src="docs/img/ru/weather.webp" alt="Погода и время"><br>
       <b>Погода</b> — пресеты, ручная настройка и плавность перехода</td>
   </tr>
   <tr>
-    <td><img src="docs/img/mods.webp" alt="Моды"><br>
+    <td><img src="docs/img/ru/mods.webp" alt="Моды"><br>
       <b>Моды</b> — установка из !Workshop, ключи, порядок загрузки, авто-обновление</td>
-    <td><img src="docs/img/validator.webp" alt="Валидатор"><br>
+    <td><img src="docs/img/ru/validator.webp" alt="Валидатор"><br>
       <b>Валидатор</b> — проверка XML, ссылок между файлами и значений с авто-исправлением</td>
   </tr>
 </table>
@@ -252,26 +252,26 @@ everything through a clean web UI. Inspired by classic GTA SA:MP hosting
 panels.
 
 <p align="center">
-  <img src="docs/img/dashboard.webp" alt="DayZ Server Manager dashboard" width="900">
+  <img src="docs/img/en/dashboard.webp" alt="DayZ Server Manager dashboard" width="900">
 </p>
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/img/guide.webp" alt="Beginner's guide"><br>
-      <b>Guide</b> — eight chapters of step-by-step explanations, each jumping straight to the section</td>
-    <td width="50%"><img src="docs/img/attachments.webp" alt="Attachments editor"><br>
+    <td width="50%"><img src="docs/img/en/guide.webp" alt="Beginner's guide"><br>
+      <b>Guide</b> — eight chapters of step-by-step explanations, each with a screenshot and a jump to the section it describes</td>
+    <td width="50%"><img src="docs/img/en/attachments.webp" alt="Attachments editor"><br>
       <b>Attachments</b> — cfgspawnabletypes.xml showing real spawn percentages instead of raw weights</td>
   </tr>
   <tr>
-    <td><img src="docs/img/types.webp" alt="types.xml editor"><br>
+    <td><img src="docs/img/en/types.webp" alt="types.xml editor"><br>
       <b>Loot</b> — types.xml with search, in-table editing and bulk spawn presets</td>
-    <td><img src="docs/img/weather.webp" alt="Weather and time"><br>
+    <td><img src="docs/img/en/weather.webp" alt="Weather and time"><br>
       <b>Weather</b> — presets, manual tuning and transition smoothness</td>
   </tr>
   <tr>
-    <td><img src="docs/img/mods.webp" alt="Mods"><br>
+    <td><img src="docs/img/en/mods.webp" alt="Mods"><br>
       <b>Mods</b> — install from !Workshop, keys, load order, auto-update</td>
-    <td><img src="docs/img/validator.webp" alt="Validator"><br>
+    <td><img src="docs/img/en/validator.webp" alt="Validator"><br>
       <b>Validator</b> — XML, cross-file references and value checks with auto-fix</td>
   </tr>
 </table>

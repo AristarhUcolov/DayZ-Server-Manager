@@ -1,0 +1,246 @@
+{
+  "chapters": [
+    {
+      "id": "start",
+      "title": "Primeiros passos",
+      "intro": "O gestor é um único .exe que corre ao lado do teu servidor DayZ e te dá um painel web em vez do Bloco de notas e ficheiros .bat. Não instala nada no sistema: apaga o .exe e fica tudo como estava.",
+      "steps": [
+        {
+          "title": "Coloca o exe na pasta do servidor",
+          "body": "Copia dayz-manager.exe para junto de DayZServer_x64.exe e serverDZ.cfg e executa-o. Abre-se uma consola e o navegador vai para http://127.0.0.1:8787."
+        },
+        {
+          "title": "Aponta-o ao teu cliente DayZ",
+          "body": "No primeiro arranque é pedida a pasta do *cliente* DayZ — a instalação do jogo que contém a pasta !Workshop. É aí que a Steam descarrega as mods, e é a única forma de o gestor as copiar para o servidor."
+        },
+        {
+          "title": "Arranca o servidor",
+          "body": "Carrega em Iniciar no painel. Se faltar DayZServer_x64.exe ou uma mod estiver partida, o servidor fecha-se e verás o motivo na secção Registos."
+        }
+      ],
+      "tips": [
+        "O painel não tem sessão iniciada. Deixa-o em Local a não ser que confies na tua rede; para acesso remoto coloca à frente um proxy inverso com palavra-passe.",
+        "Quase todos os editores recusam gravar enquanto o servidor está a correr: o DayZ bloqueia os próprios ficheiros. Para o servidor; o painel avisa-te quando é esse o motivo."
+      ]
+    },
+    {
+      "id": "mods",
+      "title": "Mods",
+      "intro": "As mods do DayZ vão para a pasta !Workshop do teu cliente assim que subscreves na Steam. Um servidor precisa da sua própria cópia de cada mod, do respetivo .bikey na pasta keys, e da mod no parâmetro -mod. O gestor trata das três coisas.",
+      "steps": [
+        {
+          "title": "Subscreve primeiro na Steam",
+          "body": "O gestor copia mods, não as descarrega. Subscreve a mod no Steam Workshop e deixa o launcher do DayZ trazê-la para !Workshop."
+        },
+        {
+          "title": "Instala no servidor",
+          "body": "Abre Mods: está lá tudo o que existe em !Workshop. Instalar copia a mod para a pasta do servidor e sincroniza o .bikey automaticamente. Sincronizar tudo faz a lista inteira de uma vez."
+        },
+        {
+          "title": "Ativa para o arranque",
+          "body": "Instalar não é o mesmo que carregar. O interruptor Mods numa linha adiciona a mod a -mod. Usa o interruptor Lado servidor apenas para mods que os clientes NÃO devem ter (ferramentas de administração)."
+        },
+        {
+          "title": "Atenção à ordem de carregamento",
+          "body": "Arrasta as linhas para que as frameworks venham primeiro: @CF antes de tudo o que depende dela, Expansion Core antes dos seus addons. Uma ordem errada é uma causa muito comum de o servidor não arrancar."
+        }
+      ],
+      "tips": [
+        "Atualizar copia os ficheiros mais recentes de !Workshop para o servidor. Liga Atualizar mods em cada reinício nas Definições para que aconteça sozinho.",
+        "Ao desinstalar, o .bikey só é apagado se nenhuma outra mod instalada usar a mesma chave: as chaves partilhadas (Expansion) permanecem.",
+        "Se uma mod traz saque, carrega em Procurar tipos de saque na sua linha: o gestor encontra o types.xml da mod e regista-o por ti."
+      ]
+    },
+    {
+      "id": "economy",
+      "title": "Saque e economia",
+      "intro": "A economia central do DayZ decide o que existe no mundo e em que quantidade. types.xml é a lista principal: uma entrada por classe de item, com quantos deve haver e onde podem aparecer. Errar nestes números é o motivo habitual para um servidor parecer vazio ou estar afogado em saque.",
+      "steps": [
+        {
+          "title": "Compreende os quatro números",
+          "body": "nominal é a quantidade alvo que o servidor tenta manter no mundo. min é o limiar que despoleta um reaparecimento. lifetime é quantos segundos um item intocado sobrevive. restock é quanto o servidor espera antes de repor. nominal = 0 significa que o item nunca aparece."
+        },
+        {
+          "title": "Edita diretamente na tabela",
+          "body": "nominal, min, lifetime e categoria editam-se na própria linha; as linhas alteradas ficam realçadas até carregares em Guardar alterações. Editar abre o item completo: usages, values, tags e flags."
+        },
+        {
+          "title": "usage e value = onde aparece",
+          "body": "usage é o tipo de edifício (Military, Police, Farm…), value é o nível de saque (Tier1 é a costa, Tier4 o interior profundo e o militar). Um item sem usage não tem onde aparecer. Ambos os nomes têm de existir em cfglimitsdefinition.xml."
+        },
+        {
+          "title": "Usa modelos para trabalho em massa",
+          "body": "Seleciona linhas e carrega num modelo de aparecimento: os seus usage/value/tags aplicam-se a todas de uma vez. Muito mais rápido do que editar centenas de entradas à mão."
+        }
+      ],
+      "tips": [
+        "Guarda os teus itens num ficheiro de types próprio em vez de mexer no types.xml original: o gestor regista-o em cfgeconomycore.xml e uma atualização do jogo não o pode sobrescrever.",
+        "Corre o validador depois de qualquer edição em massa. A correção automática acrescenta os nomes usage/value/tag desconhecidos a cfglimitsdefinition.xml, que é precisamente o que faz o saque modificado começar a aparecer."
+      ]
+    },
+    {
+      "id": "attachments",
+      "title": "Acessórios de armas",
+      "intro": "cfgspawnabletypes.xml decide com que uma arma aparece: carregador, mira, coronha. É construído por ranhuras, e os números significam duas coisas diferentes — é aqui que toda a gente se engana.",
+      "steps": [
+        {
+          "title": "Uma ranhura é um lançamento de dados",
+          "body": "Cada ranhura tem uma probabilidade: 1.0 significa que aparece sempre alguma coisa, 0.35 significa 35 % das vezes."
+        },
+        {
+          "title": "Os itens de uma ranhura competem",
+          "body": "O número em cada item é um peso relativo, não uma percentagem: o DayZ escolhe EXATAMENTE UM item da ranhura. Pesos de 60 e 40 dentro de uma ranhura de 0.35 valem na realidade 21 % e 14 %. O painel mostra-te esse valor real para não teres de o calcular."
+        },
+        {
+          "title": "Começa a partir de um modelo",
+          "body": "Escolhe um modelo de arma (AKM, M4-A1, Mosin…) e ajusta. Os nomes de classe são completados a partir do teu types.xml, e tudo o que lá não estiver é assinalado: uma gralha é o motivo habitual para um acessório nunca aparecer."
+        }
+      ],
+      "tips": [
+        "Uma ranhura por peça: uma para carregadores, outra para miras, outra para a coronha. Pôr carregador e mira na mesma ranhura significa que a arma recebe um ou outro, nunca ambos.",
+        "Só a entrada que editas é reescrita: os teus comentários e formatação no resto do ficheiro mantêm-se."
+      ]
+    },
+    {
+      "id": "rcon",
+      "title": "RCon, jogadores e anúncios",
+      "intro": "RCon é a consola remota do BattlEye: lista de jogadores em direto, expulsões, banimentos e mensagens no chat. Precisa de uma palavra-passe que o BattlEye lê de beserver_x64.cfg ao arrancar o servidor.",
+      "steps": [
+        {
+          "title": "Define a palavra-passe",
+          "body": "Escreve-a na secção RCon. O gestor grava-a em battleye/beserver_x64.cfg, criando o ficheiro se for preciso."
+        },
+        {
+          "title": "Reinicia o servidor",
+          "body": "O BattlEye só lê esse ficheiro no arranque, por isso uma palavra-passe nova não faz nada até ao próximo reinício. É normal, não é um erro."
+        },
+        {
+          "title": "Anúncios e agendamento",
+          "body": "Os anúncios agendados disparam a uma hora do dia; os de intervalo repetem-se a cada N minutos. Ambos passam por RCon, por isso a palavra-passe tem de funcionar."
+        }
+      ],
+      "tips": [
+        "Os avisos de reinício também usam RCon. Sem palavra-passe o reinício acontece na mesma — os jogadores é que não veem a contagem decrescente.",
+        "A secção Jogadores constrói um histórico a partir do registo de administração: nomes, GUID, tempo de jogo, abates. Precisa do parâmetro -adminlog ativado nas Definições."
+      ]
+    },
+    {
+      "id": "weather",
+      "title": "Meteorologia e hora",
+      "intro": "A meteorologia é definida no cfgweather.xml da missão, que o DayZ lê uma única vez ao carregar: mudanças de tempo exigem sempre um reinício, e sem mods não há forma de agendar «chuva às 20:00».",
+      "steps": [
+        {
+          "title": "Escolhe uma predefinição ou ajusta à mão",
+          "body": "Uma predefinição fixa prende o tempo para que fique como está. Dinâmico deixa-o variar por si."
+        },
+        {
+          "title": "Escolhe com que suavidade muda",
+          "body": "A velocidade de transição controla a gradualidade: Suave leva cerca de meia hora em passos pequenos, como o jogo original. Rápida percorre toda a gama em dois minutos, que é o que faz o tempo parecer um interruptor."
+        },
+        {
+          "title": "Define a duração do dia",
+          "body": "A aceleração de dia e noite multiplica a passagem do tempo de jogo: 12 significa que um dia completo dura duas horas reais. A noite é separada para a poderes manter curta."
+        }
+      ],
+      "tips": [
+        "A densidade de trovoada só conta quando há chuva e nebulosidade suficientes para uma trovoada se desencadear.",
+        "A neve só aparece em mapas que a suportam, como Sakhal."
+      ]
+    },
+    {
+      "id": "maintenance",
+      "title": "Manter tudo saudável",
+      "intro": "Três coisas salvam servidores: as cópias de segurança, o validador, e o hábito de ler mesmo os registos quando algo se parte.",
+      "steps": [
+        {
+          "title": "Liga as cópias automáticas",
+          "body": "As Definições podem gravar um zip com as tuas configurações e ficheiros de missão de forma agendada e manter os N mais recentes. Além disso, cada ficheiro que o painel sobrescreve recebe um .bak com data ao lado."
+        },
+        {
+          "title": "Valida antes de reiniciar",
+          "body": "O validador analisa todos os XML da missão, verifica as chavetas nos .cfg, confirma que os ficheiros listados em cfgeconomycore.xml existem e assinala nomes de tipo duplicados."
+        },
+        {
+          "title": "Lê o registo certo",
+          "body": "O ficheiro .RPT regista o que o próprio servidor fez: uma falha ou uma mod que não carrega aparecem lá. O ficheiro .ADM regista o que os jogadores fizeram."
+        }
+      ],
+      "tips": [
+        "O wipe apaga o estado guardado do mundo: jogadores, veículos, bases. As tabelas de saque e as configurações ficam intactas. As pastas são primeiro postas de lado, por isso um wipe por engano pode ser recuperado à mão.",
+        "O vigilante reinicia o servidor se ele se fechar sozinho. Após três falhas em cinco minutos para e mostra um aviso: um ciclo de falhas precisa de uma pessoa, não de outro reinício."
+      ]
+    },
+    {
+      "id": "remote",
+      "title": "Acesso pelo telemóvel ou outro PC",
+      "intro": "Por omissão o painel só responde nesta máquina. Passar a exposição para Rede local torna-o acessível a partir de tudo o que esteja no mesmo Wi-Fi.",
+      "steps": [
+        {
+          "title": "Muda a exposição",
+          "body": "Definições → Exposição do painel → Rede local, e depois reinicia o gestor. O cartão Acesso de rede mostra então os endereços exatos."
+        },
+        {
+          "title": "Permite-o na firewall",
+          "body": "O Windows pergunta uma vez. Se um telemóvel não conseguir ligar, permite o gestor para redes privadas na Firewall do Windows."
+        }
+      ],
+      "tips": [
+        "Continua a não haver sessão. Nunca exponhas o painel diretamente à internet: coloca à frente Caddy ou nginx com palavra-passe."
+      ]
+    }
+  ],
+  "help": {
+    "types.nominal": "Quantos exemplares deste item o servidor tenta manter no mundo ao mesmo tempo. 0 significa que nunca aparece.",
+    "types.min": "Quando a quantidade desce até aqui, o servidor agenda um reaparecimento. Não deve exceder nominal: o DayZ corta e regista um aviso.",
+    "types.lifetime": "Segundos que um item intocado sobrevive antes de desaparecer. 3888000 são 45 dias.",
+    "types.restock": "Segundos que o servidor espera antes de repor este item. 0 significa imediatamente.",
+    "types.usage": "Em que tipos de edifício o item pode aparecer (Military, Police, Farm…). Sem usage não tem onde aparecer.",
+    "types.value": "Nível de saque: Tier1 é a costa, Tier4 o interior profundo e o militar. Controla a que distância do ponto de partida o item surge.",
+    "types.quant": "Nível de enchimento em percentagem para itens com quantidade (bebidas, combustível). -1 desativa, caso contrário 0–100.",
+    "types.bulk": "Aplica estes valores a todas as linhas selecionadas de uma vez. Só mudam os campos que preencheres.",
+    "types.category": "Agrupa o item para o sistema de saque (weapons, food, clothes…). O nome tem de existir em cfglimitsdefinition.xml ou o DayZ descarta a entrada.",
+    "types.tag": "Precisa onde dentro do edifício o item cai: chão, prateleiras, terra. Sem tag pode usar qualquer superfície permitida pelo usage.",
+    "types.cost": "Prioridade de aparecimento quando há mais candidatos do que lugares. Ganha o mais alto. Não é dinheiro e os jogadores nunca o veem.",
+    "types.flags": "count_in_cargo / count_in_hoarder / count_in_map / count_in_player decidem se itens guardados numa tenda, num carro ou numa mochila contam para nominal. Desligados, o servidor continua a gerar mais de um item que os jogadores já acumularam.",
+    "mods.serverSide": "Carrega a mod com -serverMod em vez de -mod: corre no servidor e os clientes nem precisam nem a recebem. Só para ferramentas de administração — uma mod de saque ou conteúdo não funciona assim.",
+    "mods.order": "O DayZ carrega as mods da esquerda para a direita. As frameworks vêm primeiro: @CF antes de tudo o que dependa dela, Expansion Core antes dos seus addons. Ordem errada é causa comum de servidor que não arranca.",
+    "mods.update": "Copia ficheiros mais recentes do !Workshop do cliente para o servidor. O gestor não descarrega mods: subscreve primeiro na Steam.",
+    "mods.scan": "Procura dentro da mod um types.xml e regista-o em cfgeconomycore.xml, para que o saque da mod apareça mesmo.",
+    "mods.uninstall": "Remove a pasta da mod do servidor. O .bikey só é apagado se nenhuma outra mod instalada usar a mesma chave: as chaves partilhadas como as da Expansion sobrevivem.",
+    "mods.profiles": "Guarda com um nome o conjunto atual de mods ativas, para alternar entre uma configuração com mods e outra original sem voltar a ligar tudo.",
+    "weather.transition": "Com que gradualidade o tempo muda. Suave leva cerca de meia hora em passos pequenos, como o DayZ original. Rápida pode percorrer toda a gama em dois minutos, que é o que faz o tempo parecer um interruptor.",
+    "weather.dynamic": "Desligado prende o tempo onde o definires. Ligado deixa o servidor variá-lo sozinho dentro dos limites.",
+    "weather.accel": "Multiplica a passagem do tempo de jogo. 12 significa que um dia completo dura duas horas reais. A noite é separada para a poderes manter curta.",
+    "weather.storm": "Só tem efeito quando a chuva e a nebulosidade são suficientes para uma trovoada se desencadear.",
+    "weather.timePreset": "Define a hora de jogo no arranque do servidor. SystemTime segue o relógio do teu PC; um valor fixo arranca o mapa sempre à mesma hora.",
+    "rcon.password": "É gravada em battleye/beserver_x64.cfg. O BattlEye só lê esse ficheiro no arranque, por isso uma palavra-passe nova só faz efeito após reiniciar.",
+    "attach.slotChance": "Probabilidade de esta ranhura fazer aparecer alguma coisa. 1.0 = sempre, 0.35 = 35 % das vezes.",
+    "attach.itemWeight": "É um peso relativo, não uma percentagem: o DayZ escolhe EXATAMENTE UM item da ranhura. Pesos de 60 e 40 valem 60 % e 40 % da probabilidade da ranhura.",
+    "settings.restart": "Reinicia o servidor de forma agendada. Os jogadores recebem avisos por RCon antes, o que exige uma palavra-passe RCon definida.",
+    "settings.watchdog": "Reinicia o servidor se ele se fechar sozinho. Após três falhas em cinco minutos para e mostra um aviso: um ciclo de falhas precisa de uma pessoa, não de outro reinício.",
+    "settings.backup": "Comprime configurações e ficheiros de missão de forma agendada e mantém os N mais recentes. À parte, cada ficheiro que o painel sobrescreve recebe um .bak com data ao lado.",
+    "settings.exposure": "Local significa que só este PC pode abrir o painel. Rede local torna-o acessível pelo telemóvel. O painel não tem sessão: nunca o exponhas diretamente à internet.",
+    "settings.adminlog": "Ativa -adminlog, que escreve o ficheiro .ADM. A página Jogadores e o registo de abates são construídos a partir dele e ficam vazios sem ele.",
+    "validator.autofix": "Acrescenta nomes desconhecidos de usage/value/tag/category a cfglimitsdefinition.xml. Normalmente é isto que faz o saque modificado começar a aparecer: os nomes têm de estar lá ou o DayZ ignora a entrada.",
+    "validator.severity": "Os erros partem algo agora. Os avisos o DayZ tolera, mas costumam significar que a configuração não faz o que pretendias.",
+    "wipe": "Apaga o estado guardado do mundo: jogadores, veículos, bases. As tabelas de saque e as configurações ficam intactas. As pastas são postas de lado em vez de apagadas, por isso um engano pode ser desfeito à mão.",
+    "events.nominal": "Quantos eventos deste tipo o servidor mantém a decorrer ao mesmo tempo. Veículos, quedas de helicóptero, manadas de animais e grupos de infetados são todos eventos.",
+    "events.minmax": "min e max limitam o tamanho do grupo por aparecimento. max=0 significa sem limite: por isso os eventos ambientais originais têm min=100 max=0.",
+    "events.children": "As classes de objeto que este evento gera, com os seus próprios intervalos de saque. Editá-las à mão é para isso que serve o editor Mission DB.",
+    "events.active": "0 desliga o evento mantendo a configuração. É assim que vêm os eventos sazonais (Natal, Halloween) no jogo original.",
+    "server.maxPlayers": "Lugares de jogador. Aumentar o número não aumenta o teu hardware: cada lugar custa RAM e CPU, e o DayZ fica instável muito antes de a maioria das máquinas se esgotar.",
+    "server.instanceId": "Que gravação o servidor usa. Se a mudares, o servidor arranca num mundo completamente novo; a gravação antiga fica no disco com o seu próprio id.",
+    "server.steamQueryPort": "A porta que a Steam usa para listar o teu servidor. Tem de estar livre e encaminhada, senão o servidor funciona mas nunca aparece no navegador.",
+    "server.verifySignatures": "2 significa que cada ficheiro de mod tem de estar assinado por uma chave em keys/. Baixar para 0 permite mods sem assinatura — e clientes modificados. Deixa em 2.",
+    "server.thirdPerson": "1 força apenas primeira pessoa. Muda a forma de jogar mais do que qualquer outra definição, por isso decide antes de construir uma comunidade.",
+    "server.von": "Chat de voz no jogo. Desativá-lo remove-o por completo, incluindo o rádio.",
+    "server.respawnTime": "Segundos que um jogador espera para renascer depois de morrer. Valores longos desencorajam o suicídio para voltar a sortear o ponto de aparecimento.",
+    "server.mission": "Que pasta de missão em mpmissions/ o servidor carrega. É assim que se muda o mapa: chernarusplus, enoch (Livonia), sakhal.",
+    "gameplay.file": "cfggameplay.json sobrepõe regras de jogo: resistência, construção, comportamento do mapa. O DayZ ignora o ficheiro inteiro perante um único erro de sintaxe, por isso é validado antes de gravar.",
+    "battleye.bans": "Um banimento por linha: GUID ou IP, minutos (-1 = permanente), motivo. Gravar com o servidor a correr recarrega os banimentos por RCon, sem reiniciar.",
+    "logs.rpt": "O que o próprio servidor fez: arranque, carregamento de mods, erros de script, falhas. É o ficheiro a ler quando o servidor não arranca.",
+    "logs.adm": "O que os jogadores fizeram: ligações, chat, abates, posições. Precisa do parâmetro -adminlog; a página Jogadores é construída a partir dele.",
+    "backup.restore": "Restaura configurações e ficheiros de missão a partir de um zip. O servidor tem de estar parado: em funcionamento bloqueia esses ficheiros.",
+    "sync.import": "Copia definições de outra instalação do gestor. Os valores existentes são sobrescritos, por isso faz uma cópia antes se tiveres dúvidas."
+  }
+}

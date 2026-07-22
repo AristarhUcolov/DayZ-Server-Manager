@@ -1213,14 +1213,28 @@ Views.server = async (root) => {
     'shardId','instanceId','storageAutoFix','loginQueueConcurrentPlayers','loginQueueMaxPlayers',
     'steamProtocolMaxDataSize',
   ];
+  // Only the keys whose effect is non-obvious get an explanation; the rest
+  // are self-describing and a marker on every row would be noise.
+  const CFG_HELP = {
+    maxPlayers: 'server.maxPlayers',
+    instanceId: 'server.instanceId',
+    verifySignatures: 'server.verifySignatures',
+    disable3rdPerson: 'server.thirdPerson',
+    disableVoN: 'server.von',
+    password: 'rcon.password',
+  };
   for (const k of KEYS) {
     const val = data.values[k] ?? '';
     const input = h('input', { type: 'text', value: val });
     bag[k] = input;
-    form.append(h('div', {}, [h('label', { text: k }), input]));
+    const label = h('label', { text: k });
+    form.append(h('div', {}, [
+      CFG_HELP[k] ? withHelp(label, CFG_HELP[k]) : label,
+      input,
+    ]));
   }
 
-  const missionSelect = h('select', { id: 'mission-input' });
+  const missionSelect = h('select', { id: 'mission-input', 'data-help': 'server.mission' });
   let missions = { missions: [], active: data.mission || '' };
   try { missions = await api.get('/api/missions'); } catch {}
   for (const m of missions.missions) {
@@ -1823,7 +1837,7 @@ Views.types = async (root) => {
       hlp(sortTh(t('types.field.nominal'), 'nominal', true), 'types.nominal'),
       hlp(sortTh(t('types.field.min'), 'min', true), 'types.min'),
       hlp(sortTh(t('types.field.lifetime'), 'lifetime', true), 'types.lifetime'),
-      sortTh(t('types.field.category'), 'category', false),
+      hlp(sortTh(t('types.field.category'), 'category', false), 'types.category'),
       h('th', { text: '' }),
     ])));
     const tbody = h('tbody');
@@ -1908,9 +1922,17 @@ Views.types = async (root) => {
       cost: h('input', { type: 'number', value: item.cost ?? '' }),
       category: h('input', { type: 'text',   value: item.category?.name || '' }),
     };
+    const FIELD_HELP = {
+      nominal: 'types.nominal', min: 'types.min', lifetime: 'types.lifetime',
+      restock: 'types.restock', quantmin: 'types.quant', quantmax: 'types.quant',
+      cost: 'types.cost', category: 'types.category',
+    };
     const grid = h('div', { class: 'grid-3' });
     grid.append(
-      ...Object.entries(fields).map(([k, el]) => h('div', {}, [h('label', { text: k }), el]))
+      ...Object.entries(fields).map(([k, el]) => {
+        const label = h('label', { text: k });
+        return h('div', {}, [FIELD_HELP[k] ? withHelp(label, FIELD_HELP[k]) : label, el]);
+      })
     );
 
     // Usages / Values / Tags as editable pill lists.
@@ -2165,7 +2187,7 @@ Views.files = async (root) => {
         backupList.append(h('div', { class: 'row', style: { padding: '4px 0' } }, [
           h('span', { style: { flex: '1' }, text: b.name }),
           h('small', { class: 'hint', text: `${when} · ${bytes(b.size)}` }),
-          h('button', { i18n: 'backup.restore', onclick: async () => {
+          h('button', { i18n: 'backup.restore', 'data-help': 'backup.restore', onclick: async () => {
             try {
               await api.post('/api/backups/restore', { path: currentPath, backup: b.name });
               const r = await api.get('/api/files/read?path=' + encodeURIComponent(currentPath));
@@ -2419,7 +2441,7 @@ Views.validator = async (root) => {
   };
   root.append(
     h('div', { class: 'card' }, [
-      h('h2', { i18n: 'validator.title' }),
+      withHelp(h('h2', { i18n: 'validator.title' }), 'validator.severity'),
       h('div', { class: 'actions' }, [
         h('button', { class: 'primary', i18n: 'action.validate', onclick: run }),
         h('button', { i18n: 'validator.fix', onclick: autofix, 'data-help': 'validator.autofix' }),
@@ -2825,8 +2847,8 @@ Views.events = async (root) => {
     const tbl = h('table');
     tbl.append(h('thead', {}, h('tr', {}, [
       h('th', { text: 'Name' }),
-      h('th', { class: 'num', i18n: 'events.field.nominal' }),
-      h('th', { class: 'num', i18n: 'events.field.min' }),
+      hlp(h('th', { class: 'num', i18n: 'events.field.nominal' }), 'events.nominal'),
+      hlp(h('th', { class: 'num', i18n: 'events.field.min' }), 'events.minmax'),
       h('th', { class: 'num', i18n: 'events.field.max' }),
       h('th', { class: 'num', i18n: 'events.field.lifetime' }),
       h('th', { i18n: 'events.field.active' }),
@@ -3154,6 +3176,16 @@ Views.guide = async (root) => {
     toc,
   ]));
 
+  const finish = () => root.append(h('div', { class: 'guide-support' }, [
+    h('span', { class: 'guide-support-heart', text: '♥' }),
+    h('div', {}, [
+      h('strong', { i18n: 'support.title' }),
+      h('p', { i18n: 'support.text' }),
+    ]),
+    h('span', { class: 'grow' }),
+    h('div', { class: 'donate-buttons' }, donateLinks()),
+  ]));
+
   chapters.forEach((c, ci) => {
     const steps = (c.steps || []).map((st, si) => h('li', { class: 'guide-step' }, [
       h('span', { class: 'guide-step-num', text: String(si + 1) }),
@@ -3196,6 +3228,7 @@ Views.guide = async (root) => {
       ]) : null,
     ]));
   });
+  finish();
 };
 
 // --------------------------------------------------------------------- weather & time
@@ -3358,7 +3391,7 @@ Views.weather = async (root) => {
   ]);
 
   wrap.append(h('div', { class: 'card' }, [
-    h('h3', { i18n: 'weather.time.title' }),
+    withHelp(h('h3', { i18n: 'weather.time.title' }), 'weather.accel'),
     tRow('weather.time.accel', accel, accelQuick),
     tRow('weather.time.nightAccel', nAccel),
     tRow('weather.time.serverTime', sTime, startQuick, 'weather.time.serverTime.hint'),
@@ -3591,7 +3624,7 @@ Views.settings = async (root) => {
     section('settings.flags', [
       h('div', { class: 'grid-3' }, [
         h('label', {}, [F.doLogs,       h('span', { i18n: 'settings.flag.dologs' })]),
-        h('label', {}, [F.adminLog,     h('span', { i18n: 'settings.flag.adminlog' })]),
+        h('label', {}, [F.adminLog,     h('span', { i18n: 'settings.flag.adminlog' }), help('settings.adminlog')]),
         h('label', {}, [F.netLog,       h('span', { i18n: 'settings.flag.netlog' })]),
         h('label', {}, [F.freezeCheck,  h('span', { i18n: 'settings.flag.freezecheck' })]),
         h('label', {}, [F.filePatching, h('span', { i18n: 'settings.flag.filePatching' })]),
@@ -3795,22 +3828,47 @@ function backupCard() {
   ]);
 }
 
+// donateLinks builds the two links once; the card, the modal and the guide
+// strip all reuse them so a URL is never duplicated.
+function donateLinks() {
+  return [
+    h('a', { href: 'https://buymeacoffee.com/aristarh.ucolov', target: '_blank', rel: 'noopener', class: 'coffee' }, [
+      '☕ ', h('span', { i18n: 'support.coffee' }),
+    ]),
+    h('a', { href: 'https://ko-fi.com/aristarhucolov', target: '_blank', rel: 'noopener', class: 'kofi' }, [
+      '🧡 ', h('span', { i18n: 'support.kofi' }),
+    ]),
+    h('a', { href: 'https://www.donationalerts.com/r/aristarh_ucolov', target: '_blank', rel: 'noopener', class: 'da' }, [
+      '♥ ', h('span', { i18n: 'support.donationalerts' }),
+    ]),
+  ];
+}
+
+// openSupport shows the links in a modal. Bound to the topbar heart, which is
+// deliberately the smallest possible permanent presence: one icon, no layout.
+function openSupport() {
+  const m = openModal({ title: t('support.title') });
+  m.body.append(
+    h('p', { i18n: 'support.text' }),
+    h('div', { class: 'donate-buttons', style: { marginTop: '14px' } }, donateLinks()),
+  );
+  applyI18n();
+}
+
 function donationCard() {
   return h('div', { class: 'donate-card' }, [
     h('h3', { i18n: 'support.title' }),
     h('p',  { i18n: 'support.text' }),
-    h('div', { class: 'donate-buttons' }, [
-      h('a', { href: 'https://buymeacoffee.com/aristarh.ucolov', target: '_blank', rel: 'noopener', class: 'coffee' }, [
-        '☕ ', h('span', { i18n: 'support.coffee' }),
-      ]),
-      h('a', { href: 'https://www.donationalerts.com/r/aristarh_ucolov', target: '_blank', rel: 'noopener', class: 'da' }, [
-        '♥ ', h('span', { i18n: 'support.donationalerts' }),
-      ]),
-    ]),
+    h('div', { class: 'donate-buttons' }, donateLinks()),
   ]);
 }
 
 // --------------------------------------------------------------------- theme
+
+function bindSupportButton() {
+  const btn = document.getElementById('support-btn');
+  if (btn) btn.onclick = openSupport;
+}
 
 function setTheme(mode) {
   localStorage.setItem('theme', mode);
@@ -3876,7 +3934,7 @@ Views.sync = async (root) => {
 
   root.append(
     h('div', { class: 'card' }, [
-      h('h2', { i18n: 'sync.title' }),
+      withHelp(h('h2', { i18n: 'sync.title' }), 'sync.import'),
       h('p', { class: 'hint', i18n: 'sync.hint' }),
       h('label', { i18n: 'sync.source' }),
       h('div', { class: 'row' }, [src, h('button', { i18n: 'sync.preview', onclick: runPreview })]),
@@ -3965,6 +4023,7 @@ async function main() {
     // (topbar toggle / Settings) is remembered and wins afterwards.
     setTheme(localStorage.getItem('theme') ||
       (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+    bindSupportButton();
     // Topbar elevation on scroll — glass strip gains a shadow once content
     // slides underneath it.
     const tb = document.querySelector('.topbar');
@@ -4103,7 +4162,7 @@ Views.battleye = async (root) => {
   // format is the #1 way admins silently break every ban; saving here also
   // issues RCon `loadBans` so changes apply to a live server.
   const bansCard = h('div', { class: 'card' }, [
-    h('h3', { i18n: 'battleye.bans.title' }),
+    withHelp(h('h3', { i18n: 'battleye.bans.title' }), 'battleye.bans'),
     h('p', { class: 'hint', i18n: 'battleye.bans.hint' }),
   ]);
   const bansHost = h('div');
@@ -4602,17 +4661,18 @@ Views.attachments = async (root) => {
         const items = g.items || (g.items = []);
 
         const chanceInp = h('input', { type: 'text', value: g.chance ?? '1.00',
-          style: { width: '90px' }, title: t('attach.slotChance') });
-        const slotBadge = h('span', { class: 'badge info' });
+          class: 'attach-num', title: t('attach.slotChance') });
+        const slotBadge = h('span', { class: 'attach-pct slot' });
 
-        const head = h('div', { class: 'row', style: { gap: '8px', marginBottom: '8px' } }, [
+        const head = h('div', { class: 'attach-head' }, [
           h('span', { class: 'attach-slot-no', text: '#' + (gi + 1) }),
-          h('span', { class: 'k', i18n: 'attach.slotChance' }),
+          h('span', { class: 'attach-head-label', i18n: 'attach.slotChance' }),
           help('attach.slotChance'),
           chanceInp,
+          h('span', { class: 'attach-eq', text: '=' }),
           slotBadge,
           h('span', { class: 'grow' }),
-          h('button', { class: 'danger', text: '×', title: t('action.delete'),
+          h('button', { class: 'icon-x', text: '\u00d7', title: t('attach.removeSlot'),
             onclick: () => { model.attachments.splice(gi, 1); renderGroups(); } }),
         ]);
 
@@ -4629,23 +4689,32 @@ Views.attachments = async (root) => {
             const w = parseFloat(b.it.chance) || 0;
             const real = total > 0 ? slotPct * (w / total) : 0;
             b.el.textContent = fmtPct(real);
-            b.el.className = 'badge ' + (real > 0 ? 'ok' : 'mute');
+            b.el.className = 'attach-pct' + (real > 0 ? '' : ' zero');
           }
         };
         chanceInp.oninput = () => { g.chance = chanceInp.value.trim(); recalc(); };
 
-        const itemsHost = h('div');
+        // One grid so the columns line up down the whole slot; without it the
+        // class input ate the row and the weight beside it looked incidental.
+        const itemsHost = h('div', { class: 'attach-items' });
+        itemsHost.append(h('div', { class: 'attach-item attach-cols' }, [
+          h('span', { i18n: 'attach.col.class' }),
+          h('span', {}, [h('span', { i18n: 'attach.col.weight' }), help('attach.itemWeight')]),
+          h('span', { class: 'ta-r', i18n: 'attach.col.chance' }),
+          h('span', {}),
+        ]));
         items.forEach((it, ii) => {
           const nameIn = h('input', { type: 'text', value: it.name || '', list: 'dz-classnames',
-            placeholder: t('attach.itemName'), style: { flex: '1', minWidth: '160px' } });
-          const wIn = h('input', { type: 'text', value: it.chance ?? '1.00', style: { width: '80px' },
+            placeholder: t('attach.itemName') });
+          const wIn = h('input', { type: 'text', value: it.chance ?? '1.00', class: 'attach-num',
             title: t('attach.weight') });
-          const pctBadge = h('span', { class: 'badge mute', title: t('attach.realChance') });
-          const warnBadge = h('span', { class: 'badge warn', text: '?', title: t('attach.unknownClass'),
+          const pctBadge = h('span', { class: 'attach-pct', title: t('attach.realChance') });
+          const warnBadge = h('span', { class: 'attach-warn', text: '!', title: t('attach.unknownClass'),
             style: { display: 'none' } });
-          const row = h('div', { class: 'row attach-item', style: { gap: '8px', marginBottom: '4px' } }, [
-            nameIn, wIn, pctBadge, warnBadge,
-            h('button', { class: 'danger', text: '×',
+          const row = h('div', { class: 'attach-item' }, [
+            h('span', { class: 'attach-name' }, [nameIn, warnBadge]),
+            wIn, pctBadge,
+            h('button', { class: 'icon-x', text: '\u00d7', title: t('attach.removeItem'),
               onclick: () => { items.splice(ii, 1); renderGroups(); } }),
           ]);
           // A class absent from types.xml is the #1 reason an attachment
@@ -4663,11 +4732,11 @@ Views.attachments = async (root) => {
         });
         recalc();
 
-        groupsHost.append(h('div', { class: 'card flat attach-group' }, [
+        groupsHost.append(h('div', { class: 'attach-group' }, [
           head,
-          itemsHost,
-          h('div', { class: 'actions', style: { marginTop: '6px' } }, [
-            h('button', { i18n: 'attach.addItem',
+          h('div', { class: 'attach-body' }, [
+            itemsHost,
+            h('button', { class: 'attach-add', i18n: 'attach.addItem',
               onclick: () => { items.push({ name: '', chance: '1.00' }); renderGroups(); applyI18n(); } }),
           ]),
         ]));

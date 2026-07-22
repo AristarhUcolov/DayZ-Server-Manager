@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#0c0f16" />
   <title>DayZ Server Manager</title>
   <link rel="icon" type="image/svg+xml"
-        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%236366f1'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='5.5' y='6' width='13' height='5' rx='1.5'/%3E%3Crect x='5.5' y='13' width='13' height='5' rx='1.5'/%3E%3Ccircle cx='8.5' cy='8.5' r='.2'/%3E%3Ccircle cx='8.5' cy='15.5' r='.2'/%3E%3C/g%3E%3C/svg%3E" />
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23ff7a2b'/%3E%3Cg fill='none' stroke='%2314080a' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='5.5' y='6' width='13' height='5' rx='1.5'/%3E%3Crect x='5.5' y='13' width='13' height='5' rx='1.5'/%3E%3Ccircle cx='8.5' cy='8.5' r='.2'/%3E%3Ccircle cx='8.5' cy='15.5' r='.2'/%3E%3C/g%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/app.css" />
 </head>
 <body>
@@ -147,6 +147,7 @@
 
       <div class="sidebar-foot">
         <a href="https://buymeacoffee.com/aristarh.ucolov" target="_blank" rel="noopener" class="donate-link">☕ <span data-i18n="support.coffee"></span></a>
+        <a href="https://ko-fi.com/aristarhucolov" target="_blank" rel="noopener" class="donate-link">🧡 <span data-i18n="support.kofi"></span></a>
         <a href="https://www.donationalerts.com/r/aristarh_ucolov" target="_blank" rel="noopener" class="donate-link">♥ <span data-i18n="support.donationalerts"></span></a>
         <span class="copyright" data-i18n="app.copyright"></span>
       </div>
@@ -168,6 +169,10 @@
           <option value="en">EN</option>
           <option value="ru">RU</option>
         </select>
+        <button id="support-btn" class="support-btn" aria-label="Support the developer">
+          <span class="support-heart">♥</span>
+          <span class="support-btn-label" data-i18n="support.title"></span>
+        </button>
         <button id="theme-toggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
           <span class="theme-icon">◐</span>
         </button>

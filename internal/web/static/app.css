@@ -1,7 +1,7 @@
 /*
   DayZ Server Manager — web UI styles.
   Copyright (c) 2026 Aristarh Ucolov.
-  Design system v3 — "premium panel": deep graphite surfaces, indigo accent,
+  Design system v3 — "premium panel": deep graphite surfaces, orange accent,
   SVG iconography, layered elevation, full light theme, mobile-first fixes,
   a11y (focus rings, reduced motion, contrast ≥ AA). All component CSS is
   token-driven; every class name from v2 is preserved.
@@ -36,13 +36,16 @@ html[data-theme="dark"] {
   --text-faint:       #6b7590;          /* decorative meta only */
   --text-dim:         #8a94ab;          /* legacy alias */
 
-  /* Accent — indigo */
-  --accent:           #6366f1;
-  --accent-hover:     #7c83f8;
-  --accent-soft:      rgba(99, 102, 241, 0.14);
-  --accent-soft-2:    rgba(99, 102, 241, 0.26);
-  --accent-ink:       #ffffff;
-  --accent-grad:      linear-gradient(180deg, #6d70f4, #5b5ee8);
+  /* Accent — DayZ-ish orange, the colour the manager shipped with through
+     v0.10.1. Dark theme carries DARK ink on the bright fill (7.6:1); the light
+     theme below uses a deep burnt orange instead, because #ff7a2b on white is
+     only 2.6:1 and cannot hold text. Both directions were measured. */
+  --accent:           #ff7a2b;
+  --accent-hover:     #ff8f4d;
+  --accent-soft:      rgba(255, 122, 43, 0.14);
+  --accent-soft-2:    rgba(255, 122, 43, 0.26);
+  --accent-ink:       #14080a;
+  --accent-grad:      linear-gradient(180deg, #ff8942, #f26a18);
 
   /* Semantic */
   --ok:               #3ecf8e;
@@ -100,17 +103,17 @@ html[data-theme="light"] {
   --text-faint:       #8a94ab;
   --text-dim:         #64708a;
 
-  --accent:           #5457e6;
-  --accent-hover:     #474add;
-  --accent-soft:      rgba(84, 87, 230, 0.10);
-  --accent-soft-2:    rgba(84, 87, 230, 0.22);
+  --accent:           #c2410c;
+  --accent-hover:     #a5350a;
+  --accent-soft:      rgba(194, 65, 12, 0.10);
+  --accent-soft-2:    rgba(194, 65, 12, 0.22);
   --accent-ink:       #ffffff;
-  --accent-grad:      linear-gradient(180deg, #5d60ef, #4d50e0);
+  --accent-grad:      linear-gradient(180deg, #cf4710, #b23a09);
 
   --ok:               #12a165;
   --ok-soft:          rgba(18, 161, 101, 0.12);
-  --warn:             #a9790a;
-  --warn-soft:        rgba(169, 121, 10, 0.12);
+  --warn:             #854d0e;
+  --warn-soft:        rgba(133, 77, 14, 0.12);
   --error:            #d8453f;
   --error-soft:       rgba(216, 69, 63, 0.10);
   --info:             #2f6fe0;
@@ -333,8 +336,8 @@ label {
 }
 .sidebar-brand .logo {
   width: 36px; height: 36px;
-  background: linear-gradient(135deg, var(--accent), #8b8ff9);
-  color: #fff;
+  background: linear-gradient(135deg, #ff8f4d, #ef6a15);
+  color: #14080a;
   display: grid; place-items: center;
   font-weight: 800; border-radius: var(--radius-sm);
   letter-spacing: -1px; font-size: 15px;
@@ -981,6 +984,8 @@ button.pill:not(:disabled):hover { border-color: var(--accent); color: var(--acc
 }
 .donate-buttons a.coffee { background: #ff813f; }
 .donate-buttons a.coffee:hover { background: #ff9254; }
+.donate-buttons a.kofi   { background: #13c3ff; color: #04283a; }
+.donate-buttons a.kofi:hover   { background: #35cfff; }
 .donate-buttons a.da     { background: #ec4980; }
 .donate-buttons a.da:hover     { background: #f25a8f; }
 
@@ -1160,16 +1165,140 @@ html[data-theme="light"] .CodeMirror .CodeMirror-gutters { background: #f5f5f7; 
    18c. ATTACHMENTS EDITOR (cfgspawnabletypes)
    ============================================================ */
 
-.attach-group { padding: 14px 16px; margin-bottom: 10px; }
+/* A slot is a container for its items, so it reads as one object: tinted
+   header, quiet body, and a single column grid shared by every row. */
+.attach-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.attach-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.attach-head-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+.attach-eq { color: var(--text-faint); font-size: 12px; }
+.attach-body { padding: 10px 12px 12px; }
+
 .attach-slot-no {
   font: 700 11px ui-monospace, "Cascadia Mono", Consolas, monospace;
-  color: var(--accent); background: var(--accent-soft);
-  border-radius: var(--radius-xs); padding: 2px 7px;
+  color: var(--accent-ink); background: var(--accent);
+  border-radius: var(--radius-xs); padding: 2px 7px; flex: none;
 }
-.attach-item input[list] { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
-/* A class name absent from types.xml almost always means a typo — the
-   attachment would silently never spawn. */
-.attach-item.unknown input[list] { border-color: var(--warn); }
+
+/* Numeric inputs are deliberately narrow and monospace: they hold a
+   probability or a weight, never prose.
+   Selector must be `input.attach-num`, not `.attach-num` — the global
+   `input[type=text] { width: 100% }` outranks a bare class and stretched this
+   field to 888px inside the slot header. */
+input.attach-num {
+  width: 76px; flex: none; text-align: center;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12.5px;
+}
+/* .grow is only defined for .topbar/.toolbar; the header needs its own. */
+.attach-head .grow { flex: 1 1 auto; }
+
+.attach-items { display: grid; gap: 4px; }
+.attach-item {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 76px 62px 30px;
+  gap: 8px; align-items: center;
+}
+/* Column captions: without them the two 1.00 fields on screen were
+   indistinguishable, though one is a probability and the other a weight. */
+.attach-cols {
+  font-size: 10px; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--text-tertiary);
+  padding-bottom: 2px;
+}
+.attach-cols span { display: inline-flex; align-items: center; gap: 5px; }
+.attach-cols .ta-r { justify-content: flex-end; }
+
+.attach-name { position: relative; display: block; min-width: 0; }
+.attach-name input {
+  width: 100%;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12.5px;
+}
+/* A class absent from types.xml almost always means a typo — the attachment
+   would silently never spawn, so it is flagged inside the field itself. */
+.attach-item.unknown .attach-name input { border-color: var(--warn); padding-right: 26px; }
+.attach-warn {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--warn); color: #fff;
+  font: 700 10px/1 sans-serif; cursor: help;
+}
+
+.attach-pct {
+  font: 600 12px ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: var(--ok); text-align: right;
+}
+.attach-pct.zero { color: var(--text-faint); }
+.attach-pct.slot {
+  color: var(--accent); text-align: left;
+  font-size: 13px;
+}
+
+/* Deleting one item must not compete with Save for attention. Quiet until
+   you reach for it. */
+.icon-x {
+  width: 28px; height: 28px; padding: 0; flex: none;
+  justify-content: center;
+  background: transparent; border-color: transparent;
+  color: var(--text-faint); font-size: 16px; line-height: 1;
+}
+.icon-x:not(:disabled):hover {
+  background: var(--error-soft); border-color: transparent; color: var(--error);
+}
+
+.attach-add { margin-top: 8px; font-size: 12px; padding: 5px 11px; }
+
+@media (max-width: 620px) {
+  .attach-item { grid-template-columns: 1fr 70px 56px 28px; gap: 6px; }
+  .attach-head { flex-wrap: wrap; }
+}
+
+/* ============================================================
+   18f. SUPPORT TOUCHPOINTS
+   ============================================================ */
+
+/* Topbar heart: the smallest permanent presence there is — one icon, and the
+   label only when there is room for it. */
+.support-btn {
+  background: transparent; border-color: transparent;
+  color: var(--text-tertiary);
+  padding: 5px 9px; font-size: 12px;
+}
+.support-btn:not(:disabled):hover {
+  background: var(--accent-soft); border-color: transparent; color: var(--accent);
+}
+.support-heart { color: var(--accent); font-size: 13px; line-height: 1; }
+
+/* Closing strip in the guide. Lighter than the footer card on purpose: it is
+   an aside after eight chapters, not another advert. */
+.guide-support {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-top: 18px; padding: 14px 16px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.guide-support .grow { flex: 1 1 auto; }
+.guide-support-heart { color: var(--accent); font-size: 22px; line-height: 1; flex: none; }
+.guide-support strong { display: block; font-size: 14px; }
+.guide-support p { margin: 2px 0 0; color: var(--text-secondary); font-size: 12.5px; }
+.guide-support .donate-buttons { margin: 0; }
+
+@media (max-width: 900px) {
+  .support-btn-label { display: none; }
+}
 
 /* ============================================================
    18d. HOVER HELP
