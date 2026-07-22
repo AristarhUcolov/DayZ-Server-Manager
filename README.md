@@ -130,6 +130,20 @@
 - **Автопроверка/защита от повреждений.** Все write-операции возвращают
   409 Conflict, если сервер запущен (DayZ держит блокировки на свои файлы).
   В UI сверху показывается баннер-предупреждение.
+- **Объяснение, почему сервер не запустился.** Когда сервер выключен, панель
+  читает свежий RPT и собственный лог и показывает разобранную причину:
+  отсутствующий мод (с именем папки), неподписанный `.pbo`, занятый порт,
+  сломанный `serverDZ.cfg`, не загрузившаяся экономика. Всегда показывается и
+  исходная строка лога — распознавание эвристическое, и решение остаётся за
+  вами. На здоровом сервере блок не появляется вовсе.
+- **Сравнение перед восстановлением.** Панель и раньше клала `.bak` рядом с
+  каждым файлом, который перезаписывает, но восстановление было вслепую.
+  Теперь рядом с копией есть «Сравнить»: построчный дифф покажет, что именно
+  вернётся. Работает и на `types.xml` в 30 000 строк.
+- **Отмена вайпа.** Вайп и раньше *переносил* папки мира в
+  `.dayz-manager/wipes/<метка>/`, а не удалял их — именно ради обратимости.
+  Теперь их можно вернуть одной кнопкой. Если сервер уже накопил новое
+  состояние, возврат блокируется с объяснением, чтобы не похоронить новый мир.
 - **Инструкция для новичков.** Восемь глав прямо в панели: с чего начать,
   моды, лут и экономика, обвесы, RCon, погода, обслуживание, доступ с
   телефона. Каждая — с пошаговыми действиями, скриншотом раздела, блоком
@@ -176,6 +190,19 @@ go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
 ```bash
 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
 ```
+
+**Иконка и свойства файла.** `cmd/manager/resource_windows_amd64.syso` лежит в
+репозитории и подхватывается `go build` автоматически — никаких инструментов
+ставить не нужно. Пересобирать его надо только если меняется иконка или версия:
+
+```bash
+go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+# после правки версии в cmd/manager/versioninfo.json:
+goversioninfo -icon=cmd/manager/icon.ico -o cmd/manager/resource_windows_amd64.syso cmd/manager/versioninfo.json
+```
+
+Версия в `versioninfo.json` не связана с `appVersion` в `main.go` — при выпуске
+меняйте обе, иначе «Свойства → Подробно» будут показывать старый номер.
 
 Готовый exe полностью самодостаточен — весь веб-интерфейс встроен в бинарь
 через `//go:embed`. Никакого Node.js, никаких зависимостей.
@@ -370,6 +397,21 @@ panels.
 - **Write-safety guard.** All file-writing endpoints return `409 Conflict`
   while the server is running (DayZ holds file locks on its working set).
   A warning banner is shown in the UI.
+- **Why the server did not start.** While the server is down, the panel reads
+  the newest RPT and its own log and shows the reason in plain words: a missing
+  mod (named), an unsigned `.pbo`, a port already taken, a malformed
+  `serverDZ.cfg`, an economy that failed to load. The raw log line is always
+  shown — the matching is heuristic and the judgement stays yours. Nothing
+  appears at all on a healthy server.
+- **Diff before restore.** The panel has always kept a `.bak` beside every file
+  it overwrites, but restoring one was blind. Each backup now has a Compare
+  button showing exactly which lines would come back — fast even on a
+  30 000-line `types.xml`.
+- **Undo a wipe.** A wipe already *moved* the world folders into
+  `.dayz-manager/wipes/<timestamp>/` rather than deleting them, precisely so it
+  could be reversed. Now it can be, with one button — and the restore is
+  refused, with an explanation, once the server has built new state, so the old
+  world can never bury the new one.
 - **Beginner's guide.** Eight chapters inside the panel: getting started,
   mods, loot and economy, attachments, RCon, weather, maintenance, remote
   access. Each has numbered steps, a screenshot of the section, a
@@ -415,6 +457,19 @@ Cross-compiling to Windows from Linux/macOS:
 ```bash
 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
 ```
+
+**Icon and file properties.** `cmd/manager/resource_windows_amd64.syso` is
+committed and `go build` links it automatically — no tooling to install.
+Regenerate it only when the icon or the version changes:
+
+```bash
+go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+# after editing the version in cmd/manager/versioninfo.json:
+goversioninfo -icon=cmd/manager/icon.ico -o cmd/manager/resource_windows_amd64.syso cmd/manager/versioninfo.json
+```
+
+The version in `versioninfo.json` is not tied to `appVersion` in `main.go` —
+bump both on release, or Properties → Details will show the old number.
 
 The resulting binary is fully self-contained — the web UI is embedded via
 `//go:embed`. No Node.js, no runtime deps.

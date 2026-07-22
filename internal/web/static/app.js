@@ -774,6 +774,9 @@ Views.dashboard = async (root) => {
   timers.perf = setInterval(loadPerf, 60000);
   timers.tick = setInterval(tick, 5000);
   await tick();
+  // After tick() so State.serverStatus is fresh; the card renders only when
+  // the server is down and something was actually recognised.
+  if (myNav === _navSeq) await renderDiagnosis(root, true);
 };
 
 // parseUptimeSeconds turns the backend's Duration string ("3h17m4s",
@@ -2196,6 +2199,9 @@ Views.files = async (root) => {
         backupList.append(h('div', { class: 'row', style: { padding: '4px 0' } }, [
           h('span', { style: { flex: '1' }, text: b.name }),
           h('small', { class: 'hint', text: `${when} · ${bytes(b.size)}` }),
+          // See what restoring would change before committing to it.
+          h('button', { class: 'secondary', i18n: 'backup.diff',
+            onclick: () => openBackupDiff(currentPath, b.name) }),
           h('button', { i18n: 'backup.restore', 'data-help': 'backup.restore', onclick: async () => {
             try {
               await api.post('/api/backups/restore', { path: currentPath, backup: b.name });
@@ -3149,6 +3155,95 @@ function announcementsCard(c, F, onChange) {
 }
 
 
+
+
+// openBackupDiff shows what restoring a .bak would change. Restoring used to be
+// a leap of faith: you picked a timestamp and hoped.
+async function openBackupDiff(path, backupName) {
+  const m = openModal({ title: backupName, wide: true });
+  m.body.append(h('p', { class: 'hint', i18n: 'backup.diff.hint' }));
+  const host = h('div');
+  m.body.append(host);
+  applyI18n();
+
+  let d;
+  try {
+    d = await api.get(`/api/backups/diff?path=${encodeURIComponent(path)}&backup=${encodeURIComponent(backupName)}`);
+  } catch (e) { handleErr(e); return; }
+
+  const r = d.diff || {};
+  if (r.identical) {
+    host.append(h('p', { class: 'hint', i18n: 'backup.diff.same' }));
+    applyI18n();
+    return;
+  }
+  host.append(h('div', { class: 'diff-stat' }, [
+    h('span', { class: 'diff-plus', text: '+' + (r.added || 0) }),
+    h('span', { class: 'diff-minus', text: '-' + (r.removed || 0) }),
+    h('span', { class: 'hint', i18n: 'backup.diff.legend' }),
+  ]));
+  if (r.truncated) {
+    host.append(h('p', { class: 'hint', i18n: 'backup.diff.truncated' }));
+    applyI18n();
+    return;
+  }
+  const pre = h('div', { class: 'diff-view' });
+  for (const op of r.ops || []) {
+    pre.append(h('div', { class: 'diff-row d' + (op.kind === '+' ? 'add' : op.kind === '-' ? 'del' : 'ctx') }, [
+      h('span', { class: 'diff-num', text: op.oldLine ? String(op.oldLine) : '' }),
+      h('span', { class: 'diff-num', text: op.newLine ? String(op.newLine) : '' }),
+      h('span', { class: 'diff-sign', text: op.kind }),
+      h('span', { class: 'diff-text', text: op.text }),
+    ]));
+  }
+  host.append(pre);
+  applyI18n();
+}
+
+// ---------------------------------------------------------------- diagnostics
+//
+// "Why won't my server start?" The answer is in the RPT, a multi-megabyte file
+// most admins never open. renderDiagnosis turns the classified findings into
+// something readable and puts it where the question is asked: the dashboard,
+// but only while the server is down, so a healthy server shows nothing.
+
+async function renderDiagnosis(host, placeAtTop) {
+  let d;
+  try { d = await api.get('/api/diagnose'); } catch { return; }
+  if (!d || !(d.findings || []).length || d.running) return;
+
+  const card = h('div', { class: 'card diag-card' }, [
+    withHelp(h('h3', { i18n: 'diag.title' }), 'diag'),
+    h('p', { class: 'hint', i18n: 'diag.subtitle' }),
+  ]);
+  for (const f of d.findings) {
+    // The classifier speaks English; State.help carries the translations,
+    // keyed by the finding's stable code, and falls back to what Go sent.
+    const hx = (State.help || {});
+    const title = hx['diag.' + f.code + '.title'] || f.title;
+    const detail = (hx['diag.' + f.code + '.detail'] || f.detail)
+      .replace('{subject}', f.subject || '');
+    card.append(h('div', { class: 'diag-item ' + (f.severity === 'fatal' ? 'fatal' : 'warn') }, [
+      h('div', { class: 'diag-head' }, [
+        h('span', { class: 'diag-badge', text: t('diag.sev.' + f.severity) }),
+        h('strong', { text: title }),
+      ]),
+      h('p', { class: 'diag-detail', text: detail }),
+      // Always show the raw line: the classification is a heuristic and the
+      // admin should be able to judge it.
+      h('pre', { class: 'diag-line', text: f.line }),
+      h('div', { class: 'diag-src' }, [
+        h('span', { text: f.source.toUpperCase() }),
+        h('button', { class: 'secondary', i18n: 'diag.openLog',
+          onclick: () => { location.hash = '#logs'; } }),
+      ]),
+    ]));
+  }
+  if (placeAtTop && host.firstChild) host.insertBefore(card, host.firstChild);
+  else host.append(card);
+  applyI18n();
+}
+
 // --------------------------------------------------------------------- guide
 //
 // The beginner's guide. Content comes from /api/guide rather than the i18n
@@ -3499,6 +3594,58 @@ Views.wipe = async (root) => {
     h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '10px 0' } }, [confirm, h('span', { i18n: 'wipe.confirm' })]),
     h('div', { class: 'actions' }, [wipeBtn]),
   ]));
+
+  // ---- previous wipes, and putting one back -------------------------------
+  const undoCard = h('div', { class: 'card' });
+  wrap.append(undoCard);
+
+  async function refreshWipes() {
+    undoCard.innerHTML = '';
+    undoCard.append(
+      withHelp(h('h3', { i18n: 'wipe.undo.title' }), 'wipe.undo'),
+      h('p', { class: 'hint', i18n: 'wipe.undo.hint' }),
+    );
+    let w;
+    try { w = await api.get('/api/wipe/list'); }
+    catch (e) { handleErr(e); return; }
+
+    const sets = w.wipes || [];
+    if (!sets.length) {
+      undoCard.append(h('p', { class: 'hint', i18n: 'wipe.undo.none' }));
+      applyI18n();
+      return;
+    }
+    for (const set of sets) {
+      const when = set.when ? new Date(set.when).toLocaleString() : set.id;
+      // Blocked means the mission has that folder again: restoring would bury
+      // a world players have been building on since the wipe.
+      const blocked = (set.blocked || []).length > 0;
+      undoCard.append(h('div', { class: 'wipe-set' + (blocked ? ' blocked' : '') }, [
+        h('div', { class: 'grow' }, [
+          h('strong', { text: when }),
+          h('div', { class: 'hint', text: (set.folders || []).join(', ') + ' · ' + bytes(set.size || 0) }),
+          blocked ? h('div', { class: 'wipe-blocked', text: t('wipe.undo.blocked').replace('{names}', set.blocked.join(', ')) }) : null,
+        ]),
+        h('button', {
+          class: 'secondary', i18n: 'wipe.undo.button',
+          disabled: blocked || d.serverRunning,
+          onclick: async (e) => {
+            const btn = e.currentTarget; // capture BEFORE the await
+            if (!(await confirmModal(t('wipe.undo.confirm').replace('{when}', when), { okText: t('wipe.undo.button') }))) return;
+            await withBusy(btn, async () => {
+              try {
+                const r = await api.post('/api/wipe/restore', { id: set.id });
+                toast(t('wipe.undo.done').replace('{n}', r.count), 'ok');
+                await navigate('wipe');
+              } catch (err) { handleErr(err); }
+            });
+          },
+        }),
+      ]));
+    }
+    applyI18n();
+  }
+  await refreshWipes();
 };
 
 Views.settings = async (root) => {

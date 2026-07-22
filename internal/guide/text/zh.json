@@ -246,6 +246,26 @@
     "attach.cargo": "Cargo 在物品「内部」生成：背包的内容物、木箱里的战利品、汽车后备箱。而配件是装在物品「上面」。原版文件里有一半是 cargo，而不是配件。",
     "attach.hoarder": "把该记录标记为持久存储——油桶、帐篷、藏匿点。玩家放进去的东西会计入存储上限，而不是世界战利品。",
     "attach.damage": "物品生成时的损坏度，0.0（全新）到 1.0（损毁）。两个都留空则沿用 DayZ 默认值。",
-    "attach.tags": "限制该记录适用的位置，例如 floor 或 shelves。用逗号分隔。大多数记录不需要。"
+    "attach.tags": "限制该记录适用的位置，例如 floor 或 shelves。用逗号分隔。大多数记录不需要。",
+    "diag": "在最新的 RPT 和管理器日志中做模式匹配。它能识别真正会让 DayZ 服务器停止的少数几类故障；其余情况仍需查看原始日志，因此结果为空并不等于一切正常。",
+    "wipe.undo": "清档是把世界文件夹移动到 .dayz-manager/wipes/<时间戳>/ 而不是删除，因此可以撤销——直到服务器重新积累了世界状态，那时放回旧世界就会覆盖掉新的。",
+    "diag.mod_missing.title": "-mod 中列出的模组不在服务器上",
+    "diag.mod_missing.detail": "DayZ 无法打开 {subject}。该模组写在启动参数里，但其文件夹缺失或不完整——请在「模组」页安装或重新同步，然后再启动。",
+    "diag.mod_missing_generic.title": "服务器需要的文件缺失",
+    "diag.mod_missing_generic.detail": "DayZ 无法打开 {subject}。请确认该路径存在，且没有被杀毒软件隔离。",
+    "diag.bad_signature.title": "模组文件未签名或密钥不匹配",
+    "diag.bad_signature.detail": "{subject} 未通过 BattlEye 的签名校验。请在「模组」页重新同步该模组的 .bikey——不要调低 verifySignatures，那样会连被改动的客户端一起放进来。",
+    "diag.script_error.title": "脚本编译失败",
+    "diag.script_error.detail": "服务器在编译脚本时停止。RPT 中紧随其后的几行会指出文件与行号——通常是与当前 DayZ 版本不匹配的模组。",
+    "diag.mission_missing.title": "server.cfg 中的任务不存在",
+    "diag.mission_missing.detail": "serverDZ.cfg 里指定的模板在 mpmissions/ 下没有对应文件夹。请在「服务器」页选择一个已存在的任务。",
+    "diag.port_busy.title": "服务器端口已被占用",
+    "diag.port_busy.detail": "端口被另一个进程占用——最常见的是上一个尚未完全退出的 DayZ 服务器。稍候几秒，或在「服务器」页更换端口。",
+    "diag.config_parse.title": "serverDZ.cfg 格式有误",
+    "diag.config_parse.detail": "配置解析提前中断。常见原因是缺少分号或大括号不匹配；校验器会检查括号配对。",
+    "diag.no_economy.title": "中央经济加载失败",
+    "diag.no_economy.detail": "服务器也许能运行，但不会生成战利品。请运行校验器：通常是 cfgeconomycore.xml 引用的文件缺失，或 usage/value 名称未知。",
+    "diag.missing_key.title": "keys/ 中缺少模组密钥",
+    "diag.missing_key.detail": "使用该模组的玩家会因签名错误被踢出。请在「模组」页使用「同步密钥」。"
   }
 }

@@ -246,6 +246,26 @@
     "attach.cargo": "Cargo はアイテムの「中」にスポーンします: バックパックの中身、木箱の戦利品、車のトランク。アタッチメントは「上」に装着されます。バニラのファイルの半分はアタッチメントではなく Cargo です。",
     "attach.hoarder": "この項目を永続ストレージ（ドラム缶・テント・隠し場所）として扱います。プレイヤーが中に入れた物はワールドの戦利品ではなくホーダー上限に数えられます。",
     "attach.damage": "スポーン時の状態、0.0（新品）から 1.0（破損）まで。両方空にすると DayZ の既定値のままになります。",
-    "attach.tags": "項目が適用される場所を絞ります（floor、shelves など）。カンマ区切り。ほとんどの項目には不要です。"
+    "attach.tags": "項目が適用される場所を絞ります（floor、shelves など）。カンマ区切り。ほとんどの項目には不要です。",
+    "diag": "最新の RPT とマネージャーのログをパターン照合します。DayZ サーバーを実際に止める数種類の障害を認識しますが、それ以外は生ログを読む必要があるため、何も出ないことは「異常なし」の保証ではありません。",
+    "wipe.undo": "ワイプはワールドのフォルダーを削除せず .dayz-manager/wipes/<タイムスタンプ>/ へ移すので取り消せます — ただしサーバーが新しい状態を作るまでです。その後に古いワールドを戻すと新しい方が埋もれてしまいます。",
+    "diag.mod_missing.title": "-mod に指定された MOD がサーバーにありません",
+    "diag.mod_missing.detail": "DayZ は {subject} を開けませんでした。MOD は起動パラメーターにありますが、フォルダーが無いか不完全です — MOD ページでインストールまたは再同期してから起動してください。",
+    "diag.mod_missing_generic.title": "サーバーに必要なファイルがありません",
+    "diag.mod_missing_generic.detail": "DayZ は {subject} を開けませんでした。パスが存在するか、ウイルス対策ソフトに隔離されていないか確認してください。",
+    "diag.bad_signature.title": "MOD ファイルが未署名か、キーが一致しません",
+    "diag.bad_signature.detail": "{subject} が BattlEye の署名チェックに失敗しました。MOD ページで .bikey を再同期してください — verifySignatures を下げてはいけません。改変クライアントまで入れてしまいます。",
+    "diag.script_error.title": "スクリプトのコンパイルに失敗しました",
+    "diag.script_error.detail": "スクリプトのコンパイル中にサーバーが停止しました。RPT のこの直後の行にファイル名と行番号が出ます — 多くは現在の DayZ バージョンに合っていない MOD です。",
+    "diag.mission_missing.title": "server.cfg のミッションが存在しません",
+    "diag.mission_missing.detail": "serverDZ.cfg に書かれたテンプレートに対応するフォルダーが mpmissions/ にありません。サーバーページで既存のミッションを選んでください。",
+    "diag.port_busy.title": "サーバーポートが既に使われています",
+    "diag.port_busy.detail": "別のプロセスがポートを保持しています — 多くは終了しきっていない前回の DayZ サーバーです。数秒待つか、サーバーページでポートを変更してください。",
+    "diag.config_parse.title": "serverDZ.cfg が壊れています",
+    "diag.config_parse.detail": "設定の解析が途中で止まりました。セミコロンの抜けや閉じ忘れた波かっこが定番の原因で、かっこの対応はバリデーターが確認します。",
+    "diag.no_economy.title": "中央経済の読み込みに失敗しました",
+    "diag.no_economy.detail": "サーバーは動いてもルートが出ません。バリデーターを実行してください: cfgeconomycore.xml が参照するファイルの欠落か、未知の usage/value 名が原因です。",
+    "diag.missing_key.title": "keys/ に MOD のキーがありません",
+    "diag.missing_key.detail": "その MOD を使うクライアントは署名不正でキックされます。MOD ページの「キーを同期」を使ってください。"
   }
 }

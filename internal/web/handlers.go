@@ -153,6 +153,12 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/spawnable/presets", methods(h.spawnablePresets, http.MethodGet))
 	mux.HandleFunc("/api/spawnable/classnames", methods(h.spawnableClassNames, http.MethodGet))
 	mux.HandleFunc("/api/guide", methods(h.guideGet, http.MethodGet))
+	// v0.18.0: explain a failed start, diff a backup before restoring it, and
+	// undo a wipe (wipeApply already moves the folders aside for exactly this).
+	mux.HandleFunc("/api/diagnose", methods(h.diagnose, http.MethodGet))
+	mux.HandleFunc("/api/backups/diff", methods(h.backupsDiff, http.MethodGet))
+	mux.HandleFunc("/api/wipe/list", methods(h.wipeList, http.MethodGet))
+	mux.HandleFunc("/api/wipe/restore", methods(h.wipeRestore, http.MethodPost))
 
 	// Dashboard live metrics.
 	mux.HandleFunc("/api/dashboard/metrics", methods(h.dashboardMetrics, http.MethodGet))

@@ -1350,6 +1350,78 @@ input.attach-num {
 .attach-prop.grow input { flex: 1; }
 
 /* ============================================================
+   18g. DIAGNOSIS / DIFF / WIPE UNDO
+   ============================================================ */
+
+/* Why the server did not start. Shown only when it is down and something was
+   actually recognised, so it never becomes wallpaper. */
+.diag-card { border-color: var(--error); }
+.diag-item {
+  border-left: 3px solid var(--warn);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px; margin-top: 10px;
+}
+.diag-item.fatal { border-left-color: var(--error); }
+.diag-head { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
+.diag-badge {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--warn-soft); color: var(--warn);
+}
+.diag-item.fatal .diag-badge { background: var(--error-soft); color: var(--error); }
+.diag-detail { margin: 0 0 8px; color: var(--text-secondary); line-height: 1.6; }
+/* The raw log line, always shown: the classification is a heuristic and the
+   admin has to be able to check it. */
+.diag-line {
+  margin: 0; padding: 7px 9px;
+  background: var(--terminal-bg); color: var(--terminal-text);
+  border-radius: var(--radius-xs);
+  font: 11.5px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap; word-break: break-all;
+}
+.diag-src {
+  display: flex; align-items: center; gap: 10px; margin-top: 8px;
+  font: 700 10px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: .08em; color: var(--text-faint);
+}
+.diag-src button { padding: 4px 10px; font-size: 12px; letter-spacing: 0; }
+
+/* Backup diff */
+.diff-stat { display: flex; align-items: center; gap: 12px; margin: 10px 0; font-size: 13px; }
+.diff-plus  { color: var(--ok); font-weight: 700; }
+.diff-minus { color: var(--error); font-weight: 700; }
+.diff-view {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  max-height: 55vh; overflow: auto;
+  font: 12px/1.55 ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.diff-row { display: flex; align-items: flex-start; white-space: pre; }
+.diff-num {
+  flex: none; width: 46px; text-align: right; padding: 0 8px 0 0;
+  color: var(--text-faint); user-select: none;
+}
+.diff-sign { flex: none; width: 16px; text-align: center; user-select: none; }
+.diff-text { flex: 1; padding-right: 10px; white-space: pre-wrap; word-break: break-all; }
+.diff-row.dadd { background: var(--ok-soft); }
+.diff-row.dadd .diff-sign { color: var(--ok); }
+.diff-row.ddel { background: var(--error-soft); }
+.diff-row.ddel .diff-sign { color: var(--error); }
+.diff-row.dctx { color: var(--text-secondary); }
+
+/* Previous wipes */
+.wipe-set {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 13px; margin-top: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.wipe-set.blocked { opacity: .72; }
+.wipe-blocked { margin-top: 4px; font-size: 12px; color: var(--warn); }
+
+/* ============================================================
    18d. HOVER HELP
    ============================================================ */
 

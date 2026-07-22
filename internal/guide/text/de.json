@@ -246,6 +246,26 @@
     "attach.cargo": "Cargo spawnt IM Gegenstand: der Inhalt eines Rucksacks, die Beute einer Kiste, der Kofferraum eines Autos. Anbauteile sitzen DARAUF. Die Hälfte der Vanilla-Datei ist Cargo, nicht Anbauteile.",
     "attach.hoarder": "Kennzeichnet den Eintrag als dauerhaften Speicher — Fässer, Zelte, Verstecke. DayZ rechnet den Inhalt auf das Hoarder-Limit an statt auf den Weltloot.",
     "attach.damage": "Zustand beim Spawn, 0.0 (neuwertig) bis 1.0 (ruiniert). Beide Felder leer lassen, um DayZ' Standard zu behalten.",
-    "attach.tags": "Schränkt ein, wo der Eintrag gilt, z. B. floor oder shelves. Kommagetrennt. Die meisten Einträge brauchen keine."
+    "attach.tags": "Schränkt ein, wo der Eintrag gilt, z. B. floor oder shelves. Kommagetrennt. Die meisten Einträge brauchen keine.",
+    "diag": "Mustererkennung im neuesten RPT und im Manager-Log. Erkennt die wenigen Fehler, die einen DayZ-Server wirklich stoppen; alles andere erfordert weiterhin das Rohlog — ein leeres Ergebnis ist also kein Gesundheitszeugnis.",
+    "wipe.undo": "Ein Wipe verschiebt die Weltordner nach .dayz-manager/wipes/<Zeitstempel>/, statt sie zu löschen, und bleibt so umkehrbar — bis der Server neuen Zustand aufgebaut hat, denn dann würde die alte Welt die neue begraben.",
+    "diag.mod_missing.title": "Ein in -mod gelisteter Mod fehlt auf dem Server",
+    "diag.mod_missing.detail": "DayZ konnte {subject} nicht öffnen. Der Mod steht in den Startparametern, aber sein Ordner fehlt oder ist unvollständig — auf der Mods-Seite installieren oder neu synchronisieren, dann erneut starten.",
+    "diag.mod_missing_generic.title": "Eine benötigte Datei fehlt",
+    "diag.mod_missing_generic.detail": "DayZ konnte {subject} nicht öffnen. Prüfen Sie, ob der Pfad existiert und ob ein Virenscanner die Datei entfernt hat.",
+    "diag.bad_signature.title": "Eine Mod-Datei ist unsigniert oder der Schlüssel passt nicht",
+    "diag.bad_signature.detail": "{subject} hat BattlEyes Signaturprüfung nicht bestanden. Synchronisieren Sie den .bikey auf der Mods-Seite — senken Sie NICHT verifySignatures, das ließe auch veränderte Clients zu.",
+    "diag.script_error.title": "Ein Skript ließ sich nicht kompilieren",
+    "diag.script_error.detail": "Der Server brach beim Kompilieren der Skripte ab. Die Zeilen direkt danach im RPT nennen Datei und Zeilennummer — meist ein Mod, der nicht zur aktuellen DayZ-Version passt.",
+    "diag.mission_missing.title": "Die Mission aus server.cfg existiert nicht",
+    "diag.mission_missing.detail": "Zum Template in serverDZ.cfg gibt es keinen Ordner unter mpmissions/. Wählen Sie auf der Server-Seite eine vorhandene Mission.",
+    "diag.port_busy.title": "Der Serverport ist bereits belegt",
+    "diag.port_busy.detail": "Ein anderer Prozess hält den Port — sehr oft ein vorheriger DayZ-Server, der noch nicht beendet ist. Warten Sie kurz oder ändern Sie den Port auf der Server-Seite.",
+    "diag.config_parse.title": "serverDZ.cfg ist fehlerhaft",
+    "diag.config_parse.detail": "Der Config-Parser brach vorzeitig ab. Ein fehlendes Semikolon oder eine unbalancierte Klammer ist die übliche Ursache — den Klammernstand prüft der Validator.",
+    "diag.no_economy.title": "Die zentrale Wirtschaft wurde nicht geladen",
+    "diag.no_economy.detail": "Der Server läuft vielleicht, spawnt aber keinen Loot. Lassen Sie den Validator laufen: meist fehlt eine in cfgeconomycore.xml referenzierte Datei oder ein usage/value-Name ist unbekannt.",
+    "diag.missing_key.title": "Ein Mod-Schlüssel fehlt in keys/",
+    "diag.missing_key.detail": "Clients mit diesem Mod werden wegen falscher Signatur gekickt. Nutzen Sie „Schlüssel synchronisieren“ auf der Mods-Seite."
   }
 }

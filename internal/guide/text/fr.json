@@ -246,6 +246,26 @@
     "attach.cargo": "Le cargo apparaît DANS l'objet : le contenu d'un sac, le butin d'une caisse, le coffre d'une voiture. Les accessoires se montent DESSUS. La moitié du fichier d'origine est du cargo, pas des accessoires.",
     "attach.hoarder": "Marque l'entrée comme stockage persistant — barils, tentes, caches. DayZ compte ce que les joueurs y rangent dans la limite de stockage, pas dans le butin du monde.",
     "attach.damage": "État dans lequel l'objet apparaît, de 0.0 (impeccable) à 1.0 (ruiné). Laissez les deux vides pour garder la valeur par défaut de DayZ.",
-    "attach.tags": "Restreint où l'entrée s'applique, p. ex. floor ou shelves. Séparés par des virgules. La plupart n'en ont pas besoin."
+    "attach.tags": "Restreint où l'entrée s'applique, p. ex. floor ou shelves. Séparés par des virgules. La plupart n'en ont pas besoin.",
+    "diag": "Reconnaissance de motifs dans le RPT le plus récent et le journal du gestionnaire. Elle identifie les quelques pannes qui arrêtent vraiment un serveur DayZ ; le reste demande toujours le journal brut, donc un résultat vide n'est pas un certificat de bonne santé.",
+    "wipe.undo": "Un effacement déplace les dossiers du monde vers .dayz-manager/wipes/<horodatage>/ au lieu de les supprimer : il reste réversible — jusqu'à ce que le serveur reconstitue un état, car remettre l'ancien monde enterrerait le nouveau.",
+    "diag.mod_missing.title": "Un mod listé dans -mod est absent du serveur",
+    "diag.mod_missing.detail": "DayZ n'a pas pu ouvrir {subject}. Le mod figure dans les paramètres de lancement mais son dossier est absent ou incomplet — installez-le ou resynchronisez-le sur la page Mods, puis relancez.",
+    "diag.mod_missing_generic.title": "Un fichier nécessaire au serveur est absent",
+    "diag.mod_missing_generic.detail": "DayZ n'a pas pu ouvrir {subject}. Vérifiez que le chemin existe et qu'aucun antivirus ne l'a mis en quarantaine.",
+    "diag.bad_signature.title": "Un fichier de mod n'est pas signé ou sa clé ne correspond pas",
+    "diag.bad_signature.detail": "{subject} a échoué à la vérification de signature de BattlEye. Resynchronisez le .bikey sur la page Mods — n'abaissez PAS verifySignatures, cela laisserait aussi entrer des clients modifiés.",
+    "diag.script_error.title": "Un script n'a pas compilé",
+    "diag.script_error.detail": "Le serveur s'est arrêté pendant la compilation des scripts. Les lignes juste après dans le RPT donnent le fichier et le numéro de ligne — souvent un mod qui ne correspond pas à la version actuelle de DayZ.",
+    "diag.mission_missing.title": "La mission indiquée dans server.cfg n'existe pas",
+    "diag.mission_missing.detail": "Le template nommé dans serverDZ.cfg n'a pas de dossier sous mpmissions/. Choisissez une mission existante sur la page Serveur.",
+    "diag.port_busy.title": "Le port du serveur est déjà pris",
+    "diag.port_busy.detail": "Un autre processus détient le port — très souvent un serveur DayZ précédent qui n'a pas fini de s'arrêter. Patientez quelques secondes ou changez le port sur la page Serveur.",
+    "diag.config_parse.title": "serverDZ.cfg est mal formé",
+    "diag.config_parse.detail": "L'analyseur s'est arrêté trop tôt. Un point-virgule manquant ou une accolade non fermée en est la cause habituelle — le validateur vérifie l'équilibre des accolades.",
+    "diag.no_economy.title": "L'économie centrale n'a pas été chargée",
+    "diag.no_economy.detail": "Le serveur peut tourner mais ne fera apparaître aucun butin. Lancez le validateur : il manque généralement un fichier référencé par cfgeconomycore.xml, ou un nom usage/value est inconnu.",
+    "diag.missing_key.title": "Une clé de mod manque dans keys/",
+    "diag.missing_key.detail": "Les clients utilisant ce mod seront exclus pour signature invalide. Utilisez « Synchroniser les clés » sur la page Mods."
   }
 }

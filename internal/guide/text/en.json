@@ -246,6 +246,26 @@
     "attach.cargo": "Cargo spawns INSIDE the item: a backpack's contents, a crate's loot, a car's boot. Attachments are mounted ON it. Half of the vanilla file is cargo, not attachments.",
     "attach.hoarder": "Marks the entry as persistent storage — barrels, tents, stashes. DayZ counts what players put inside towards the hoarder limit instead of world loot.",
     "attach.damage": "Condition the item spawns in, 0.0 (pristine) to 1.0 (ruined). Leave both empty to keep the DayZ default.",
-    "attach.tags": "Restricts where the entry applies, e.g. floor or shelves. Comma-separated. Most entries need none."
+    "attach.tags": "Restricts where the entry applies, e.g. floor or shelves. Comma-separated. Most entries need none.",
+    "diag": "Pattern-matched from the newest RPT and the manager's stdout log. It recognises the handful of failures that actually stop a DayZ server; anything it does not recognise still needs the raw log, so an empty result is not a clean bill of health.",
+    "wipe.undo": "A wipe moves the world folders into .dayz-manager/wipes/<timestamp>/ rather than deleting them, so it stays reversible — until the server rebuilds that state, at which point putting the old world back would bury the new one.",
+    "diag.mod_missing.title": "A mod folder listed in -mod is not on the server",
+    "diag.mod_missing.detail": "DayZ could not open {subject}. The mod is in the launch parameters but its folder is missing or incomplete — install or re-sync it on the Mods page, then start again.",
+    "diag.mod_missing_generic.title": "A file the server needs is missing",
+    "diag.mod_missing_generic.detail": "DayZ could not open {subject}. Check that the path exists and that no antivirus has quarantined it.",
+    "diag.bad_signature.title": "A mod file is unsigned or its key does not match",
+    "diag.bad_signature.detail": "{subject} failed BattlEye's signature check. Re-sync the mod's .bikey on the Mods page — do NOT lower verifySignatures, which would also let modified clients in.",
+    "diag.script_error.title": "A script failed to compile",
+    "diag.script_error.detail": "The server stopped while compiling scripts. The lines just after this one in the RPT name the file and line number — usually a mod that does not match the current DayZ version.",
+    "diag.mission_missing.title": "The mission in server.cfg does not exist",
+    "diag.mission_missing.detail": "The template named in serverDZ.cfg has no matching folder under mpmissions/. Pick an existing mission on the Server page.",
+    "diag.port_busy.title": "The server port is already taken",
+    "diag.port_busy.detail": "Another process — very often a previous DayZ server that has not fully exited — holds the port. Wait a few seconds, or change the port on the Server page.",
+    "diag.config_parse.title": "serverDZ.cfg is malformed",
+    "diag.config_parse.detail": "The config parser stopped early. A missing semicolon or an unbalanced brace is the usual cause — the Validator checks brace balance.",
+    "diag.no_economy.title": "The central economy failed to load",
+    "diag.no_economy.detail": "The server may run but spawn no loot. Run the Validator: a missing file referenced from cfgeconomycore.xml, or an unknown usage/value name, is the usual cause.",
+    "diag.missing_key.title": "A mod key is missing from keys/",
+    "diag.missing_key.detail": "Clients using that mod will be kicked for a bad signature. Use Sync keys on the Mods page."
   }
 }

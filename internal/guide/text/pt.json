@@ -246,6 +246,26 @@
     "attach.cargo": "O cargo aparece DENTRO do item: o conteúdo de uma mochila, o saque de uma caixa, a mala de um carro. Os acessórios ficam POR CIMA. Metade do ficheiro original é cargo, não acessórios.",
     "attach.hoarder": "Marca a entrada como armazenamento persistente — barris, tendas, esconderijos. O DayZ conta o que os jogadores lá guardam para o limite de armazenamento, não para o saque do mundo.",
     "attach.damage": "Estado em que o item aparece, de 0.0 (impecável) a 1.0 (arruinado). Deixa ambos vazios para manter o valor padrão do DayZ.",
-    "attach.tags": "Restringe onde a entrada se aplica, p. ex. floor ou shelves. Separadas por vírgulas. A maioria não precisa de nenhuma."
+    "attach.tags": "Restringe onde a entrada se aplica, p. ex. floor ou shelves. Separadas por vírgulas. A maioria não precisa de nenhuma.",
+    "diag": "Correspondência de padrões no RPT mais recente e no registo do gestor. Reconhece as poucas falhas que realmente param um servidor DayZ; o resto continua a exigir o registo em bruto, por isso um resultado vazio não é um atestado de saúde.",
+    "wipe.undo": "Um wipe move as pastas do mundo para .dayz-manager/wipes/<data e hora>/ em vez de as apagar, ficando reversível — até o servidor reconstruir esse estado, altura em que repor o mundo antigo enterraria o novo.",
+    "diag.mod_missing.title": "Uma mod listada em -mod não está no servidor",
+    "diag.mod_missing.detail": "O DayZ não conseguiu abrir {subject}. A mod está nos parâmetros de arranque mas a pasta falta ou está incompleta — instala ou volta a sincronizar na página Mods e arranca de novo.",
+    "diag.mod_missing_generic.title": "Falta um ficheiro de que o servidor precisa",
+    "diag.mod_missing_generic.detail": "O DayZ não conseguiu abrir {subject}. Verifica se o caminho existe e se nenhum antivírus o pôs em quarentena.",
+    "diag.bad_signature.title": "Um ficheiro da mod não está assinado ou a chave não corresponde",
+    "diag.bad_signature.detail": "{subject} falhou a verificação de assinatura do BattlEye. Volta a sincronizar o .bikey na página Mods — NÃO baixes o verifySignatures, isso deixaria entrar clientes modificados.",
+    "diag.script_error.title": "Um script não compilou",
+    "diag.script_error.detail": "O servidor parou ao compilar scripts. As linhas logo a seguir no RPT indicam o ficheiro e a linha — normalmente uma mod desalinhada da versão atual do DayZ.",
+    "diag.mission_missing.title": "A missão indicada em server.cfg não existe",
+    "diag.mission_missing.detail": "O template nomeado no serverDZ.cfg não tem pasta em mpmissions/. Escolhe uma missão existente na página Servidor.",
+    "diag.port_busy.title": "A porta do servidor já está ocupada",
+    "diag.port_busy.detail": "Outro processo tem a porta — muitas vezes um servidor DayZ anterior que ainda não terminou. Espera uns segundos ou muda a porta na página Servidor.",
+    "diag.config_parse.title": "O serverDZ.cfg está malformado",
+    "diag.config_parse.detail": "O analisador parou cedo demais. Um ponto e vírgula em falta ou uma chaveta por fechar é a causa habitual; o validador verifica o equilíbrio de chavetas.",
+    "diag.no_economy.title": "A economia central não carregou",
+    "diag.no_economy.detail": "O servidor pode funcionar mas não gera saque. Corre o validador: normalmente falta um ficheiro referenciado no cfgeconomycore.xml ou há um nome usage/value desconhecido.",
+    "diag.missing_key.title": "Falta uma chave de mod em keys/",
+    "diag.missing_key.detail": "Os jogadores com essa mod serão expulsos por assinatura inválida. Usa «Sincronizar chaves» na página Mods."
   }
 }

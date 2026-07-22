@@ -246,6 +246,26 @@
     "attach.cargo": "Cargo는 아이템 「안에」 생성됩니다: 배낭의 내용물, 상자의 전리품, 자동차 트렁크. 부착물은 「위에」 장착됩니다. 바닐라 파일의 절반은 부착물이 아니라 Cargo입니다.",
     "attach.hoarder": "이 항목을 영구 저장소(드럼통, 텐트, 은닉처)로 표시합니다. 플레이어가 넣은 물건은 월드 전리품이 아니라 저장소 한도에 계산됩니다.",
     "attach.damage": "생성 시 상태로 0.0(새것)에서 1.0(파손)까지. 둘 다 비워 두면 DayZ 기본값을 사용합니다.",
-    "attach.tags": "항목이 적용되는 위치를 제한합니다(floor, shelves 등). 쉼표로 구분. 대부분은 필요 없습니다."
+    "attach.tags": "항목이 적용되는 위치를 제한합니다(floor, shelves 등). 쉼표로 구분. 대부분은 필요 없습니다.",
+    "diag": "가장 최근 RPT와 매니저 로그를 패턴으로 대조합니다. DayZ 서버를 실제로 멈추는 몇 가지 장애를 인식하며, 그 밖의 경우는 여전히 원본 로그가 필요하므로 결과가 비어 있다고 해서 이상이 없다는 뜻은 아닙니다.",
+    "wipe.undo": "초기화는 월드 폴더를 삭제하지 않고 .dayz-manager/wipes/<타임스탬프>/ 로 옮기므로 되돌릴 수 있습니다 — 다만 서버가 새 상태를 만들기 전까지입니다. 그 뒤에 옛 월드를 되돌리면 새 월드가 묻힙니다.",
+    "diag.mod_missing.title": "-mod에 지정된 모드가 서버에 없습니다",
+    "diag.mod_missing.detail": "DayZ가 {subject}을(를) 열지 못했습니다. 모드가 실행 인자에는 있지만 폴더가 없거나 불완전합니다 — 모드 페이지에서 설치하거나 다시 동기화한 뒤 시작하세요.",
+    "diag.mod_missing_generic.title": "서버에 필요한 파일이 없습니다",
+    "diag.mod_missing_generic.detail": "DayZ가 {subject}을(를) 열지 못했습니다. 경로가 있는지, 백신이 격리하지 않았는지 확인하세요.",
+    "diag.bad_signature.title": "모드 파일이 서명되지 않았거나 키가 맞지 않습니다",
+    "diag.bad_signature.detail": "{subject}이(가) BattlEye 서명 검사를 통과하지 못했습니다. 모드 페이지에서 .bikey를 다시 동기화하세요 — verifySignatures를 낮추면 변조된 클라이언트까지 들어옵니다.",
+    "diag.script_error.title": "스크립트 컴파일에 실패했습니다",
+    "diag.script_error.detail": "스크립트를 컴파일하다가 서버가 멈췄습니다. RPT의 바로 다음 줄들이 파일과 줄 번호를 알려 줍니다 — 대개 현재 DayZ 버전과 맞지 않는 모드입니다.",
+    "diag.mission_missing.title": "server.cfg의 미션이 존재하지 않습니다",
+    "diag.mission_missing.detail": "serverDZ.cfg에 지정된 템플릿에 해당하는 폴더가 mpmissions/에 없습니다. 서버 페이지에서 존재하는 미션을 고르세요.",
+    "diag.port_busy.title": "서버 포트가 이미 사용 중입니다",
+    "diag.port_busy.detail": "다른 프로세스가 포트를 잡고 있습니다 — 대개 아직 완전히 종료되지 않은 이전 DayZ 서버입니다. 몇 초 기다리거나 서버 페이지에서 포트를 바꾸세요.",
+    "diag.config_parse.title": "serverDZ.cfg가 손상되었습니다",
+    "diag.config_parse.detail": "설정 파서가 도중에 멈췄습니다. 세미콜론 누락이나 닫히지 않은 중괄호가 흔한 원인이며, 중괄호 균형은 검사기가 확인합니다.",
+    "diag.no_economy.title": "중앙 경제를 불러오지 못했습니다",
+    "diag.no_economy.detail": "서버는 돌아가더라도 전리품이 생성되지 않습니다. 검사기를 실행하세요: 보통 cfgeconomycore.xml이 참조하는 파일이 없거나 usage/value 이름이 알 수 없는 값입니다.",
+    "diag.missing_key.title": "keys/에 모드 키가 없습니다",
+    "diag.missing_key.detail": "해당 모드를 쓰는 클라이언트는 서명 오류로 강퇴됩니다. 모드 페이지의 「키 동기화」를 사용하세요."
   }
 }

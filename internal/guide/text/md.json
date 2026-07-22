@@ -246,6 +246,26 @@
     "attach.cargo": "Cargo apare ÎN interiorul obiectului: conținutul unui rucsac, prada dintr-o ladă, portbagajul unei mașini. Accesoriile se montează PE el. Jumătate din fișierul original este cargo, nu accesorii.",
     "attach.hoarder": "Marchează intrarea drept depozitare permanentă — butoaie, corturi, ascunzători. DayZ numără ce pun jucătorii înăuntru la limita depozitelor, nu la prada din lume.",
     "attach.damage": "Starea în care apare obiectul, de la 0.0 (impecabil) la 1.0 (distrus). Lasă ambele goale pentru a păstra valoarea implicită DayZ.",
-    "attach.tags": "Restrânge unde se aplică intrarea, de ex. floor sau shelves. Separate prin virgulă. Majoritatea nu au nevoie de niciuna."
+    "attach.tags": "Restrânge unde se aplică intrarea, de ex. floor sau shelves. Separate prin virgulă. Majoritatea nu au nevoie de niciuna.",
+    "diag": "Potrivire de tipare în cel mai recent RPT și în jurnalul managerului. Recunoaște puținele defecțiuni care chiar opresc un server DayZ; restul cere în continuare jurnalul brut, deci un rezultat gol nu este un certificat de sănătate.",
+    "wipe.undo": "O ștergere mută folderele lumii în .dayz-manager/wipes/<marcaj de timp>/ în loc să le elimine, rămânând reversibilă — până când serverul reconstruiește starea, pentru că atunci readucerea lumii vechi ar îngropa-o pe cea nouă.",
+    "diag.mod_missing.title": "Un mod din -mod lipsește de pe server",
+    "diag.mod_missing.detail": "DayZ nu a putut deschide {subject}. Modul este în parametrii de pornire, dar folderul lui lipsește sau este incomplet — instalează-l sau resincronizează-l în pagina Moduri și pornește din nou.",
+    "diag.mod_missing_generic.title": "Lipsește un fișier de care serverul are nevoie",
+    "diag.mod_missing_generic.detail": "DayZ nu a putut deschide {subject}. Verifică dacă există calea și dacă vreun antivirus nu l-a pus în carantină.",
+    "diag.bad_signature.title": "Un fișier al modului nu este semnat sau cheia nu se potrivește",
+    "diag.bad_signature.detail": "{subject} nu a trecut verificarea de semnătură BattlEye. Resincronizează .bikey în pagina Moduri — NU coborî verifySignatures, ar lăsa să intre și clienți modificați.",
+    "diag.script_error.title": "Un script nu s-a compilat",
+    "diag.script_error.detail": "Serverul s-a oprit la compilarea scripturilor. Liniile imediat următoare din RPT indică fișierul și numărul liniei — de obicei un mod care nu corespunde versiunii curente DayZ.",
+    "diag.mission_missing.title": "Misiunea din server.cfg nu există",
+    "diag.mission_missing.detail": "Șablonul numit în serverDZ.cfg nu are folder în mpmissions/. Alege o misiune existentă în pagina Server.",
+    "diag.port_busy.title": "Portul serverului este deja ocupat",
+    "diag.port_busy.detail": "Alt proces ține portul — cel mai adesea un server DayZ anterior care nu s-a închis complet. Așteaptă câteva secunde sau schimbă portul în pagina Server.",
+    "diag.config_parse.title": "serverDZ.cfg este deteriorat",
+    "diag.config_parse.detail": "Analizatorul s-a oprit prea devreme. Cauza uzuală este un punct și virgulă lipsă sau o acoladă neînchisă; validatorul verifică echilibrul acoladelor.",
+    "diag.no_economy.title": "Economia centrală nu s-a încărcat",
+    "diag.no_economy.detail": "Serverul poate rula, dar nu va genera pradă. Rulează validatorul: de regulă lipsește un fișier referit în cfgeconomycore.xml sau un nume usage/value este necunoscut.",
+    "diag.missing_key.title": "Lipsește o cheie de mod din keys/",
+    "diag.missing_key.detail": "Jucătorii cu acel mod vor fi dați afară pentru semnătură invalidă. Folosește „Sincronizează cheile” în pagina Moduri."
   }
 }
