@@ -32,3 +32,9 @@ Thumbs.db
 
 # Reference DayZ server install used for local testing (not distributed).
 DayZServer/
+
+# Social-preview cards — uploaded through GitHub Settings, not served from the
+# repo, so they live on disk without being tracked. (tools/social_card.py is
+# their generator, kept local too; tools/make_icon.py IS tracked.)
+docs/social-preview*.png
+tools/social_card.py

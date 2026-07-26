@@ -1,0 +1,7 @@
+# Steer reporters to the built-in help before they file, and keep the blank
+# "open a blank issue" option so nobody is ever blocked from reporting.
+blank_issues_enabled: true
+contact_links:
+  - name: "\U0001F4D6 Guide & diagnosis / Инструкция и диагностика"
+    url: https://github.com/AristarhUcolov/DayZ-Server-Manager#readme
+    about: "The manager has an in-app Guide and shows why a server won't start — check there first. / В менеджере есть раздел «Инструкция» и диагностика запуска — сначала загляните туда."
