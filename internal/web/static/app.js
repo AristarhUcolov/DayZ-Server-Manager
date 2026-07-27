@@ -5471,7 +5471,7 @@ Views.attachments = async (root) => {
         h('td', {}, h('span', { class: 'kind-badge k-' + kind, text: t('attach.kind.' + kind) })),
         num(att.length),
         num(cargo.length),
-        h('td', { class: 'hint attach-sum', text: summary }),
+        h('td', { class: 'attach-sum' }, [h('span', { class: 'attach-sum-in hint', text: summary })]),
         h('td', {}, h('button', { i18n: 'action.edit', onclick: () => openAttachEditor(st, false) })),
       ]));
     }
