@@ -139,12 +139,15 @@ func (p *GearPreset) Save(path string) error {
 // something that visibly works rather than a naked spawn.
 func StarterGearPreset() *GearPreset {
 	one := 1.0
-	hMin, hMax := 0.45, 0.7
+	// Pristine, not worn. healthMin/healthMax are HEALTH fractions (1.0 =
+	// pristine, 0.0 = ruined), so the old 0.45–0.7 default spawned players in
+	// worn/damaged clothes.
+	pristine := 1.0
 	noQuick := -1
 	item := func(cls string) GearItem {
 		return GearItem{
 			ItemType: cls, SpawnWeight: 1, QuickBarSlot: &noQuick,
-			Attributes: &GearAttributes{HealthMin: &hMin, HealthMax: &hMax},
+			Attributes: &GearAttributes{HealthMin: &pristine, HealthMax: &pristine},
 		}
 	}
 	return &GearPreset{
@@ -159,7 +162,10 @@ func StarterGearPreset() *GearPreset {
 		DiscreteUnsortedItemSets: []GearItem{
 			{
 				Name: "Starter", SpawnWeight: 1,
-				Attributes:          &GearAttributes{QuantityMin: &one, QuantityMax: &one},
+				Attributes: &GearAttributes{
+					HealthMin: &pristine, HealthMax: &pristine,
+					QuantityMin: &one, QuantityMax: &one,
+				},
 				SimpleChildrenTypes: []string{"Rag", "Apple"},
 			},
 		},

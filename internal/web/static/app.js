@@ -3353,6 +3353,54 @@ Views.loadout = async (root) => {
   const SLOTS = ['Head', 'Eyewear', 'Mask', 'Headgear', 'Body', 'Vest', 'Back',
     'Hands', 'Gloves', 'Legs', 'Feet', 'Armband'];
 
+  // Named condition ranges. healthMin/healthMax are health fractions
+  // (1.0 = pristine, 0.0 = ruined); these mirror the ranges the DayZ modding
+  // wiki documents. Anything not matching a named range shows as "custom".
+  const CONDITION = [
+    { id: 'pristine', min: 1.0,  max: 1.0 },
+    { id: 'worn',     min: 0.7,  max: 0.9 },
+    { id: 'damaged',  min: 0.45, max: 0.65 },
+    { id: 'badly',    min: 0.1,  max: 0.25 },
+  ];
+  const near = (a, b) => Math.abs((a ?? -1) - b) < 0.001;
+  function matchCondition(attr) {
+    if (!attr || attr.healthMin == null) return 'pristine'; // absent = treat as new
+    for (const c of CONDITION) if (near(attr.healthMin, c.min) && near(attr.healthMax, c.max)) return c.id;
+    return 'custom';
+  }
+  // Builds a condition picker bound to obj.attributes.health{Min,Max}, leaving
+  // any quantity fields on the same attributes object untouched.
+  function conditionControl(obj) {
+    const attrs = () => (obj.attributes || (obj.attributes = {}));
+    const sel = h('select', { class: 'loadout-cond-sel' },
+      [...CONDITION.map(c => c.id), 'custom'].map(id => h('option', { value: id, i18n: 'loadout.cond.' + id })));
+    const minIn = h('input', { type: 'number', min: '0', max: '1', step: '0.05', class: 'attach-num loadout-cond-num' });
+    const maxIn = h('input', { type: 'number', min: '0', max: '1', step: '0.05', class: 'attach-num loadout-cond-num' });
+    const custom = h('span', { class: 'loadout-cond-custom' }, [minIn, h('span', { text: '–' }), maxIn]);
+
+    const cur = matchCondition(obj.attributes);
+    sel.value = cur;
+    minIn.value = String(obj.attributes && obj.attributes.healthMin != null ? obj.attributes.healthMin : 1);
+    maxIn.value = String(obj.attributes && obj.attributes.healthMax != null ? obj.attributes.healthMax : 1);
+    custom.style.display = cur === 'custom' ? '' : 'none';
+
+    sel.onchange = () => {
+      if (sel.value === 'custom') {
+        custom.style.display = '';
+        attrs().healthMin = parseFloat(minIn.value) || 0;
+        attrs().healthMax = parseFloat(maxIn.value) || 0;
+      } else {
+        custom.style.display = 'none';
+        const c = CONDITION.find(x => x.id === sel.value);
+        attrs().healthMin = c.min; attrs().healthMax = c.max;
+        minIn.value = String(c.min); maxIn.value = String(c.max);
+      }
+    };
+    const onNum = () => { attrs().healthMin = parseFloat(minIn.value) || 0; attrs().healthMax = parseFloat(maxIn.value) || 0; };
+    minIn.oninput = onNum; maxIn.oninput = onNum;
+    return h('span', { class: 'loadout-cond' }, [sel, custom]);
+  }
+
   async function openLoadout(file) {
     let preset;
     if (file) {
@@ -3385,7 +3433,8 @@ Views.loadout = async (root) => {
         itemsHost.append(h('div', { class: 'loadout-item attach-cols' }, [
           h('span', { i18n: 'loadout.item.class' }),
           h('span', {}, [h('span', { i18n: 'loadout.item.weight' }), help('attach.itemWeight')]),
-          h('span', {}), h('span', {}),
+          h('span', {}, [h('span', { i18n: 'loadout.condition' }), help('loadout.condition')]),
+          h('span', {}),
         ]));
         items.forEach((it, ii) => {
           const nameIn = h('input', { type: 'text', value: it.itemType || '', list: 'dz-loadout-classes', placeholder: t('loadout.item.class') });
@@ -3393,7 +3442,7 @@ Views.loadout = async (root) => {
           nameIn.oninput = () => { it.itemType = nameIn.value.trim(); };
           wIn.oninput = () => { it.spawnWeight = parseInt(wIn.value, 10) || 1; };
           itemsHost.append(h('div', { class: 'loadout-item' }, [
-            nameIn, wIn, h('span', {}),
+            nameIn, wIn, conditionControl(it),
             h('button', { class: 'icon-x', text: '×', onclick: () => { items.splice(ii, 1); renderSlots(); } }),
           ]));
         });
@@ -3409,7 +3458,7 @@ Views.loadout = async (root) => {
           h('div', { class: 'attach-body' }, [
             itemsHost,
             h('button', { class: 'attach-add', i18n: 'loadout.item.add',
-              onclick: () => { items.push({ itemType: '', spawnWeight: 1, quickBarSlot: -1 }); renderSlots(); applyI18n(); } }),
+              onclick: () => { items.push({ itemType: '', spawnWeight: 1, quickBarSlot: -1, attributes: { healthMin: 1, healthMax: 1 } }); renderSlots(); applyI18n(); } }),
           ]),
         ]));
       });
@@ -3445,9 +3494,10 @@ Views.loadout = async (root) => {
           ]));
         });
         cargoHost.append(h('div', { class: 'attach-group' }, [
-          h('div', { class: 'attach-head' }, [
+          h('div', { class: 'attach-head loadout-cargo-head' }, [
             h('span', { class: 'attach-head-label', i18n: 'loadout.cargo.set' }),
             h('span', { class: 'grow' }),
+            h('span', { class: 'attach-head-label', i18n: 'loadout.condition' }), conditionControl(set),
             h('span', { class: 'attach-head-label', i18n: 'loadout.item.weight' }), wIn,
             h('button', { class: 'icon-x', text: '×', title: t('loadout.removeSet'),
               onclick: () => { sets.splice(si, 1); renderCargo(); } }),

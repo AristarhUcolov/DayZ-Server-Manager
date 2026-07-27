@@ -271,6 +271,7 @@
     "loadout.weight": "O peso deste preset face aos outros. O DayZ escolhe UM preset por aparecimento, por isso um com peso 3 é três vezes mais provável do que um com peso 1.",
     "loadout.characters": "A que modelos de personagem se aplica este preset (SurvivorM_Mirek, SurvivorF_Eva, …). Vazio = a todos; é escolhido um ao acaso por aparecimento.",
     "loadout.worn": "Itens colocados no corpo, slot a slot. Dentro de um slot o DayZ escolhe UM item por peso, por isso várias variantes dão variedade entre aparecimentos.",
-    "loadout.carried": "Itens soltos colocados diretamente no inventário do novo jogador em vez de um slot de roupa — trapos, comida, uma ferramenta inicial."
+    "loadout.carried": "Itens soltos colocados diretamente no inventário do novo jogador em vez de um slot de roupa — trapos, comida, uma ferramenta inicial.",
+    "loadout.condition": "O estado em que um item aparece. No DayZ 1.0 = impecável e 0.0 = arruinado, por isso mais alto é melhor. «Impecável» mantém o equipamento inicial novo; escolhe «Personalizado» para definir um intervalo de saúde min–max exato, e o item aparece algalgures dentro dele."
   }
 }

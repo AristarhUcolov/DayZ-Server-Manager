@@ -271,6 +271,7 @@
     "loadout.weight": "This preset's weight against the others. DayZ picks ONE preset per spawn, so a preset with weight 3 is three times as likely as one with weight 1.",
     "loadout.characters": "Which survivor models this preset applies to (SurvivorM_Mirek, SurvivorF_Eva, …). Leave empty to apply to all; one is chosen at random per spawn.",
     "loadout.worn": "Items placed onto the body, one body slot at a time. Within a slot DayZ picks ONE item by weight, so listing several variants gives spawn-to-spawn variety.",
-    "loadout.carried": "Loose items dropped straight into the new player's inventory rather than a worn slot — rags, food, a starter tool."
+    "loadout.carried": "Loose items dropped straight into the new player's inventory rather than a worn slot — rags, food, a starter tool.",
+    "loadout.condition": "The condition an item spawns in. In DayZ 1.0 = pristine and 0.0 = ruined, so higher is better. Pristine keeps fresh-spawn gear new; pick Custom to set an exact min–max health range, and the item spawns somewhere in it."
   }
 }

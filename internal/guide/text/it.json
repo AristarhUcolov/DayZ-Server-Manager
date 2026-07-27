@@ -271,6 +271,7 @@
     "loadout.weight": "Il peso di questo preset rispetto agli altri. DayZ sceglie UN preset per spawn, quindi uno con peso 3 è tre volte più probabile di uno con peso 1.",
     "loadout.characters": "A quali modelli di personaggio si applica il preset (SurvivorM_Mirek, SurvivorF_Eva, …). Vuoto = a tutti; se ne sceglie uno a caso per spawn.",
     "loadout.worn": "Oggetti messi sul corpo, uno slot alla volta. In uno slot DayZ sceglie UN oggetto in base al peso, quindi più varianti danno varietà tra uno spawn e l'altro.",
-    "loadout.carried": "Oggetti sciolti messi direttamente nell'inventario del nuovo giocatore invece che in uno slot di abbigliamento — stracci, cibo, un attrezzo iniziale."
+    "loadout.carried": "Oggetti sciolti messi direttamente nell'inventario del nuovo giocatore invece che in uno slot di abbigliamento — stracci, cibo, un attrezzo iniziale.",
+    "loadout.condition": "La condizione in cui un oggetto compare. In DayZ 1.0 = perfetto e 0.0 = distrutto, quindi più alto è meglio. «Perfetto» mantiene nuovo l'equipaggiamento iniziale; scegli «Personalizzato» per impostare un intervallo di salute min–max preciso, e l'oggetto compare al suo interno."
   }
 }

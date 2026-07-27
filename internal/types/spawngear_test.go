@@ -38,6 +38,15 @@ func TestStarterGearPresetIsValid(t *testing.T) {
 	if bodyItems == 0 {
 		t.Error("Body slot is empty")
 	}
+	// Fresh spawns must be PRISTINE, not worn: healthMin/healthMax are health
+	// fractions where 1.0 = pristine. The first default shipped 0.45-0.7.
+	for _, sl := range back.AttachmentSlotItemSets {
+		for _, it := range sl.DiscreteItemSets {
+			if it.Attributes == nil || it.Attributes.HealthMin == nil || *it.Attributes.HealthMin < 0.99 {
+				t.Errorf("%s spawns worn (healthMin=%v), want pristine 1.0", it.ItemType, it.Attributes)
+			}
+		}
+	}
 	// Round-trip must be byte-stable (no drift on a no-op edit).
 	raw1, _ := os.ReadFile(path)
 	if err := back.Save(path); err != nil {

@@ -271,6 +271,7 @@
     "loadout.weight": "Das Gewicht dieses Presets gegenüber den anderen. DayZ wählt EIN Preset pro Spawn, ein Preset mit Gewicht 3 ist also dreimal so wahrscheinlich wie eines mit Gewicht 1.",
     "loadout.characters": "Für welche Charaktermodelle dieses Preset gilt (SurvivorM_Mirek, SurvivorF_Eva, …). Leer = für alle; pro Spawn wird eines zufällig gewählt.",
     "loadout.worn": "Gegenstände, die an den Körper gelegt werden, Slot für Slot. Innerhalb eines Slots wählt DayZ EINEN Gegenstand nach Gewicht, mehrere Varianten sorgen also für Abwechslung.",
-    "loadout.carried": "Lose Gegenstände, die direkt ins Inventar des neuen Spielers wandern statt in einen Kleidungsslot — Lumpen, Essen, ein Startwerkzeug."
+    "loadout.carried": "Lose Gegenstände, die direkt ins Inventar des neuen Spielers wandern statt in einen Kleidungsslot — Lumpen, Essen, ein Startwerkzeug.",
+    "loadout.condition": "Der Zustand, in dem ein Gegenstand spawnt. In DayZ ist 1.0 = neuwertig und 0.0 = zerstört, höher ist also besser. „Neuwertig“ hält die Startausrüstung neu; mit „Eigen“ legst du einen genauen Gesundheitsbereich min–max fest, und der Gegenstand spawnt irgendwo darin."
   }
 }

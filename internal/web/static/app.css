@@ -1367,12 +1367,18 @@ input.attach-num {
   gap: 8px; align-items: center;
 }
 .loadout-item input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+.loadout-cond { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.loadout-cond-sel { font-size: 12px; padding: 5px 6px; min-width: 92px; }
+.loadout-cond-custom { display: inline-flex; align-items: center; gap: 4px; }
+.loadout-cond-num { width: 52px; }
+.loadout-cargo-head { flex-wrap: wrap; gap: 8px; }
+.loadout-cargo-head .loadout-cond { flex: none; }
 .loadout-cargo-row { display: grid; grid-template-columns: 1fr 30px; gap: 8px; align-items: center; margin-bottom: 4px; }
 .loadout-cargo-row input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
 
 @media (max-width: 620px) {
   .loadout-item { grid-template-columns: 1fr 60px 30px; }
-  .loadout-item > span:nth-child(3) { display: none; }
+  .loadout-item > *:nth-child(3) { display: none; }
 }
 
 /* ============================================================

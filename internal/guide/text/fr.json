@@ -271,6 +271,7 @@
     "loadout.weight": "Le poids de ce preset face aux autres. DayZ choisit UN preset par apparition, donc un preset de poids 3 est trois fois plus probable qu'un de poids 1.",
     "loadout.characters": "À quels modèles de personnage ce preset s'applique (SurvivorM_Mirek, SurvivorF_Eva, …). Vide = à tous ; un est choisi au hasard à chaque apparition.",
     "loadout.worn": "Objets placés sur le corps, emplacement par emplacement. Dans un emplacement, DayZ choisit UN objet selon le poids : plusieurs variantes donnent de la variété.",
-    "loadout.carried": "Objets en vrac déposés directement dans l'inventaire du nouveau joueur plutôt que dans un emplacement de vêtement — chiffons, nourriture, un outil de départ."
+    "loadout.carried": "Objets en vrac déposés directement dans l'inventaire du nouveau joueur plutôt que dans un emplacement de vêtement — chiffons, nourriture, un outil de départ.",
+    "loadout.condition": "L'état dans lequel un objet apparaît. Dans DayZ, 1.0 = impeccable et 0.0 = ruiné, donc plus haut vaut mieux. « Impeccable » garde l'équipement de départ neuf ; choisissez « Personnalisé » pour fixer une plage de santé min–max précise, l'objet apparaît quelque part dedans."
   }
 }

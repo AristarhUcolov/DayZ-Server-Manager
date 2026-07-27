@@ -149,6 +149,9 @@
   живёт в пресетах spawn-gear DayZ, которые менеджер создаёт, регистрирует в
   cfggameplay.json и включает сам. Если миссия раздаёт набор через init.c,
   раздел честно это показывает и предлагает включить систему одной кнопкой.
+  У каждой вещи задаётся состояние — новое, ношеное, повреждённое, сильно
+  повреждённое или свой диапазон; по умолчанию всё новое, чтобы игрок не
+  появлялся в изношенной одежде.
 - **Заражённые — отдельно от оружия.** 162 зомби в cfgspawnabletypes.xml
   больше не засоряют фильтр «Оружие»: у них свой тип, как у одежды и техники.
 - **Инструкция для новичков.** Восемь глав прямо в панели: с чего начать,
@@ -424,7 +427,9 @@ panels.
   NOT Gameplay: the loadout lives in DayZ's spawn-gear presets, which the
   manager creates, registers in cfggameplay.json and switches on for you. If
   the mission still spawns players from init.c, the section says so and offers
-  to enable the system with one button.
+  to enable the system with one button. Each item takes a condition — pristine,
+  worn, damaged, badly damaged or a custom range; everything defaults to
+  pristine so a fresh spawn never arrives in worn-out clothes.
 - **Infected split out from weapons.** The 162 zombies in cfgspawnabletypes.xml
   no longer clutter the Weapons filter — they get their own kind, like clothing
   and vehicles do.
