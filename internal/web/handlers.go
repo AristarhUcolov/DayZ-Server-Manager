@@ -1779,7 +1779,7 @@ func (h *handlers) modsInstallTypes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = util.BackupBeforeWrite(dst)
-	if err := os.WriteFile(dst, data, 0o644); err != nil {
+	if err := writeFileAtomic(dst, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1917,7 +1917,11 @@ func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
 			if err == nil {
 				dstCfg := filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)
 				_ = util.BackupBeforeWrite(dstCfg)
-				_ = os.WriteFile(dstCfg, data, 0o644)
+				// Don't swallow this: a failed server.cfg copy during import used
+				// to look like success, leaving the server on its old config.
+				if err := writeFileAtomic(dstCfg, data); err != nil {
+					h.app.Log.Printf("import: failed to write %s: %v", h.app.Cfg().ServerCfg, err)
+				}
 			}
 		}
 	}
@@ -2017,7 +2021,7 @@ func (h *handlers) backupsRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = util.BackupBeforeWrite(full)
-	if err := os.WriteFile(full, data, 0o644); err != nil {
+	if err := writeFileAtomic(full, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2231,6 +2235,21 @@ func (h *handlers) acquireWrite(w http.ResponseWriter) (func(), bool) {
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// writeFileAtomic writes data via a temp file + rename, so a crash or a full
+// disk mid-write can never leave a half-written config that DayZ then refuses
+// to load. Callers BackupBeforeWrite separately when they want an undo point.
+func writeFileAtomic(path string, data []byte) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func sizeOrZero(info os.FileInfo) int64 {

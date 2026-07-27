@@ -452,7 +452,7 @@ var es = Bundle{
 	"validator.title":            "Validador",
 	"validator.none":             "No se encontraron problemas.",
 	"validator.fix":              "Corrección automática",
-	"validator.fix.hint":         "La corrección automática añade a la lista blanca cada usage/value/tag/category desconocido referenciado por tus types en cfglimitsdefinition.xml (se conserva un .bak) — la solución para el botín de mods que DayZ descarta en silencio. Requiere el servidor detenido.",
+	"validator.fix.hint":         "La auto-corrección solo añade: incluye usage/value/tag/category desconocidos de tus types en cfglimitsdefinition.xml Y registra los archivos moded_types que falten en cfgeconomycore.xml, las dos causas de que el botín modeado desaparezca en silencio. Se guarda un .bak por archivo. Requiere el servidor detenido.",
 	"validator.fix.none":         "Nada que corregir automáticamente.",
 	"validator.fix.done":         "{n} elemento(s) corregido(s). Revalidando…",
 	"validator.severity.error":   "Error",

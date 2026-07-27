@@ -2421,11 +2421,28 @@ async function openModTypesDialog(mod, files) {
 
 Views.validator = async (root) => {
   const listEl = h('div');
+  const cls = (sev) => sev === 'error' ? 'err' : (sev === 'warning' ? 'warn' : 'mute');
   const run = async () => {
     listEl.innerHTML = '';
     try {
       const d = await api.get('/api/validate');
-      if (!d.count) { listEl.append(h('p', { i18n: 'validator.none' })); return; }
+      const issues = (d.issues || []).slice();
+      if (!issues.length) {
+        listEl.append(h('p', { class: 'validator-ok', i18n: 'validator.none' }));
+        return;
+      }
+      // Most severe first, so the errors that actually break the mission are at
+      // the top instead of buried in check order.
+      const rank = { error: 0, warning: 1, info: 2 };
+      issues.sort((a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3));
+      const nErr = issues.filter(i => i.severity === 'error').length;
+      const nWarn = issues.filter(i => i.severity === 'warning').length;
+      const nInfo = issues.length - nErr - nWarn;
+      listEl.append(h('div', { class: 'validator-summary' }, [
+        nErr ? h('span', { class: 'badge err', text: nErr + ' ' + (t('validator.severity.error') || 'error') }) : null,
+        nWarn ? h('span', { class: 'badge warn', text: nWarn + ' ' + (t('validator.severity.warning') || 'warning') }) : null,
+        nInfo ? h('span', { class: 'badge mute', text: nInfo + ' ' + (t('validator.severity.info') || 'info') }) : null,
+      ]));
       const tbl = h('table');
       tbl.append(h('thead', {}, h('tr', {}, [
         h('th', { i18n: 'col.severity' }),
@@ -2434,17 +2451,17 @@ Views.validator = async (root) => {
         h('th', { i18n: 'col.message' }),
       ])));
       const tb = h('tbody');
-      for (const i of d.issues) {
-        const cls = i.severity === 'error' ? 'err' : (i.severity === 'warning' ? 'warn' : 'mute');
+      for (const i of issues) {
         tb.append(h('tr', {}, [
-          h('td', {}, h('span', { class: `badge ${cls}`, text: t('validator.severity.' + i.severity) || i.severity })),
-          h('td', { text: i.file }),
-          h('td', { text: i.line || '' }),
+          h('td', {}, h('span', { class: `badge ${cls(i.severity)}`, text: t('validator.severity.' + i.severity) || i.severity })),
+          // Show just the filename; the full path is a mouth-full and repeats.
+          h('td', {}, h('span', { class: 'mono', text: (i.file || '').split(/[\\/]/).pop(), title: i.file })),
+          h('td', { class: 'num', text: i.line || '' }),
           h('td', { text: i.message }),
         ]));
       }
       tbl.append(tb);
-      listEl.append(tbl);
+      listEl.append(h('div', { class: 'table-scroll' }, tbl));
     } catch (e) { handleErr(e); }
   };
   const autofix = async (e) => {

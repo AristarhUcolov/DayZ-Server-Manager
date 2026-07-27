@@ -452,7 +452,7 @@ var pt = Bundle{
 	"validator.title":            "Validador",
 	"validator.none":             "Nenhum problema encontrado.",
 	"validator.fix":              "Correção automática",
-	"validator.fix.hint":         "A correção automática adiciona à lista branca cada usage/value/tag/category desconhecido referenciado pelos seus types em cfglimitsdefinition.xml (um .bak é mantido) — a solução para o loot modado que o DayZ descarta silenciosamente. Requer o servidor parado.",
+	"validator.fix.hint":         "A corre-ção automática apenas adiciona: inclui usage/value/tag/category desconhecidos dos seus types em cfglimitsdefinition.xml E registra os arquivos moded_types ausentes em cfgeconomycore.xml — as duas causas de o loot modado sumir em silêncio. Um .bak é mantido por arquivo. Requer o servidor parado.",
 	"validator.fix.none":         "Nada a corrigir automaticamente.",
 	"validator.fix.done":         "{n} item(ns) corrigido(s). Revalidando…",
 	"validator.severity.error":   "Erro",

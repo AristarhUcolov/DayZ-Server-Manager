@@ -452,7 +452,7 @@ var de = Bundle{
 	"validator.title":            "Validator",
 	"validator.none":             "Keine Probleme gefunden.",
 	"validator.fix":              "Auto-Korrektur",
-	"validator.fix.hint":         "Die Auto-Korrektur setzt jede unbekannte usage/value/tag/category, die von deinen Types referenziert wird, in cfglimitsdefinition.xml auf die Whitelist (ein .bak wird aufbewahrt) — die Lösung für gemoddeten Loot, den DayZ still verwirft. Erfordert einen gestoppten Server.",
+	"validator.fix.hint":         "Auto-Korrektur fügt nur hinzu: sie trägt unbekannte usage/value/tag/category aus deinen types in cfglimitsdefinition.xml ein UND registriert moded_types-Dateien, die in cfgeconomycore.xml fehlen — die zwei Gründe, warum modded Loot still verschwindet. Pro Datei wird ein .bak angelegt. Server muss gestoppt sein.",
 	"validator.fix.none":         "Nichts automatisch zu korrigieren.",
 	"validator.fix.done":         "{n} Element(e) korrigiert. Erneute Prüfung…",
 	"validator.severity.error":   "Fehler",

@@ -82,6 +82,59 @@ func TestWhitelistLimitsInsertsAndStaysValid(t *testing.T) {
 	}
 }
 
+// AutoFix must register a moded_types file that is present on disk but missing
+// from cfgeconomycore.xml — the #1 "my custom loot doesn't spawn" cause — while
+// leaving the already-registered one alone. This runs even when there is no
+// cfglimitsdefinition.xml (the two fixes are independent).
+func TestAutoFixRegistersUnregisteredModedFile(t *testing.T) {
+	dir := t.TempDir()
+	mission := "dayzOffline.test"
+	missionDir := filepath.Join(dir, "mpmissions", mission)
+	moded := filepath.Join(missionDir, "moded_types")
+	if err := os.MkdirAll(moded, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	eco := filepath.Join(missionDir, "cfgeconomycore.xml")
+	os.WriteFile(eco, []byte(`<?xml version="1.0" encoding="UTF-8"?>
+<economycore>
+    <ce folder="moded_types">
+        <file name="registered.xml" type="types" />
+    </ce>
+</economycore>
+`), 0o644)
+	typesXML := `<?xml version="1.0"?><types><type name="X"><nominal>1</nominal></type></types>`
+	os.WriteFile(filepath.Join(moded, "registered.xml"), []byte(typesXML), 0o644)
+	os.WriteFile(filepath.Join(moded, "custom.xml"), []byte(typesXML), 0o644)
+
+	fixed, err := AutoFix(dir, mission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(fixed, "\n"), "custom.xml") {
+		t.Errorf("custom.xml was not reported as registered: %v", fixed)
+	}
+	reg, err := dztypes.RegisteredInModed(eco)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reg["custom.xml"] {
+		t.Error("custom.xml is still not registered in cfgeconomycore.xml")
+	}
+	if !reg["registered.xml"] {
+		t.Error("the already-registered file was lost")
+	}
+	// A second run is a no-op: nothing left to register.
+	again, err := AutoFix(dir, mission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range again {
+		if strings.Contains(s, "cfgeconomycore") {
+			t.Errorf("second AutoFix re-registered something: %q", s)
+		}
+	}
+}
+
 // The shape BI actually ships: <user> nested inside <usageflags>/<valueflags>.
 // The old parser looked for <user> at the root and silently merged nothing, so
 // every types entry using a group name was about to be reported as unknown.

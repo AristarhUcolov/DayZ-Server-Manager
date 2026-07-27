@@ -452,7 +452,7 @@ var zh = Bundle{
 	"validator.title":            "校验器",
 	"validator.none":             "未发现问题。",
 	"validator.fix":              "自动修复",
-	"validator.fix.hint":         "自动修复会将你的 types 引用的每个未知 usage/value/tag/category 加入 cfglimitsdefinition.xml 的白名单（会保留一个 .bak）— 这是修复 DayZ 会静默丢弃的模组战利品的方法。需要服务器已停止。",
+	"validator.fix.hint":         "自动修复仅做添加：将 types 中未知的 usage/value/tag/category 写入 cfglimitsdefinition.xml，并注册 cfgeconomycore.xml 中缺失的 moded_types 文件——这是模组战利品静默消失的两个原因。每个文件保留 .bak。需要服务器处于停止状态。",
 	"validator.fix.none":         "没有可自动修复的内容。",
 	"validator.fix.done":         "已修复 {n} 项。正在重新校验…",
 	"validator.severity.error":   "错误",

@@ -529,6 +529,13 @@ main {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
 }
 .card > p:first-of-type.hint { margin-top: -4px; margin-bottom: 14px; }
+/* …but when that first hint actually follows the button row (e.g. the Validator's
+   auto-fix note), the negative pull-up crammed it against the buttons. Give it
+   real breathing room instead. */
+.card > .actions + p.hint { margin-top: 12px; margin-bottom: 0; }
+/* Validator result summary — severity counts above the issue table. */
+.validator-summary { display: flex; gap: 8px; margin: 14px 0 10px; flex-wrap: wrap; }
+.validator-ok { color: var(--ok, #22c55e); font-weight: 600; margin-top: 14px; }
 /* Secondary "well" tier — flat inset card for nested/secondary content. */
 .card.flat { background: var(--surface-2); box-shadow: none; }
 

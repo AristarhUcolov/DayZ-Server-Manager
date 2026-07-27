@@ -452,7 +452,7 @@ var ko = Bundle{
 	"validator.title":            "검사기",
 	"validator.none":             "문제가 발견되지 않았습니다.",
 	"validator.fix":              "자동 수정",
-	"validator.fix.hint":         "자동 수정은 당신의 types가 참조하는 알 수 없는 usage/value/tag/category를 모두 cfglimitsdefinition.xml의 화이트리스트에 추가합니다(.bak가 보관됨) — DayZ가 조용히 버리는 모드 전리품을 고치는 방법입니다. 서버가 중지되어 있어야 합니다.",
+	"validator.fix.hint":         "자동 수정은 추가만 합니다: types의 알 수 없는 usage/value/tag/category를 cfglimitsdefinition.xml에 등록하고 cfgeconomycore.xml에 없는 moded_types 파일을 등록합니다 — 모드 전리품이 조용히 사라지는 두 가지 원인입니다. 파일마다 .bak을 보관합니다. 서버를 중지해야 합니다.",
 	"validator.fix.none":         "자동으로 수정할 항목이 없습니다.",
 	"validator.fix.done":         "{n}개 항목을 수정했습니다. 다시 검사 중…",
 	"validator.severity.error":   "오류",

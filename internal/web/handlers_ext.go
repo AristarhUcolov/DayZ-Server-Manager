@@ -237,7 +237,7 @@ func (h *handlers) battleyeBans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = util.BackupBeforeWrite(path)
-	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+	if err := writeFileAtomic(path, []byte(b.String())); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

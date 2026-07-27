@@ -350,85 +350,119 @@ func mergeUserLimits(l *limits, userPath string) {
 }
 
 // AutoFix applies the safe, reversible validator fixes and returns a
-// human-readable list of what it did. Currently: whitelist every unknown
-// usage/value/tag/category referenced by types into cfglimitsdefinition.xml
-// (the canonical way to stop DayZ silently dropping modded loot). A .bak is
-// written before the file is touched. Server must be stopped (caller enforces).
+// human-readable list of what it did. Both fixes are purely additive — they
+// never change existing values, only register things DayZ is silently ignoring:
+//
+//  1. Whitelist every unknown usage/value/tag/category referenced by types into
+//     cfglimitsdefinition.xml (the canonical way to stop DayZ dropping modded
+//     loot).
+//  2. Register any moded_types/*.xml file that is missing from cfgeconomycore.xml
+//     — the single most common cause of "my custom loot does not spawn".
+//
+// A .bak is written before each file is touched. Server must be stopped (caller
+// enforces). A read failure on one file never blocks the other fix.
 func AutoFix(serverDir, missionTemplate string) ([]string, error) {
 	if missionTemplate == "" {
 		return nil, errors.New("no mission configured")
 	}
 	missionDir := dztypes.MissionDir(serverDir, missionTemplate)
-	limitsPath := filepath.Join(missionDir, "cfglimitsdefinition.xml")
-	limits, err := loadLimits(limitsPath)
-	if err != nil || !limits.loaded {
-		return nil, fmt.Errorf("cannot read cfglimitsdefinition.xml: %w", err)
-	}
-	mergeUserLimits(limits, filepath.Join(missionDir, "cfglimitsdefinitionuser.xml"))
-
-	// Collect unknown names per kind (preserve original casing for writing).
-	miss := map[string]map[string]string{ // kind -> lower -> original
-		"category": {}, "usage": {}, "value": {}, "tag": {},
-	}
-	consider := func(set map[string]bool, kind, name string) {
-		if name == "" {
-			return
-		}
-		if !set[strings.ToLower(name)] {
-			miss[kind][strings.ToLower(name)] = name
-		}
-	}
-	scan := func(doc *dztypes.TypesDoc) {
-		for i := range doc.Types {
-			t := &doc.Types[i]
-			if t.Category != nil {
-				consider(limits.categories, "category", t.Category.Name)
-			}
-			for _, r := range t.Usages {
-				consider(limits.usages, "usage", r.Name)
-			}
-			for _, r := range t.Values {
-				consider(limits.values, "value", r.Name)
-			}
-			for _, r := range t.Tags {
-				consider(limits.tags, "tag", r.Name)
-			}
-		}
-	}
-	if doc, err := dztypes.Load(filepath.Join(missionDir, "db", "types.xml")); err == nil {
-		scan(doc)
-	}
 	moded := dztypes.ModedDir(serverDir, missionTemplate)
-	if entries, err := os.ReadDir(moded); err == nil {
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".xml") {
-				continue
+	var out []string
+
+	// ---- 1. whitelist unknown category/usage/value/tag ----
+	limitsPath := filepath.Join(missionDir, "cfglimitsdefinition.xml")
+	limits, limitsErr := loadLimits(limitsPath)
+	if limitsErr == nil && limits.loaded {
+		mergeUserLimits(limits, filepath.Join(missionDir, "cfglimitsdefinitionuser.xml"))
+		miss := map[string]map[string]string{ // kind -> lower -> original
+			"category": {}, "usage": {}, "value": {}, "tag": {},
+		}
+		consider := func(set map[string]bool, kind, name string) {
+			if name != "" && !set[strings.ToLower(name)] {
+				miss[kind][strings.ToLower(name)] = name
 			}
-			if doc, err := dztypes.Load(filepath.Join(moded, e.Name())); err == nil {
-				scan(doc)
+		}
+		scan := func(doc *dztypes.TypesDoc) {
+			for i := range doc.Types {
+				t := &doc.Types[i]
+				if t.Category != nil {
+					consider(limits.categories, "category", t.Category.Name)
+				}
+				for _, r := range t.Usages {
+					consider(limits.usages, "usage", r.Name)
+				}
+				for _, r := range t.Values {
+					consider(limits.values, "value", r.Name)
+				}
+				for _, r := range t.Tags {
+					consider(limits.tags, "tag", r.Name)
+				}
+			}
+		}
+		if doc, err := dztypes.Load(filepath.Join(missionDir, "db", "types.xml")); err == nil {
+			scan(doc)
+		}
+		if entries, err := os.ReadDir(moded); err == nil {
+			for _, e := range entries {
+				if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".xml") {
+					continue
+				}
+				if doc, err := dztypes.Load(filepath.Join(moded, e.Name())); err == nil {
+					scan(doc)
+				}
+			}
+		}
+		total := 0
+		for _, m := range miss {
+			total += len(m)
+		}
+		if total > 0 {
+			written, err := whitelistLimits(limitsPath, miss)
+			if err != nil {
+				return nil, err
+			}
+			for _, kind := range []string{"category", "usage", "value", "tag"} {
+				for _, name := range written[kind] {
+					out = append(out, fmt.Sprintf("added %s %q to cfglimitsdefinition.xml", kind, name))
+				}
 			}
 		}
 	}
 
-	total := 0
-	for _, m := range miss {
-		total += len(m)
-	}
-	if total == 0 {
-		return nil, nil
-	}
-	written, err := whitelistLimits(limitsPath, miss)
-	if err != nil {
-		return nil, err
-	}
-	// Report the names that were really inserted. Reporting `miss` meant a
-	// section we failed to find was still announced as fixed.
-	var out []string
-	for _, kind := range []string{"category", "usage", "value", "tag"} {
-		for _, name := range written[kind] {
-			out = append(out, fmt.Sprintf("added %s %q to cfglimitsdefinition.xml", kind, name))
+	// ---- 2. register unregistered moded_types files ----
+	eco := filepath.Join(missionDir, "cfgeconomycore.xml")
+	// Only touch cfgeconomycore.xml when a moded_types block already exists (the
+	// same guard the validator uses): if the admin registers custom loot some
+	// other way, adding a block would be presumptuous.
+	if registered, err := dztypes.RegisteredInModed(eco); err == nil && len(registered) > 0 {
+		if entries, err := os.ReadDir(moded); err == nil {
+			backedUp := false
+			for _, e := range entries {
+				if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".xml") {
+					continue
+				}
+				if registered[strings.ToLower(e.Name())] {
+					continue
+				}
+				// Only register files that really parse as types files — never
+				// pull an unrelated stray XML into the central economy.
+				if _, err := dztypes.Load(filepath.Join(moded, e.Name())); err != nil {
+					continue
+				}
+				if !backedUp {
+					if err := util.BackupBeforeWrite(eco); err != nil {
+						return nil, err
+					}
+					backedUp = true
+				}
+				if err := dztypes.RegisterModedFile(eco, e.Name(), "types"); err != nil {
+					return nil, fmt.Errorf("register %s: %w", e.Name(), err)
+				}
+				out = append(out, fmt.Sprintf("registered %s in cfgeconomycore.xml", e.Name()))
+			}
 		}
 	}
+
 	return out, nil
 }
 

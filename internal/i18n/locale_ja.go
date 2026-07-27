@@ -452,7 +452,7 @@ var ja = Bundle{
 	"validator.title":            "バリデーター",
 	"validator.none":             "問題は見つかりませんでした。",
 	"validator.fix":              "自動修正",
-	"validator.fix.hint":         "自動修正は、あなたの types が参照する未知の usage/value/tag/category をすべて cfglimitsdefinition.xml のホワイトリストに追加します（.bak が保持されます）— DayZ が黙って破棄する Mod ルートを直す方法です。サーバーの停止が必要です。",
+	"validator.fix.hint":         "自動修正は追加のみ：types の未知の usage/value/tag/category を cfglimitsdefinition.xml に登録し、cfgeconomycore.xml にない moded_types ファイルを登録します—MODルートが黙って消える二つの原因です。ファイルごとに .bak を保存。サーバー停止が必要。",
 	"validator.fix.none":         "自動修正する項目はありません。",
 	"validator.fix.done":         "{n} 件を修正しました。再検証中…",
 	"validator.severity.error":   "エラー",
