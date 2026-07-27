@@ -3526,6 +3526,75 @@ Views.loadout = async (root) => {
     const charInp = h('input', { type: 'text', value: (preset.characterTypes || []).join(', '),
       placeholder: 'SurvivorM_Mirek, SurvivorF_Eva' });
 
+    // Test roll — simulate one fresh spawn from the current (unsaved) preset, so
+    // an admin sees a concrete outcome: which items win the weighted pick and at
+    // what condition. Pure client-side; mirrors DayZ's weighted choice + a random
+    // health draw inside each item's healthMin..healthMax range.
+    const rollHost = h('div', { class: 'loadout-roll', style: { display: 'none' } });
+    function pickWeighted(arr) {
+      const items = (arr || []).filter(x => (x.itemType || '').trim());
+      if (!items.length) return null;
+      const total = items.reduce((s, x) => s + Math.max(1, x.spawnWeight || 1), 0);
+      let r = Math.random() * total;
+      for (const it of items) { r -= Math.max(1, it.spawnWeight || 1); if (r <= 0) return it; }
+      return items[items.length - 1];
+    }
+    function healthLabel(v) {
+      // DayZ item health states, as fractions of max health.
+      if (v > 0.9) return t('loadout.cond.pristine');
+      if (v > 0.7) return t('loadout.cond.worn');
+      if (v > 0.5) return t('loadout.cond.damaged');
+      if (v > 0.3) return t('loadout.cond.badly');
+      return t('loadout.cond.ruined');
+    }
+    function rollCondition(attrs) {
+      const min = attrs && attrs.healthMin != null ? attrs.healthMin : 1;
+      const max = attrs && attrs.healthMax != null ? attrs.healthMax : 1;
+      const v = min + Math.random() * (Math.max(min, max) - min);
+      return healthLabel(v) + ' · ' + Math.round(v * 100) + '%';
+    }
+    function rollLine(labelKey, body) {
+      return h('div', { class: 'loadout-roll-line' }, [
+        h('span', { class: 'loadout-roll-k', i18n: labelKey }), body,
+      ]);
+    }
+    function doRoll() {
+      rollHost.style.display = '';
+      rollHost.innerHTML = '';
+      const chars = charInp.value.split(',').map(x => x.trim()).filter(Boolean);
+      const who = chars.length ? chars[Math.floor(Math.random() * chars.length)] : t('loadout.roll.anyChar');
+      rollHost.append(rollLine('loadout.roll.character', h('span', { text: who })));
+
+      const worn = [];
+      preset.attachmentSlotItemSets.forEach(slot => {
+        const pick = pickWeighted(slot.discreteItemSets);
+        if (!pick) return;
+        worn.push(h('div', { class: 'loadout-roll-item' }, [
+          h('span', { class: 'loadout-roll-slot', text: (slot.slotName || '?') + ':' }),
+          h('span', { class: 'grow', text: pick.itemType }),
+          h('span', { class: 'loadout-roll-cond', text: rollCondition(pick.attributes) }),
+        ]));
+      });
+      rollHost.append(rollLine('loadout.roll.wearing',
+        worn.length ? h('div', { class: 'loadout-roll-list' }, worn) : h('span', { class: 'hint', i18n: 'loadout.roll.empty' })));
+
+      const carry = [];
+      preset.discreteUnsortedItemSets.forEach(set => {
+        const kids = (set.simpleChildrenTypes || []).map(x => (x || '').trim()).filter(Boolean);
+        if (!kids.length) return;
+        const cond = rollCondition(set.attributes);
+        kids.forEach(k => carry.push(h('div', { class: 'loadout-roll-item' }, [
+          h('span', { class: 'grow', text: k }),
+          h('span', { class: 'loadout-roll-cond', text: cond }),
+        ])));
+      });
+      rollHost.append(rollLine('loadout.roll.carrying',
+        carry.length ? h('div', { class: 'loadout-roll-list' }, carry) : h('span', { class: 'hint', i18n: 'loadout.roll.empty' })));
+
+      rollHost.append(h('button', { class: 'attach-add', i18n: 'loadout.roll.again', onclick: doRoll }));
+      applyI18n();
+    }
+
     async function doSave() {
       preset.name = nameInp.value.trim();
       preset.spawnWeight = parseInt(weightInp.value, 10) || 1;
@@ -3561,6 +3630,11 @@ Views.loadout = async (root) => {
         cargoHost,
         h('button', { class: 'attach-add', i18n: 'loadout.addSet',
           onclick: () => { preset.discreteUnsortedItemSets.push({ name: 'Cargo', spawnWeight: 1, simpleChildrenTypes: [], attributes: { healthMin: 1, healthMax: 1 } }); renderCargo(); applyI18n(); } }),
+      ]),
+
+      h('div', { class: 'attach-section' }, [
+        h('button', { class: 'secondary', i18n: 'loadout.testRoll', onclick: doRoll }),
+        rollHost,
       ]),
 
       h('div', { class: 'actions' }, [
@@ -5049,6 +5123,127 @@ Views.gameplay = async (root) => {
     rawHost,
     h('p', { class: 'hint', i18n: 'gameplay.enabledNote' }),
   );
+};
+
+// --------------------------------------------------------------- history
+//
+// Every config snapshot the manager has taken (it keeps a `.bak.<ts>` next to
+// each file it overwrites), grouped by file, newest first — so "what changed
+// and roll it back" lives in one place instead of only inside the Files editor.
+// Diff and restore reuse the same endpoints the per-file backup list uses.
+
+Views.history = async (root) => {
+  root.append(pageHeader('nav.history', 'history.subtitle'));
+  if (State.serverStatus.running) root.append(runningBanner());
+  let d;
+  try { d = await api.get('/api/backups/all'); }
+  catch (e) { handleErr(e); return; }
+  const files = d.files || [];
+  if (!files.length) {
+    root.append(h('div', { class: 'card' }, [h('p', { class: 'hint', i18n: 'history.empty' })]));
+    return;
+  }
+
+  const host = h('div');
+  function render() {
+    host.innerHTML = '';
+    files.forEach(f => {
+      const rows = h('div', { class: 'hist-versions' });
+      f.versions.forEach(v => {
+        rows.append(h('div', { class: 'hist-row' }, [
+          h('span', { class: 'hist-when', text: new Date(v.time * 1000).toLocaleString() }),
+          h('small', { class: 'hint hist-size', text: bytes(v.size) }),
+          h('span', { class: 'grow' }),
+          h('button', { class: 'secondary', i18n: 'backup.diff', onclick: () => openBackupDiff(f.path, v.name) }),
+          h('button', { i18n: 'backup.restore', onclick: async () => {
+            const ok = await confirmModal(t('history.restoreConfirm').replace('{file}', f.path),
+              { title: t('backup.restore'), danger: true, okText: t('backup.restore') });
+            if (!ok) return;
+            try {
+              await api.post('/api/backups/restore', { path: f.path, backup: v.name });
+              toast(t('backup.restored'), 'ok');
+              await navigate('history');
+            } catch (err) { handleErr(err); }
+          }}),
+        ]));
+      });
+      host.append(h('div', { class: 'card hist-file' }, [
+        h('div', { class: 'hist-head' }, [
+          h('code', { class: 'hist-path', text: f.path }),
+          f.exists ? null : h('span', { class: 'pill pill-warn', i18n: 'history.deleted' }),
+          h('span', { class: 'grow' }),
+          h('small', { class: 'hint', text: String(f.versions.length) }),
+        ]),
+        rows,
+      ]));
+    });
+    applyI18n();
+  }
+  render();
+  root.append(host);
+};
+
+// --------------------------------------------------------------- server health
+//
+// One page that answers "is anything wrong?" — server up / crash-loop, disk
+// room, config validity, and start-readiness — each a coloured tile linking to
+// the page that fixes it. Detailed start-failure findings reuse the same
+// diagnosis card the dashboard shows when the server is down.
+
+Views.health = async (root) => {
+  root.append(pageHeader('nav.health', 'health.subtitle'));
+  // /api/health runs the full config validator, which can take a second on a
+  // big mission — show a placeholder so the page isn't blank meanwhile.
+  const loading = h('div', { class: 'card' }, [h('p', { class: 'hint', i18n: 'health.checking' })]);
+  root.append(loading);
+  applyI18n();
+  let d;
+  try { d = await api.get('/api/health'); }
+  catch (e) { loading.remove(); handleErr(e); return; }
+  loading.remove();
+
+  const tiles = h('div', { class: 'health-tiles' });
+  const tile = (level, titleKey, detail, route) => {
+    const el = h('div', { class: 'health-tile ' + level + (route ? ' clickable' : '') }, [
+      h('div', { class: 'health-dot' }),
+      h('div', { class: 'health-tile-body' }, [
+        h('div', { class: 'health-tile-t', i18n: titleKey }),
+        h('div', { class: 'health-tile-d', text: detail }),
+      ]),
+    ]);
+    if (route) el.onclick = () => { location.hash = '#' + route; };
+    tiles.append(el);
+  };
+
+  const s = d.server || {};
+  if (s.running) tile('ok', 'health.server', t('health.server.up').replace('{up}', s.uptime || ''), 'dashboard');
+  else if (s.loopPaused) tile('error', 'health.server', t('health.server.crashloop'), 'dashboard');
+  else tile('idle', 'health.server', t('health.server.stopped'), 'dashboard');
+
+  const free = (d.disk || {}).free || 0;
+  const GB = 1024 * 1024 * 1024;
+  let dl = 'ok';
+  if (free > 0 && free < 2 * GB) dl = 'error';
+  else if (free > 0 && free < 10 * GB) dl = 'warn';
+  tile(free ? dl : 'idle', 'health.disk', t('health.disk.free').replace('{free}', bytes(free)), 'files');
+
+  const v = d.validator || {};
+  if ((v.errors || 0) > 0) tile('error', 'health.config', t('health.config.issues').replace('{e}', v.errors).replace('{w}', v.warnings || 0), 'validator');
+  else if ((v.warnings || 0) > 0) tile('warn', 'health.config', t('health.config.issues').replace('{e}', 0).replace('{w}', v.warnings), 'validator');
+  else tile('ok', 'health.config', t('health.config.ok'), 'validator');
+
+  const st = d.startup || {};
+  if (s.running) tile('ok', 'health.start', t('health.start.running'), null);
+  else if ((st.fatal || 0) > 0) tile('error', 'health.start', t('health.start.issues').replace('{n}', st.fatal), null);
+  else if ((st.warnings || 0) > 0) tile('warn', 'health.start', t('health.start.issues').replace('{n}', st.warnings), null);
+  else tile('ok', 'health.start', t('health.start.ok'), null);
+
+  root.append(h('div', { class: 'card' }, [tiles]));
+  applyI18n();
+
+  // The detailed "why won't it start" card — self-fetching, and it only renders
+  // when the server is down and the log actually shows a cause.
+  await renderDiagnosis(root, false);
 };
 
 // --------------------------------------------------------------- attachments

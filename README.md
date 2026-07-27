@@ -140,6 +140,17 @@
   каждым файлом, который перезаписывает, но восстановление было вслепую.
   Теперь рядом с копией есть «Сравнить»: построчный дифф покажет, что именно
   вернётся. Работает и на `types.xml` в 30 000 строк.
+- **Здоровье сервера.** Отдельная страница, которая одним взглядом отвечает
+  «всё ли в порядке»: работает ли сервер (или встал в краш-цикле), хватает ли
+  места на диске, проходят ли конфиги валидацию и — если сервер не стартует —
+  почему (разбор RPT). Каждая плитка ведёт на страницу, где это чинится.
+- **История конфигов.** Менеджер и раньше бэкапил файл перед каждой записью;
+  теперь все версии всех конфигов видны в одном месте — с датой, сравнением
+  (что вернётся при откате) и восстановлением в один клик.
+- **Предпросмотр набора.** В редакторе стартового набора есть кнопка «Пробный
+  спавн»: прокручивает один спавн по весам и показывает конкретный результат —
+  какой персонаж, что надето и с каким состоянием, что в инвентаре. «Ещё раз»
+  показывает разброс.
 - **Отмена вайпа.** Вайп и раньше *переносил* папки мира в
   `.dayz-manager/wipes/<метка>/`, а не удалял их — именно ради обратимости.
   Теперь их можно вернуть одной кнопкой. Если сервер уже накопил новое
@@ -428,6 +439,17 @@ panels.
   it overwrites, but restoring one was blind. Each backup now has a Compare
   button showing exactly which lines would come back — fast even on a
   30 000-line `types.xml`.
+- **Server health.** A page that answers "is anything wrong?" at a glance: is
+  the server up (or stuck in a crash loop), is there disk room, does the config
+  validate, and — if it won't start — why (the RPT is read for you). Each tile
+  links to the page that fixes it.
+- **Config history.** The manager already backed a file up before every write;
+  now every version of every config is visible in one place, with the date, a
+  diff of what a restore would bring back, and one-click restore.
+- **Loadout test roll.** The fresh-spawn loadout editor has a "Test roll" button
+  that samples one spawn by weight and shows the concrete outcome — which
+  character, what is worn and at what condition, what is carried. "Roll again"
+  shows the spread.
 - **Undo a wipe.** A wipe already *moved* the world folders into
   `.dayz-manager/wipes/<timestamp>/` rather than deleting them, precisely so it
   could be reversed. Now it can be, with one button — and the restore is

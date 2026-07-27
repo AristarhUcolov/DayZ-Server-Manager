@@ -14,9 +14,11 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -25,6 +27,86 @@ import (
 	dztypes "dayzmanager/internal/types"
 	"dayzmanager/internal/util"
 )
+
+// backupStampRe matches the `.bak.YYYYMMDD-HHMMSS` suffix the manager appends
+// to every snapshot, anchored at end so a file merely containing ".bak." is not
+// mistaken for one.
+var backupStampRe = regexp.MustCompile(`\.bak\.(\d{8}-\d{6})$`)
+
+// backupsAll scans the server tree for every `<file>.bak.<ts>` snapshot the
+// manager has taken and groups them by the original file, so the History page
+// can show "what changed and when" across all editors in one place — instead of
+// the admin having to remember which file they edited and open it in Files.
+//
+// Big, irrelevant subtrees (installed mods, DB storage shards, keys) are skipped
+// so the walk stays cheap: snapshots only ever live next to the config files the
+// manager itself rewrites.
+func (h *handlers) backupsAll(w http.ResponseWriter, r *http.Request) {
+	root := h.app.ServerDir
+	type ver struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+		Time int64  `json:"time"`
+	}
+	type group struct {
+		Path     string `json:"path"`     // original file, relative to server dir
+		Exists   bool   `json:"exists"`   // the live file is still present
+		Versions []ver  `json:"versions"` // newest first
+	}
+	groups := map[string]*group{}
+
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // unreadable entry — skip, never abort the whole walk
+		}
+		if d.IsDir() {
+			name := d.Name()
+			// Skip the heavy, snapshot-free subtrees.
+			if p != root && (strings.HasPrefix(name, "@") || strings.HasPrefix(name, "storage_") ||
+				name == "keys" || name == "BattlEyeLogs" || strings.HasPrefix(name, ".")) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		m := backupStampRe.FindStringSubmatchIndex(d.Name())
+		if m == nil {
+			return nil
+		}
+		origBase := d.Name()[:m[0]] // strip ".bak.<ts>"
+		relDir, e := filepath.Rel(root, filepath.Dir(p))
+		if e != nil {
+			return nil
+		}
+		origRel := filepath.ToSlash(filepath.Join(relDir, origBase))
+		g := groups[origRel]
+		if g == nil {
+			_, statErr := os.Stat(filepath.Join(filepath.Dir(p), origBase))
+			g = &group{Path: origRel, Exists: statErr == nil}
+			groups[origRel] = g
+		}
+		info, _ := d.Info()
+		g.Versions = append(g.Versions, ver{Name: d.Name(), Size: sizeOrZero(info), Time: info.ModTime().Unix()})
+		return nil
+	})
+
+	out := make([]*group, 0, len(groups))
+	for _, g := range groups {
+		sort.Slice(g.Versions, func(i, j int) bool { return g.Versions[i].Time > g.Versions[j].Time })
+		out = append(out, g)
+	}
+	// Most-recently-touched file first — that is what an admin is looking for.
+	sort.Slice(out, func(i, j int) bool {
+		var ti, tj int64
+		if len(out[i].Versions) > 0 {
+			ti = out[i].Versions[0].Time
+		}
+		if len(out[j].Versions) > 0 {
+			tj = out[j].Versions[0].Time
+		}
+		return ti > tj
+	})
+	writeJSON(w, map[string]interface{}{"files": out})
+}
 
 // ---------------------------------------------------------------------------
 // Why did the server not start?

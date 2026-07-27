@@ -121,6 +121,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 
 	// Backups (timestamped .bak files created before every write).
 	mux.HandleFunc("/api/backups/list", methods(h.backupsList, http.MethodGet))
+	mux.HandleFunc("/api/backups/all", methods(h.backupsAll, http.MethodGet))
 	mux.HandleFunc("/api/backups/restore", methods(h.backupsRestore, http.MethodPost))
 
 	// Mod profile configs (profiles/*ExpansionMod*/Settings/*.json etc.).
@@ -156,6 +157,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// v0.18.0: explain a failed start, diff a backup before restoring it, and
 	// undo a wipe (wipeApply already moves the folders aside for exactly this).
 	mux.HandleFunc("/api/diagnose", methods(h.diagnose, http.MethodGet))
+	mux.HandleFunc("/api/health", methods(h.health, http.MethodGet))
 	mux.HandleFunc("/api/backups/diff", methods(h.backupsDiff, http.MethodGet))
 	mux.HandleFunc("/api/wipe/list", methods(h.wipeList, http.MethodGet))
 	mux.HandleFunc("/api/wipe/restore", methods(h.wipeRestore, http.MethodPost))

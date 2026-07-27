@@ -1382,6 +1382,42 @@ input.attach-num {
 .loadout-cargo-row { display: grid; grid-template-columns: 1fr 30px; gap: 8px; align-items: center; margin-bottom: 4px; }
 .loadout-cargo-row input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
 
+/* Test-roll preview: one sampled fresh spawn. */
+.loadout-roll { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-soft); }
+.loadout-roll-line { display: flex; gap: 10px; align-items: flex-start; padding: 5px 0; border-top: 1px solid var(--border-subtle); }
+.loadout-roll-line:first-child { border-top: none; }
+.loadout-roll-k { flex: none; width: 96px; font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; padding-top: 2px; }
+.loadout-roll-list { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.loadout-roll-item { display: flex; align-items: center; gap: 8px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+.loadout-roll-slot { flex: none; color: var(--text-tertiary); min-width: 64px; }
+.loadout-roll-cond { flex: none; font-family: var(--font); font-size: 12px; color: var(--text-secondary); }
+.loadout-roll .attach-add { margin-top: 10px; }
+
+/* History — config snapshots grouped by file. */
+.hist-file { margin-bottom: 12px; }
+.hist-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.hist-path { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; color: var(--text); word-break: break-all; }
+.hist-versions { display: flex; flex-direction: column; gap: 2px; }
+.hist-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border-subtle); }
+.hist-row:first-child { border-top: none; }
+.hist-when { font-size: 13px; color: var(--text-secondary); min-width: 160px; }
+.hist-size { flex: none; }
+.pill-warn { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  background: var(--warn-soft); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+
+/* Server health tiles. */
+.health-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.health-tile { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-soft); }
+.health-tile.clickable { cursor: pointer; transition: border-color .12s, background .12s; }
+.health-tile.clickable:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+.health-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 15%, transparent); }
+.health-tile.ok .health-dot { color: var(--ok, #22c55e); background: var(--ok, #22c55e); }
+.health-tile.warn .health-dot { color: var(--warn); background: var(--warn); }
+.health-tile.error .health-dot { color: var(--error); background: var(--error); }
+.health-tile.idle .health-dot { color: var(--text-tertiary); background: var(--text-tertiary); }
+.health-tile-t { font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); }
+.health-tile-d { font-size: 14px; color: var(--text); margin-top: 3px; }
+
 @media (max-width: 620px) {
   .loadout-item { grid-template-columns: 1fr 60px 30px; }
   .loadout-item > *:nth-child(3) { display: none; }
