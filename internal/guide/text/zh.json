@@ -266,6 +266,11 @@
     "diag.no_economy.title": "中央经济加载失败",
     "diag.no_economy.detail": "服务器也许能运行，但不会生成战利品。请运行校验器：通常是 cfgeconomycore.xml 引用的文件缺失，或 usage/value 名称未知。",
     "diag.missing_key.title": "keys/ 中缺少模组密钥",
-    "diag.missing_key.detail": "使用该模组的玩家会因签名错误被踢出。请在「模组」页使用「同步密钥」。"
+    "diag.missing_key.detail": "使用该模组的玩家会因签名错误被踢出。请在「模组」页使用「同步密钥」。",
+    "loadout": "玩家重生时穿着和携带的物品。这是 DayZ 的出生装备预设，注册在 cfggameplay.json 中——改动需重启服务器后生效。原版的装备在 init.c 里，所以在你启用该系统之前，新任务这里是空的。",
+    "loadout.weight": "该预设相对于其他预设的权重。DayZ 每次出生只挑选一个预设，因此权重 3 的预设被选中的概率是权重 1 的三倍。",
+    "loadout.characters": "该预设适用于哪些角色模型（SurvivorM_Mirek、SurvivorF_Eva…）。留空 = 适用于全部；每次出生随机选一个。",
+    "loadout.worn": "放到身体各槽位上的物品，一个槽位一组。同一槽位中 DayZ 按权重挑选一件，因此列多个变体可让每次出生有所不同。",
+    "loadout.carried": "直接放进新玩家背包、而非穿戴槽位的散装物品——破布、食物、一件初始工具。"
   }
 }

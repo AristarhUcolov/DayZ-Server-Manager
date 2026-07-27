@@ -266,6 +266,11 @@
     "diag.no_economy.title": "The central economy failed to load",
     "diag.no_economy.detail": "The server may run but spawn no loot. Run the Validator: a missing file referenced from cfgeconomycore.xml, or an unknown usage/value name, is the usual cause.",
     "diag.missing_key.title": "A mod key is missing from keys/",
-    "diag.missing_key.detail": "Clients using that mod will be kicked for a bad signature. Use Sync keys on the Mods page."
+    "diag.missing_key.detail": "Clients using that mod will be kicked for a bad signature. Use Sync keys on the Mods page.",
+    "loadout": "What a player is wearing and carrying when they respawn. These are DayZ's spawn-gear presets, registered in cfggameplay.json — changes take effect after a server restart. In vanilla the loadout lives in init.c instead, which is why a fresh mission shows nothing here until you enable the system.",
+    "loadout.weight": "This preset's weight against the others. DayZ picks ONE preset per spawn, so a preset with weight 3 is three times as likely as one with weight 1.",
+    "loadout.characters": "Which survivor models this preset applies to (SurvivorM_Mirek, SurvivorF_Eva, …). Leave empty to apply to all; one is chosen at random per spawn.",
+    "loadout.worn": "Items placed onto the body, one body slot at a time. Within a slot DayZ picks ONE item by weight, so listing several variants gives spawn-to-spawn variety.",
+    "loadout.carried": "Loose items dropped straight into the new player's inventory rather than a worn slot — rags, food, a starter tool."
   }
 }

@@ -266,6 +266,11 @@
     "diag.no_economy.title": "Die zentrale Wirtschaft wurde nicht geladen",
     "diag.no_economy.detail": "Der Server läuft vielleicht, spawnt aber keinen Loot. Lassen Sie den Validator laufen: meist fehlt eine in cfgeconomycore.xml referenzierte Datei oder ein usage/value-Name ist unbekannt.",
     "diag.missing_key.title": "Ein Mod-Schlüssel fehlt in keys/",
-    "diag.missing_key.detail": "Clients mit diesem Mod werden wegen falscher Signatur gekickt. Nutzen Sie „Schlüssel synchronisieren“ auf der Mods-Seite."
+    "diag.missing_key.detail": "Clients mit diesem Mod werden wegen falscher Signatur gekickt. Nutzen Sie „Schlüssel synchronisieren“ auf der Mods-Seite.",
+    "loadout": "Was ein Spieler beim Respawn trägt und dabei hat. Das sind DayZ-Spawn-Gear-Presets, registriert in cfggameplay.json — Änderungen greifen nach einem Serverneustart. In Vanilla steckt die Ausrüstung stattdessen in init.c, weshalb eine frische Mission hier nichts zeigt, bis du das System aktivierst.",
+    "loadout.weight": "Das Gewicht dieses Presets gegenüber den anderen. DayZ wählt EIN Preset pro Spawn, ein Preset mit Gewicht 3 ist also dreimal so wahrscheinlich wie eines mit Gewicht 1.",
+    "loadout.characters": "Für welche Charaktermodelle dieses Preset gilt (SurvivorM_Mirek, SurvivorF_Eva, …). Leer = für alle; pro Spawn wird eines zufällig gewählt.",
+    "loadout.worn": "Gegenstände, die an den Körper gelegt werden, Slot für Slot. Innerhalb eines Slots wählt DayZ EINEN Gegenstand nach Gewicht, mehrere Varianten sorgen also für Abwechslung.",
+    "loadout.carried": "Lose Gegenstände, die direkt ins Inventar des neuen Spielers wandern statt in einen Kleidungsslot — Lumpen, Essen, ein Startwerkzeug."
   }
 }

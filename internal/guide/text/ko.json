@@ -266,6 +266,11 @@
     "diag.no_economy.title": "중앙 경제를 불러오지 못했습니다",
     "diag.no_economy.detail": "서버는 돌아가더라도 전리품이 생성되지 않습니다. 검사기를 실행하세요: 보통 cfgeconomycore.xml이 참조하는 파일이 없거나 usage/value 이름이 알 수 없는 값입니다.",
     "diag.missing_key.title": "keys/에 모드 키가 없습니다",
-    "diag.missing_key.detail": "해당 모드를 쓰는 클라이언트는 서명 오류로 강퇴됩니다. 모드 페이지의 「키 동기화」를 사용하세요."
+    "diag.missing_key.detail": "해당 모드를 쓰는 클라이언트는 서명 오류로 강퇴됩니다. 모드 페이지의 「키 동기화」를 사용하세요.",
+    "loadout": "플레이어가 리스폰할 때 입고 들고 있는 것. DayZ의 스폰 장비 프리셋으로 cfggameplay.json에 등록되며, 변경은 서버 재시작 후 적용됩니다. 바닐라에서는 장비가 init.c에 있어, 시스템을 켜기 전까지 새 미션에서는 여기에 아무것도 표시되지 않습니다.",
+    "loadout.weight": "다른 프리셋 대비 이 프리셋의 가중치. DayZ는 스폰마다 하나의 프리셋을 고르므로, 가중치 3인 프리셋은 가중치 1인 것보다 세 배 더 자주 선택됩니다.",
+    "loadout.characters": "이 프리셋이 적용되는 캐릭터 모델(SurvivorM_Mirek, SurvivorF_Eva…). 비우면 = 전체; 스폰마다 하나가 무작위로 선택됩니다.",
+    "loadout.worn": "몸의 슬롯에 장착되는 아이템(슬롯 단위). 한 슬롯 안에서 DayZ가 가중치로 하나를 고르므로 여러 변형을 넣으면 스폰마다 달라집니다.",
+    "loadout.carried": "착용 슬롯이 아니라 새 플레이어의 인벤토리에 바로 들어가는 낱개 아이템 — 천 조각, 음식, 초기 도구 등."
   }
 }

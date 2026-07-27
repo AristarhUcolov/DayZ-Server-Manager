@@ -266,6 +266,11 @@
     "diag.no_economy.title": "A economia central não carregou",
     "diag.no_economy.detail": "O servidor pode funcionar mas não gera saque. Corre o validador: normalmente falta um ficheiro referenciado no cfgeconomycore.xml ou há um nome usage/value desconhecido.",
     "diag.missing_key.title": "Falta uma chave de mod em keys/",
-    "diag.missing_key.detail": "Os jogadores com essa mod serão expulsos por assinatura inválida. Usa «Sincronizar chaves» na página Mods."
+    "diag.missing_key.detail": "Os jogadores com essa mod serão expulsos por assinatura inválida. Usa «Sincronizar chaves» na página Mods.",
+    "loadout": "O que um jogador veste e transporta ao renascer. São os presets spawn-gear do DayZ, registados no cfggameplay.json — as alterações têm efeito após reiniciar o servidor. No vanilla o equipamento está no init.c, por isso uma missão nova não mostra nada aqui até ativares o sistema.",
+    "loadout.weight": "O peso deste preset face aos outros. O DayZ escolhe UM preset por aparecimento, por isso um com peso 3 é três vezes mais provável do que um com peso 1.",
+    "loadout.characters": "A que modelos de personagem se aplica este preset (SurvivorM_Mirek, SurvivorF_Eva, …). Vazio = a todos; é escolhido um ao acaso por aparecimento.",
+    "loadout.worn": "Itens colocados no corpo, slot a slot. Dentro de um slot o DayZ escolhe UM item por peso, por isso várias variantes dão variedade entre aparecimentos.",
+    "loadout.carried": "Itens soltos colocados diretamente no inventário do novo jogador em vez de um slot de roupa — trapos, comida, uma ferramenta inicial."
   }
 }

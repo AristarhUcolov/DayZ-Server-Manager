@@ -266,6 +266,11 @@
     "diag.no_economy.title": "Economia centrală nu s-a încărcat",
     "diag.no_economy.detail": "Serverul poate rula, dar nu va genera pradă. Rulează validatorul: de regulă lipsește un fișier referit în cfgeconomycore.xml sau un nume usage/value este necunoscut.",
     "diag.missing_key.title": "Lipsește o cheie de mod din keys/",
-    "diag.missing_key.detail": "Jucătorii cu acel mod vor fi dați afară pentru semnătură invalidă. Folosește „Sincronizează cheile” în pagina Moduri."
+    "diag.missing_key.detail": "Jucătorii cu acel mod vor fi dați afară pentru semnătură invalidă. Folosește „Sincronizează cheile” în pagina Moduri.",
+    "loadout": "Ce poartă și ce duce cu el un jucător la reapariție. Sunt preseturile spawn-gear DayZ, înregistrate în cfggameplay.json — modificările au efect după repornirea serverului. În vanilla echipamentul este în init.c, de aceea o misiune nouă nu arată nimic aici până nu activezi sistemul.",
+    "loadout.weight": "Greutatea acestui preset față de celelalte. DayZ alege UN preset per apariție, deci unul cu greutate 3 e de trei ori mai probabil decât unul cu greutate 1.",
+    "loadout.characters": "Cărui model de personaj i se aplică presetul (SurvivorM_Mirek, SurvivorF_Eva, …). Gol = tuturor; se alege unul la întâmplare per apariție.",
+    "loadout.worn": "Obiecte puse pe corp, slot cu slot. Într-un slot DayZ alege UN obiect după greutate, deci mai multe variante dau varietate de la o apariție la alta.",
+    "loadout.carried": "Obiecte libere puse direct în inventarul noului jucător, nu într-un slot de îmbrăcăminte — cârpe, mâncare, o unealtă de început."
   }
 }

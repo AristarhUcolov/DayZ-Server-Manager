@@ -266,6 +266,11 @@
     "diag.no_economy.title": "La economía central no se cargó",
     "diag.no_economy.detail": "El servidor puede funcionar pero no generará botín. Ejecuta el validador: suele faltar un archivo referenciado en cfgeconomycore.xml o hay un nombre usage/value desconocido.",
     "diag.missing_key.title": "Falta una clave de mod en keys/",
-    "diag.missing_key.detail": "Los jugadores con ese mod serán expulsados por firma incorrecta. Usa «Sincronizar claves» en la página Mods."
+    "diag.missing_key.detail": "Los jugadores con ese mod serán expulsados por firma incorrecta. Usa «Sincronizar claves» en la página Mods.",
+    "loadout": "Lo que un jugador lleva puesto y encima al reaparecer. Son los presets spawn-gear de DayZ, registrados en cfggameplay.json — los cambios surten efecto tras reiniciar el servidor. En vanilla el equipo está en init.c, por eso una misión nueva no muestra nada aquí hasta que activas el sistema.",
+    "loadout.weight": "El peso de este preset frente a los demás. DayZ elige UN preset por aparición, así que uno con peso 3 es tres veces más probable que uno con peso 1.",
+    "loadout.characters": "A qué modelos de personaje se aplica este preset (SurvivorM_Mirek, SurvivorF_Eva, …). Vacío = a todos; se elige uno al azar por aparición.",
+    "loadout.worn": "Objetos colocados en el cuerpo, ranura por ranura. Dentro de una ranura DayZ elige UN objeto por peso, así que varias variantes dan variedad entre apariciones.",
+    "loadout.carried": "Objetos sueltos que van directos al inventario del nuevo jugador en vez de a una ranura de ropa — trapos, comida, una herramienta inicial."
   }
 }
