@@ -1352,6 +1352,30 @@ input.attach-num {
 .attach-prop.grow input { flex: 1; }
 
 /* ============================================================
+   18h. PLAYER LOADOUT
+   ============================================================ */
+
+.loadout-state { font-size: 13px; padding: 10px 13px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border-left: 3px solid var(--border-strong); margin-bottom: 12px; }
+.loadout-state.ok   { border-left-color: var(--ok);   color: var(--text); }
+.loadout-state.warn { border-left-color: var(--warn); color: var(--text); }
+
+/* Worn-item and cargo rows reuse the attachments grid, minus the percentage
+   column the loadout system does not have. */
+.loadout-item {
+  display: grid; grid-template-columns: minmax(140px, 1fr) 76px 1fr 30px;
+  gap: 8px; align-items: center;
+}
+.loadout-item input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+.loadout-cargo-row { display: grid; grid-template-columns: 1fr 30px; gap: 8px; align-items: center; margin-bottom: 4px; }
+.loadout-cargo-row input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+
+@media (max-width: 620px) {
+  .loadout-item { grid-template-columns: 1fr 60px 30px; }
+  .loadout-item > span:nth-child(3) { display: none; }
+}
+
+/* ============================================================
    18g. DIAGNOSIS / DIFF / WIPE UNDO
    ============================================================ */
 

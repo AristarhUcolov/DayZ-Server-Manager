@@ -3244,6 +3244,279 @@ async function renderDiagnosis(host, placeAtTop) {
   applyI18n();
 }
 
+// --------------------------------------------------------------------- player loadout
+//
+// The fresh-spawn loadout — what a player is wearing and carrying when they
+// respawn. This edits DayZ's spawn-gear preset files and registers them in
+// cfggameplay.json. In vanilla the loadout lives in init.c, which the panel
+// cannot safely touch, so the page is honest about that: until the system is
+// switched on it shows one button to enable it, not an editor pretending to
+// work.
+
+Views.loadout = async (root) => {
+  const myNav = _navSeq;
+  root.append(pageHeader('nav.loadout', 'loadout.subtitle'));
+  if (State.serverStatus.running) root.append(runningBanner());
+
+  let d, classNames = [];
+  try { d = await api.get('/api/spawngear'); }
+  catch (e) { handleErr(e); return; }
+  try { classNames = (await api.get('/api/spawnable/classnames')).names || []; } catch {}
+  if (myNav !== _navSeq) return;
+
+  // Shared autocomplete of real class names from types.xml, so a typo — the
+  // usual reason a loadout item silently never spawns — is easy to avoid.
+  const dl = h('datalist', { id: 'dz-loadout-classes' });
+  for (const n of classNames.slice(0, 5000)) dl.append(h('option', { value: n }));
+  const slotDl = h('datalist', { id: 'dz-loadout-slots' },
+    ['Head','Eyewear','Mask','Headgear','Body','Vest','Back','Hands','Gloves','Legs','Feet','Armband']
+      .map(x => h('option', { value: x })));
+  root.append(dl, slotDl);
+
+  // ---- status card --------------------------------------------------------
+  const statusCard = h('div', { class: 'card' });
+  root.append(statusCard);
+
+  function renderStatus() {
+    statusCard.innerHTML = '';
+    statusCard.append(withHelp(h('h3', { i18n: 'loadout.title' }), 'loadout'));
+
+    if (d.active) {
+      statusCard.append(h('p', { class: 'loadout-state ok', i18n: 'loadout.state.active' }));
+    } else if ((d.presets || []).length && !d.flagEnabled) {
+      // Presets exist but the server.cfg switch is off — the one case where a
+      // loadout is configured yet inert. Saving fixes it, but say so plainly.
+      statusCard.append(h('p', { class: 'loadout-state warn', i18n: 'loadout.state.flagOff' }));
+    } else if (!(d.presets || []).length) {
+      statusCard.append(
+        h('p', { class: 'loadout-state', i18n: 'loadout.state.initc' }),
+        h('div', { class: 'actions' }, [
+          h('button', { class: 'primary', i18n: 'loadout.enable', disabled: State.serverStatus.running,
+            onclick: (e) => withBusy(e.currentTarget, async () => {
+              try { await api.post('/api/spawngear/enable', {}); toast(t('msg.saved'), 'ok'); await navigate('loadout'); }
+              catch (err) { handleErr(err); }
+            }) }),
+        ]),
+      );
+      applyI18n();
+      return;
+    }
+
+    // ---- preset list ------------------------------------------------------
+    const tbl = h('table');
+    tbl.append(h('thead', {}, h('tr', {}, [
+      h('th', { i18n: 'loadout.col.name' }),
+      hlp(h('th', { class: 'num', i18n: 'loadout.col.weight' }), 'loadout.weight'),
+      h('th', { class: 'num', i18n: 'loadout.col.slots' }),
+      h('th', { class: 'num', i18n: 'loadout.col.cargo' }),
+      h('th', { text: '' }),
+    ])));
+    const tb = h('tbody');
+    for (const p of d.presets) {
+      tb.append(h('tr', {}, [
+        h('td', {}, [
+          h('span', { style: { fontWeight: '600' }, text: p.missing ? p.file : p.name }),
+          h('span', { class: 'attach-cat', text: p.file }),
+          p.missing ? h('span', { class: 'kind-badge', style: { color: 'var(--error)' }, i18n: 'loadout.missing' }) : null,
+        ]),
+        h('td', { class: 'num', text: String(p.weight || '') }),
+        h('td', { class: 'num', text: String(p.slots || 0) }),
+        h('td', { class: 'num', text: String(p.cargo || 0) }),
+        h('td', {}, h('div', { class: 'row', style: { gap: '6px', justifyContent: 'flex-end' } }, [
+          p.missing ? null : h('button', { i18n: 'action.edit', onclick: () => openLoadout(p.file) }),
+          h('button', { class: 'icon-x', text: '×', title: t('action.delete'),
+            onclick: async (e) => {
+              const btn = e.currentTarget;
+              if (!(await confirmModal(t('confirm.delete').replace('{name}', p.name || p.file), { danger: true, okText: t('action.delete') }))) return;
+              await withBusy(btn, async () => {
+                try { await api.del('/api/spawngear/delete?file=' + encodeURIComponent(p.file)); toast(t('msg.deleted'), 'ok'); await navigate('loadout'); }
+                catch (err) { handleErr(err); }
+              });
+            } }),
+        ])),
+      ]));
+    }
+    tbl.append(tb);
+    statusCard.append(
+      h('div', { class: 'table-scroll' }, tbl),
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'primary', i18n: 'loadout.add', onclick: () => openLoadout('') }),
+      ]),
+    );
+    applyI18n();
+  }
+  renderStatus();
+
+  // ---- editor -------------------------------------------------------------
+  // DayZ's clothing slots. Kept short and ordered head-to-toe; the input is a
+  // free datalist so a modded slot name can still be typed.
+  const SLOTS = ['Head', 'Eyewear', 'Mask', 'Headgear', 'Body', 'Vest', 'Back',
+    'Hands', 'Gloves', 'Legs', 'Feet', 'Armband'];
+
+  async function openLoadout(file) {
+    let preset;
+    if (file) {
+      try { preset = await api.get('/api/spawngear/preset?file=' + encodeURIComponent(file)); }
+      catch (e) { handleErr(e); return; }
+    } else {
+      preset = { spawnWeight: 1, name: '', characterTypes: [], attachmentSlotItemSets: [], discreteUnsortedItemSets: [] };
+    }
+    // Normalise for the editor.
+    preset.attachmentSlotItemSets = preset.attachmentSlotItemSets || [];
+    preset.discreteUnsortedItemSets = preset.discreteUnsortedItemSets || [];
+    preset.characterTypes = preset.characterTypes || [];
+
+    const m = openModal({ title: file ? preset.name : t('loadout.add'), wide: true });
+
+    const nameInp = h('input', { type: 'text', value: preset.name || '', placeholder: t('loadout.name.ph') });
+    const weightInp = h('input', { type: 'number', min: '1', value: String(preset.spawnWeight || 1), class: 'attach-num' });
+
+    // Worn items, grouped by slot.
+    const slotsHost = h('div');
+    function renderSlots() {
+      slotsHost.innerHTML = '';
+      preset.attachmentSlotItemSets.forEach((slot, si) => {
+        const items = slot.discreteItemSets || (slot.discreteItemSets = []);
+        const slotSel = h('input', { type: 'text', list: 'dz-loadout-slots', value: slot.slotName || '',
+          class: 'attach-num', style: { width: '120px' }, placeholder: 'Body' });
+        slotSel.oninput = () => { slot.slotName = slotSel.value.trim(); };
+
+        const itemsHost = h('div', { class: 'attach-items' });
+        itemsHost.append(h('div', { class: 'loadout-item attach-cols' }, [
+          h('span', { i18n: 'loadout.item.class' }),
+          h('span', {}, [h('span', { i18n: 'loadout.item.weight' }), help('attach.itemWeight')]),
+          h('span', {}), h('span', {}),
+        ]));
+        items.forEach((it, ii) => {
+          const nameIn = h('input', { type: 'text', value: it.itemType || '', list: 'dz-loadout-classes', placeholder: t('loadout.item.class') });
+          const wIn = h('input', { type: 'text', value: String(it.spawnWeight ?? 1), class: 'attach-num', title: t('loadout.item.weight') });
+          nameIn.oninput = () => { it.itemType = nameIn.value.trim(); };
+          wIn.oninput = () => { it.spawnWeight = parseInt(wIn.value, 10) || 1; };
+          itemsHost.append(h('div', { class: 'loadout-item' }, [
+            nameIn, wIn, h('span', {}),
+            h('button', { class: 'icon-x', text: '×', onclick: () => { items.splice(ii, 1); renderSlots(); } }),
+          ]));
+        });
+
+        slotsHost.append(h('div', { class: 'attach-group' }, [
+          h('div', { class: 'attach-head' }, [
+            h('span', { class: 'attach-head-label', i18n: 'loadout.slot' }),
+            slotSel,
+            h('span', { class: 'grow' }),
+            h('button', { class: 'icon-x', text: '×', title: t('loadout.removeSlot'),
+              onclick: () => { preset.attachmentSlotItemSets.splice(si, 1); renderSlots(); } }),
+          ]),
+          h('div', { class: 'attach-body' }, [
+            itemsHost,
+            h('button', { class: 'attach-add', i18n: 'loadout.item.add',
+              onclick: () => { items.push({ itemType: '', spawnWeight: 1, quickBarSlot: -1 }); renderSlots(); applyI18n(); } }),
+          ]),
+        ]));
+      });
+      if (!preset.attachmentSlotItemSets.length) {
+        slotsHost.append(h('p', { class: 'hint', i18n: 'loadout.noSlots' }));
+      }
+      applyI18n();
+    }
+    renderSlots();
+
+    // Cargo — loose items carried in the inventory. Modelled as one line per
+    // class name (simpleChildrenTypes), which covers almost every loadout.
+    const cargoHost = h('div');
+    function cargoItems() {
+      // Flatten every discreteUnsortedItemSet's simpleChildrenTypes into rows,
+      // keeping each row's owning set so weight stays editable per set.
+      return preset.discreteUnsortedItemSets;
+    }
+    function renderCargo() {
+      cargoHost.innerHTML = '';
+      const sets = cargoItems();
+      sets.forEach((set, si) => {
+        set.simpleChildrenTypes = set.simpleChildrenTypes || [];
+        const wIn = h('input', { type: 'text', value: String(set.spawnWeight ?? 1), class: 'attach-num', title: t('loadout.item.weight') });
+        wIn.oninput = () => { set.spawnWeight = parseInt(wIn.value, 10) || 1; };
+        const listHost = h('div', { class: 'attach-items' });
+        set.simpleChildrenTypes.forEach((cls, ci) => {
+          const inp = h('input', { type: 'text', value: cls, list: 'dz-loadout-classes', placeholder: t('loadout.item.class') });
+          inp.oninput = () => { set.simpleChildrenTypes[ci] = inp.value.trim(); };
+          listHost.append(h('div', { class: 'loadout-cargo-row' }, [
+            inp,
+            h('button', { class: 'icon-x', text: '×', onclick: () => { set.simpleChildrenTypes.splice(ci, 1); renderCargo(); } }),
+          ]));
+        });
+        cargoHost.append(h('div', { class: 'attach-group' }, [
+          h('div', { class: 'attach-head' }, [
+            h('span', { class: 'attach-head-label', i18n: 'loadout.cargo.set' }),
+            h('span', { class: 'grow' }),
+            h('span', { class: 'attach-head-label', i18n: 'loadout.item.weight' }), wIn,
+            h('button', { class: 'icon-x', text: '×', title: t('loadout.removeSet'),
+              onclick: () => { sets.splice(si, 1); renderCargo(); } }),
+          ]),
+          h('div', { class: 'attach-body' }, [
+            listHost,
+            h('button', { class: 'attach-add', i18n: 'loadout.cargo.addItem',
+              onclick: () => { set.simpleChildrenTypes.push(''); renderCargo(); applyI18n(); } }),
+          ]),
+        ]));
+      });
+      if (!sets.length) cargoHost.append(h('p', { class: 'hint', i18n: 'loadout.noCargo' }));
+      applyI18n();
+    }
+    renderCargo();
+
+    // Character types — which survivor models this preset applies to. Empty =
+    // all. Simple comma field, since these are a fixed vanilla set.
+    const charInp = h('input', { type: 'text', value: (preset.characterTypes || []).join(', '),
+      placeholder: 'SurvivorM_Mirek, SurvivorF_Eva' });
+
+    async function doSave() {
+      preset.name = nameInp.value.trim();
+      preset.spawnWeight = parseInt(weightInp.value, 10) || 1;
+      preset.characterTypes = charInp.value.split(',').map(x => x.trim()).filter(Boolean);
+      if (!preset.name) { toast(t('loadout.needName'), 'error'); return; }
+      try {
+        const r = await api.post('/api/spawngear/save', { file, preset });
+        toast(t('msg.saved'), 'ok');
+        m.close();
+        await navigate('loadout');
+        if (!r.flagSet && !d.flagEnabled) toast(t('loadout.enabledNote'), 'ok');
+      } catch (e) { handleErr(e); }
+    }
+
+    m.body.append(
+      h('div', { class: 'grid-2' }, [
+        h('div', {}, [withHelp(h('label', { i18n: 'loadout.name' }), 'loadout'), nameInp]),
+        h('div', {}, [withHelp(h('label', { i18n: 'loadout.col.weight' }), 'loadout.weight'), weightInp]),
+      ]),
+      h('div', { style: { marginTop: '10px' } }, [
+        withHelp(h('label', { i18n: 'loadout.characters' }), 'loadout.characters'), charInp,
+      ]),
+
+      h('div', { class: 'attach-section' }, [
+        withHelp(h('h3', { i18n: 'loadout.worn' }), 'loadout.worn'),
+        slotsHost,
+        h('button', { class: 'attach-add', i18n: 'loadout.addSlot',
+          onclick: () => { preset.attachmentSlotItemSets.push({ slotName: '', discreteItemSets: [] }); renderSlots(); applyI18n(); } }),
+      ]),
+
+      h('div', { class: 'attach-section' }, [
+        withHelp(h('h3', { i18n: 'loadout.carried' }), 'loadout.carried'),
+        cargoHost,
+        h('button', { class: 'attach-add', i18n: 'loadout.addSet',
+          onclick: () => { preset.discreteUnsortedItemSets.push({ name: 'Cargo', spawnWeight: 1, simpleChildrenTypes: [] }); renderCargo(); applyI18n(); } }),
+      ]),
+
+      h('div', { class: 'actions' }, [
+        h('span', { class: 'grow' }),
+        h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => withBusy(e.currentTarget, doSave) }),
+        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+      ]),
+    );
+    applyI18n();
+  }
+};
+
+
 // --------------------------------------------------------------------- guide
 //
 // The beginner's guide. Content comes from /api/guide rather than the i18n

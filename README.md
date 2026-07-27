@@ -144,6 +144,13 @@
   `.dayz-manager/wipes/<метка>/`, а не удалял их — именно ради обратимости.
   Теперь их можно вернуть одной кнопкой. Если сервер уже накопил новое
   состояние, возврат блокируется с объяснением, чтобы не похоронить новый мир.
+- **Стартовый набор игрока.** Отдельный раздел, где задаётся, с чем игрок
+  появляется — одежда по слотам и вещи в инвентаре. Это НЕ Gameplay: набор
+  живёт в пресетах spawn-gear DayZ, которые менеджер создаёт, регистрирует в
+  cfggameplay.json и включает сам. Если миссия раздаёт набор через init.c,
+  раздел честно это показывает и предлагает включить систему одной кнопкой.
+- **Заражённые — отдельно от оружия.** 162 зомби в cfgspawnabletypes.xml
+  больше не засоряют фильтр «Оружие»: у них свой тип, как у одежды и техники.
 - **Инструкция для новичков.** Восемь глав прямо в панели: с чего начать,
   моды, лут и экономика, обвесы, RCon, погода, обслуживание, доступ с
   телефона. Каждая — с пошаговыми действиями, скриншотом раздела, блоком
@@ -412,6 +419,15 @@ panels.
   could be reversed. Now it can be, with one button — and the restore is
   refused, with an explanation, once the server has built new state, so the old
   world can never bury the new one.
+- **Player fresh-spawn loadout.** A dedicated section for what a player spawns
+  wearing and carrying — clothing by slot and loose inventory items. This is
+  NOT Gameplay: the loadout lives in DayZ's spawn-gear presets, which the
+  manager creates, registers in cfggameplay.json and switches on for you. If
+  the mission still spawns players from init.c, the section says so and offers
+  to enable the system with one button.
+- **Infected split out from weapons.** The 162 zombies in cfgspawnabletypes.xml
+  no longer clutter the Weapons filter — they get their own kind, like clothing
+  and vehicles do.
 - **Beginner's guide.** Eight chapters inside the panel: getting started,
   mods, loot and economy, attachments, RCon, weather, maintenance, remote
   access. Each has numbered steps, a screenshot of the section, a

@@ -159,6 +159,12 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/backups/diff", methods(h.backupsDiff, http.MethodGet))
 	mux.HandleFunc("/api/wipe/list", methods(h.wipeList, http.MethodGet))
 	mux.HandleFunc("/api/wipe/restore", methods(h.wipeRestore, http.MethodPost))
+	// v0.20.0: player fresh-spawn loadout (DayZ spawn-gear presets).
+	mux.HandleFunc("/api/spawngear", methods(h.spawnGearList, http.MethodGet))
+	mux.HandleFunc("/api/spawngear/preset", methods(h.spawnGearGet, http.MethodGet))
+	mux.HandleFunc("/api/spawngear/save", methods(h.spawnGearSave, http.MethodPost))
+	mux.HandleFunc("/api/spawngear/delete", methods(h.spawnGearDelete, http.MethodDelete, http.MethodPost))
+	mux.HandleFunc("/api/spawngear/enable", methods(h.spawnGearEnable, http.MethodPost))
 
 	// Dashboard live metrics.
 	mux.HandleFunc("/api/dashboard/metrics", methods(h.dashboardMetrics, http.MethodGet))
