@@ -4739,7 +4739,7 @@ Views.attachments = async (root) => {
   // the whole file, not just the page being shown.
   let kindFilter = '';
   const kinds = d.kinds || {};
-  const KIND_ORDER = ['weapon', 'clothing', 'container', 'vehicle', 'other'];
+  const KIND_ORDER = ['weapon', 'clothing', 'container', 'infected', 'animal', 'vehicle', 'other'];
   const chipHost = h('div', { class: 'kind-chips' });
   const buildChips = () => {
     chipHost.innerHTML = '';
@@ -4763,7 +4763,7 @@ Views.attachments = async (root) => {
   // Grouped by kind: the file covers weapons, clothing, containers and
   // vehicles, and the picker should make that visible rather than implying
   // the editor is weapons-only.
-  for (const k of ['weapon', 'clothing', 'container', 'vehicle']) {
+  for (const k of ['weapon', 'clothing', 'container', 'infected', 'animal', 'vehicle']) {
     const inKind = presets.filter(p => (p.kind || 'weapon') === k);
     if (!inKind.length) continue;
     const g = h('optgroup', { label: t('attach.kind.' + k) });

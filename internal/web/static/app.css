@@ -1327,6 +1327,8 @@ input.attach-num {
 .kind-badge.k-clothing  { color: #6aa8ff; border-color: rgba(106,168,255,.45); }
 .kind-badge.k-container { color: #3ecf8e; border-color: rgba(62,207,142,.45); }
 .kind-badge.k-vehicle   { color: #c89bff; border-color: rgba(200,155,255,.45); }
+.kind-badge.k-infected  { color: #9ccc5a; border-color: rgba(156,204,90,.45); }
+.kind-badge.k-animal    { color: #d9a066; border-color: rgba(217,160,102,.45); }
 
 .attach-table td { vertical-align: middle; }
 .attach-name-cell { font-weight: 600; }

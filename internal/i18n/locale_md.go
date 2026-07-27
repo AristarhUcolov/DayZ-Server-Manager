@@ -529,6 +529,8 @@ var md = Bundle{
 	"attach.kind.container":      "Containere",
 	"attach.kind.vehicle":        "Vehicule",
 	"attach.kind.other":          "Altele",
+	"attach.kind.infected":       "Infectați",
+	"attach.kind.animal":         "Animale",
 	"attach.col.kind":            "Tip",
 	"attach.col.on":              "Pe el",
 	"attach.col.inside":          "Înăuntru",

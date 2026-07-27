@@ -529,6 +529,8 @@ var ja = Bundle{
 	"attach.kind.container":      "コンテナ",
 	"attach.kind.vehicle":        "車両",
 	"attach.kind.other":          "その他",
+	"attach.kind.infected":       "感染者",
+	"attach.kind.animal":         "動物",
 	"attach.col.kind":            "種類",
 	"attach.col.on":              "本体に",
 	"attach.col.inside":          "中身",

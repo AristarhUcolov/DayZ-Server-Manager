@@ -529,6 +529,8 @@ var it = Bundle{
 	"attach.kind.container":      "Contenitori",
 	"attach.kind.vehicle":        "Veicoli",
 	"attach.kind.other":          "Altro",
+	"attach.kind.infected":       "Infetti",
+	"attach.kind.animal":         "Animali",
 	"attach.col.kind":            "Tipo",
 	"attach.col.on":              "Sopra",
 	"attach.col.inside":          "Dentro",

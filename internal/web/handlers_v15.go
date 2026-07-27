@@ -113,6 +113,22 @@ func (h *handlers) typeCategories() map[string]string {
 // where it exists; roughly a third of the entries (vehicles, wrecks, tents)
 // have none, so the shape of the entry itself decides those.
 func spawnKind(st *dztypes.SpawnableType, category string) string {
+	name := strings.ToLower(st.Name)
+
+	// Infected first, by name — they make up ~28% of the vanilla file and carry
+	// clothing/loot presets, so without this they fall through to the
+	// attachments heuristic below and pollute the Weapons filter. They also
+	// almost never have a types.xml category, so the name is all we have.
+	if strings.HasPrefix(name, "zmb") || strings.HasPrefix(name, "zombie") ||
+		strings.Contains(name, "infected") {
+		return "infected"
+	}
+	// Animals (hunting servers add many) share the same shape as infected: a
+	// living entry carrying loot, not a weapon.
+	if strings.HasPrefix(name, "animal") {
+		return "animal"
+	}
+
 	switch strings.ToLower(category) {
 	case "weapons":
 		return "weapon"
@@ -123,7 +139,6 @@ func spawnKind(st *dztypes.SpawnableType, category string) string {
 	case "tools", "food", "materials", "explosives":
 		return "other"
 	}
-	name := strings.ToLower(st.Name)
 	switch {
 	case strings.Contains(name, "wreck"), strings.Contains(name, "civiliansedan"),
 		strings.Contains(name, "hatchback"), strings.Contains(name, "offroad"),

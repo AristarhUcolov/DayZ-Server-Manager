@@ -529,6 +529,8 @@ var zh = Bundle{
 	"attach.kind.container":      "容器",
 	"attach.kind.vehicle":        "载具",
 	"attach.kind.other":          "其他",
+	"attach.kind.infected":       "感染者",
+	"attach.kind.animal":         "动物",
 	"attach.col.kind":            "类型",
 	"attach.col.on":              "身上",
 	"attach.col.inside":          "内部",

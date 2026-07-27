@@ -529,6 +529,8 @@ var pt = Bundle{
 	"attach.kind.container":      "Contentores",
 	"attach.kind.vehicle":        "Veículos",
 	"attach.kind.other":          "Outros",
+	"attach.kind.infected":       "Infetados",
+	"attach.kind.animal":         "Animais",
 	"attach.col.kind":            "Tipo",
 	"attach.col.on":              "Por cima",
 	"attach.col.inside":          "Dentro",

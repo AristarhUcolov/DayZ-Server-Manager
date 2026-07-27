@@ -529,6 +529,8 @@ var ko = Bundle{
 	"attach.kind.container":      "컨테이너",
 	"attach.kind.vehicle":        "차량",
 	"attach.kind.other":          "기타",
+	"attach.kind.infected":       "감염자",
+	"attach.kind.animal":         "동물",
 	"attach.col.kind":            "종류",
 	"attach.col.on":              "본체에",
 	"attach.col.inside":          "내부",
