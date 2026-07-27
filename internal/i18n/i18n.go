@@ -424,7 +424,7 @@ var en = Bundle{
 	"sync.done":       "Import finished. Restart the server to pick up the new mods.",
 
 	"profiles.title": "Mod profile configs",
-	"profiles.hint":  "Settings that mods (Expansion, Namalsk, etc.) write to the profiles folder. Changes take effect on next server start. Files are backed up before each save.",
+	"profiles.hint":  "Settings that mods (Expansion, Namalsk, etc.) write to the profiles folder. Changes take effect on next server start. Files are backed up before each save. Server logs and crash dumps are hidden here — read them under Logs and Admin-log.",
 	"profiles.empty": "No profile files yet. Start the server once to generate the defaults.",
 
 	"backup.title":    "Backups",
@@ -622,6 +622,9 @@ var en = Bundle{
 	"gameplay.raw":          "Raw JSON",
 	"gameplay.form":         "Form",
 	"gameplay.enabledNote":  "enableCfgGameplayFile = 1 is set automatically in serverDZ.cfg on save, so the file actually takes effect.",
+	"gameplay.reset":         "Reset to defaults",
+	"gameplay.reset.confirm": "Clear all Gameplay overrides and return to DayZ's built-in defaults? The fresh-spawn loadout registration is kept. Review the result, then press Save to apply.",
+	"gameplay.reset.done":    "Reset to defaults — review and press Save to apply.",
 	"gameplay.invalid":      "Invalid JSON:",
 	"perf.title":            "Performance",
 	"perf.players":          "Players online",
@@ -1025,7 +1028,7 @@ var ru = Bundle{
 	"sync.done":       "Импорт завершён. Перезапустите сервер, чтобы применить.",
 
 	"profiles.title": "Конфиги модов (profiles)",
-	"profiles.hint":  "Настройки, которые моды (Expansion, Namalsk и т.п.) пишут в папку profiles. Применятся при следующем запуске сервера. Файлы бэкапятся при каждом сохранении.",
+	"profiles.hint":  "Настройки, которые моды (Expansion, Namalsk и т.п.) пишут в папку profiles. Применятся при следующем запуске сервера. Файлы бэкапятся при каждом сохранении. Логи сервера и краш-дампы здесь скрыты — их видно в разделах «Логи» и «Админ-лог».",
 	"profiles.empty": "Файлов пока нет. Запустите сервер один раз, чтобы моды создали дефолты.",
 
 	"backup.title":    "Бэкапы",
@@ -1223,6 +1226,9 @@ var ru = Bundle{
 	"gameplay.raw":          "Raw JSON",
 	"gameplay.form":         "Форма",
 	"gameplay.enabledNote":  "enableCfgGameplayFile = 1 проставляется в serverDZ.cfg автоматически при сохранении — файл реально вступит в силу.",
+	"gameplay.reset":         "Сбросить к умолчаниям",
+	"gameplay.reset.confirm": "Сбросить все переопределения Геймплея к встроенным умолчаниям DayZ? Регистрация стартового набора сохранится. Проверьте результат и нажмите «Сохранить».",
+	"gameplay.reset.done":    "Сброшено к умолчаниям — проверьте и нажмите «Сохранить».",
 	"gameplay.invalid":      "Некорректный JSON:",
 	"perf.title":            "Производительность",
 	"perf.players":          "Игроков онлайн",

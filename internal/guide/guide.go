@@ -208,5 +208,10 @@ func Help(lang string) map[string]string {
 			}
 		}
 	}
+	// cfggameplay field descriptions ride along under a "gp." prefix so the
+	// Gameplay editor's per-field tooltips come from the same map.
+	for k, v := range GameplayFieldHelp(lang) {
+		out["gp."+k] = v
+	}
 	return out
 }

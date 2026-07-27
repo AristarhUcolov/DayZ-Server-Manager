@@ -33,6 +33,12 @@ Thumbs.db
 # Reference DayZ server install used for local testing (not distributed).
 DayZServer/
 
+# Node deps for local E2E only (puppeteer-core drives headless Edge). Installed
+# on demand during testing, never part of the shipped single-exe.
+node_modules/
+package.json
+package-lock.json
+
 # Social-preview cards — uploaded through GitHub Settings, not served from the
 # repo, so they live on disk without being tracked. (tools/social_card.py is
 # their generator, kept local too; tools/make_icon.py IS tracked.)

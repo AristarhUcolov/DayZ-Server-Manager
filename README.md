@@ -150,8 +150,19 @@
   cfggameplay.json и включает сам. Если миссия раздаёт набор через init.c,
   раздел честно это показывает и предлагает включить систему одной кнопкой.
   У каждой вещи задаётся состояние — новое, ношеное, повреждённое, сильно
-  повреждённое или свой диапазон; по умолчанию всё новое, чтобы игрок не
-  появлялся в изношенной одежде.
+  повреждённое или свой диапазон; по умолчанию всё новое. Менеджер к тому же
+  прописывает состояние в файл для каждой вещи и заставляет вложенные предметы
+  (тряпка, яблоко) наследовать его, поэтому игрок больше не появляется со
+  случайно «сломанным» лутом, даже если предмету явно не задали состояние.
+- **Геймплей стал понятнее.** У каждого поля cfggameplay.json теперь всплывающая
+  подсказка простыми словами — за что отвечают выносливость, строительство базы,
+  яркость ночей, карта и т.п. Кнопка «Сбросить к умолчаниям» очищает все
+  переопределения к встроенным значениям DayZ, сохраняя привязку стартового
+  набора.
+- **Логи не мешают в «Моды: настройки».** Редактор конфигов модов больше не
+  показывает логи и краш-дампы сервера (.RPT, .ADM, script/webapi, crash) — их
+  видно в разделах «Логи» и «Админ-лог», а здесь остаётся только то, что реально
+  правят.
 - **Заражённые — отдельно от оружия.** 162 зомби в cfgspawnabletypes.xml
   больше не засоряют фильтр «Оружие»: у них свой тип, как у одежды и техники.
 - **Инструкция для новичков.** Восемь глав прямо в панели: с чего начать,
@@ -429,7 +440,17 @@ panels.
   the mission still spawns players from init.c, the section says so and offers
   to enable the system with one button. Each item takes a condition — pristine,
   worn, damaged, badly damaged or a custom range; everything defaults to
-  pristine so a fresh spawn never arrives in worn-out clothes.
+  pristine. The manager also writes an explicit condition for every item and
+  makes loose children (a rag, an apple) inherit it, so a fresh spawn no longer
+  arrives with randomly "broken" gear even when an item was left unset.
+- **Gameplay made readable.** Every cfggameplay.json field now has a plain-language
+  hover tooltip — what stamina, base building, night brightness, the map and so on
+  actually do. A "Reset to defaults" button clears every override back to DayZ's
+  built-in values while keeping the fresh-spawn loadout registration.
+- **Logs out of the mod-config editor.** The mod settings editor no longer lists
+  server logs and crash dumps (.RPT, .ADM, script/webapi, crash) — those have
+  their own viewers under Logs and Admin-log, leaving only the files admins
+  actually edit.
 - **Infected split out from weapons.** The 162 zombies in cfgspawnabletypes.xml
   no longer clutter the Weapons filter — they get their own kind, like clothing
   and vehicles do.

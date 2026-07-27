@@ -3383,6 +3383,13 @@ Views.loadout = async (root) => {
     minIn.value = String(obj.attributes && obj.attributes.healthMin != null ? obj.attributes.healthMin : 1);
     maxIn.value = String(obj.attributes && obj.attributes.healthMax != null ? obj.attributes.healthMax : 1);
     custom.style.display = cur === 'custom' ? '' : 'none';
+    // Persist the shown condition right away. An item left untouched must save
+    // the value it displays — otherwise "pristine" in the UI writes no health
+    // and the item spawns at the engine's default, which is not always new.
+    if (!obj.attributes || obj.attributes.healthMin == null) {
+      const c = CONDITION.find(x => x.id === cur) || CONDITION[0];
+      attrs().healthMin = c.min; attrs().healthMax = c.max;
+    }
 
     sel.onchange = () => {
       if (sel.value === 'custom') {
@@ -3553,7 +3560,7 @@ Views.loadout = async (root) => {
         withHelp(h('h3', { i18n: 'loadout.carried' }), 'loadout.carried'),
         cargoHost,
         h('button', { class: 'attach-add', i18n: 'loadout.addSet',
-          onclick: () => { preset.discreteUnsortedItemSets.push({ name: 'Cargo', spawnWeight: 1, simpleChildrenTypes: [] }); renderCargo(); applyI18n(); } }),
+          onclick: () => { preset.discreteUnsortedItemSets.push({ name: 'Cargo', spawnWeight: 1, simpleChildrenTypes: [], attributes: { healthMin: 1, healthMax: 1 } }); renderCargo(); applyI18n(); } }),
       ]),
 
       h('div', { class: 'actions' }, [
@@ -4928,6 +4935,13 @@ Views.gameplay = async (root) => {
   let rawMode = !obj;
   const modeBtn = h('button', {});
 
+  // Per-field explanation: the ⓘ marker, but only for keys we actually have a
+  // description for (an empty tooltip is worse than none). Descriptions arrive
+  // in State.help under the "gp." prefix; leaf keys are unique enough in
+  // cfggameplay that keying on the leaf name is reliable.
+  const gpHelp = (key) => (State.help && State.help['gp.' + key]) ? help('gp.' + key) : null;
+  const gpLabel = (txt, key) => h('label', { class: 'gp-flabel' }, [h('span', { text: txt }), gpHelp(key)]);
+
   // Generic recursive form: booleans → switches, numbers → number inputs,
   // strings → text, arrays → JSON one-liners, objects → collapsible groups.
   // Schema-free, so every key of every DayZ version is editable.
@@ -4937,17 +4951,20 @@ Views.gameplay = async (root) => {
       const cb = h('input', { type: 'checkbox', class: 'switch' });
       cb.checked = val;
       cb.onchange = () => { parent[key] = cb.checked; };
-      return h('label', {}, [cb, h('span', { text: key })]);
+      const lbl = h('label', {}, [cb, h('span', { text: key })]);
+      const hm = gpHelp(key);
+      // Keep the marker OUTSIDE the <label> so clicking it doesn't toggle the switch.
+      return hm ? h('div', { class: 'gp-bool' }, [lbl, hm]) : lbl;
     }
     if (typeof val === 'number') {
       const inp = h('input', { type: 'number', step: 'any', value: String(val) });
       inp.onchange = () => { const n = Number(inp.value); if (!Number.isNaN(n)) parent[key] = n; };
-      return h('div', {}, [h('label', { text: key }), inp]);
+      return h('div', {}, [gpLabel(key, key), inp]);
     }
     if (typeof val === 'string') {
       const inp = h('input', { type: 'text', value: val });
       inp.onchange = () => { parent[key] = inp.value; };
-      return h('div', {}, [h('label', { text: key }), inp]);
+      return h('div', {}, [gpLabel(key, key), inp]);
     }
     if (Array.isArray(val)) {
       const inp = h('input', { type: 'text', value: JSON.stringify(val), class: 'mono' });
@@ -4955,10 +4972,10 @@ Views.gameplay = async (root) => {
         try { const v = JSON.parse(inp.value); if (Array.isArray(v)) { parent[key] = v; inp.style.borderColor = ''; return; } } catch {}
         inp.style.borderColor = 'var(--error)';
       };
-      return h('div', {}, [h('label', { text: key + ' []' }), inp]);
+      return h('div', {}, [gpLabel(key + ' []', key), inp]);
     }
     if (val && typeof val === 'object') {
-      const det = h('details', { class: 'gp-group' }, [h('summary', { text: key })]);
+      const det = h('details', { class: 'gp-group' }, [h('summary', {}, [h('span', { text: key }), gpHelp(key)])]);
       const inner = h('div', { class: 'gp-grid' });
       for (const k of Object.keys(val)) inner.append(fieldFor(val, k));
       det.append(inner);
@@ -5003,9 +5020,28 @@ Views.gameplay = async (root) => {
   }
   root._save = doSave;
 
+  // Reset to DayZ defaults: strip every override so the engine falls back to its
+  // own built-in values, but keep the fresh-spawn loadout registration so the
+  // Player-loadout page is not silently unwired. The change is only applied to
+  // the in-memory form — the admin still presses Save, so it stays reviewable
+  // and can be abandoned by leaving the page.
+  async function doReset() {
+    const ok = await confirmModal(t('gameplay.reset.confirm'), { title: t('gameplay.reset'), danger: true, okText: t('gameplay.reset') });
+    if (!ok) return;
+    const preserved = (obj && obj.PlayerData && Array.isArray(obj.PlayerData.spawnGearPresetFiles))
+      ? obj.PlayerData.spawnGearPresetFiles : [];
+    const version = (obj && typeof obj.version === 'number') ? obj.version : 1;
+    obj = { version };
+    if (preserved.length) obj.PlayerData = { spawnGearPresetFiles: preserved };
+    rawHost.value = JSON.stringify(obj, null, 4);
+    renderForm();
+    toast(t('gameplay.reset.done'), 'ok');
+  }
+
   card.append(
     h('div', { class: 'toolbar' }, [
       modeBtn,
+      h('button', { class: 'secondary', i18n: 'gameplay.reset', onclick: doReset }),
       h('span', { class: 'grow' }),
       h('button', { class: 'primary', i18n: 'action.save', title: 'Ctrl+S', onclick: (e) => withBusy(e.currentTarget, doSave) }),
     ]),

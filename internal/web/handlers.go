@@ -2035,6 +2035,19 @@ func (h *handlers) profilesResolve(rel string) (string, error) {
 	return full, nil
 }
 
+// isServerLogArtifact reports whether a profiles-dir filename is a server log
+// or crash dump rather than editable config. These are read-only run output
+// with their own viewers (Logs, Admin-log), so the config editor hides them.
+func isServerLogArtifact(name string) bool {
+	n := strings.ToLower(name)
+	switch strings.ToLower(filepath.Ext(n)) {
+	case ".rpt", ".adm", ".log", ".mdmp", ".dmp", ".bidmp":
+		return true
+	}
+	// A few DayZ artifacts have no tidy extension.
+	return strings.HasPrefix(n, "crash_") || strings.Contains(n, "webapilog")
+}
+
 func (h *handlers) profilesTree(w http.ResponseWriter, r *http.Request) {
 	rel := r.URL.Query().Get("path")
 	full, err := h.profilesResolve(rel)
@@ -2061,6 +2074,13 @@ func (h *handlers) profilesTree(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []node{}
 	for _, e := range entries {
+		// The profiles dir is also where the server dumps its run logs (.RPT,
+		// .ADM, crash dumps, script/webapi logs). Those have their own reader
+		// under Logs and Admin-log; showing them here only buries the mod config
+		// files an admin actually came to edit. Hide them from the tree.
+		if !e.IsDir() && isServerLogArtifact(e.Name()) {
+			continue
+		}
 		info, _ := e.Info()
 		child := filepath.ToSlash(filepath.Join(rel, e.Name()))
 		out = append(out, node{Name: e.Name(), Path: child, IsDir: e.IsDir(), Size: sizeOrZero(info)})

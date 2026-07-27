@@ -150,6 +150,72 @@ func TestGearPresetPreservesUnknownFields(t *testing.T) {
 	}
 }
 
+// An item or cargo set the editor shows as "new" but that carries no explicit
+// health must be written as pristine, not left to the engine's default — the
+// exact way fresh spawns were arriving in worn gear despite a pristine setting.
+func TestNormalizeFillsMissingConditionWithPristine(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "p.json")
+	// A worn item with no attributes, and a cargo set with loose children but
+	// no inheritance flag — both the gaps that produced random condition.
+	os.WriteFile(path, []byte(`{
+    "spawnWeight": 1,
+    "name": "X",
+    "characterTypes": [],
+    "attachmentSlotItemSets": [
+        { "slotName": "Body", "discreteItemSets": [ { "itemType": "TShirt_Grey", "spawnWeight": 1 } ] }
+    ],
+    "discreteUnsortedItemSets": [
+        { "name": "Cargo", "spawnWeight": 1, "simpleChildrenTypes": ["Rag", "Apple"] }
+    ]
+}`), 0o644)
+	p, err := LoadGearPreset(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Save(path); err != nil { // Save normalizes
+		t.Fatal(err)
+	}
+	back, err := LoadGearPreset(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	it := back.AttachmentSlotItemSets[0].DiscreteItemSets[0]
+	if it.Attributes == nil || it.Attributes.HealthMin == nil || *it.Attributes.HealthMin != 1.0 {
+		t.Errorf("worn item without attributes was not made pristine: %+v", it.Attributes)
+	}
+	set := back.DiscreteUnsortedItemSets[0]
+	if set.Attributes == nil || set.Attributes.HealthMin == nil || *set.Attributes.HealthMin != 1.0 {
+		t.Errorf("cargo set without attributes was not made pristine: %+v", set.Attributes)
+	}
+	if set.SimpleChildrenUseDefault == nil || !*set.SimpleChildrenUseDefault {
+		t.Error("cargo children were not pinned to inherit the set's condition")
+	}
+}
+
+// Normalize must never overwrite a condition the user chose on purpose.
+func TestNormalizeLeavesExplicitConditionAlone(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "p.json")
+	os.WriteFile(path, []byte(`{
+    "spawnWeight": 1, "name": "X", "characterTypes": [],
+    "attachmentSlotItemSets": [
+        { "slotName": "Body", "discreteItemSets": [
+            { "itemType": "TShirt_Grey", "spawnWeight": 1, "attributes": { "healthMin": 0.45, "healthMax": 0.65 } } ] }
+    ],
+    "discreteUnsortedItemSets": []
+}`), 0o644)
+	p, _ := LoadGearPreset(path)
+	if err := p.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	back, _ := LoadGearPreset(path)
+	it := back.AttachmentSlotItemSets[0].DiscreteItemSets[0]
+	if *it.Attributes.HealthMin != 0.45 || *it.Attributes.HealthMax != 0.65 {
+		t.Errorf("explicit condition was overwritten: %v-%v", *it.Attributes.HealthMin, *it.Attributes.HealthMax)
+	}
+}
+
 func contains2(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {

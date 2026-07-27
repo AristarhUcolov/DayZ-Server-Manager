@@ -105,8 +105,47 @@ func LoadGearPreset(path string) (*GearPreset, error) {
 	return &p, nil
 }
 
+// Normalize makes the file spawn exactly what the editor shows. Every worn
+// item and every cargo set the UI displays as "pristine" must actually SAY so
+// in the JSON: an item with no attributes falls back to the engine's default
+// condition, which is not guaranteed pristine, so a fresh spawn could arrive in
+// worn or ruined gear even though the panel showed "new". So any item with no
+// health set gets pristine (1.0/1.0), and any set that carries loose children
+// (a rag, an apple) is made to hand them its own condition rather than let them
+// roll the engine default. Explicit conditions the user chose are never
+// touched — only the absent ones are filled.
+func (p *GearPreset) Normalize() {
+	one := 1.0
+	fill := func(it *GearItem) {
+		if it.Attributes == nil {
+			it.Attributes = &GearAttributes{}
+		}
+		if it.Attributes.HealthMin == nil && it.Attributes.HealthMax == nil {
+			hMin, hMax := one, one
+			it.Attributes.HealthMin = &hMin
+			it.Attributes.HealthMax = &hMax
+		}
+		// A set with loose children (simpleChildrenTypes) but no explicit
+		// inheritance flag would spawn those children at the engine default.
+		// Pin them to the set's own (now pristine) condition.
+		if len(it.SimpleChildrenTypes) > 0 && it.SimpleChildrenUseDefault == nil {
+			inherit := true
+			it.SimpleChildrenUseDefault = &inherit
+		}
+	}
+	for si := range p.AttachmentSlotItemSets {
+		for ii := range p.AttachmentSlotItemSets[si].DiscreteItemSets {
+			fill(&p.AttachmentSlotItemSets[si].DiscreteItemSets[ii])
+		}
+	}
+	for i := range p.DiscreteUnsortedItemSets {
+		fill(&p.DiscreteUnsortedItemSets[i])
+	}
+}
+
 // Save writes the preset as pretty JSON, folding the preserved extras back in.
 func (p *GearPreset) Save(path string) error {
+	p.Normalize() // never let a fresh spawn fall back to a random engine default
 	// Marshal the modelled fields, then merge extras at the top level.
 	base, err := json.Marshal(p)
 	if err != nil {
@@ -139,6 +178,7 @@ func (p *GearPreset) Save(path string) error {
 // something that visibly works rather than a naked spawn.
 func StarterGearPreset() *GearPreset {
 	one := 1.0
+	inherit := true
 	// Pristine, not worn. healthMin/healthMax are HEALTH fractions (1.0 =
 	// pristine, 0.0 = ruined), so the old 0.45–0.7 default spawned players in
 	// worn/damaged clothes.
@@ -167,6 +207,9 @@ func StarterGearPreset() *GearPreset {
 					QuantityMin: &one, QuantityMax: &one,
 				},
 				SimpleChildrenTypes: []string{"Rag", "Apple"},
+				// The rag and apple inherit the set's pristine condition rather
+				// than roll the engine default.
+				SimpleChildrenUseDefault: &inherit,
 			},
 		},
 	}
