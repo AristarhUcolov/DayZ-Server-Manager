@@ -158,6 +158,8 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// undo a wipe (wipeApply already moves the folders aside for exactly this).
 	mux.HandleFunc("/api/diagnose", methods(h.diagnose, http.MethodGet))
 	mux.HandleFunc("/api/health", methods(h.health, http.MethodGet))
+	mux.HandleFunc("/api/cleanup/scan", methods(h.cleanupScan, http.MethodGet))
+	mux.HandleFunc("/api/cleanup", methods(h.cleanupRun, http.MethodPost))
 	mux.HandleFunc("/api/backups/diff", methods(h.backupsDiff, http.MethodGet))
 	mux.HandleFunc("/api/wipe/list", methods(h.wipeList, http.MethodGet))
 	mux.HandleFunc("/api/wipe/restore", methods(h.wipeRestore, http.MethodPost))
@@ -689,6 +691,15 @@ func (h *handlers) modsSyncKeys(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
+	// Toggling a mod rewrites the launch args, which only take effect on the
+	// next start — doing it while the server runs just desyncs the panel from
+	// the live process. Require the server stopped, like every other config
+	// write. The UI also disables the toggles, but this is authoritative.
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
+		return
+	}
+	defer unlock()
 	var req struct {
 		Mod        string `json:"mod"`
 		Enabled    bool   `json:"enabled"`
@@ -741,6 +752,13 @@ func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
 // here. Unknown names are refused — otherwise a rename race could silently
 // reintroduce a uninstalled mod into the launch args.
 func (h *handlers) modsOrder(w http.ResponseWriter, r *http.Request) {
+	// Load order only takes effect on the next start, like toggling a mod —
+	// require the server stopped so it can't desync from the live process.
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
+		return
+	}
+	defer unlock()
 	var req struct {
 		Mods       []string `json:"mods"`
 		ServerSide bool     `json:"serverSide"`

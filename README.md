@@ -143,7 +143,12 @@
 - **Здоровье сервера.** Отдельная страница, которая одним взглядом отвечает
   «всё ли в порядке»: работает ли сервер (или встал в краш-цикле), хватает ли
   места на диске, проходят ли конфиги валидацию и — если сервер не стартует —
-  почему (разбор RPT). Каждая плитка ведёт на страницу, где это чинится.
+  почему (разбор RPT). Каждая плитка ведёт на страницу, где это чинится. Тут же
+  очистка в один клик: удалить логи сервера и краш-дампы (новейшие RPT/ADM
+  сохраняются) или старые бэкапы конфигов, чтобы освободить место на диске.
+- **Личное сообщение игроку.** На странице RCon рядом с «Кикнуть»/«Забанить»
+  появилась кнопка «Сообщение» — отправить текст конкретному игроку (а не только
+  общий бродкаст всем).
 - **История конфигов.** Менеджер и раньше бэкапил файл перед каждой записью;
   теперь все версии всех конфигов видны в одном месте — с датой, сравнением
   (что вернётся при откате) и восстановлением в один клик.
@@ -442,7 +447,12 @@ panels.
 - **Server health.** A page that answers "is anything wrong?" at a glance: is
   the server up (or stuck in a crash loop), is there disk room, does the config
   validate, and — if it won't start — why (the RPT is read for you). Each tile
-  links to the page that fixes it.
+  links to the page that fixes it. It also offers one-click cleanup: delete
+  server logs and crash dumps (the newest RPT/ADM are kept) or old config
+  backups to reclaim disk space.
+- **Private message to a player.** The RCon page's player list gains a Message
+  button next to Kick/Ban — send text to one specific player, not only the
+  broadcast-to-everyone Say box.
 - **Config history.** The manager already backed a file up before every write;
   now every version of every config is visible in one place, with the date, a
   diff of what a restore would bring back, and one-click restore.

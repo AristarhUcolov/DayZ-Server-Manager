@@ -19,6 +19,19 @@ package guide
 var gameplayHelpEN = map[string]string{
 	"version": "Format version of cfggameplay.json. DayZ sets this; leave it as-is.",
 
+	// Group headers — shown on the collapsible sections.
+	"GeneralData":      "Global toggles: base and container damage, safe-zone respawn.",
+	"BaseBuildingData": "Base-building rules and the placement-preview checks below.",
+	"HologramData":     "The green/red placement preview: which checks to skip when positioning a base part.",
+	"ConstructionData": "Behaviour while a base part is being built.",
+	"PlayerData":       "Player rules: respawn, personal light, stamina and the fresh-spawn loadout.",
+	"StaminaData":      "Stamina system tuning — drain, weight penalty, pool size.",
+	"DrowningData":     "Swimming and drowning rules.",
+	"UIData":           "HUD and interface toggles: map, watch, compass, hit indicator.",
+	"HitIndicationData": "The on-screen indicator that shows where a hit came from.",
+	"MapData":          "In-game map behaviour: ownership, position, contours.",
+	"WorldsData":       "World-level settings: night darkness, temperatures, extra object spawners.",
+
 	// GeneralData
 	"disableBaseDamage":        "Base structures (walls, gates, fences, watchtowers) take no damage from anything.",
 	"disableContainerDamage":   "Deployed storage (tents, barrels, crates, stashes) takes no damage.",
@@ -87,6 +100,18 @@ var gameplayHelpEN = map[string]string{
 // gameplayHelpRU overrides the English text where a Russian translation exists.
 var gameplayHelpRU = map[string]string{
 	"version": "Версия формата cfggameplay.json. Задаётся DayZ — не трогайте.",
+
+	"GeneralData":       "Глобальные переключатели: урон базам и хранилищам, спавн в безопасной зоне.",
+	"BaseBuildingData":  "Правила строительства баз и проверки предпросмотра установки ниже.",
+	"HologramData":      "Зелёный/красный предпросмотр установки: какие проверки пропускать при размещении детали базы.",
+	"ConstructionData":  "Поведение во время постройки детали базы.",
+	"PlayerData":        "Правила игрока: возрождение, личный свет, выносливость и стартовый набор.",
+	"StaminaData":       "Настройка выносливости — трата, штраф за вес, размер запаса.",
+	"DrowningData":      "Правила плавания и утопления.",
+	"UIData":            "Переключатели HUD и интерфейса: карта, часы, компас, индикатор попаданий.",
+	"HitIndicationData": "Экранный индикатор направления, откуда прилетело попадание.",
+	"MapData":           "Поведение внутриигровой карты: владение, позиция, горизонтали.",
+	"WorldsData":        "Настройки мира: тёмность ночи, температуры, доп. спавнеры объектов.",
 
 	"disableBaseDamage":        "Постройки базы (стены, ворота, заборы, вышки) не получают урона ни от чего.",
 	"disableContainerDamage":   "Хранилища (палатки, бочки, ящики, схроны) не получают урона.",

@@ -1350,6 +1350,9 @@ Views.mods = async (root) => {
     if (m.installedInServer) {
       const activeCb = h('input', { type: 'checkbox', class: 'switch' });
       activeCb.checked = (d.activeMods || []).includes(m.name);
+      // Mod toggles change the launch args, so they only apply on the next
+      // start — lock them while the server is running (the backend refuses too).
+      if (State.serverStatus.running) { activeCb.disabled = true; activeCb.title = t('mods.toggleRunning'); }
       activeCb.onchange = async () => {
         const prev = !activeCb.checked; // value before this toggle
         activeCb.disabled = true;
@@ -1376,6 +1379,7 @@ Views.mods = async (root) => {
     if (m.installedInServer) {
       const srvCb = h('input', { type: 'checkbox', class: 'switch' });
       srvCb.checked = (d.serverMods || []).includes(m.name);
+      if (State.serverStatus.running) { srvCb.disabled = true; srvCb.title = t('mods.toggleRunning'); }
       srvCb.onchange = async () => {
         if (srvCb.checked && !(await confirmModal(t('mods.serverMod.confirm'), { danger: true, okText: t('action.save') }))) { srvCb.checked = false; return; }
         const prev = !srvCb.checked;
@@ -2716,6 +2720,8 @@ Views.rcon = async (root) => {
           h('div', { text: p.guid }),
           h('div', { text: p.ping }),
           h('div', {}, [
+            h('button', { i18n: 'action.message', onclick: () => messageDialog(p) }),
+            ' ',
             h('button', { i18n: 'action.kick', onclick: () => kickDialog(p) }),
             ' ',
             h('button', { class: 'danger', i18n: 'action.ban', onclick: () => banDialog(p) }),
@@ -2741,6 +2747,28 @@ Views.rcon = async (root) => {
       // until a manual refresh, because polling only armed on success.
       startPolling();
     }
+  }
+
+  // Private message to one player — RCon `say <id> <text>` (the backend maps
+  // playerId → SayTo). Broadcast to everyone stays available in the Say box.
+  function messageDialog(p) {
+    const m = openModal({ title: t('action.message') + ' — ' + p.name });
+    const msg = h('input', { type: 'text', placeholder: t('rcon.message.ph'), style: { width: '100%' } });
+    const send = async () => {
+      const text = msg.value.trim();
+      if (!text) return;
+      try { await api.post('/api/rcon/say', { playerId: p.id, message: text }); m.close(); toast(t('rcon.message.sent'), 'ok'); }
+      catch (e) { handleErr(e); }
+    };
+    msg.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    m.body.append(
+      h('label', { i18n: 'rcon.message.label' }), msg,
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'primary', i18n: 'action.send', onclick: send }),
+        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+      ]),
+    );
+    setTimeout(() => msg.focus(), 0);
   }
 
   // Kick / Ban dialogs — proper modals instead of native prompt().
@@ -5203,6 +5231,12 @@ Views.health = async (root) => {
   loading.remove();
 
   const tiles = h('div', { class: 'health-tiles' });
+  const setTile = (el, level, titleKey, detail) => {
+    el.className = 'health-tile ' + level + (el.dataset.route ? ' clickable' : '');
+    el.querySelector('.health-tile-t').setAttribute('data-i18n', titleKey);
+    el.querySelector('.health-tile-t').textContent = t(titleKey);
+    el.querySelector('.health-tile-d').textContent = detail;
+  };
   const tile = (level, titleKey, detail, route) => {
     const el = h('div', { class: 'health-tile ' + level + (route ? ' clickable' : '') }, [
       h('div', { class: 'health-dot' }),
@@ -5211,8 +5245,9 @@ Views.health = async (root) => {
         h('div', { class: 'health-tile-d', text: detail }),
       ]),
     ]);
-    if (route) el.onclick = () => { location.hash = '#' + route; };
+    if (route) { el.dataset.route = route; el.onclick = () => { location.hash = '#' + route; }; }
     tiles.append(el);
+    return el;
   };
 
   const s = d.server || {};
@@ -5227,10 +5262,10 @@ Views.health = async (root) => {
   else if (free > 0 && free < 10 * GB) dl = 'warn';
   tile(free ? dl : 'idle', 'health.disk', t('health.disk.free').replace('{free}', bytes(free)), 'files');
 
-  const v = d.validator || {};
-  if ((v.errors || 0) > 0) tile('error', 'health.config', t('health.config.issues').replace('{e}', v.errors).replace('{w}', v.warnings || 0), 'validator');
-  else if ((v.warnings || 0) > 0) tile('warn', 'health.config', t('health.config.issues').replace('{e}', 0).replace('{w}', v.warnings), 'validator');
-  else tile('ok', 'health.config', t('health.config.ok'), 'validator');
+  // Config validity runs the full validator (~seconds on a big mission), so it
+  // is fetched separately: the tile shows "checking" and fills in when ready,
+  // instead of holding up the whole page.
+  const cfgTile = tile('idle', 'health.config', t('health.checking'), 'validator');
 
   const st = d.startup || {};
   if (s.running) tile('ok', 'health.start', t('health.start.running'), null);
@@ -5240,6 +5275,53 @@ Views.health = async (root) => {
 
   root.append(h('div', { class: 'card' }, [tiles]));
   applyI18n();
+
+  api.get('/api/validate').then((v) => {
+    const iss = v.issues || [];
+    const e = iss.filter((x) => x.severity === 'error').length;
+    const wn = iss.filter((x) => x.severity === 'warning').length;
+    if (e > 0) setTile(cfgTile, 'error', 'health.config', t('health.config.issues').replace('{e}', e).replace('{w}', wn));
+    else if (wn > 0) setTile(cfgTile, 'warn', 'health.config', t('health.config.issues').replace('{e}', 0).replace('{w}', wn));
+    else setTile(cfgTile, 'ok', 'health.config', t('health.config.ok'));
+  }).catch(() => setTile(cfgTile, 'idle', 'health.config', '—'));
+
+  // Disk cleanup — server logs and .bak snapshots quietly eat gigabytes on a
+  // long-lived server. Show how much each occupies and clear it on demand.
+  const cleanupHost = h('div', { class: 'cleanup-rows' });
+  root.append(h('div', { class: 'card' }, [
+    h('h3', { i18n: 'health.cleanup.title' }),
+    h('p', { class: 'hint', i18n: 'health.cleanup.hint' }),
+    cleanupHost,
+  ]));
+  async function renderCleanup() {
+    let c;
+    try { c = await api.get('/api/cleanup/scan'); } catch { return; }
+    cleanupHost.innerHTML = '';
+    const row = (target, labelKey, info) => {
+      const clear = h('button', { class: 'secondary', i18n: 'health.cleanup.clear', disabled: !info.count,
+        onclick: async () => {
+          const ok = await confirmModal(
+            t('health.cleanup.confirm.' + target).replace('{n}', info.count).replace('{size}', bytes(info.bytes)),
+            { danger: true, okText: t('health.cleanup.clear') });
+          if (!ok) return;
+          try {
+            const r = await api.post('/api/cleanup', { target });
+            toast(t('health.cleanup.done').replace('{n}', r.deleted).replace('{size}', bytes(r.freed)), 'ok');
+            await renderCleanup();
+          } catch (e) { handleErr(e); }
+        } });
+      return h('div', { class: 'cleanup-row' }, [
+        h('span', { class: 'cleanup-label', i18n: labelKey }),
+        h('span', { class: 'cleanup-size', text: info.count ? (info.count + ' · ' + bytes(info.bytes)) : t('health.cleanup.none') }),
+        h('span', { class: 'grow' }),
+        clear,
+      ]);
+    };
+    cleanupHost.append(row('logs', 'health.cleanup.logs', c.logs || {}));
+    cleanupHost.append(row('backups', 'health.cleanup.backups', c.backups || {}));
+    applyI18n();
+  }
+  renderCleanup();
 
   // The detailed "why won't it start" card — self-fetching, and it only renders
   // when the server is down and the log actually shows a cause.

@@ -1345,7 +1345,20 @@ input.attach-num {
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 .attach-table td.num.zero { color: var(--text-faint); }
-.attach-sum { max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Fixed layout so the table always fits its container: the fixed columns get
+   explicit widths and the contents column takes whatever is left and truncates.
+   The old rigid 460px contents column pushed the table past its container on
+   narrower screens — that overflow scrolled the Edit button off and split the
+   row-hover band in two. */
+.attach-table { table-layout: fixed; width: 100%; }
+.attach-table th:nth-child(1), .attach-table td:nth-child(1) { width: 24%; }
+.attach-table th:nth-child(2), .attach-table td:nth-child(2) { width: 96px; }
+.attach-table th:nth-child(3), .attach-table td:nth-child(3) { width: 92px; }
+.attach-table th:nth-child(4), .attach-table td:nth-child(4) { width: 84px; }
+.attach-table th:nth-child(6), .attach-table td:nth-child(6) { width: 112px; }
+.attach-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-name-cell { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-cat { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* --- editor: attachments / cargo / properties as separate sections ------- */
 
@@ -1417,6 +1430,11 @@ input.attach-num {
 .health-tile.idle .health-dot { color: var(--text-tertiary); background: var(--text-tertiary); }
 .health-tile-t { font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); }
 .health-tile-d { font-size: 14px; color: var(--text); margin-top: 3px; }
+.cleanup-rows { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.cleanup-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border-subtle); }
+.cleanup-row:first-child { border-top: none; }
+.cleanup-label { font-weight: 600; min-width: 140px; }
+.cleanup-size { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
 @media (max-width: 620px) {
   .loadout-item { grid-template-columns: 1fr 60px 30px; }
