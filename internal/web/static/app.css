@@ -1780,6 +1780,84 @@ input.attach-num {
   .chip.running .dot { animation: none; }
 }
 
+/* Players — watch flag + admin notes ------------------------------------- */
+.star-cell { width: 34px; text-align: center; padding-left: 4px; padding-right: 4px; }
+.star-btn {
+  background: none; border: none; cursor: pointer; padding: 2px 4px;
+  font-size: 17px; line-height: 1; color: var(--text-tertiary);
+  border-radius: 6px; transition: color .12s, background .12s;
+}
+.star-btn:hover { color: var(--warn); background: var(--surface-2); }
+.star-btn.on { color: var(--warn); }
+tr.row-watch > td { background: var(--warn-soft); }
+tr.row-watch > td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+.player-note {
+  margin-top: 4px; font-size: 12px; color: var(--text-secondary);
+  white-space: pre-wrap; border-left: 2px solid var(--border); padding-left: 8px;
+}
+
+/* Leaderboard ------------------------------------------------------------- */
+.lb-metrics { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.lb-tab {
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary);
+  padding: 6px 14px; border-radius: 999px; cursor: pointer; font-weight: 600; font-size: 13px;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.lb-tab:hover { border-color: var(--accent); color: var(--text); }
+.lb-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.lb-rank-h { width: 48px; }
+.lb-rank { text-align: center; font-weight: 700; color: var(--text-tertiary); }
+.lb-medal { font-size: 19px; }
+.lb-score { font-weight: 700; color: var(--accent); }
+.lb-active { color: var(--accent); }
+tr.lb-top > td { background: var(--surface-2); }
+
+/* Global config search --------------------------------------------------- */
+.search-group { margin-top: 14px; }
+.search-file {
+  display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px;
+  color: var(--text-secondary); padding-bottom: 4px; border-bottom: 1px solid var(--border); margin-bottom: 4px;
+}
+.search-file-name { font-family: var(--mono, ui-monospace, monospace); }
+.search-hit {
+  display: flex; gap: 10px; align-items: baseline; padding: 4px 6px; border-radius: 6px;
+}
+.search-hit.link { cursor: pointer; }
+.search-hit.link:hover { background: var(--surface-2); }
+.search-ln {
+  flex: 0 0 auto; min-width: 40px; text-align: right; color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums; font-size: 12px;
+}
+.search-snip {
+  white-space: pre-wrap; word-break: break-word; font-size: 12.5px;
+  font-family: var(--mono, ui-monospace, monospace); color: var(--text);
+}
+.search-snip mark { background: var(--warn-soft); color: var(--text); border-radius: 3px; padding: 0 1px; }
+
+/* Config profiles -------------------------------------------------------- */
+.profile-row {
+  display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 12px 0; border-top: 1px solid var(--border);
+}
+.profile-row:first-of-type { border-top: none; }
+.profile-main { min-width: 0; }
+.profile-name { font-weight: 700; }
+.profile-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+
+/* Loot economy dashboard ------------------------------------------------- */
+.ebar-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+.ebar-label {
+  flex: 0 0 150px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12.5px; color: var(--text-secondary);
+}
+.ebar-track { flex: 1 1 auto; height: 14px; background: var(--surface-2); border-radius: 7px; overflow: hidden; }
+.ebar-fill { height: 100%; background: var(--accent); border-radius: 7px; min-width: 2px; }
+.ebar-val {
+  flex: 0 0 auto; min-width: 64px; text-align: right; font-size: 12px;
+  color: var(--text-tertiary); font-variant-numeric: tabular-nums;
+}
+.inline-check { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+
 @media print {
   .sidebar, .topbar, .sidebar-backdrop, #toast-region, .support-footer,
   .nav-toggle, .top-progress, .actions, .toolbar { display: none !important; }

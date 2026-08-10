@@ -2220,6 +2220,22 @@ Views.files = async (root) => {
     } catch (e) { handleErr(e); }
   }
 
+  // Open a single file into the editor. Shared by tree clicks and the global
+  // config-search deep-link (via _filesTarget). Optionally jumps to a line.
+  async function openFilePath(path, line) {
+    const r = await api.get(`/api/files/read?path=${encodeURIComponent(path)}`);
+    currentPath = path;
+    setMode(path.split('/').pop());
+    setValue(r.content);
+    pathLabel.textContent = path;
+    await refreshBackups();
+    if (cm && line > 0) {
+      cm.setCursor(line - 1, 0);
+      cm.scrollIntoView({ line: line - 1, ch: 0 }, 120);
+      cm.focus();
+    }
+  }
+
   async function loadDir(path) {
     const d = await api.get(`/api/files/tree?path=${encodeURIComponent(path || '')}`);
     tree.innerHTML = '';
@@ -2236,13 +2252,8 @@ Views.files = async (root) => {
         // Any error here (413 for a >2 MB file, 404 for one that vanished)
         // used to be an unhandled rejection: no toast, nothing happened.
         try {
-        if (e.isDir) return await loadDir(e.path);
-        const r = await api.get(`/api/files/read?path=${encodeURIComponent(e.path)}`);
-        currentPath = e.path;
-        setMode(e.name);
-        setValue(r.content);
-        pathLabel.textContent = e.path;
-        await refreshBackups();
+          if (e.isDir) return await loadDir(e.path);
+          await openFilePath(e.path);
         } catch (err) { handleErr(err); }
       };
       tree.append(node);
@@ -2288,6 +2299,287 @@ Views.files = async (root) => {
     // CM failed to load — textarea stays functional as a fallback.
     console.warn('CodeMirror load failed', e);
   }
+
+  // Deep-link from the global config search: open the requested file (and jump
+  // to the matched line) once the editor is ready.
+  if (_filesTarget) {
+    const tgt = _filesTarget; _filesTarget = null;
+    const dir = tgt.path.split('/').slice(0, -1).join('/');
+    try { await loadDir(dir); } catch {}
+    try { await openFilePath(tgt.path, tgt.line); } catch (err) { handleErr(err); }
+  }
+};
+
+// _filesTarget is a pending {path, line} the Files view should open on its next
+// mount — set by the global config search before navigating to Files.
+let _filesTarget = null;
+
+// ------------------------------------------------------------- config search
+
+// highlightNodes returns DOM nodes for `text` with every case-insensitive
+// occurrence of `q` wrapped in <mark>. Built from text nodes (never innerHTML)
+// so config contents can't inject markup.
+function highlightNodes(text, q) {
+  const out = [];
+  const lc = text.toLowerCase(), ql = q.toLowerCase();
+  let i = 0;
+  while (true) {
+    const idx = lc.indexOf(ql, i);
+    if (idx < 0) { out.push(document.createTextNode(text.slice(i))); break; }
+    if (idx > i) out.push(document.createTextNode(text.slice(i, idx)));
+    out.push(h('mark', { text: text.slice(idx, idx + q.length) }));
+    i = idx + q.length;
+  }
+  return out;
+}
+
+Views.search = async (root) => {
+  root.append(pageHeader('nav.search', 'search.subtitle'));
+  const input = h('input', { type: 'search', placeholder: t('search.placeholder') });
+  const resultsCard = h('div', { class: 'card' });
+  root.append(h('div', { class: 'card' }, h('div', { class: 'toolbar' }, [
+    input,
+    h('button', { class: 'primary', i18n: 'search.go', onclick: () => run() }),
+  ])));
+  root.append(resultsCard);
+  setTimeout(() => input.focus(), 0);
+
+  let timer = null, seq = 0;
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 350); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(timer); run(); } });
+
+  async function run() {
+    const q = input.value.trim();
+    const mine = ++seq;
+    resultsCard.innerHTML = '';
+    if (q.length < 2) { resultsCard.append(h('p', { class: 'hint', i18n: 'search.hintShort' })); applyI18n(); return; }
+    let d;
+    try { d = await api.get('/api/config/search?q=' + encodeURIComponent(q)); }
+    catch (e) { handleErr(e); return; }
+    if (mine !== seq) return; // a newer keystroke already fired
+    const matches = d.matches || [];
+    if (!matches.length) {
+      resultsCard.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'search.none' })));
+      applyI18n();
+      return;
+    }
+    resultsCard.append(h('p', { class: 'hint',
+      text: t('search.count').replace('{n}', d.total) + (d.truncated ? ' ' + t('search.truncated') : '') }));
+
+    // Group consecutive matches by file (backupItems order keeps them together).
+    let curFile = null, group = null;
+    for (const m of matches) {
+      if (m.file !== curFile) {
+        curFile = m.file;
+        group = h('div', { class: 'search-group' }, [
+          h('div', { class: 'search-file' }, [
+            h('span', { class: 'search-file-name', text: m.file }),
+            m.path ? null : h('span', { class: 'badge mute', i18n: 'search.readonly' }),
+          ]),
+        ]);
+        resultsCard.append(group);
+      }
+      const row = h('div', { class: 'search-hit' + (m.path ? ' link' : '') }, [
+        h('span', { class: 'search-ln', text: String(m.line) }),
+        h('code', { class: 'search-snip' }, highlightNodes(m.text, q)),
+      ]);
+      if (m.path) {
+        row.title = t('search.open');
+        row.onclick = () => { _filesTarget = { path: m.path, line: m.line }; navigate('files'); };
+      }
+      group.append(row);
+    }
+    applyI18n();
+  }
+};
+
+// ----------------------------------------------------------- config profiles
+
+Views.cfgprofiles = async (root) => {
+  root.append(pageHeader('nav.cfgProfiles', 'cfgProfiles.subtitle'));
+  const running = !!State.serverStatus.running;
+  if (running) root.append(runningBanner());
+
+  const nameIn = h('input', { type: 'text', placeholder: t('cfgProfiles.namePh') });
+  const noteIn = h('input', { type: 'text', placeholder: t('cfgProfiles.notePh') });
+  root.append(h('div', { class: 'card' }, [
+    h('h3', { i18n: 'cfgProfiles.saveTitle' }),
+    h('p', { class: 'hint', i18n: 'cfgProfiles.saveHint' }),
+    h('div', { class: 'toolbar' }, [
+      nameIn, noteIn,
+      h('button', { class: 'primary', i18n: 'cfgProfiles.save', onclick: (e) => save(e.currentTarget) }),
+    ]),
+  ]));
+
+  const listCard = h('div', { class: 'card' }, [h('h3', { i18n: 'cfgProfiles.list' })]);
+  root.append(listCard);
+
+  async function save(btn) {
+    const name = nameIn.value.trim();
+    if (!name) { toast(t('cfgProfiles.needName'), 'warn'); nameIn.focus(); return; }
+    await withBusy(btn, async () => {
+      try {
+        await api.post('/api/config-profiles/save', { name, note: noteIn.value.trim() });
+        toast(t('cfgProfiles.saved'), 'ok');
+        nameIn.value = ''; noteIn.value = '';
+        await load();
+      } catch (e) { handleErr(e); }
+    });
+  }
+
+  async function apply(p, btn) {
+    if (!(await confirmModal(t('cfgProfiles.applyConfirm').replace('{name}', p.name)))) return;
+    await withBusy(btn, async () => {
+      try {
+        const r = await api.post('/api/config-profiles/apply', { slug: p.slug });
+        toast(t('cfgProfiles.applied').replace('{n}', r.count || 0), 'ok');
+      } catch (e) { handleErr(e); }
+    });
+  }
+
+  async function del(p, btn) {
+    if (!(await confirmModal(t('cfgProfiles.deleteConfirm').replace('{name}', p.name), { danger: true, okText: t('action.delete') }))) return;
+    await withBusy(btn, async () => {
+      try {
+        await api.post('/api/config-profiles/delete', { slug: p.slug });
+        await load();
+      } catch (e) { handleErr(e); }
+    });
+  }
+
+  async function load() {
+    listCard.innerHTML = '';
+    listCard.append(h('h3', { i18n: 'cfgProfiles.list' }));
+    let d;
+    try { d = await api.get('/api/config-profiles'); }
+    catch (e) { handleErr(e); return; }
+    const profiles = d.profiles || [];
+    if (!profiles.length) {
+      listCard.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'cfgProfiles.none' })));
+      applyI18n();
+      return;
+    }
+    for (const p of profiles) {
+      listCard.append(h('div', { class: 'profile-row' }, [
+        h('div', { class: 'profile-main' }, [
+          h('div', { class: 'profile-name', text: p.name }),
+          p.note ? h('div', { class: 'hint', text: p.note }) : null,
+          h('div', { class: 'hint', text:
+            fmtWhen(p.created) + ' · ' + t('cfgProfiles.files').replace('{n}', p.files) + ' · ' + bytes(p.size) }),
+        ]),
+        h('div', { class: 'profile-actions' }, [
+          h('button', { class: 'primary', i18n: 'cfgProfiles.apply', disabled: running,
+            onclick: (e) => apply(p, e.currentTarget) }),
+          h('button', { class: 'danger', i18n: 'action.delete', onclick: (e) => del(p, e.currentTarget) }),
+        ]),
+      ]));
+    }
+    applyI18n();
+  }
+  await load();
+};
+
+// ----------------------------------------------------------- loot economy
+
+Views.economy = async (root) => {
+  const myNav = _navSeq;
+  root.append(pageHeader('nav.economy', 'economy.subtitle'));
+  const running = !!State.serverStatus.running;
+
+  // File picker — vanilla types.xml plus any custom (moded) types files.
+  const files = ['types.xml'];
+  try { const md = await api.get('/api/moded'); (md.files || []).forEach(f => files.push(f.name)); }
+  catch {}
+  if (myNav !== _navSeq) return;
+  let curFile = '';
+  const fileSel = h('select', { onchange: () => { curFile = fileSel.value; loadStats(); } });
+  files.forEach(f => fileSel.append(h('option', { value: f === 'types.xml' ? '' : f, text: f })));
+  root.append(h('div', { class: 'card' }, h('div', { class: 'toolbar' }, [
+    h('label', { i18n: 'economy.file' }), fileSel,
+  ])));
+
+  const tiles = h('div', { class: 'grid-4' });
+  root.append(tiles);
+  const tuneCard = h('div', { class: 'card' });
+  root.append(tuneCard);
+  const chartsHost = h('div');
+  root.append(chartsHost);
+
+  const tile = (key, val) => h('div', { class: 'card' }, [h('h3', { i18n: key }), h('div', { class: 'metric-num', text: val })]);
+
+  function hbar(label, value, max, sub) {
+    const pct = max > 0 ? Math.max(2, Math.round(value / max * 100)) : 0;
+    return h('div', { class: 'ebar-row' }, [
+      h('div', { class: 'ebar-label', text: label, title: label }),
+      h('div', { class: 'ebar-track' }, h('div', { class: 'ebar-fill', style: { width: pct + '%' } })),
+      h('div', { class: 'ebar-val', text: sub != null ? sub : String(value) }),
+    ]);
+  }
+
+  function renderTune() {
+    tuneCard.innerHTML = '';
+    tuneCard.append(h('h3', { i18n: 'economy.tune.title' }), h('p', { class: 'hint', i18n: 'economy.tune.hint' }));
+    if (running) tuneCard.append(runningBanner());
+    const presets = [
+      { f: 2, label: 'economy.tune.x2' },
+      { f: 1.5, label: 'economy.tune.x15' },
+      { f: 0.5, label: 'economy.tune.half' },
+      { f: 0.25, label: 'economy.tune.quarter' },
+    ];
+    tuneCard.append(h('div', { class: 'toolbar' }, presets.map(p =>
+      h('button', { class: 'secondary', i18n: p.label, disabled: running, onclick: (e) => tune(p.f, e.currentTarget) }))));
+    const scaleMin = h('input', { type: 'checkbox' });
+    scaleMin.checked = true;
+    tuneCard.append(h('label', { class: 'inline-check' }, [scaleMin, h('span', { i18n: 'economy.tune.scaleMin' })]));
+    tuneCard._scaleMin = scaleMin;
+  }
+
+  async function tune(factor, btn) {
+    const scaleMin = tuneCard._scaleMin ? tuneCard._scaleMin.checked : true;
+    if (!(await confirmModal(t('economy.tune.confirm').replace('{pct}', Math.round(factor * 100))))) return;
+    await withBusy(btn, async () => {
+      try {
+        const r = await api.post('/api/economy/tune', { file: curFile, factor, nominal: true, min: scaleMin });
+        toast(t('economy.tune.done').replace('{n}', r.touched || 0), 'ok');
+        await loadStats();
+      } catch (e) { handleErr(e); }
+    });
+  }
+
+  function barCard(titleKey, rows, valOf, subOf, limit) {
+    if (!rows || !rows.length) return null;
+    const max = Math.max.apply(null, rows.map(valOf));
+    const card = h('div', { class: 'card' }, [h('h3', { i18n: titleKey })]);
+    rows.slice(0, limit || rows.length).forEach(r => card.append(hbar(r.name, valOf(r), max, subOf ? subOf(r) : null)));
+    return card;
+  }
+
+  async function loadStats() {
+    let d;
+    try { d = await api.get('/api/economy/stats' + (curFile ? '?file=' + encodeURIComponent(curFile) : '')); }
+    catch (e) { handleErr(e); return; }
+    tiles.innerHTML = '';
+    tiles.append(
+      tile('economy.tiles.items', String(d.total || 0)),
+      tile('economy.tiles.nominal', String(d.totalNominal || 0)),
+      tile('economy.tiles.categories', String((d.categories || []).length)),
+      tile('economy.tiles.min', String(d.totalMin || 0)),
+    );
+    chartsHost.innerHTML = '';
+    const cards = [
+      barCard('economy.byCategory', d.categories, r => r.nominal,
+        r => r.nominal + ' · ' + t('economy.itemsN').replace('{n}', r.count), 14),
+      barCard('economy.byUsage', d.usages, r => r.count, null, 12),
+      barCard('economy.byTier', d.values, r => r.count, null, 0),
+      barCard('economy.top', d.top, r => r.nominal, r => String(r.nominal), 20),
+    ];
+    for (const c of cards) if (c) chartsHost.append(c);
+    applyI18n();
+  }
+
+  renderTune();
+  await loadStats();
+  applyI18n();
 };
 
 // openSyncAllPicker — interactive modal for the "Sync all" flow. Shows
@@ -5021,7 +5313,10 @@ Views.players = async (root) => {
   catch (e) { handleErr(e); return; }
   if (myNav !== _navSeq) return; // ADM ingestion can take a moment
 
+  const list = d.players || [];
+
   // Summary tiles.
+  const watchTile = h('div', { class: 'metric-num', text: '0' });
   root.append(h('div', { class: 'grid-4' }, [
     h('div', { class: 'card' }, [
       h('h3', { i18n: 'players.total' }),
@@ -5031,23 +5326,72 @@ Views.players = async (root) => {
       h('h3', { i18n: 'players.online' }),
       h('div', { class: 'metric-num', text: String(d.online || 0) }),
     ]),
+    h('div', { class: 'card' }, [
+      h('h3', { i18n: 'players.watching' }),
+      watchTile,
+    ]),
   ]));
 
-  // Player table.
-  const tbl = h('table');
-  tbl.append(h('thead', {}, h('tr', {}, [
-    h('th', { i18n: 'col.name' }),
-    h('th', { i18n: 'col.guid' }),
-    h('th', { i18n: 'col.firstSeen' }),
-    h('th', { i18n: 'col.lastSeen' }),
-    h('th', { class: 'num', i18n: 'col.sessions' }),
-    h('th', { class: 'num', i18n: 'col.playtime' }),
-    h('th', { class: 'num', i18n: 'col.kills' }),
-    h('th', { class: 'num', i18n: 'col.deaths' }),
-  ])));
-  const tb = h('tbody');
-  const list = d.players || [];
-  for (const p of list.slice(0, 500)) {
+  // Note & watch editor — a note survives name changes because it is keyed by
+  // the player's stable Key on the server.
+  async function openNoteEditor(p) {
+    const m = openModal({ title: (p.name || '—') + ' — ' + t('players.note.edit') });
+    const ta = h('textarea', { rows: '4', style: { width: '100%', marginBottom: '10px' },
+      placeholder: t('players.note.placeholder') });
+    ta.value = p.note || '';
+    const watchCb = h('input', { type: 'checkbox' });
+    watchCb.checked = !!p.watch;
+    const save = async (btn) => {
+      await withBusy(btn, async () => {
+        try {
+          await api.post('/api/players/note', { key: p.key, note: ta.value, watch: watchCb.checked });
+          p.note = ta.value.trim();
+          p.watch = watchCb.checked;
+          toast(t('msg.saved'), 'ok');
+          m.close();
+          renderAll();
+        } catch (e) { handleErr(e); }
+      });
+    };
+    m.body.append(
+      ta,
+      h('label', { class: 'inline-check', style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' } }, [
+        watchCb, h('span', { i18n: 'players.watch.flag' }),
+      ]),
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => save(e.currentTarget) }),
+        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
+      ]),
+    );
+    applyI18n();
+    setTimeout(() => ta.focus(), 0);
+  }
+
+  async function toggleWatch(p) {
+    const nv = !p.watch;
+    try {
+      await api.post('/api/players/note', { key: p.key, note: p.note || '', watch: nv });
+      p.watch = nv;
+      renderAll();
+    } catch (e) { handleErr(e); }
+  }
+
+  // Star button that toggles the watch flag inline.
+  function watchStar(p) {
+    return h('button', {
+      class: 'star-btn' + (p.watch ? ' on' : ''),
+      title: t(p.watch ? 'players.watch.off' : 'players.watch.on'),
+      text: p.watch ? '★' : '☆',
+      onclick: () => toggleWatch(p),
+    });
+  }
+
+  function noteBtn(p) {
+    return h('button', { class: 'icon-btn', title: t('players.note.edit'),
+      text: '✎', onclick: () => openNoteEditor(p) });
+  }
+
+  function playerRow(p) {
     const nameCell = h('td', {}, [
       h('div', { style: { fontWeight: '600', display: 'flex', gap: '8px', alignItems: 'center' } }, [
         h('span', { text: p.name || '—' }),
@@ -5056,8 +5400,10 @@ Views.players = async (root) => {
       p.aliases && p.aliases.length
         ? h('div', { class: 'hint', text: t('players.aliases') + ': ' + p.aliases.join(', ') })
         : null,
+      p.note ? h('div', { class: 'player-note', text: p.note }) : null,
     ]);
-    tb.append(h('tr', {}, [
+    return h('tr', { class: p.watch ? 'row-watch' : '' }, [
+      h('td', { class: 'star-cell' }, watchStar(p)),
       nameCell,
       h('td', { class: 'mono', text: p.id ? p.id.slice(0, 12) + (p.id.length > 12 ? '…' : '') : '—', title: p.id || '' }),
       h('td', { text: fmtWhen(p.firstSeen) }),
@@ -5066,18 +5412,70 @@ Views.players = async (root) => {
       h('td', { class: 'num', text: fmtMinutes(p.playtimeMinutes || 0) }),
       h('td', { class: 'num', text: String(p.kills || 0) }),
       h('td', { class: 'num', text: String(p.deaths || 0) }),
+      h('td', { class: 'star-cell' }, noteBtn(p)),
+    ]);
+  }
+
+  // Watchlist card — only shown when at least one player is flagged.
+  const watchCard = h('div', { class: 'card' }, [h('h3', { i18n: 'players.watchlist' })]);
+  root.append(watchCard);
+
+  // Player table.
+  const tableCard = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.players' })]);
+  root.append(tableCard);
+
+  function tableHead() {
+    return h('thead', {}, h('tr', {}, [
+      h('th', { text: '' }),
+      h('th', { i18n: 'col.name' }),
+      h('th', { i18n: 'col.guid' }),
+      h('th', { i18n: 'col.firstSeen' }),
+      h('th', { i18n: 'col.lastSeen' }),
+      h('th', { class: 'num', i18n: 'col.sessions' }),
+      h('th', { class: 'num', i18n: 'col.playtime' }),
+      h('th', { class: 'num', i18n: 'col.kills' }),
+      h('th', { class: 'num', i18n: 'col.deaths' }),
+      h('th', { text: '' }),
     ]));
   }
-  const tableCard = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.players' })]);
-  if (!list.length) {
-    tableCard.append(h('div', { class: 'empty-state' }, [
-      h('div', { class: 'es-hint', i18n: 'players.noData' }),
-    ]));
-  } else {
+
+  function renderWatch() {
+    watchCard.innerHTML = '';
+    watchCard.append(h('h3', { i18n: 'players.watchlist' }));
+    const watched = list.filter(p => p.watch);
+    watchTile.textContent = String(watched.length);
+    if (!watched.length) {
+      watchCard.style.display = 'none';
+      return;
+    }
+    watchCard.style.display = '';
+    const tbl = h('table');
+    tbl.append(tableHead());
+    const tb = h('tbody');
+    for (const p of watched) tb.append(playerRow(p));
+    tbl.append(tb);
+    watchCard.append(h('div', { class: 'table-scroll' }, tbl));
+  }
+
+  function renderTable() {
+    tableCard.innerHTML = '';
+    tableCard.append(h('h2', { i18n: 'nav.players' }));
+    if (!list.length) {
+      tableCard.append(h('div', { class: 'empty-state' }, [
+        h('div', { class: 'es-hint', i18n: 'players.noData' }),
+      ]));
+      return;
+    }
+    const tbl = h('table');
+    tbl.append(tableHead());
+    const tb = h('tbody');
+    for (const p of list.slice(0, 500)) tb.append(playerRow(p));
     tbl.append(tb);
     tableCard.append(h('div', { class: 'table-scroll' }, tbl));
   }
-  root.append(tableCard);
+
+  function renderAll() { renderWatch(); renderTable(); applyI18n(); }
+  renderAll();
 
   // Killfeed.
   const kfCard = h('div', { class: 'card' }, [h('h3', { i18n: 'players.killfeed' })]);
@@ -5122,6 +5520,87 @@ function fmtMinutes(min) {
   if (min < 60) return min + 'm';
   return Math.floor(min / 60) + 'h ' + (min % 60) + 'm';
 }
+
+// ------------------------------------------------------------------ leaderboard
+
+Views.leaderboard = async (root) => {
+  const myNav = _navSeq;
+  root.append(pageHeader('nav.leaderboard', 'leaderboard.subtitle'));
+  let d;
+  try { d = await api.get('/api/players'); }
+  catch (e) { handleErr(e); return; }
+  if (myNav !== _navSeq) return;
+
+  const list = d.players || [];
+  if (!list.length) {
+    root.append(h('div', { class: 'card' }, h('div', { class: 'empty-state' },
+      h('div', { class: 'es-hint', i18n: 'leaderboard.empty' }))));
+    return;
+  }
+
+  // Each metric knows how to score a player and how to print the score.
+  const metrics = {
+    playtime: { label: 'leaderboard.metric.playtime', val: p => p.playtimeMinutes || 0, fmt: v => fmtMinutes(v) },
+    kills:    { label: 'leaderboard.metric.kills',    val: p => p.kills || 0,           fmt: v => String(v) },
+    kd:       { label: 'leaderboard.metric.kd',       val: p => (p.deaths ? (p.kills || 0) / p.deaths : (p.kills || 0)), fmt: v => v.toFixed(2) },
+    sessions: { label: 'leaderboard.metric.sessions', val: p => p.sessions || 0,        fmt: v => String(v) },
+  };
+  const medals = ['🥇', '🥈', '🥉'];
+  let cur = 'playtime';
+
+  const card = h('div', { class: 'card' });
+  root.append(card);
+
+  function render() {
+    card.innerHTML = '';
+    card.append(h('div', { class: 'lb-metrics' }, Object.keys(metrics).map(k =>
+      h('button', { class: 'lb-tab' + (k === cur ? ' active' : ''), i18n: metrics[k].label,
+        onclick: () => { cur = k; render(); applyI18n(); } }))));
+
+    const m = metrics[cur];
+    const ranked = list.slice()
+      .sort((a, b) => m.val(b) - m.val(a))
+      .filter(p => m.val(p) > 0)
+      .slice(0, 50);
+
+    if (!ranked.length) {
+      card.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'leaderboard.empty' })));
+      return;
+    }
+
+    // One column per stat; the active ranking metric's column is highlighted
+    // rather than duplicated as a separate "score" column.
+    const cols = [
+      { key: 'playtime', i18n: 'col.playtime', val: p => fmtMinutes(p.playtimeMinutes || 0) },
+      { key: 'kills', i18n: 'col.kills', val: p => String(p.kills || 0) },
+      { key: 'deaths', i18n: 'col.deaths', val: p => String(p.deaths || 0) },
+      { key: 'kd', i18n: 'col.kd', val: p => (p.deaths ? ((p.kills || 0) / p.deaths) : (p.kills || 0)).toFixed(2) },
+      { key: 'sessions', i18n: 'col.sessions', val: p => String(p.sessions || 0) },
+    ];
+    const tbl = h('table');
+    tbl.append(h('thead', {}, h('tr', {}, [
+      h('th', { class: 'lb-rank-h', i18n: 'col.rank' }),
+      h('th', { i18n: 'col.name' }),
+      ...cols.map(c => h('th', { class: 'num' + (c.key === cur ? ' lb-active' : ''), i18n: c.i18n })),
+    ])));
+    const tb = h('tbody');
+    ranked.forEach((p, i) => {
+      tb.append(h('tr', { class: i < 3 ? 'lb-top' : '' }, [
+        h('td', { class: 'lb-rank' }, i < 3
+          ? h('span', { class: 'lb-medal', text: medals[i] })
+          : h('span', { text: String(i + 1) })),
+        h('td', {}, [
+          h('span', { style: { fontWeight: '600' }, text: p.name || '—' }),
+          p.watch ? h('span', { class: 'badge mute', text: '★', title: t('players.watched'), style: { marginLeft: '6px' } }) : null,
+        ]),
+        ...cols.map(c => h('td', { class: 'num' + (c.key === cur ? ' lb-score' : ''), text: c.val(p) })),
+      ]));
+    });
+    tbl.append(tb);
+    card.append(h('div', { class: 'table-scroll' }, tbl));
+  }
+  render();
+};
 
 // --------------------------------------------------------------------- gameplay
 

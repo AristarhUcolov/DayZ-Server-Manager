@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -222,6 +223,66 @@ func (d *TypesDoc) BulkPatch(names []string, patch BulkFieldPatch) int {
 			}
 		}
 		touched++
+	}
+	return touched
+}
+
+// ScaleOpts controls a Scale pass over the economy.
+type ScaleOpts struct {
+	Nominal  bool   // scale <nominal>
+	Min      bool   // scale <min>
+	Category string // "" = every type; otherwise only this category (case-insensitive)
+}
+
+// Scale multiplies the selected numeric fields of every matching type by
+// `factor`, rounding to the nearest integer and never going below zero. It is
+// the engine behind the "CE tuning presets" (more/less loot). When both nominal
+// and min are scaled the ratio is preserved; a rounding overshoot that leaves
+// min > nominal is clamped back down. Returns how many types were touched.
+func (d *TypesDoc) Scale(factor float64, opts ScaleOpts) int {
+	if factor <= 0 || (!opts.Nominal && !opts.Min) {
+		return 0
+	}
+	scale := func(p *int) int {
+		v := int(math.Round(float64(*p) * factor))
+		if v < 0 {
+			v = 0
+		}
+		return v
+	}
+	touched := 0
+	for i := range d.Types {
+		t := &d.Types[i]
+		if opts.Category != "" {
+			if t.Category == nil || !strings.EqualFold(t.Category.Name, opts.Category) {
+				continue
+			}
+		}
+		changed := false
+		if opts.Nominal && t.Nominal != nil {
+			nv := scale(t.Nominal)
+			if nv != *t.Nominal {
+				t.Nominal = &nv
+				changed = true
+			}
+		}
+		if opts.Min && t.Min != nil {
+			mv := scale(t.Min)
+			if mv != *t.Min {
+				t.Min = &mv
+				changed = true
+			}
+		}
+		// Keep the CE invariant min <= nominal after rounding.
+		if t.Min != nil && t.Nominal != nil && *t.Min > *t.Nominal {
+			v := *t.Nominal
+			t.Min = &v
+			changed = true
+		}
+		if changed {
+			d.markDirty(t.Name)
+			touched++
+		}
 	}
 	return touched
 }

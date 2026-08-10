@@ -181,6 +181,28 @@
   правят.
 - **Заражённые — отдельно от оружия.** 162 зомби в cfgspawnabletypes.xml
   больше не засоряют фильтр «Оружие»: у них свой тип, как у одежды и техники.
+- **Лидерборд.** Отдельная страница-рейтинг: игроки по времени в игре,
+  убийствам, K/D или сессиям, с медалями для первой тройки. Данные берутся
+  из той же базы игроков (наиграно, киллы, сессии).
+- **Список наблюдения и заметки.** На странице игроков можно отметить игрока
+  звездой и записать заметку (например, «подозреваю в дюпе»). Отмеченные
+  выносятся в отдельный блок наверху; заметка и флаг переживают смену ника,
+  потому что привязаны к стабильному ключу игрока.
+- **Профили конфигов.** Сохраните всю конфигурацию (serverDZ.cfg, файлы
+  экономики миссии, BattlEye, кастомный лут) как именованный профиль и
+  переключайтесь между ними в один клик — «PvP на выходные» против «обычный
+  PvE». Применение сначала бэкапит каждый текущий файл и требует остановленного
+  сервера.
+- **Глобальный поиск по конфигам.** Найдите любой класс, параметр или значение
+  сразу во всех файлах конфигурации и экономики; клик по результату открывает
+  файл в редакторе прямо на нужной строке.
+- **Экономика лута.** Отдельная страница-дашборд: nominal по категориям,
+  предметы по usage и по уровню (tier), топ предметов по nominal — структура
+  экономики с одного взгляда, с графиками.
+- **Пресеты тюнинга CE.** Кнопки ×2 / ×1.5 / ×0.5 / ×0.25 масштабируют
+  количество спавна (`nominal`, при желании и `min`) во всём файле types в
+  один клик, сохраняя правило `min ≤ nominal`. Требует остановленного сервера,
+  делает бэкап.
 - **Инструкция для новичков.** Десять глав прямо в панели: с чего начать,
   моды, лут и экономика, обвесы, стартовый набор, RCon, погода, обслуживание,
   здоровье сервера, доступ с телефона. Каждая — с пошаговыми действиями,
@@ -506,6 +528,26 @@ panels.
 - **Infected split out from weapons.** The 162 zombies in cfgspawnabletypes.xml
   no longer clutter the Weapons filter — they get their own kind, like clothing
   and vehicles do.
+- **Leaderboard.** A ranking page: players by playtime, kills, K/D or sessions,
+  with medals for the top three. Built from the same player database (playtime,
+  kills, sessions).
+- **Watchlist and notes.** On the Players page you can flag a player with a star
+  and jot down a note (e.g. "suspected duper"). Flagged players get their own
+  block at the top; the note and flag survive name changes because they are keyed
+  to the player's stable key.
+- **Config profiles.** Save the whole configuration (serverDZ.cfg, the mission
+  economy files, BattlEye, custom loot) as a named profile and switch between
+  them in one click — "Weekend PvP" vs "Weekday PvE". Applying backs up every
+  current file first and requires the server stopped.
+- **Global config search.** Find any class name, setting or value across every
+  config and economy file at once; clicking a result opens the file in the editor
+  at that exact line.
+- **Loot economy dashboard.** A dashboard page: nominal by category, items by
+  usage and by tier, and the top items by nominal — the shape of your economy at
+  a glance, with charts.
+- **CE tuning presets.** ×2 / ×1.5 / ×0.5 / ×0.25 buttons scale spawn amounts
+  (`nominal`, and `min` when checked) across a whole types file in one click,
+  keeping the `min ≤ nominal` rule. Requires the server stopped, keeps a backup.
 - **Beginner's guide.** Eight chapters inside the panel: getting started,
   mods, loot and economy, attachments, RCon, weather, maintenance, remote
   access. Each has numbered steps, a screenshot of the section, a

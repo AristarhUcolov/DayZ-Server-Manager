@@ -27,6 +27,25 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "0.24.0", Date: "2026-08-10",
+		EN: []string{
+			"New Leaderboard page — rank players by playtime, kills, K/D or sessions, with medals for the top three.",
+			"Players page gained a watchlist and per-player notes — flag someone with a star and jot down why; both survive name changes.",
+			"New Config profiles page — save the whole configuration as a named profile and switch between them in one click.",
+			"New global config Search — find any class name, setting or value across every config file, with a jump straight to the line.",
+			"New Loot economy page — see nominal by category, items by usage and tier, and the top items at a glance.",
+			"CE tuning presets — scale spawn amounts across a types file (×2 / ×1.5 / ×0.5 / ×0.25) in one click, keeping the min ≤ nominal rule.",
+		},
+		RU: []string{
+			"Новая страница «Лидерборд» — рейтинг игроков по времени в игре, убийствам, K/D или сессиям, с медалями для первой тройки.",
+			"На странице игроков появились список наблюдения и заметки — отметьте игрока звездой и запишите причину; и то, и другое переживает смену ника.",
+			"Новая страница «Профили конфигов» — сохраните всю конфигурацию как именованный профиль и переключайтесь между ними в один клик.",
+			"Новый глобальный поиск по конфигам — найдите любой класс, параметр или значение во всех файлах, с переходом сразу к строке.",
+			"Новая страница «Экономика лута» — nominal по категориям, предметы по usage и уровню, топ предметов с одного взгляда.",
+			"Пресеты тюнинга CE — масштабируйте количество спавна во всём файле types (×2 / ×1.5 / ×0.5 / ×0.25) в один клик, сохраняя правило min ≤ nominal.",
+		},
+	},
+	{
 		Version: "0.23.1", Date: "2026-08-10",
 		EN: []string{
 			"Two new guide chapters — Player loadout and Server health — with screenshots, in all 11 languages.",

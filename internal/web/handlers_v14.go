@@ -78,6 +78,25 @@ func (h *handlers) playersList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// playerNote records an admin note and/or watch flag on a player. Keyed by the
+// player's stable Key (GUID or name:<name>) so it survives name changes.
+func (h *handlers) playerNote(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Key   string `json:"key"`
+		Note  string `json:"note"`
+		Watch bool   `json:"watch"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Key) == "" {
+		http.Error(w, "player key required", http.StatusBadRequest)
+		return
+	}
+	if !h.playersDB().SetMeta(req.Key, req.Note, req.Watch) {
+		http.Error(w, "unknown player", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"status": "saved", "key": req.Key, "note": strings.TrimSpace(req.Note), "watch": req.Watch})
+}
+
 // playersIngestLoop keeps the database current even when nobody has the page
 // open, so session/playtime math stays accurate.
 func (h *handlers) playersIngestLoop(ctx context.Context) {

@@ -82,6 +82,10 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// Bulk-edit endpoint: apply a scalar field patch to many types at once.
 	mux.HandleFunc("/api/types/bulk-patch", methods(h.typesBulkPatch, http.MethodPost))
 
+	// Loot economy dashboard + CE tuning presets.
+	mux.HandleFunc("/api/economy/stats", methods(h.economyStats, http.MethodGet))
+	mux.HandleFunc("/api/economy/tune", methods(h.economyTune, http.MethodPost))
+
 	// BattlEye configuration files (bans, whitelist, script filters, ...).
 	mux.HandleFunc("/api/battleye/list", methods(h.battleyeList, http.MethodGet))
 	mux.HandleFunc("/api/battleye/read", methods(h.battleyeRead, http.MethodGet))
@@ -124,6 +128,15 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/backups/all", methods(h.backupsAll, http.MethodGet))
 	mux.HandleFunc("/api/backups/restore", methods(h.backupsRestore, http.MethodPost))
 
+	// Config profiles — named snapshots of the whole configuration set.
+	mux.HandleFunc("/api/config-profiles", methods(h.cfgProfilesList, http.MethodGet))
+	mux.HandleFunc("/api/config-profiles/save", methods(h.cfgProfileSave, http.MethodPost))
+	mux.HandleFunc("/api/config-profiles/apply", methods(h.cfgProfileApply, http.MethodPost))
+	mux.HandleFunc("/api/config-profiles/delete", methods(h.cfgProfileDelete, http.MethodPost))
+
+	// Global config search — grep across the config/economy files.
+	mux.HandleFunc("/api/config/search", methods(h.configSearch, http.MethodGet))
+
 	// Mod profile configs (profiles/*ExpansionMod*/Settings/*.json etc.).
 	mux.HandleFunc("/api/profiles/tree", methods(h.profilesTree, http.MethodGet))
 	mux.HandleFunc("/api/profiles/read", methods(h.profilesRead, http.MethodGet))
@@ -147,6 +160,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/backup/run", methods(h.backupRun, http.MethodPost))
 	mux.HandleFunc("/api/discord/test", methods(h.discordTest, http.MethodPost))
 	mux.HandleFunc("/api/players", methods(h.playersList, http.MethodGet))
+	mux.HandleFunc("/api/players/note", methods(h.playerNote, http.MethodPost))
 	mux.HandleFunc("/api/gameplay", methods(h.gameplay, http.MethodGet, http.MethodPost))
 	mux.HandleFunc("/api/metrics/history", methods(h.metricsHistory, http.MethodGet))
 	mux.HandleFunc("/api/spawnable", methods(h.spawnableList, http.MethodGet))

@@ -39,6 +39,10 @@ type Player struct {
 	Kills     int      `json:"kills"`
 	Deaths    int      `json:"deaths"`
 	Online    bool     `json:"online"` // filled at serve time from RCon
+	// Admin-set metadata, persisted alongside the derived stats. ADM ingestion
+	// never touches these — a note or a watch flag survives every log pass.
+	Note  string `json:"note,omitempty"`
+	Watch bool   `json:"watch,omitempty"`
 }
 
 type KillEvent struct {
@@ -345,6 +349,22 @@ func (s *Store) Snapshot(killLimit int) ([]Player, []KillEvent) {
 		rev[len(kf)-1-i] = k
 	}
 	return out, rev
+}
+
+// SetMeta records an admin note and watch flag on a player, keyed by their
+// stable Key (GUID or name:<name>). Returns false when the key is unknown.
+// The metadata is persisted immediately and never overwritten by ADM ingestion.
+func (s *Store) SetMeta(key, note string, watch bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p := s.d.Players[key]
+	if p == nil {
+		return false
+	}
+	p.Note = strings.TrimSpace(note)
+	p.Watch = watch
+	s.save()
+	return true
 }
 
 func contains(list []string, s string) bool {
