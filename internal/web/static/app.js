@@ -5345,6 +5345,58 @@ Views.health = async (root) => {
   await renderDiagnosis(root, false);
 };
 
+// --------------------------------------------------------------- sponsors
+//
+// A thank-you wall for the people funding the manager's development, and a nudge
+// for anyone who wants the project to keep growing. The sponsor's own words and
+// the developer's reply are shown verbatim; only the surrounding labels are
+// translated. Anonymous supporters who'd like their real name/Steam shown are
+// told how to reach the developer.
+
+Views.sponsors = async (root) => {
+  root.append(pageHeader('nav.sponsors', 'sponsors.subtitle'));
+  let d;
+  try { d = await api.get('/api/sponsors'); }
+  catch (e) { handleErr(e); return; }
+  const list = d.sponsors || [];
+
+  root.append(h('div', { class: 'card' }, [
+    h('p', { class: 'sponsors-intro', i18n: 'sponsors.intro' }),
+  ]));
+
+  if (!list.length) {
+    root.append(h('div', { class: 'card' }, [h('p', { class: 'hint', i18n: 'sponsors.none' })]));
+  } else {
+    const wall = h('div', { class: 'sponsors-wall' });
+    for (const s of list) {
+      const head = h('div', { class: 'sponsor-head' }, [
+        h('span', { class: 'sponsor-name', text: s.name || '—' }),
+        s.amount ? h('span', { class: 'sponsor-amount', text: s.amount }) : null,
+        s.date ? h('span', { class: 'sponsor-date', text: s.date }) : null,
+      ]);
+      const body = [head];
+      if (s.link) body.push(h('a', { class: 'sponsor-link', href: s.link, target: '_blank', rel: 'noopener', text: s.link }));
+      if (s.message) body.push(h('blockquote', { class: 'sponsor-msg', text: '“' + s.message + '”' }));
+      if (s.reply) body.push(h('div', { class: 'sponsor-reply' }, [
+        h('span', { class: 'sponsor-reply-label', i18n: 'sponsors.reply.label' }),
+        h('span', { text: s.reply }),
+      ]));
+      if (s.anon) body.push(h('p', { class: 'hint sponsor-anon', i18n: 'sponsors.anon.note' }));
+      wall.append(h('div', { class: 'card sponsor-card' }, body));
+    }
+    root.append(wall);
+  }
+
+  // Call to action. The donation buttons themselves live in the always-present
+  // support footer right below, so this stays a motivational heading + note
+  // rather than duplicating the exact same button row.
+  root.append(h('div', { class: 'card sponsors-cta' }, [
+    h('h3', { i18n: 'sponsors.cta.title' }),
+    h('p', { class: 'hint', i18n: 'sponsors.cta.hint' }),
+  ]));
+  applyI18n();
+};
+
 // --------------------------------------------------------------- attachments
 //
 // cfgspawnabletypes.xml editor. DayZ semantics, which the UI makes explicit:

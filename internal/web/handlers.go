@@ -158,6 +158,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// undo a wipe (wipeApply already moves the folders aside for exactly this).
 	mux.HandleFunc("/api/diagnose", methods(h.diagnose, http.MethodGet))
 	mux.HandleFunc("/api/health", methods(h.health, http.MethodGet))
+	mux.HandleFunc("/api/sponsors", methods(h.sponsorsList, http.MethodGet))
 	mux.HandleFunc("/api/cleanup/scan", methods(h.cleanupScan, http.MethodGet))
 	mux.HandleFunc("/api/cleanup", methods(h.cleanupRun, http.MethodPost))
 	mux.HandleFunc("/api/backups/diff", methods(h.backupsDiff, http.MethodGet))

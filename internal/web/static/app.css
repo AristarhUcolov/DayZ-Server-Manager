@@ -1447,6 +1447,22 @@ input.attach-num {
 .cleanup-label { font-weight: 600; min-width: 140px; }
 .cleanup-size { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
+/* Sponsors — a thank-you wall. */
+.sponsors-intro { font-size: 15px; line-height: 1.6; margin: 0; }
+.sponsors-wall { display: flex; flex-direction: column; gap: 12px; }
+.sponsor-card { border-left: 3px solid var(--accent); }
+.sponsor-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.sponsor-name { font-weight: 700; font-size: 16px; }
+.sponsor-amount { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.sponsor-date { color: var(--text-tertiary); font-size: 12px; margin-left: auto; }
+.sponsor-link { display: inline-block; margin-top: 4px; font-size: 13px; }
+.sponsor-msg { margin: 10px 0 0; padding: 8px 14px; border-left: 2px solid var(--border-strong);
+  color: var(--text); font-style: italic; background: var(--bg-soft); border-radius: 0 var(--radius) var(--radius) 0; }
+.sponsor-reply { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.sponsor-reply-label { font-weight: 600; color: var(--accent); font-size: 13px; }
+.sponsor-anon { margin-top: 10px; }
+.sponsors-cta { margin-top: 12px; }
+
 @media (max-width: 620px) {
   .loadout-item { grid-template-columns: 1fr 60px 30px; }
   .loadout-item > *:nth-child(3) { display: none; }

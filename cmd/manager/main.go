@@ -22,7 +22,7 @@ import (
 
 const (
 	appName    = "DayZ Server Manager"
-	appVersion = "0.22.1"
+	appVersion = "0.23.0"
 	appAuthor  = "Aristarh Ucolov"
 )
 
@@ -109,8 +109,14 @@ func signalContext() (context.Context, context.CancelFunc) {
 }
 
 func sniffDayZ(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, "DayZServer_x64.exe"))
-	return err == nil
+	// Windows ships DayZServer_x64.exe; the Linux dedicated server is DayZServer.
+	// Check both so the working-dir sniff works on either platform.
+	for _, name := range []string{"DayZServer_x64.exe", "DayZServer"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // displayHost picks the address shown in the log and opened in the browser.

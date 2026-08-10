@@ -200,7 +200,29 @@ func (c *Controller) PID() int {
 	return c.cmd.Process.Pid
 }
 
-// Start launches DayZServer_x64.exe with the current manager config.
+// serverExeCandidates are the DayZ dedicated-server binary names to look for,
+// in order. Windows ships DayZServer_x64.exe; the Linux server binary is
+// DayZServer (an ELF). On non-Windows we try both so an oddly-named install
+// still starts.
+func serverExeCandidates() []string {
+	if runtime.GOOS == "windows" {
+		return []string{"DayZServer_x64.exe"}
+	}
+	return []string{"DayZServer", "DayZServer_x64"}
+}
+
+// FindServerExe returns the first server-binary candidate that exists in dir.
+func FindServerExe(dir string) (string, bool) {
+	for _, name := range serverExeCandidates() {
+		p := filepath.Join(dir, name)
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// Start launches the DayZ dedicated server with the current manager config.
 func (c *Controller) Start() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -208,9 +230,10 @@ func (c *Controller) Start() error {
 		return errors.New("server already running")
 	}
 
-	exe := filepath.Join(c.serverDir, "DayZServer_x64.exe")
-	if _, err := os.Stat(exe); err != nil {
-		return fmt.Errorf("DayZServer_x64.exe not found in %s", c.serverDir)
+	exe, ok := FindServerExe(c.serverDir)
+	if !ok {
+		return fmt.Errorf("DayZ server binary (%s) not found in %s",
+			strings.Join(serverExeCandidates(), " or "), c.serverDir)
 	}
 
 	args := c.buildArgs()

@@ -228,6 +228,19 @@ go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
 ```
 
+**Linux.** Начиная с v0.23.0 менеджер работает и на Linux — в GitHub Releases
+рядом с `dayz-manager.exe` лежит бинарник `dayz-manager-linux` (ELF, у
+исполняемых файлов в Linux нет расширения). Собрать самому:
+
+```bash
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager-linux ./cmd/manager
+```
+
+Положите его в папку сервера рядом с бинарником `DayZServer` (Linux-версия
+сервера, без `.exe`), сделайте исполняемым `chmod +x dayz-manager-linux` и
+запустите `./dayz-manager-linux`. Диск, метрики процесса и разбор RPT работают
+на Linux нативно (через `/proc` и `statfs`).
+
 **Иконка и свойства файла.** `cmd/manager/resource_windows_amd64.syso` лежит в
 репозитории и подхватывается `go build` автоматически — никаких инструментов
 ставить не нужно. Пересобирать его надо только если меняется иконка или версия:
@@ -300,6 +313,12 @@ internal/i18n/           строковые бандлы (11 языков), по
 internal/web/            HTTP-сервер, REST API, встроенные статические файлы
 internal/web/static/     index.html, app.css, app.js (встраиваются при сборке)
 ```
+
+## Спонсоры
+
+Проект развивается благодаря поддержке пользователей. Список тех, кто помог,
+и способы поддержать — в [SPONSORS.md](SPONSORS.md) и на странице **Спонсоры**
+прямо в менеджере. Спасибо! 💙
 
 ## Лицензия
 
@@ -532,6 +551,19 @@ Cross-compiling to Windows from Linux/macOS:
 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
 ```
 
+**Linux.** From v0.23.0 the manager also runs on Linux — GitHub Releases carry a
+`dayz-manager-linux` binary (ELF; Linux executables have no extension) alongside
+`dayz-manager.exe`. Build it yourself with:
+
+```bash
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager-linux ./cmd/manager
+```
+
+Drop it into the server folder next to the `DayZServer` binary (the Linux server,
+no `.exe`), make it executable with `chmod +x dayz-manager-linux`, and run
+`./dayz-manager-linux`. Disk space, process metrics and RPT diagnosis all work
+natively on Linux (via `/proc` and `statfs`).
+
 **Icon and file properties.** `cmd/manager/resource_windows_amd64.syso` is
 committed and `go build` links it automatically — no tooling to install.
 Regenerate it only when the icon or the version changes:
@@ -610,6 +642,12 @@ Internet, put Caddy / nginx with HTTP Basic auth in front.
 
 All write endpoints return `409 Conflict` if the DayZ server is currently
 running.
+
+## Sponsors
+
+The project grows thanks to its supporters. The people who chipped in — and the
+ways to help — are in [SPONSORS.md](SPONSORS.md) and on the **Sponsors** page
+inside the manager. Thank you! 💙
 
 ## License
 
