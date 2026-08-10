@@ -3369,6 +3369,7 @@ Views.loadout = async (root) => {
         h('td', { class: 'num', text: String(p.cargo || 0) }),
         h('td', {}, h('div', { class: 'row', style: { gap: '6px', justifyContent: 'flex-end' } }, [
           p.missing ? null : h('button', { i18n: 'action.edit', onclick: () => openLoadout(p.file) }),
+          p.missing ? null : h('button', { i18n: 'loadout.export', onclick: () => exportPreset(p.file) }),
           h('button', { class: 'icon-x', text: '×', title: t('action.delete'),
             onclick: async (e) => {
               const btn = e.currentTarget;
@@ -3386,11 +3387,54 @@ Views.loadout = async (root) => {
       h('div', { class: 'table-scroll' }, tbl),
       h('div', { class: 'actions' }, [
         h('button', { class: 'primary', i18n: 'loadout.add', onclick: () => openLoadout('') }),
+        h('button', { i18n: 'loadout.import', onclick: () => importPreset() }),
       ]),
     );
     applyI18n();
   }
   renderStatus();
+
+  // ---- import / export ----------------------------------------------------
+  // Presets are plain JSON files, so sharing one between servers is just a
+  // download + upload. Export streams the file as-is; import parses it, ensures
+  // a name, and saves it as a new preset (the backend normalises + registers it).
+  async function exportPreset(file) {
+    try {
+      const preset = await api.get('/api/spawngear/preset?file=' + encodeURIComponent(file));
+      const blob = new Blob([JSON.stringify(preset, null, 4)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = file || 'loadout.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { handleErr(e); }
+  }
+  function importPreset() {
+    const inp = h('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' } });
+    inp.onchange = async () => {
+      const f = inp.files && inp.files[0];
+      if (!f) { inp.remove(); return; }
+      try {
+        let preset;
+        try { preset = JSON.parse(await f.text()); }
+        catch { toast(t('loadout.import.badJson'), 'error'); return; }
+        if (!preset || typeof preset !== 'object' || !Array.isArray(preset.attachmentSlotItemSets)) {
+          if (!(await confirmModal(t('loadout.import.notPreset'), { danger: true, okText: t('action.confirm') }))) return;
+        }
+        let name = (preset.name || '').trim();
+        if (!name) {
+          name = await promptModal(t('loadout.import.name'), { value: f.name.replace(/\.json$/i, '') });
+          if (!name) return;
+        }
+        preset.name = name;
+        await api.post('/api/spawngear/save', { file: '', preset });
+        toast(t('loadout.import.done').replace('{name}', name), 'ok');
+        await navigate('loadout');
+      } catch (e) { handleErr(e); }
+      finally { inp.remove(); }
+    };
+    document.body.appendChild(inp); inp.click();
+  }
 
   // ---- editor -------------------------------------------------------------
   // DayZ's clothing slots. Kept short and ordered head-to-toe; the input is a
@@ -4714,6 +4758,10 @@ async function main() {
     // Support footer is rendered once here (outside #view) so it appears under
     // every section without any chance of duplication.
     renderSupportFooter();
+    // Wire the clickable version in the sidebar, and pop "What's new" once when
+    // the exe has been updated since the last visit.
+    setupVersionBadge();
+    maybeShowWhatsNew();
     // Restore the section from the URL hash so a reload keeps the user where
     // they were (defaults to dashboard for a fresh load / unknown hash).
     await navigate(routeFromHash());
@@ -4725,6 +4773,59 @@ async function main() {
 function currentRoute() {
   const active = document.querySelector('.nav a.active');
   return active ? active.dataset.route : 'dashboard';
+}
+
+// ---- What's new -----------------------------------------------------------
+
+// setupVersionBadge shows the running version in the sidebar and makes it open
+// the changelog on click.
+function setupVersionBadge() {
+  const el = document.getElementById('app-version');
+  if (!el) return;
+  const v = (State.info && State.info.version) || '';
+  if (!v) return;
+  el.textContent = 'v' + v;
+  el.title = t('whatsnew.title');
+  el.hidden = false;
+  el.onclick = () => openChangelog(false);
+}
+
+// maybeShowWhatsNew pops the changelog once, the first time the UI loads after
+// the exe was updated. A brand-new install (no remembered version) just records
+// the current one silently — no nagging on first run.
+function maybeShowWhatsNew() {
+  const cur = (State.info && State.info.version) || '';
+  if (!cur) return;
+  const seen = localStorage.getItem('seenVersion');
+  localStorage.setItem('seenVersion', cur);
+  if (seen && seen !== cur) openChangelog(true);
+}
+
+// openChangelog fetches the release notes and shows them in a modal. `auto` is
+// true when triggered by an update (stay quiet on error) vs. a manual click.
+async function openChangelog(auto) {
+  let d;
+  try { d = await api.get('/api/changelog?lang=' + encodeURIComponent(State.lang || 'en')); }
+  catch (e) { if (!auto) handleErr(e); return; }
+  const releases = d.releases || [];
+  if (!releases.length) return;
+  const m = openModal({ title: t('whatsnew.title'), wide: true });
+  m.body.append(h('p', { class: 'hint', text: (t('whatsnew.version') || 'Version {v}').replace('{v}', d.current || '') }));
+  const host = h('div', { class: 'changelog' });
+  for (const r of releases) {
+    host.append(h('div', { class: 'changelog-rel' }, [
+      h('div', { class: 'changelog-head' }, [
+        h('span', { class: 'changelog-ver', text: 'v' + r.version }),
+        h('span', { class: 'changelog-date', text: r.date || '' }),
+      ]),
+      h('ul', { class: 'changelog-notes' }, (r.notes || []).map(n => h('li', { text: n }))),
+    ]));
+  }
+  m.body.append(host);
+  m.body.append(h('div', { class: 'actions' }, [
+    h('button', { class: 'primary', i18n: 'action.close', onclick: () => m.close() }),
+  ]));
+  applyI18n();
 }
 
 // --------------------------------------------------------------------- battleye
@@ -4937,6 +5038,7 @@ Views.players = async (root) => {
   tbl.append(h('thead', {}, h('tr', {}, [
     h('th', { i18n: 'col.name' }),
     h('th', { i18n: 'col.guid' }),
+    h('th', { i18n: 'col.firstSeen' }),
     h('th', { i18n: 'col.lastSeen' }),
     h('th', { class: 'num', i18n: 'col.sessions' }),
     h('th', { class: 'num', i18n: 'col.playtime' }),
@@ -4958,6 +5060,7 @@ Views.players = async (root) => {
     tb.append(h('tr', {}, [
       nameCell,
       h('td', { class: 'mono', text: p.id ? p.id.slice(0, 12) + (p.id.length > 12 ? '…' : '') : '—', title: p.id || '' }),
+      h('td', { text: fmtWhen(p.firstSeen) }),
       h('td', { text: fmtWhen(p.lastSeen) }),
       h('td', { class: 'num', text: String(p.sessions || 0) }),
       h('td', { class: 'num', text: fmtMinutes(p.playtimeMinutes || 0) }),

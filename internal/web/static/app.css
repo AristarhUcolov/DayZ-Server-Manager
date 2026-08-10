@@ -1463,6 +1463,21 @@ input.attach-num {
 .sponsor-anon { margin-top: 10px; }
 .sponsors-cta { margin-top: 12px; }
 
+/* Sidebar version badge — opens the changelog. */
+.app-version { display: inline-block; margin-top: 3px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; cursor: pointer;
+  color: var(--text-tertiary); background: var(--bg-soft); border: 1px solid var(--border);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.app-version:hover { color: var(--accent); border-color: var(--accent); }
+
+/* What's-new / changelog. */
+.changelog { display: flex; flex-direction: column; gap: 16px; margin: 12px 0; max-height: 60vh; overflow-y: auto; }
+.changelog-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.changelog-ver { font-weight: 700; font-size: 15px; color: var(--accent); }
+.changelog-date { color: var(--text-tertiary); font-size: 12px; }
+.changelog-notes { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.changelog-notes li { line-height: 1.5; }
+
 @media (max-width: 620px) {
   .loadout-item { grid-template-columns: 1fr 60px 30px; }
   .loadout-item > *:nth-child(3) { display: none; }
