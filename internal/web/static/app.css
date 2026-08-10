@@ -1858,6 +1858,61 @@ tr.lb-top > td { background: var(--surface-2); }
 }
 .inline-check { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
 
+/* Game map + heatmap ----------------------------------------------------- */
+.map-wrap {
+  max-width: 760px; margin: 0 auto; border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden;
+}
+.game-map { display: block; width: 100%; height: auto; background: var(--surface); }
+.gm-bg { fill: var(--surface-2); }
+.gm-grid { stroke: var(--border); stroke-width: 0.5; }
+.gm-axis { fill: var(--text-tertiary); font-size: 11px; }
+.gm-town { fill: var(--text-secondary); }
+.gm-town-label { fill: var(--text-secondary); font-size: 9px; font-weight: 600; }
+.map-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.map-legend { display: flex; gap: 14px; flex-wrap: wrap; }
+.map-leg { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.map-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.map-dot-pvp { background: var(--error); }
+.map-dot-env { background: var(--warn); }
+.map-dot-suicide { background: var(--text-tertiary); }
+.map-readout {
+  font-variant-numeric: tabular-nums; color: var(--text-tertiary);
+  font-size: 12px; min-width: 150px; text-align: right;
+}
+.heat { stroke: none; }
+.heat-pvp { fill: var(--error); fill-opacity: 0.42; }
+.heat-env { fill: var(--warn); fill-opacity: 0.38; }
+.heat-suicide { fill: var(--text-tertiary); fill-opacity: 0.38; }
+.gm-edit { cursor: crosshair; }
+.ev-pt { fill: var(--accent); stroke: #fff; stroke-width: 1; cursor: grab; }
+.ev-pt:hover { fill: var(--warn); }
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.live-pt { fill: var(--ok); stroke: #fff; stroke-width: 1; }
+.live-pt.stale { fill: var(--text-tertiary); }
+.live-label { fill: var(--text); font-size: 10px; font-weight: 700; }
+.live-label.stale { fill: var(--text-tertiary); font-weight: 600; }
+
+/* Random presets library ------------------------------------------------- */
+.preset-block { padding: 12px 0; border-top: 1px solid var(--border); }
+.preset-block:first-of-type { border-top: none; }
+.preset-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.preset-name { font-weight: 700; font-family: var(--mono, ui-monospace, monospace); }
+
+/* Where does it spawn ---------------------------------------------------- */
+.loot-hit { padding: 10px 0; border-top: 1px solid var(--border); }
+.loot-hit:first-of-type { border-top: none; }
+.loot-hit-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }
+.loot-name { font-weight: 700; font-family: var(--mono, ui-monospace, monospace); }
+.loot-hit .chip-list { margin-top: 6px; margin-bottom: 0; }
+.loot-warn { color: var(--warn); margin-top: 4px; }
+
+/* globals.xml form ------------------------------------------------------- */
+.globals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 8px 20px; }
+.globals-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.globals-row > :first-child { color: var(--text-secondary); font-size: 13px; min-width: 0; }
+.globals-row input { flex: 0 0 130px; width: 130px; }
+
 @media print {
   .sidebar, .topbar, .sidebar-backdrop, #toast-region, .support-footer,
   .nav-toggle, .top-progress, .actions, .toolbar { display: none !important; }

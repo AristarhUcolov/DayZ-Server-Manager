@@ -146,6 +146,23 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/events", methods(h.eventsList, http.MethodGet))
 	mux.HandleFunc("/api/events/item", methods(h.eventsItem, http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete))
 
+	// Event spawn-point editor (cfgeventspawns.xml on the map).
+	mux.HandleFunc("/api/eventspawns", methods(h.eventSpawnsList, http.MethodGet))
+	mux.HandleFunc("/api/eventspawns/save", methods(h.eventSpawnsSave, http.MethodPost))
+
+	// globals.xml variable form.
+	mux.HandleFunc("/api/globals", methods(h.globalsGet, http.MethodGet))
+	mux.HandleFunc("/api/globals/save", methods(h.globalsSave, http.MethodPost))
+
+	// "Where does this item spawn?" reverse loot lookup.
+	mux.HandleFunc("/api/loot/where", methods(h.lootWhere, http.MethodGet))
+
+	// cfgrandompresets.xml library (real per-item spawn chance).
+	mux.HandleFunc("/api/randompresets", methods(h.randomPresetsList, http.MethodGet))
+
+	// Mod types drift — which installed mods ship loot missing from the economy.
+	mux.HandleFunc("/api/mods/drift", methods(h.modsDrift, http.MethodGet))
+
 	// Logs.
 	mux.HandleFunc("/api/logs/list", methods(h.logsList, http.MethodGet))
 	mux.HandleFunc("/api/logs/read", methods(h.logsRead, http.MethodGet))
@@ -161,6 +178,8 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/discord/test", methods(h.discordTest, http.MethodPost))
 	mux.HandleFunc("/api/players", methods(h.playersList, http.MethodGet))
 	mux.HandleFunc("/api/players/note", methods(h.playerNote, http.MethodPost))
+	mux.HandleFunc("/api/map/heat", methods(h.mapHeat, http.MethodGet))
+	mux.HandleFunc("/api/map/live", methods(h.mapLive, http.MethodGet))
 	mux.HandleFunc("/api/gameplay", methods(h.gameplay, http.MethodGet, http.MethodPost))
 	mux.HandleFunc("/api/metrics/history", methods(h.metricsHistory, http.MethodGet))
 	mux.HandleFunc("/api/spawnable", methods(h.spawnableList, http.MethodGet))

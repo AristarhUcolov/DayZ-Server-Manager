@@ -60,6 +60,9 @@ type KillEvent struct {
 	// reported as a suicide, which on a normal server is most deaths.
 	Kind    string `json:"kind"`
 	Suicide bool   `json:"suicide,omitempty"` // kept for older UI builds
+	// Pos is the victim's world position [x, z] (the death location), when the
+	// log line carried one. Drives the death/kill heatmap.
+	Pos []float64 `json:"pos,omitempty"`
 }
 
 type db struct {
@@ -76,6 +79,12 @@ type Store struct {
 	// restart just misses one session's playtime, never corrupts totals.
 	open   map[string]time.Time
 	lastIn time.Time
+	// Last-known ground position per player key, from any positioned ADM line
+	// (connect / hit / chat). In-memory only — this is "where were they last
+	// seen", used by the live map, not something to persist. Vanilla DayZ does
+	// not log positions continuously, so these can be stale between events.
+	lastPos   map[string][]float64
+	lastPosAt map[string]time.Time
 }
 
 const (
@@ -88,9 +97,11 @@ const (
 
 func Open(managerDir string) *Store {
 	s := &Store{
-		path: filepath.Join(managerDir, "players.json"),
-		d:    db{Players: map[string]*Player{}, Offsets: map[string]int64{}},
-		open: map[string]time.Time{},
+		path:      filepath.Join(managerDir, "players.json"),
+		d:         db{Players: map[string]*Player{}, Offsets: map[string]int64{}},
+		open:      map[string]time.Time{},
+		lastPos:   map[string][]float64{},
+		lastPosAt: map[string]time.Time{},
 	}
 	if data, err := os.ReadFile(s.path); err == nil {
 		_ = json.Unmarshal(data, &s.d)
@@ -260,6 +271,7 @@ func (s *Store) apply(ev admlog.Event, stamp string, at time.Time) bool {
 		}
 		p.Sessions++
 		s.open[p.Key] = at
+		s.recordPos(p.Key, xz(ev.Pos), at)
 		return true
 	case "disconnect":
 		p := s.player(ev.ID, ev.Player, stamp)
@@ -300,6 +312,7 @@ func (s *Store) apply(ev admlog.Event, stamp string, at time.Time) bool {
 			Weapon: ev.Weapon, Distance: ev.Distance,
 			Source: ev.Source, Kind: kind,
 			Suicide: kind == "suicide",
+			Pos:     xz(ev.Pos),
 		})
 		return true
 	case "death":
@@ -315,12 +328,72 @@ func (s *Store) apply(ev admlog.Event, stamp string, at time.Time) bool {
 			kind = "suicide"
 		}
 		s.pushKill(KillEvent{At: stamp, Time: ev.Time, Victim: ev.Player,
-			Kind: kind, Suicide: kind == "suicide", Source: ev.Source})
+			Kind: kind, Suicide: kind == "suicide", Source: ev.Source,
+			Pos: xz(ev.Pos)})
 		return true
 	case "hit", "chat":
-		return s.player(ev.ID, ev.Player, stamp) != nil
+		p := s.player(ev.ID, ev.Player, stamp)
+		if p == nil {
+			return false
+		}
+		s.recordPos(p.Key, xz(ev.Pos), at)
+		return true
 	}
 	return false
+}
+
+// recordPos stores a player's last-known ground position. Caller holds s.mu.
+// A nil position (line without pos=<…>) is ignored so the previous fix stands.
+func (s *Store) recordPos(key string, pos []float64, at time.Time) {
+	if pos == nil {
+		return
+	}
+	s.lastPos[key] = pos
+	s.lastPosAt[key] = at
+}
+
+// LivePos is one player's last-known location for the live map.
+type LivePos struct {
+	Key    string  `json:"key"`
+	Name   string  `json:"name"`
+	X      float64 `json:"x"`
+	Z      float64 `json:"z"`
+	AgeSec int     `json:"ageSec"` // seconds since the position was logged
+}
+
+// LivePositions returns the last-known location of every player the store has
+// seen a position for. The caller decides who is actually online (via RCon).
+func (s *Store) LivePositions() []LivePos {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]LivePos, 0, len(s.lastPos))
+	now := time.Now()
+	for k, pos := range s.lastPos {
+		if len(pos) < 2 {
+			continue
+		}
+		name := k
+		if p := s.d.Players[k]; p != nil && p.Name != "" {
+			name = p.Name
+		}
+		age := int(now.Sub(s.lastPosAt[k]).Seconds())
+		if age < 0 {
+			age = 0
+		}
+		out = append(out, LivePos{Key: k, Name: name, X: pos[0], Z: pos[1], AgeSec: age})
+	}
+	return out
+}
+
+// xz reduces a DayZ world position to the map ground plane [x, z]. The .ADM
+// log writes pos=<east, north, altitude> — the altitude is the LAST component,
+// so the ground plane is the first two, not [0] and [2]. Returns nil when no
+// position was logged, so the field stays omitted for lines without a pos=<…>.
+func xz(pos []float64) []float64 {
+	if len(pos) < 2 {
+		return nil
+	}
+	return []float64{pos[0], pos[1]}
 }
 
 func (s *Store) pushKill(k KillEvent) {

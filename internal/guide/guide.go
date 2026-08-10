@@ -215,5 +215,9 @@ func Help(lang string) map[string]string {
 	for k, v := range GameplayFieldHelp(lang) {
 		out["gp."+k] = v
 	}
+	// globals.xml variable descriptions ride along under a "gl." prefix.
+	for k, v := range GlobalsFieldHelp(lang) {
+		out["gl."+k] = v
+	}
 	return out
 }

@@ -27,6 +27,29 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "0.25.0", Date: "2026-08-11",
+		EN: []string{
+			"New map pages — a schematic map (Chernarus, Livonia, Sakhal) with a 1 km grid and landmarks.",
+			"Heatmap — where players die and fights happen, from the admin log, split into PvP, environment and suicides.",
+			"Event spawn editor — place and move cfgeventspawns.xml points on the map, with a check for events that have no spawn points (they never spawn) or points with no matching event.",
+			"Live map — the last-known position of online players (positions come from connect/combat/chat, so a dot can lag; older than 5 min is dimmed).",
+			"globals.xml form — a friendly editor with a plain-language tooltip per known variable.",
+			"Where to find — type an item's class name to see its category, locations, tier and nominal.",
+			"Random presets library — cfgrandompresets.xml with each item's real spawn chance.",
+			"Mod loot check — which installed mods ship loot that isn't in your economy (so it never spawns).",
+		},
+		RU: []string{
+			"Новые страницы с картой — схематичная карта (Chernarus, Livonia, Sakhal) с сеткой 1 км и ландмарками.",
+			"Тепловая карта — где гибнут игроки и идут бои, из админ-лога, с разбивкой на PvP, окружение и суициды.",
+			"Редактор точек событий — расставляйте и двигайте точки cfgeventspawns.xml на карте, с проверкой событий без точек (не заспавнятся) и точек без события.",
+			"Живая карта — последняя известная позиция онлайн-игроков (позиции берутся из входа/боя/чата, поэтому точка может отставать; старше 5 мин приглушены).",
+			"Форма globals.xml — удобный редактор с понятной подсказкой у каждой известной переменной.",
+			"«Где найти» — введите класс предмета и увидите его категорию, локации, тир и nominal.",
+			"Библиотека рандом-пресетов — cfgrandompresets.xml с реальным шансом каждого предмета.",
+			"Проверка лута модов — какие установленные моды везут лут, которого нет в вашей экономике (и он не спавнится).",
+		},
+	},
+	{
 		Version: "0.24.0", Date: "2026-08-10",
 		EN: []string{
 			"New Leaderboard page — rank players by playtime, kills, K/D or sessions, with medals for the top three.",

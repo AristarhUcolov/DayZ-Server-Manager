@@ -203,6 +203,29 @@
   количество спавна (`nominal`, при желании и `min`) во всём файле types в
   один клик, сохраняя правило `min ≤ nominal`. Требует остановленного сервера,
   делает бэкап.
+- **Карта сервера.** Схематичная карта Chernarus/Livonia/Sakhal с сеткой 1 км
+  и ландмарками — общий компонент для трёх инструментов ниже. Береговые контуры
+  пока не рисуются; координатная сетка и города дают ориентир.
+- **Тепловая карта.** Где гибнут игроки и идут бои — из позиций в админ-логе.
+  Разбивка на PvP, окружение и суициды, фильтры, координаты под курсором.
+- **Редактор точек событий.** `cfgeventspawns.xml` на карте: клик — добавить
+  точку, тащить — двигать, правый клик — удалить. Кросс-чек с `events.xml`:
+  показывает события без точек (не заспавнятся) и осиротевшие точки.
+- **Живая карта.** Последняя известная позиция онлайн-игроков, авто-обновление.
+  Ванильный DayZ пишет позиции только при входе/бою/чате, поэтому точка может
+  отставать; позиции старше 5 минут приглушены.
+- **Форма globals.xml.** Понятная форма над глобальными переменными экономики
+  (таймеры уборки, лимиты спавна, вход/выход, распад баз) с подсказкой у каждой
+  известной переменной. Поиск, сохранение только изменённого.
+- **«Где найти».** Обратный поиск лута: вводишь класс предмета → категория,
+  локации (usage), тир (value), теги, nominal/min. Предупреждает, если у
+  предмета нет usage — в обычном луте зданий он не появится.
+- **Библиотека рандом-пресетов.** `cfgrandompresets.xml`: группы cargo/attachments
+  с реальным шансом каждого предмета (шанс группы × вес ÷ сумма весов), как в
+  разделе обвесов.
+- **Проверка лута модов.** Для каждого установленного мода показывает, весь ли
+  его лут есть в экономике: «не смержен» / «частично» / активен, со списком
+  отсутствующих типов — главная причина, почему предметы мода не спавнятся.
 - **Инструкция для новичков.** Десять глав прямо в панели: с чего начать,
   моды, лут и экономика, обвесы, стартовый набор, RCon, погода, обслуживание,
   здоровье сервера, доступ с телефона. Каждая — с пошаговыми действиями,
@@ -548,6 +571,30 @@ panels.
 - **CE tuning presets.** ×2 / ×1.5 / ×0.5 / ×0.25 buttons scale spawn amounts
   (`nominal`, and `min` when checked) across a whole types file in one click,
   keeping the `min ≤ nominal` rule. Requires the server stopped, keeps a backup.
+- **Server map.** A schematic Chernarus/Livonia/Sakhal map with a 1 km grid and
+  landmarks — a shared component behind the three tools below. Coastlines aren't
+  traced yet; the grid and towns give orientation.
+- **Heatmap.** Where players die and fights happen, from positions in the admin
+  log. Split into PvP, environment and suicides, with filters and a coordinate
+  readout under the cursor.
+- **Event spawn editor.** `cfgeventspawns.xml` on the map: click to add a point,
+  drag to move, right-click to delete. Cross-checked against `events.xml`, so
+  events with no spawn points (they never spawn) and orphan points are flagged.
+- **Live map.** The last-known position of online players, auto-refreshing.
+  Vanilla DayZ logs positions only on connect, combat and chat, so a dot can lag;
+  positions older than 5 minutes are dimmed.
+- **globals.xml form.** A friendly form over the central-economy globals (cleanup
+  timers, spawn limits, login/logout, base decay) with a plain-language tooltip
+  per known variable. Search, saves only what changed.
+- **Where to find.** A reverse loot lookup: type an item's class name → category,
+  locations (usage), tier (value), tags, nominal/min. Warns when an item has no
+  usage — it won't appear in normal building loot.
+- **Random presets library.** `cfgrandompresets.xml`: cargo/attachment groups
+  with each item's real spawn chance (group chance × weight ÷ sum of weights),
+  the same math as Attachments.
+- **Mod loot check.** For each installed mod, shows whether all its loot is in
+  the economy: not merged / partly missing / active, with the missing type names
+  — the top reason a mod's items don't spawn.
 - **Beginner's guide.** Eight chapters inside the panel: getting started,
   mods, loot and economy, attachments, RCon, weather, maintenance, remote
   access. Each has numbered steps, a screenshot of the section, a

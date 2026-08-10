@@ -5602,6 +5602,625 @@ Views.leaderboard = async (root) => {
   render();
 };
 
+// ------------------------------------------------------------------- game map
+
+// Approximate world coordinates (metres, X east / Z north) of well-known
+// Chernarus locations, for orientation on the schematic map. Other worlds fall
+// back to the bare grid until their landmarks are traced.
+const MAP_LANDMARKS = {
+  chernarus: [
+    ['Chernogorsk', 6650, 2050], ['Elektrozavodsk', 10380, 1980],
+    ['Berezino', 12060, 9130], ['Novodmitrovsk', 11900, 14350],
+    ['Severograd', 8050, 12700], ['Zelenogorsk', 2720, 5250],
+    ['NW Airfield', 4500, 10300], ['Tisy', 1650, 13900],
+    ['Stary Sobor', 6070, 7700], ['Vybor', 3800, 8950],
+    ['Krasnostav', 11200, 12200], ['Kamenka', 1900, 2200],
+    ['Balota', 4900, 2450], ['Solnichniy', 13600, 6200], ['Gorka', 9500, 8800],
+  ],
+};
+
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs, parent) {
+  const el = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+  if (parent) parent.append(el);
+  return el;
+}
+
+// buildGameMap draws a correctly-scaled, license-safe schematic map: a 1 km
+// grid with kilometre labels, known landmarks (Chernarus), and an empty <g>
+// layer for callers to plot points into. Returns helpers to convert world
+// coordinates to the 0..1000 SVG space and back.
+function buildGameMap(map) {
+  const size = (map && map.size) || 15360;
+  const S = 1000;
+  const w2s = (x, z) => [x / size * S, S - z / size * S];        // flip Z (north up)
+  const s2w = (sx, sy) => [sx / S * size, (S - sy) / S * size];  // inverse
+
+  const svg = svgEl('svg', { viewBox: `0 0 ${S} ${S}`, class: 'game-map', preserveAspectRatio: 'xMidYMid meet' });
+  svgEl('rect', { x: 0, y: 0, width: S, height: S, class: 'gm-bg' }, svg);
+
+  const grid = svgEl('g', { class: 'gm-grid-g' }, svg);
+  for (let m = 0; m <= size + 1; m += 1000) {
+    const p = m / size * S;
+    svgEl('line', { x1: p, y1: 0, x2: p, y2: S, class: 'gm-grid' }, grid);
+    svgEl('line', { x1: 0, y1: p, x2: S, y2: p, class: 'gm-grid' }, grid);
+    const km = m / 1000;
+    if (km % 2 === 0 && m < size) {
+      svgEl('text', { x: p + 3, y: 14, class: 'gm-axis' }, grid).textContent = km;
+      svgEl('text', { x: 3, y: S - p - 4, class: 'gm-axis' }, grid).textContent = km;
+    }
+  }
+
+  const marks = svgEl('g', { class: 'gm-marks' }, svg);
+  for (const [name, x, z] of (MAP_LANDMARKS[map && map.key] || [])) {
+    const [sx, sy] = w2s(x, z);
+    svgEl('circle', { cx: sx, cy: sy, r: 2.2, class: 'gm-town' }, marks);
+    const label = svgEl('text', { x: sx + 4, y: sy + 3, class: 'gm-town-label' }, marks);
+    label.textContent = name;
+  }
+
+  const layer = svgEl('g', { class: 'gm-layer' }, svg);
+  return { svg, w2s, s2w, size, layer, S };
+}
+
+// mapCoordReadout wires a hover readout showing the world X/Z under the cursor.
+function mapCoordReadout(gm, readoutEl) {
+  gm.svg.addEventListener('mousemove', (e) => {
+    const r = gm.svg.getBoundingClientRect();
+    const sx = (e.clientX - r.left) / r.width * gm.S;
+    const sy = (e.clientY - r.top) / r.height * gm.S;
+    const [wx, wz] = gm.s2w(sx, sy);
+    readoutEl.textContent = 'X ' + Math.round(wx) + ' · Z ' + Math.round(wz);
+  });
+  gm.svg.addEventListener('mouseleave', () => { readoutEl.textContent = ''; });
+}
+
+Views.heatmap = async (root) => {
+  const myNav = _navSeq;
+  root.append(pageHeader('nav.heatmap', 'heatmap.subtitle'));
+  let d;
+  try { d = await api.get('/api/map/heat'); }
+  catch (e) { handleErr(e); return; }
+  if (myNav !== _navSeq) return;
+
+  const points = d.points || [];
+  const counts = d.counts || {};
+  const card = h('div', { class: 'card' });
+  root.append(card);
+
+  if (d.map && d.map.key === 'unknown') {
+    card.append(h('p', { class: 'hint', i18n: 'map.genericGrid' }));
+  }
+  if (!points.length) {
+    card.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'heatmap.none' })));
+    return;
+  }
+
+  // Filters + legend.
+  const show = { pvp: true, env: true, suicide: true };
+  const legend = h('div', { class: 'map-legend' });
+  const readout = h('div', { class: 'map-readout' });
+  const kinds = [
+    ['pvp', 'heatmap.pvp'],
+    ['env', 'heatmap.env'],
+    ['suicide', 'heatmap.suicide'],
+  ];
+  for (const [k, key] of kinds) {
+    const cb = h('input', { type: 'checkbox' });
+    cb.checked = true;
+    cb.addEventListener('change', () => { show[k] = cb.checked; draw(); });
+    legend.append(h('label', { class: 'map-leg map-leg-' + k }, [
+      cb, h('span', { class: 'map-dot map-dot-' + k }),
+      h('span', { i18n: key }), h('span', { class: 'hint', text: '(' + (counts[k] || 0) + ')' }),
+    ]));
+  }
+  card.append(h('div', { class: 'map-toolbar' }, [legend, h('div', { class: 'grow' }), readout]));
+
+  const gm = buildGameMap(d.map);
+  mapCoordReadout(gm, readout);
+  card.append(h('div', { class: 'map-wrap' }, gm.svg));
+  card.append(h('p', { class: 'hint', text: (d.map ? d.map.name + ' · ' : '') + t('heatmap.points').replace('{n}', d.total || 0) }));
+
+  function draw() {
+    gm.layer.innerHTML = '';
+    for (const p of points) {
+      if (!show[p.kind]) continue;
+      const [sx, sy] = gm.w2s(p.x, p.z);
+      svgEl('circle', { cx: sx, cy: sy, r: 4, class: 'heat heat-' + p.kind }, gm.layer);
+    }
+  }
+  draw();
+  applyI18n();
+};
+
+// ------------------------------------------------------------- event spawns
+
+function clientToWorld(gm, e) {
+  const r = gm.svg.getBoundingClientRect();
+  const sx = (e.clientX - r.left) / r.width * gm.S;
+  const sy = (e.clientY - r.top) / r.height * gm.S;
+  return gm.s2w(sx, sy);
+}
+
+Views.eventmap = async (root) => {
+  const myNav = _navSeq;
+  root.append(pageHeader('nav.eventmap', 'eventmap.subtitle'));
+  const running = !!State.serverStatus.running;
+  if (running) root.append(runningBanner());
+
+  let d;
+  try { d = await api.get('/api/eventspawns'); }
+  catch (e) { handleErr(e); return; }
+  if (myNav !== _navSeq) return;
+
+  // Name -> positions map, seeded from cfgeventspawns and extended with any
+  // events that are defined in events.xml but have no points yet.
+  const byName = new Map();
+  for (const e of (d.events || [])) byName.set(e.name, (e.pos || []).map(p => ({ ...p })));
+  for (const name of (d.defined || [])) if (!byName.has(name)) byName.set(name, []);
+  const names = [...byName.keys()].sort();
+
+  let cur = (d.events && d.events.length) ? d.events[0].name : (names[0] || '');
+  let pos = [];   // working copy for the selected event
+  let dirty = false;
+  let justDragged = false;
+
+  const gm = buildGameMap(d.map);
+  gm.svg.classList.add('gm-edit');
+  const circles = [];
+
+  // Controls.
+  const sel = h('select', {});
+  function rebuildSelect() {
+    sel.innerHTML = '';
+    for (const name of names) {
+      const n = (byName.get(name) || []).length;
+      const o = h('option', { value: name, text: name + '  (' + n + ')' });
+      if (name === cur) o.selected = true;
+      sel.append(o);
+    }
+  }
+  const readout = h('div', { class: 'map-readout' });
+  const countLbl = h('span', { class: 'hint' });
+  const saveBtn = h('button', { class: 'primary', i18n: 'eventmap.save', disabled: running,
+    onclick: (e) => save(e.currentTarget) });
+
+  sel.addEventListener('change', async () => {
+    if (dirty && !(await confirmModal(t('eventmap.discard').replace('{name}', cur)))) {
+      rebuildSelect(); return; // revert selection
+    }
+    cur = sel.value;
+    loadCur();
+  });
+
+  const card = h('div', { class: 'card' }, [
+    h('div', { class: 'map-toolbar' }, [
+      h('label', { i18n: 'eventmap.event' }), sel,
+      h('div', { class: 'grow' }), countLbl, readout,
+    ]),
+    h('p', { class: 'hint', i18n: 'eventmap.help' }),
+    h('div', { class: 'map-wrap' }, gm.svg),
+    h('div', { class: 'actions' }, [saveBtn]),
+  ]);
+  root.append(card);
+  mapCoordReadout(gm, readout);
+
+  // Validation panel.
+  const noPos = d.noPositions || [];
+  const orphans = d.orphans || [];
+  if (noPos.length || orphans.length) {
+    const vc = h('div', { class: 'card' }, [h('h3', { i18n: 'eventmap.checks' })]);
+    if (noPos.length) {
+      vc.append(h('p', { class: 'hint', i18n: 'eventmap.noPositions' }),
+        h('div', { class: 'chip-list' }, noPos.map(n => h('span', { class: 'badge warn', text: n }))));
+    }
+    if (orphans.length) {
+      vc.append(h('p', { class: 'hint', i18n: 'eventmap.orphans' }),
+        h('div', { class: 'chip-list' }, orphans.map(n => h('span', { class: 'badge mute', text: n }))));
+    }
+    root.append(vc);
+  }
+
+  function loadCur() {
+    pos = (byName.get(cur) || []).map(p => ({ ...p }));
+    dirty = false;
+    render();
+  }
+
+  function render() {
+    gm.layer.innerHTML = '';
+    circles.length = 0;
+    countLbl.textContent = t('eventmap.points').replace('{n}', pos.length);
+    pos.forEach((p, i) => {
+      const [sx, sy] = gm.w2s(p.x, p.z);
+      const c = svgEl('circle', { cx: sx, cy: sy, r: 5, class: 'ev-pt' }, gm.layer);
+      c.addEventListener('mousedown', (e) => startDrag(i, e));
+      c.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        pos.splice(i, 1); dirty = true; render();
+      });
+      circles[i] = c;
+    });
+  }
+
+  let drag = null;
+  function startDrag(idx, e) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    drag = { idx, moved: false };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+  function onMove(e) {
+    if (!drag) return;
+    drag.moved = true;
+    const [wx, wz] = clientToWorld(gm, e);
+    pos[drag.idx].x = Math.round(wx * 100) / 100;
+    pos[drag.idx].z = Math.round(wz * 100) / 100;
+    const [sx, sy] = gm.w2s(pos[drag.idx].x, pos[drag.idx].z);
+    circles[drag.idx].setAttribute('cx', sx);
+    circles[drag.idx].setAttribute('cy', sy);
+    readout.textContent = 'X ' + Math.round(wx) + ' · Z ' + Math.round(wz);
+  }
+  function onUp() {
+    if (drag && drag.moved) { dirty = true; justDragged = true; setTimeout(() => { justDragged = false; }, 0); }
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    drag = null;
+  }
+
+  // Click empty map to add a point.
+  gm.svg.addEventListener('click', (e) => {
+    if (justDragged) return;
+    if (e.target && e.target.classList && e.target.classList.contains('ev-pt')) return;
+    if (!cur) return;
+    const [wx, wz] = clientToWorld(gm, e);
+    pos.push({ x: Math.round(wx * 100) / 100, z: Math.round(wz * 100) / 100, a: 0 });
+    dirty = true; render();
+  });
+
+  async function save(btn) {
+    if (!cur) return;
+    await withBusy(btn, async () => {
+      try {
+        const r = await api.post('/api/eventspawns/save', { name: cur, pos });
+        byName.set(cur, pos.map(p => ({ ...p })));
+        rebuildSelect();
+        dirty = false;
+        toast(t('eventmap.saved').replace('{n}', r.count || 0), 'ok');
+      } catch (e) { handleErr(e); }
+    });
+  }
+
+  rebuildSelect();
+  loadCur();
+  applyI18n();
+};
+
+// ---------------------------------------------------------------- live map
+
+Views.livemap = async (root) => {
+  const myNav = _navSeq;
+  root.append(pageHeader('nav.livemap', 'livemap.subtitle'));
+  const status = h('p', { class: 'hint' });
+  const mapHost = h('div');
+  root.append(h('div', { class: 'card' }, [
+    status, mapHost, h('p', { class: 'hint', i18n: 'livemap.note' }),
+  ]));
+
+  let gm = null, timer = null;
+  root._teardown = () => { if (timer) clearInterval(timer); };
+
+  async function refresh() {
+    let d;
+    try { d = await api.get('/api/map/live'); }
+    catch { return; } // stay quiet on background-poll failures
+    if (myNav !== _navSeq) { if (timer) clearInterval(timer); return; }
+
+    if (!d.running) {
+      gm = null;
+      status.textContent = '';
+      mapHost.innerHTML = '';
+      mapHost.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'livemap.stopped' })));
+      applyI18n();
+      return;
+    }
+    if (!gm) {
+      mapHost.innerHTML = '';
+      gm = buildGameMap(d.map);
+      mapHost.append(h('div', { class: 'map-wrap' }, gm.svg));
+    }
+    const players = d.players || [];
+    status.textContent = t('livemap.count')
+      .replace('{online}', d.onlineCount || 0)
+      .replace('{shown}', players.length);
+    gm.layer.innerHTML = '';
+    for (const p of players) {
+      const [sx, sy] = gm.w2s(p.x, p.z);
+      const stale = p.ageSec > 300;
+      svgEl('circle', { cx: sx, cy: sy, r: 5, class: 'live-pt' + (stale ? ' stale' : '') }, gm.layer);
+      const label = svgEl('text', { x: sx + 7, y: sy + 3, class: 'live-label' + (stale ? ' stale' : '') }, gm.layer);
+      label.textContent = p.name;
+    }
+    applyI18n();
+  }
+
+  await refresh();
+  timer = setInterval(refresh, 10000);
+};
+
+// --------------------------------------------------------- where does it spawn
+
+Views.lootwhere = async (root) => {
+  root.append(pageHeader('nav.lootwhere', 'lootwhere.subtitle'));
+  const input = h('input', { type: 'search', placeholder: t('lootwhere.placeholder') });
+  const results = h('div', { class: 'card' });
+  root.append(h('div', { class: 'card' }, h('div', { class: 'toolbar' }, [
+    input, h('button', { class: 'primary', i18n: 'search.go', onclick: () => run() }),
+  ])));
+  root.append(results);
+  setTimeout(() => input.focus(), 0);
+
+  let timer = null, seq = 0;
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 350); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(timer); run(); } });
+
+  const chips = (cls, arr) => (arr || []).map(x => h('span', { class: 'badge ' + cls, text: x }));
+
+  function renderHit(it) {
+    const row = h('div', { class: 'loot-hit' }, [
+      h('div', { class: 'loot-hit-head' }, [
+        h('span', { class: 'loot-name', text: it.name }),
+        h('span', { class: 'hint', text: it.file }),
+      ]),
+      h('div', { class: 'hint', text:
+        t('lootwhere.nominal') + ': ' + (it.nominal ?? '—') + ' · ' +
+        t('lootwhere.min') + ': ' + (it.min ?? '—') }),
+      h('div', { class: 'chip-list' }, [
+        it.category ? h('span', { class: 'badge info', text: it.category }) : null,
+        ...chips('ok', it.usages),
+        ...chips('warn', it.values),
+        ...chips('mute', it.tags),
+      ]),
+    ]);
+    if (!(it.usages && it.usages.length)) {
+      row.append(h('p', { class: 'hint loot-warn', i18n: 'lootwhere.noUsage' }));
+    }
+    return row;
+  }
+
+  async function run() {
+    const q = input.value.trim();
+    const mine = ++seq;
+    results.innerHTML = '';
+    if (q.length < 2) { results.append(h('p', { class: 'hint', i18n: 'search.hintShort' })); applyI18n(); return; }
+    let d;
+    try { d = await api.get('/api/loot/where?q=' + encodeURIComponent(q)); }
+    catch (e) { handleErr(e); return; }
+    if (mine !== seq) return;
+    const hits = d.hits || [];
+    if (!hits.length) {
+      results.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'lootwhere.none' })));
+      applyI18n();
+      return;
+    }
+    results.append(h('p', { class: 'hint',
+      text: t('search.count').replace('{n}', d.total) + (d.truncated ? ' ' + t('search.truncated') : '') }));
+    for (const it of hits) results.append(renderHit(it));
+    applyI18n();
+  }
+};
+
+// ----------------------------------------------------------------- globals
+
+function prettifyVar(name) {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+}
+
+Views.globals = async (root) => {
+  root.append(pageHeader('nav.globals', 'globals.subtitle'));
+  if (State.serverStatus.running) root.append(runningBanner());
+  let d;
+  try { d = await api.get('/api/globals'); }
+  catch (e) { handleErr(e); return; }
+
+  if (!d.exists) {
+    root.append(h('div', { class: 'card' }, h('div', { class: 'empty-state' },
+      h('div', { class: 'es-hint', i18n: 'globals.missing' }))));
+    return;
+  }
+  const vars = d.vars || [];
+  const search = h('input', { type: 'search', placeholder: t('globals.search') });
+  const grid = h('div', { class: 'globals-grid' });
+  const inputs = [];
+
+  for (const v of vars) {
+    // type=text (not number): a number input locale-reformats the display and
+    // its .value can drift from the stored string ("230.0" → "230"), which would
+    // make untouched floats look changed and rewrite them on every save. Text
+    // keeps the exact string, so change-detection by equality is reliable.
+    const inp = h('input', { type: 'text', value: v.value,
+      inputmode: v.type === '1' ? 'decimal' : 'numeric' });
+    inp.dataset.name = v.name;
+    inp.dataset.orig = v.value;
+    const labelText = h('span', { text: prettifyVar(v.name) });
+    const helpKey = 'gl.' + v.name;
+    const label = (State.help && State.help[helpKey])
+      ? withHelp(labelText, helpKey)
+      : labelText;
+    grid.append(h('div', { class: 'globals-row', 'data-name': v.name.toLowerCase() }, [label, inp]));
+    inputs.push(inp);
+  }
+
+  search.addEventListener('input', () => {
+    const q = search.value.toLowerCase();
+    grid.querySelectorAll('.globals-row').forEach(r => {
+      r.style.display = r.dataset.name.includes(q) ? '' : 'none';
+    });
+  });
+
+  async function save(btn) {
+    const changed = inputs
+      .filter(i => i.value.trim() !== i.dataset.orig)
+      .map(i => ({ name: i.dataset.name, value: i.value.trim() }));
+    if (!changed.length) { toast(t('globals.noChanges'), 'warn'); return; }
+    await withBusy(btn, async () => {
+      try {
+        const r = await api.post('/api/globals/save', { vars: changed });
+        inputs.forEach(i => { i.dataset.orig = i.value.trim(); });
+        toast(t('globals.saved').replace('{n}', r.applied || 0), 'ok');
+      } catch (e) { handleErr(e); }
+    });
+  }
+
+  root.append(h('div', { class: 'card' }, [
+    h('h2', { i18n: 'nav.globals' }),
+    h('p', { class: 'hint', text: d.path }),
+    h('div', { class: 'toolbar' }, [search]),
+    grid,
+    h('div', { class: 'actions' }, [
+      h('button', { class: 'primary', i18n: 'globals.save',
+        disabled: State.serverStatus.running, onclick: (e) => save(e.currentTarget) }),
+    ]),
+  ]));
+  root._save = () => { const b = root.querySelector('.actions button'); if (b) save(b); };
+  applyI18n();
+};
+
+// -------------------------------------------------------------- mod drift
+
+Views.moddrift = async (root) => {
+  root.append(pageHeader('nav.moddrift', 'moddrift.subtitle'));
+  const card = h('div', { class: 'card' });
+  root.append(card);
+  card.append(h('p', { class: 'hint', i18n: 'moddrift.scanning' }));
+  applyI18n();
+
+  let d;
+  try { d = await api.get('/api/mods/drift'); }
+  catch (e) { handleErr(e); return; }
+  card.innerHTML = '';
+
+  const list = d.mods || [];
+  if (!list.length) {
+    card.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'moddrift.none' })));
+    return;
+  }
+  const issues = list.filter(m => m.status !== 'ok').length;
+  card.append(h('p', { class: 'hint',
+    text: t('moddrift.summary').replace('{checked}', d.checked || 0).replace('{issues}', issues) }));
+
+  const statusBadge = (s) => {
+    if (s === 'notmerged') return h('span', { class: 'badge err', i18n: 'moddrift.st.notmerged' });
+    if (s === 'partial') return h('span', { class: 'badge warn', i18n: 'moddrift.st.partial' });
+    return h('span', { class: 'badge ok', i18n: 'moddrift.st.ok' });
+  };
+
+  const tbl = h('table');
+  tbl.append(h('thead', {}, h('tr', {}, [
+    h('th', { text: '' }),
+    h('th', { i18n: 'moddrift.mod' }),
+    h('th', { class: 'num', i18n: 'moddrift.ships' }),
+    h('th', { class: 'num', i18n: 'moddrift.active' }),
+    h('th', { class: 'num', i18n: 'moddrift.missing' }),
+  ])));
+  const tb = h('tbody');
+  for (const m of list) {
+    tb.append(h('tr', { class: m.status !== 'ok' ? 'row-watch' : '' }, [
+      h('td', {}, statusBadge(m.status)),
+      h('td', { class: 'mono', text: m.mod }),
+      h('td', { class: 'num', text: String(m.ships) }),
+      h('td', { class: 'num', text: String(m.active) }),
+      h('td', { class: 'num', text: String(m.missing) }),
+    ]));
+    if (m.missing > 0 && m.sample && m.sample.length) {
+      const chips = m.sample.map(n => h('span', { class: 'badge mute', text: n }));
+      if (m.missing > m.sample.length) chips.push(h('span', { class: 'hint', text: '+' + (m.missing - m.sample.length) }));
+      tb.append(h('tr', {}, h('td', { colspan: '5' }, [
+        h('span', { class: 'hint', i18n: 'moddrift.missingList' }),
+        h('div', { class: 'chip-list', style: { marginTop: '4px' } }, chips),
+      ])));
+    }
+  }
+  tbl.append(tb);
+  card.append(h('div', { class: 'table-scroll' }, tbl));
+  applyI18n();
+};
+
+// ----------------------------------------------------------- random presets
+
+Views.randompresets = async (root) => {
+  root.append(pageHeader('nav.randompresets', 'randompresets.subtitle'));
+  let d;
+  try { d = await api.get('/api/randompresets'); }
+  catch (e) { handleErr(e); return; }
+  if (!d.exists) {
+    root.append(h('div', { class: 'card' }, h('div', { class: 'empty-state' },
+      h('div', { class: 'es-hint', i18n: 'randompresets.missing' }))));
+    return;
+  }
+  const presets = d.presets || [];
+  const search = h('input', { type: 'search', placeholder: t('randompresets.search') });
+  const list = h('div', { class: 'card' });
+  root.append(h('div', { class: 'card' }, h('div', { class: 'toolbar' }, [search])));
+  root.append(list);
+
+  function matches(p, q) {
+    if (!q) return true;
+    if (p.name.toLowerCase().includes(q)) return true;
+    return (p.items || []).some(it => it.name.toLowerCase().includes(q));
+  }
+
+  function presetBlock(p) {
+    const items = p.items || [];
+    const sum = items.reduce((a, it) => a + (it.chance || 0), 0);
+    const block = h('div', { class: 'preset-block' }, [
+      h('div', { class: 'preset-head' }, [
+        h('span', { class: 'badge ' + (p.kind === 'cargo' ? 'info' : 'mute'), text: p.kind }),
+        h('span', { class: 'preset-name', text: p.name }),
+        h('span', { class: 'hint', text: t('randompresets.group').replace('{pct}', (p.chance * 100).toFixed(0)) }),
+      ]),
+    ]);
+    const tbl = h('table');
+    tbl.append(h('thead', {}, h('tr', {}, [
+      h('th', { i18n: 'col.name' }),
+      h('th', { class: 'num', i18n: 'randompresets.weight' }),
+      h('th', { class: 'num', i18n: 'randompresets.real' }),
+    ])));
+    const tb = h('tbody');
+    for (const it of items) {
+      const real = sum > 0 ? (p.chance * (it.chance || 0) / sum * 100) : 0;
+      tb.append(h('tr', {}, [
+        h('td', { class: 'mono', text: it.name }),
+        h('td', { class: 'num hint', text: String(it.chance) }),
+        h('td', { class: 'num', style: { fontWeight: '700' }, text: real.toFixed(1) + '%' }),
+      ]));
+    }
+    tbl.append(tb);
+    block.append(h('div', { class: 'table-scroll' }, tbl));
+    return block;
+  }
+
+  function render() {
+    const q = search.value.trim().toLowerCase();
+    list.innerHTML = '';
+    const shown = presets.filter(p => matches(p, q));
+    list.append(h('p', { class: 'hint', text: shown.length + ' / ' + presets.length }));
+    if (!shown.length) {
+      list.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'randompresets.none' })));
+      applyI18n();
+      return;
+    }
+    for (const p of shown) list.append(presetBlock(p));
+    applyI18n();
+  }
+  search.addEventListener('input', render);
+  render();
+};
+
 // --------------------------------------------------------------------- gameplay
 
 Views.gameplay = async (root) => {
