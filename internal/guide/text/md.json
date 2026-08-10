@@ -102,6 +102,29 @@
       ]
     },
     {
+      "id": "loadout",
+      "title": "Echipamentul jucătorului",
+      "intro": "Stabilește ce poartă și ce are asupra sa un jucător în momentul reapariției. Vanilla fixează asta în init.c-ul misiunii; panoul folosește în schimb preseturile de echipament de spawn ale DayZ și pornește tot sistemul pentru tine.",
+      "steps": [
+        {
+          "title": "Activează sistemul",
+          "body": "Deschide Echipamentul jucătorului. Dacă misiunea încă generează jucători din init.c, pagina o spune și oferă un buton care creează un preset inițial, îl înregistrează în cfggameplay.json și pornește comutatorul enableCfgGameplayFile — totul odată."
+        },
+        {
+          "title": "Editează hainele și echipamentul",
+          "body": "Fiecare preset arată ce se poartă pe sloturi (Corp, Picioare, Tălpi…) și ce se cară liber. Adaugă obiecte după numele clasei, setează o pondere de spawn când un slot trebuie să aleagă între mai multe și alege o stare — impecabil, uzat, deteriorat sau un interval propriu."
+        },
+        {
+          "title": "Testare aleatorie și partajare",
+          "body": "Apasă Testare aleatorie pentru a extrage un spawn și a vedea exact ce primește un jucător, inclusiv personajul. Exportă un preset într-un fișier pentru alt server și importă-l înapoi."
+        }
+      ],
+      "tips": [
+        "healthMin/healthMax sunt fracțiuni de sănătate: 1.0 e impecabil, 0.0 e distrus. Ține totul impecabil ca spawnurile noi să nu apară în haine uzate.",
+        "Echipamentul se salvează cu serverul oprit, ca orice modificare de config — pornește serverul din nou după aceea."
+      ]
+    },
+    {
       "id": "rcon",
       "title": "RCon, jucători și anunțuri",
       "intro": "RCon este consola la distanță a BattlEye: lista jucătorilor în timp real, excluderi, interdicții și mesaje în chat. Are nevoie de o parolă pe care BattlEye o citește din beserver_x64.cfg la pornirea serverului.",
@@ -168,6 +191,29 @@
       "tips": [
         "Ștergerea elimină starea salvată a lumii: jucători, vehicule, baze. Tabelele de pradă și configurațiile rămân neatinse. Folderele sunt mai întâi mutate deoparte, așa că o ștergere din greșeală poate fi recuperată manual.",
         "Watchdogul repornește serverul dacă acesta se închide singur. După trei căderi în cinci minute se oprește și afișează un banner: o buclă de căderi are nevoie de un om, nu de încă o repornire."
+      ]
+    },
+    {
+      "id": "health",
+      "title": "Starea serverului",
+      "intro": "O pagină care răspunde dintr-o privire dacă e ceva în neregulă, plus uneltele să ții serverul ordonat: anulează o modificare proastă de config și eliberează spațiu pe disc.",
+      "steps": [
+        {
+          "title": "Citește plăcile de stare",
+          "body": "Pagina Starea serverului arată patru plăci — serverul e pornit (sau blocat într-o buclă de blocări), există spațiu pe disc, configul e valid și, dacă nu pornește, de ce. Fiecare placă duce la pagina care rezolvă."
+        },
+        {
+          "title": "Anulează o modificare",
+          "body": "Managerul salvează fiecare fișier de config înainte de scriere. Pagina Istoric listează acele instantanee pe fișier, cu o comparație a ceea ce ar readuce o restaurare și restaurare dintr-un clic — plasa ta de siguranță după o editare proastă."
+        },
+        {
+          "title": "Eliberează spațiu",
+          "body": "Pe pagina de stare un clic șterge jurnalele serverului și dump-urile de blocare (cele mai noi RPT și ADM se păstrează) sau backup-urile vechi de config, ca un server de lungă durată să nu umple discul în tăcere."
+        }
+      ],
+      "tips": [
+        "Placa de validitate rulează validatorul complet, care pe o misiune mare durează o clipă — se completează la o secundă-două după celelalte.",
+        "Restaurarea unui backup necesită serverul oprit, ca orice modificare de config."
       ]
     },
     {

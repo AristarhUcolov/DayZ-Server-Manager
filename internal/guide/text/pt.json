@@ -102,6 +102,29 @@
       ]
     },
     {
+      "id": "loadout",
+      "title": "Equipamento do jogador",
+      "intro": "Defina o que um jogador veste e carrega no momento em que renasce. O vanilla fixa isso no init.c da missão; o painel usa em vez disso os presets de equipamento de spawn do DayZ e liga todo o sistema por você.",
+      "steps": [
+        {
+          "title": "Ative o sistema",
+          "body": "Abra Equipamento do jogador. Se a missão ainda gera jogadores pelo init.c, a página avisa e oferece um botão que cria um preset inicial, registra-o no cfggameplay.json e liga o interruptor enableCfgGameplayFile — tudo de uma vez."
+        },
+        {
+          "title": "Edite roupas e equipamento",
+          "body": "Cada preset lista o que é vestido por slot (Corpo, Pernas, Pés…) e o que é carregado solto. Adicione itens pelo nome de classe, defina um peso de spawn quando um slot deve escolher entre vários, e escolha uma condição — impecável, usado, danificado ou um intervalo próprio."
+        },
+        {
+          "title": "Sorteio de teste e compartilhar",
+          "body": "Pressione Sorteio de teste para amostrar um spawn e ver exatamente o que um jogador recebe, personagem incluído. Exporte um preset para um arquivo para reutilizar em outro servidor e importe de volta."
+        }
+      ],
+      "tips": [
+        "healthMin/healthMax são frações de vida: 1.0 é impecável, 0.0 é arruinado. Mantenha tudo impecável para que os spawns não cheguem com roupas gastas.",
+        "O equipamento é salvo com o servidor parado, como qualquer mudança de config — inicie o servidor novamente depois."
+      ]
+    },
+    {
       "id": "rcon",
       "title": "RCon, jogadores e anúncios",
       "intro": "RCon é a consola remota do BattlEye: lista de jogadores em direto, expulsões, banimentos e mensagens no chat. Precisa de uma palavra-passe que o BattlEye lê de beserver_x64.cfg ao arrancar o servidor.",
@@ -168,6 +191,29 @@
       "tips": [
         "O wipe apaga o estado guardado do mundo: jogadores, veículos, bases. As tabelas de saque e as configurações ficam intactas. As pastas são primeiro postas de lado, por isso um wipe por engano pode ser recuperado à mão.",
         "O vigilante reinicia o servidor se ele se fechar sozinho. Após três falhas em cinco minutos para e mostra um aviso: um ciclo de falhas precisa de uma pessoa, não de outro reinício."
+      ]
+    },
+    {
+      "id": "health",
+      "title": "Estado do servidor",
+      "intro": "Uma página que responde num relance se algo está errado, além das ferramentas para manter o servidor arrumado: reverter uma alteração de configuração ruim e liberar espaço em disco.",
+      "steps": [
+        {
+          "title": "Leia os blocos de estado",
+          "body": "A página Estado do servidor mostra quatro blocos — o servidor está no ar (ou preso num ciclo de falhas), há espaço em disco, a configuração é válida e, se não inicia, por quê. Cada bloco leva à página que resolve."
+        },
+        {
+          "title": "Reverta uma alteração",
+          "body": "O gerenciador faz backup de cada arquivo de configuração antes de escrever. A página Histórico lista esses instantâneos por arquivo, com uma comparação do que uma restauração traria de volta e restauração com um clique — sua rede de segurança após uma edição ruim."
+        },
+        {
+          "title": "Libere espaço",
+          "body": "Na página de estado, um clique apaga logs do servidor e dumps de falha (os RPT e ADM mais recentes são mantidos) ou backups antigos de configuração, para que um servidor de longa duração não encha o disco em silêncio."
+        }
+      ],
+      "tips": [
+        "O bloco de validade roda o validador completo, que leva um instante numa missão grande — ele se preenche um ou dois segundos depois dos outros.",
+        "Restaurar um backup requer o servidor parado, como qualquer alteração de configuração."
       ]
     },
     {

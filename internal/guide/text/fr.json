@@ -102,6 +102,29 @@
       ]
     },
     {
+      "id": "loadout",
+      "title": "Équipement du joueur",
+      "intro": "Décidez de ce qu'un joueur porte et transporte au moment de réapparaître. Vanilla le fige dans l'init.c de la mission ; le panneau utilise plutôt les presets d'équipement de spawn de DayZ et active tout le système pour vous.",
+      "steps": [
+        {
+          "title": "Activez le système",
+          "body": "Ouvrez Équipement du joueur. Si la mission fait encore apparaître les joueurs depuis init.c, la page le signale et propose un bouton qui crée un preset de départ, l'enregistre dans cfggameplay.json et active l'option enableCfgGameplayFile — le tout d'un coup."
+        },
+        {
+          "title": "Modifiez vêtements et matériel",
+          "body": "Chaque preset indique ce qui est porté par emplacement (Corps, Jambes, Pieds…) et ce qui est transporté en vrac. Ajoutez des objets par nom de classe, définissez un poids d'apparition quand un emplacement doit choisir entre plusieurs, et choisissez un état — neuf, usé, endommagé ou une plage personnalisée."
+        },
+        {
+          "title": "Tirage test et partage",
+          "body": "Appuyez sur Tirage test pour échantillonner une apparition et voir exactement ce qu'obtient un joueur, personnage compris. Exportez un preset dans un fichier pour un autre serveur et réimportez-le."
+        }
+      ],
+      "tips": [
+        "healthMin/healthMax sont des fractions de santé : 1.0 est neuf, 0.0 est détruit. Gardez tout neuf pour que les apparitions n'arrivent pas en vêtements usés.",
+        "L'équipement est enregistré serveur arrêté, comme toute modification de config — redémarrez le serveur ensuite."
+      ]
+    },
+    {
       "id": "rcon",
       "title": "RCon, joueurs et annonces",
       "intro": "RCon est la console distante de BattlEye : liste des joueurs en direct, exclusions, bannissements et messages dans le chat. Elle a besoin d'un mot de passe que BattlEye lit dans beserver_x64.cfg au démarrage du serveur.",
@@ -168,6 +191,29 @@
       "tips": [
         "L'effacement supprime l'état sauvegardé du monde : joueurs, véhicules, bases. Vos tables de butin et configurations restent intactes. Les dossiers sont d'abord mis de côté, un effacement par erreur peut donc être récupéré à la main.",
         "Le chien de garde redémarre le serveur s'il s'arrête tout seul. Après trois plantages en cinq minutes, il s'arrête et affiche une bannière : une boucle de plantages demande un humain, pas un redémarrage de plus."
+      ]
+    },
+    {
+      "id": "health",
+      "title": "État du serveur",
+      "intro": "Une page qui répond d'un coup d'œil si quelque chose ne va pas, plus les outils pour garder le serveur en ordre : annuler une mauvaise modification de config et libérer de l'espace disque.",
+      "steps": [
+        {
+          "title": "Lisez les tuiles d'état",
+          "body": "La page État du serveur affiche quatre tuiles — le serveur tourne-t-il (ou est-il bloqué dans une boucle de plantage), y a-t-il de l'espace disque, la config est-elle valide, et s'il ne démarre pas, pourquoi. Chaque tuile mène à la page qui corrige."
+        },
+        {
+          "title": "Annulez une modification",
+          "body": "Le gestionnaire sauvegarde chaque fichier de config avant d'écrire. La page Historique liste ces sauvegardes par fichier, avec une comparaison de ce qu'une restauration ramènerait et une restauration en un clic — votre filet de sécurité après une mauvaise édition."
+        },
+        {
+          "title": "Libérez de l'espace",
+          "body": "Sur la page d'état, un clic supprime les journaux du serveur et les vidages de plantage (les RPT et ADM les plus récents sont gardés) ou les anciennes sauvegardes de config, pour qu'un serveur de longue durée ne remplisse pas le disque en silence."
+        }
+      ],
+      "tips": [
+        "La tuile de validité lance le validateur complet, qui prend un instant sur une grosse mission — elle se remplit une ou deux secondes après les autres.",
+        "Restaurer une sauvegarde nécessite le serveur arrêté, comme toute modification de config."
       ]
     },
     {

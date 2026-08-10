@@ -102,6 +102,29 @@
       ]
     },
     {
+      "id": "loadout",
+      "title": "Spieler-Ausrüstung",
+      "intro": "Lege fest, was ein Spieler beim Respawn trägt und dabei hat. Vanilla verankert das in der init.c der Mission; das Panel nutzt stattdessen die datengetriebenen Spawn-Gear-Presets von DayZ und schaltet das ganze System für dich ein.",
+      "steps": [
+        {
+          "title": "System aktivieren",
+          "body": "Öffne Spieler-Ausrüstung. Wenn die Mission Spieler noch aus der init.c spawnt, sagt die Seite das und bietet einen Knopf, der ein Starter-Preset erstellt, es in cfggameplay.json registriert und den Schalter enableCfgGameplayFile umlegt — alles auf einmal."
+        },
+        {
+          "title": "Kleidung und Ausrüstung bearbeiten",
+          "body": "Jedes Preset listet, was pro Slot getragen wird (Körper, Beine, Füße…) und was lose getragen wird. Füge Gegenstände per Klassenname hinzu, setze ein Spawn-Gewicht, wenn ein Slot zwischen mehreren wählen soll, und wähle einen Zustand — neuwertig, getragen, beschädigt oder einen eigenen Bereich."
+        },
+        {
+          "title": "Testwurf und Teilen",
+          "body": "Drücke Testwurf, um einen Spawn zu ziehen und genau zu sehen, was ein Spieler bekommt, samt Charakter. Exportiere ein Preset in eine Datei für einen anderen Server und importiere es zurück."
+        }
+      ],
+      "tips": [
+        "healthMin/healthMax sind Gesundheitsanteile: 1.0 ist neuwertig, 0.0 ist ruiniert. Lass alles neuwertig, damit frische Spawns nicht in abgetragener Kleidung erscheinen.",
+        "Die Ausrüstung wird bei gestopptem Server gespeichert, wie jede Konfig-Änderung — starte den Server danach wieder."
+      ]
+    },
+    {
       "id": "rcon",
       "title": "RCon, Spieler und Ansagen",
       "intro": "RCon ist die Fernkonsole von BattlEye: Live-Spielerliste, Kicks, Banns und Chat-Durchsagen. Sie braucht ein Passwort, das BattlEye beim Serverstart aus beserver_x64.cfg liest.",
@@ -168,6 +191,29 @@
       "tips": [
         "Wipe löscht den gespeicherten Weltzustand: Spieler, Fahrzeuge, Basen. Loot-Tabellen und Configs bleiben unberührt. Ordner werden zur Seite geschoben, ein versehentlicher Wipe lässt sich also von Hand retten.",
         "Der Absturz-Watchdog startet den Server neu, wenn er sich selbst beendet. Nach drei Abstürzen in fünf Minuten hält er an und zeigt ein Banner — eine Absturzschleife braucht einen Menschen, keinen weiteren Neustart."
+      ]
+    },
+    {
+      "id": "health",
+      "title": "Server-Zustand",
+      "intro": "Eine Seite, die auf einen Blick beantwortet, ob etwas nicht stimmt, plus die Werkzeuge, den Server sauber zu halten: eine schlechte Konfig-Änderung zurücknehmen und Speicher freigeben.",
+      "steps": [
+        {
+          "title": "Die Zustands-Kacheln lesen",
+          "body": "Die Seite Server-Zustand zeigt vier Kacheln — läuft der Server (oder hängt er in einer Absturzschleife), ist Speicher frei, ist die Konfig gültig, und falls er nicht startet, warum. Jede Kachel verlinkt auf die Seite, die es behebt."
+        },
+        {
+          "title": "Eine Änderung zurücknehmen",
+          "body": "Der Manager sichert jede Konfig-Datei vor dem Schreiben. Die Verlauf-Seite listet diese Schnappschüsse pro Datei, mit einem Vergleich, was ein Wiederherstellen genau zurückbringt, und Wiederherstellen mit einem Klick — dein Sicherheitsnetz nach einer schlechten Bearbeitung."
+        },
+        {
+          "title": "Speicher freigeben",
+          "body": "Auf der Zustands-Seite löscht ein Klick Server-Logs und Absturz-Dumps (die neuesten RPT und ADM bleiben) oder alte Konfig-Backups, damit ein langlebiger Server nicht heimlich die Platte füllt."
+        }
+      ],
+      "tips": [
+        "Die Konfig-Gültigkeits-Kachel führt den vollen Validator aus, der bei einer großen Mission kurz braucht — sie füllt sich ein, zwei Sekunden nach den anderen Kacheln.",
+        "Ein Backup wiederherzustellen erfordert einen gestoppten Server, wie jede Konfig-Änderung."
       ]
     },
     {

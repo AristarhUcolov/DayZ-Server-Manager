@@ -77,7 +77,8 @@ func TestStepRoutesAreValid(t *testing.T) {
 		"moded": true, "attachments": true, "missiondb": true, "files": true,
 		"profiles": true, "battleye": true, "logs": true, "admlog": true,
 		"players": true, "rcon": true, "validator": true, "sync": true,
-		"wipe": true, "settings": true,
+		"wipe": true, "settings": true, "loadout": true, "health": true,
+		"history": true, "sponsors": true,
 	}
 	for _, lang := range Languages() {
 		for ci, ch := range Get(lang) {

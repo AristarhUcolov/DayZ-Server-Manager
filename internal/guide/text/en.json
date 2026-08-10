@@ -102,6 +102,29 @@
       ]
     },
     {
+      "id": "loadout",
+      "title": "Player loadout",
+      "intro": "Decide what a player is wearing and carrying the moment they respawn. Vanilla hardcodes this in the mission's init.c; the panel uses DayZ's data-driven spawn-gear presets instead and switches the whole system on for you.",
+      "steps": [
+        {
+          "title": "Enable the system",
+          "body": "Open Player loadout. If the mission still spawns players from init.c, the page says so and offers one button that creates a starter preset, registers it in cfggameplay.json and flips the enableCfgGameplayFile switch — all at once."
+        },
+        {
+          "title": "Edit clothes and gear",
+          "body": "Each preset lists what is worn per slot (Body, Legs, Feet…) and what is carried loose. Add items by class name, set a spawn weight when a slot should pick between several, and choose a condition — pristine, worn, damaged or a custom range."
+        },
+        {
+          "title": "Test roll and share",
+          "body": "Press Test roll to sample one spawn and see exactly what a player gets, character and all. Export a preset to a file to reuse it on another server, and Import one back."
+        }
+      ],
+      "tips": [
+        "healthMin/healthMax are health fractions: 1.0 is pristine, 0.0 is ruined. Keep everything pristine so fresh spawns don't arrive in worn clothes.",
+        "The loadout is saved with the server stopped, like every config change — start the server again afterwards."
+      ]
+    },
+    {
       "id": "rcon",
       "title": "RCon, players and announcements",
       "intro": "RCon is BattlEye's remote console: the live player list, kicks, bans and chat broadcasts. It needs a password that BattlEye reads from beserver_x64.cfg when the server starts.",
@@ -168,6 +191,29 @@
       "tips": [
         "Wipe deletes saved world state — players, vehicles, bases. Your loot tables and configs are untouched. Folders are moved aside first, so a mistaken wipe can be recovered by hand.",
         "Crash watchdog restarts the server if it exits on its own. After three crashes in five minutes it stops and shows a banner instead — a crash loop needs a human, not another restart."
+      ]
+    },
+    {
+      "id": "health",
+      "title": "Server health",
+      "intro": "One page that answers 'is anything wrong?' at a glance, plus the tools to keep the server tidy: roll back a bad config change and free up disk space.",
+      "steps": [
+        {
+          "title": "Read the health tiles",
+          "body": "The Server health page shows four tiles — is the server up (or stuck in a crash loop), is there disk room, does the config validate, and, if it won't start, why. Each tile links to the page that fixes it."
+        },
+        {
+          "title": "Roll back a change",
+          "body": "The manager backs up every config file before it writes. The History page lists those snapshots per file, with a diff of exactly what a restore would bring back and a one-click restore — your safety net after a bad edit."
+        },
+        {
+          "title": "Free up space",
+          "body": "On the health page one click deletes server logs and crash dumps (the newest RPT and ADM are kept) or old config backups, so a long-lived server doesn't quietly fill the disk."
+        }
+      ],
+      "tips": [
+        "The config-validity tile runs the full validator, which takes a moment on a big mission — it fills in a second or two after the other tiles.",
+        "Restoring a backup requires the server stopped, like every other config change."
       ]
     },
     {

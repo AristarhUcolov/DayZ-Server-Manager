@@ -102,6 +102,29 @@
       ]
     },
     {
+      "id": "loadout",
+      "title": "Equipaggiamento del giocatore",
+      "intro": "Decidi cosa indossa e porta con sé un giocatore nel momento in cui rinasce. Vanilla lo fissa nell'init.c della missione; il pannello usa invece i preset di equipaggiamento di spawn di DayZ e attiva l'intero sistema per te.",
+      "steps": [
+        {
+          "title": "Attiva il sistema",
+          "body": "Apri Equipaggiamento del giocatore. Se la missione fa ancora comparire i giocatori da init.c, la pagina lo segnala e offre un pulsante che crea un preset iniziale, lo registra in cfggameplay.json e attiva l'interruttore enableCfgGameplayFile, tutto in una volta."
+        },
+        {
+          "title": "Modifica vestiti ed equipaggiamento",
+          "body": "Ogni preset elenca cosa si indossa per slot (Corpo, Gambe, Piedi…) e cosa si porta sfuso. Aggiungi oggetti per nome classe, imposta un peso di spawn quando uno slot deve scegliere tra più opzioni, e scegli una condizione: perfetta, usata, danneggiata o un intervallo personalizzato."
+        },
+        {
+          "title": "Prova estrazione e condivisione",
+          "body": "Premi Prova estrazione per campionare uno spawn e vedere esattamente cosa riceve un giocatore, personaggio incluso. Esporta un preset in un file per un altro server e reimportalo."
+        }
+      ],
+      "tips": [
+        "healthMin/healthMax sono frazioni di salute: 1.0 è perfetto, 0.0 è rovinato. Tieni tutto perfetto così gli spawn non arrivano con vestiti logori.",
+        "L'equipaggiamento si salva a server fermo, come ogni modifica di config — riavvia il server dopo."
+      ]
+    },
+    {
       "id": "rcon",
       "title": "RCon, giocatori e annunci",
       "intro": "RCon è la console remota di BattlEye: elenco giocatori in tempo reale, espulsioni, ban e messaggi in chat. Serve una password che BattlEye legge da beserver_x64.cfg all'avvio del server.",
@@ -168,6 +191,29 @@
       "tips": [
         "Il wipe cancella lo stato salvato del mondo: giocatori, veicoli, basi. Le tabelle del bottino e le configurazioni non vengono toccate. Le cartelle vengono prima spostate di lato, quindi un wipe per errore si può recuperare a mano.",
         "Il watchdog riavvia il server se si chiude da solo. Dopo tre crash in cinque minuti si ferma e mostra un banner: un ciclo di crash richiede una persona, non un altro riavvio."
+      ]
+    },
+    {
+      "id": "health",
+      "title": "Stato del server",
+      "intro": "Una pagina che risponde a colpo d'occhio se qualcosa non va, più gli strumenti per tenere il server in ordine: annullare una modifica di config sbagliata e liberare spazio su disco.",
+      "steps": [
+        {
+          "title": "Leggi le caselle di stato",
+          "body": "La pagina Stato del server mostra quattro caselle: il server è attivo (o bloccato in un ciclo di crash), c'è spazio su disco, la config è valida e, se non parte, perché. Ogni casella porta alla pagina che risolve."
+        },
+        {
+          "title": "Annulla una modifica",
+          "body": "Il gestore salva ogni file di config prima di scrivere. La pagina Cronologia elenca quegli snapshot per file, con un confronto di cosa riporterebbe un ripristino e ripristino con un clic — la tua rete di sicurezza dopo una modifica sbagliata."
+        },
+        {
+          "title": "Libera spazio",
+          "body": "Nella pagina di stato un clic elimina i log del server e i dump di crash (gli ultimi RPT e ADM restano) o i vecchi backup di config, così un server di lunga durata non riempie il disco in silenzio."
+        }
+      ],
+      "tips": [
+        "La casella di validità esegue il validatore completo, che su una missione grande richiede un attimo — si riempie un paio di secondi dopo le altre.",
+        "Ripristinare un backup richiede il server fermo, come ogni modifica di config."
       ]
     },
     {

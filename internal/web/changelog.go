@@ -27,6 +27,17 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "0.23.1", Date: "2026-08-10",
+		EN: []string{
+			"Two new guide chapters — Player loadout and Server health — with screenshots, in all 11 languages.",
+			"Linux internals hardened: the /proc parsers behind the process metrics are now unit-tested.",
+		},
+		RU: []string{
+			"Две новые главы инструкции — «Стартовый набор» и «Здоровье сервера» — со скриншотами, на всех 11 языках.",
+			"Укреплены Linux-внутренности: парсеры /proc за метриками процесса теперь покрыты юнит-тестами.",
+		},
+	},
+	{
 		Version: "0.23.0", Date: "2026-08-10",
 		EN: []string{
 			"Linux support — the manager now runs natively on Linux, with a dayz-manager-linux binary in releases.",

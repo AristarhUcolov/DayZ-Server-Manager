@@ -60,9 +60,11 @@ var specs = []chapterSpec{
 	{ID: "mods", Icon: "i-mods", Shot: "mods", Routes: []string{"", "mods", "", ""}},
 	{ID: "economy", Icon: "i-types", Shot: "types", Routes: []string{"types", "", "", ""}},
 	{ID: "attachments", Icon: "i-attach", Shot: "attachments", Routes: []string{"attachments", "", ""}},
+	{ID: "loadout", Icon: "i-loadout", Shot: "loadout", Routes: []string{"loadout", "", ""}},
 	{ID: "rcon", Icon: "i-rcon", Shot: "players", Routes: []string{"rcon", "", "settings"}},
 	{ID: "weather", Icon: "i-weather", Shot: "weather", Routes: []string{"weather", "", ""}},
 	{ID: "maintenance", Icon: "i-validator", Shot: "validator", Routes: []string{"settings", "validator", "logs"}},
+	{ID: "health", Icon: "i-health", Shot: "health", Routes: []string{"health", "history", ""}},
 	{ID: "remote", Icon: "i-server", Shot: "settings", Routes: []string{"settings", ""}},
 }
 

@@ -4,10 +4,8 @@
 package util
 
 import (
-	"errors"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -38,30 +36,14 @@ func ProcessStats(pid uint32) (cpuPercent float64, memBytes uint64, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	s := string(data)
-	// Field 2 (comm) is parenthesised and may itself contain spaces or ')', so
-	// split on the part after the LAST ')'. After it, index 0 is field 3 (state);
-	// utime is field 14 → index 11, stime is field 15 → index 12.
-	rp := strings.LastIndexByte(s, ')')
-	if rp < 0 {
-		return 0, 0, errors.New("unparseable /proc stat")
+	ticks, err := parseProcStatTicks(string(data))
+	if err != nil {
+		return 0, 0, err
 	}
-	fields := strings.Fields(s[rp+1:])
-	if len(fields) < 13 {
-		return 0, 0, errors.New("short /proc stat")
-	}
-	utime, _ := strconv.ParseUint(fields[11], 10, 64)
-	stime, _ := strconv.ParseUint(fields[12], 10, 64)
-	ticks := utime + stime
 
 	// Resident memory: /proc/<pid>/statm field 2 is RSS in pages.
 	if sm, e := os.ReadFile("/proc/" + p + "/statm"); e == nil {
-		f := strings.Fields(string(sm))
-		if len(f) >= 2 {
-			if pages, e2 := strconv.ParseUint(f[1], 10, 64); e2 == nil {
-				memBytes = pages * uint64(os.Getpagesize())
-			}
-		}
+		memBytes = parseStatmRSSBytes(string(sm), os.Getpagesize())
 	}
 
 	now := time.Now()

@@ -102,6 +102,29 @@
       ]
     },
     {
+      "id": "loadout",
+      "title": "Equipo del jugador",
+      "intro": "Decide qué lleva puesto y encima un jugador en el momento de reaparecer. Vanilla lo fija en el init.c de la misión; el panel usa en su lugar los presets de equipo de aparición de DayZ y activa todo el sistema por ti.",
+      "steps": [
+        {
+          "title": "Activa el sistema",
+          "body": "Abre Equipo del jugador. Si la misión aún genera jugadores desde init.c, la página lo indica y ofrece un botón que crea un preset inicial, lo registra en cfggameplay.json y activa el interruptor enableCfgGameplayFile, todo a la vez."
+        },
+        {
+          "title": "Edita ropa y equipo",
+          "body": "Cada preset indica qué se lleva por ranura (Cuerpo, Piernas, Pies…) y qué se lleva suelto. Añade objetos por nombre de clase, pon un peso de aparición cuando una ranura deba elegir entre varios, y elige un estado: impecable, usado, dañado o un rango propio."
+        },
+        {
+          "title": "Tirada de prueba y compartir",
+          "body": "Pulsa Tirada de prueba para muestrear una aparición y ver exactamente lo que recibe un jugador, personaje incluido. Exporta un preset a un archivo para reutilizarlo en otro servidor e impórtalo de vuelta."
+        }
+      ],
+      "tips": [
+        "healthMin/healthMax son fracciones de salud: 1.0 es impecable, 0.0 es arruinado. Deja todo impecable para que las apariciones no lleguen con ropa gastada.",
+        "El equipo se guarda con el servidor detenido, como cualquier cambio de configuración; vuelve a iniciar el servidor después."
+      ]
+    },
+    {
       "id": "rcon",
       "title": "RCon, jugadores y anuncios",
       "intro": "RCon es la consola remota de BattlEye: lista de jugadores en vivo, expulsiones, baneos y mensajes al chat. Necesita una contraseña que BattlEye lee de beserver_x64.cfg al arrancar el servidor.",
@@ -168,6 +191,29 @@
       "tips": [
         "El borrado elimina el estado guardado del mundo: jugadores, vehículos, bases. Tus tablas de botín y configuraciones no se tocan. Las carpetas se apartan primero, así que un borrado por error puede recuperarse a mano.",
         "El vigilante de caídas reinicia el servidor si se cierra solo. Tras tres caídas en cinco minutos se detiene y muestra un aviso: un bucle de caídas necesita a una persona, no otro reinicio."
+      ]
+    },
+    {
+      "id": "health",
+      "title": "Estado del servidor",
+      "intro": "Una página que responde de un vistazo si algo va mal, más las herramientas para mantener el servidor ordenado: revertir un cambio de configuración malo y liberar espacio en disco.",
+      "steps": [
+        {
+          "title": "Lee las casillas de estado",
+          "body": "La página Estado del servidor muestra cuatro casillas: si el servidor está activo (o atascado en un bucle de fallos), si hay espacio en disco, si la configuración es válida y, si no arranca, por qué. Cada casilla enlaza con la página que lo soluciona."
+        },
+        {
+          "title": "Revierte un cambio",
+          "body": "El gestor respalda cada archivo de configuración antes de escribir. La página Historial lista esas copias por archivo, con una comparación de lo que traería una restauración y restauración con un clic: tu red de seguridad tras una mala edición."
+        },
+        {
+          "title": "Libera espacio",
+          "body": "En la página de estado, un clic borra registros del servidor y volcados de fallos (se conservan el RPT y ADM más recientes) o copias de configuración antiguas, para que un servidor de larga vida no llene el disco en silencio."
+        }
+      ],
+      "tips": [
+        "La casilla de validez ejecuta el validador completo, que tarda un momento en una misión grande: se rellena un par de segundos después de las demás.",
+        "Restaurar una copia requiere el servidor detenido, como cualquier cambio de configuración."
       ]
     },
     {
