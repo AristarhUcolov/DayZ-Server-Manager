@@ -258,6 +258,18 @@
     }
   ],
   "help": {
+    "weather.overcast": "Cloud cover, 0–100%. Higher is greyer and darker; it also gates rain — rain needs overcast above roughly 70%.",
+    "weather.fog": "Fog density, 0–100%. Thick fog cuts sight lines hard — tense for loot runs, rough for snipers.",
+    "weather.rain": "Rain intensity, 0–100%. Only actually falls when overcast is high enough; wets the player and masks sound.",
+    "weather.snowfall": "Snowfall intensity, 0–100% (visible mainly on snowy maps like Sakhal).",
+    "weather.wind": "Wind speed in m/s. Drives cloud movement and, with the dynamic toggle, how fast weather drifts.",
+    "events.lifetime": "Seconds a spawned group stays in the world before it despawns if untouched.",
+    "events.restock": "Seconds before a cleared or used-up event spawns again. 0 = restock as soon as it can.",
+    "events.saveable": "1 = the spawned group is written to persistence and survives a restart; 0 = it is re-rolled fresh each start.",
+    "moddrift.help.ships": "How many loot types this mod's own types file defines.",
+    "moddrift.help.active": "How many of those types are actually present in your economy (types.xml + moded_types).",
+    "moddrift.help.missing": "Types the mod ships but your economy doesn't have — these items won't spawn until they're merged.",
+    "leaderboard.metrics": "Pick what to rank by: total playtime, kills, kill/death ratio or number of sessions.",
     "server.hostname": "The server name shown in the DayZ browser. Keep it short and searchable.",
     "server.password": "Join password. Leave empty for a public server; set it to make the server private.",
     "server.passwordAdmin": "In-game admin password (#login). Separate from the RCon password — keep it secret.",

@@ -258,6 +258,18 @@
     }
   ],
   "help": {
+    "weather.overcast": "Copertura nuvolosa, 0–100%. Più alta = più grigia e scura; abilita anche la pioggia — serve copertura sopra ~70%.",
+    "weather.fog": "Densità della nebbia, 0–100%. La nebbia fitta riduce molto la visuale — teso per il loot, duro per i cecchini.",
+    "weather.rain": "Intensità della pioggia, 0–100%. Cade davvero solo con copertura sufficiente; bagna il giocatore e maschera il suono.",
+    "weather.snowfall": "Intensità della neve, 0–100% (visibile soprattutto su mappe innevate come Sakhal).",
+    "weather.wind": "Velocità del vento in m/s. Muove le nuvole e, con l'opzione dinamica, la rapidità del cambio meteo.",
+    "events.lifetime": "Secondi per cui un gruppo generato resta nel mondo prima di sparire se non toccato.",
+    "events.restock": "Secondi prima che un evento ripulito o esaurito riappaia. 0 = rifornisce appena possibile.",
+    "events.saveable": "1 = il gruppo generato è scritto nella persistenza e sopravvive a un riavvio; 0 = rigenerato a ogni avvio.",
+    "moddrift.help.ships": "Quanti tipi di loot definisce il file types di questo mod.",
+    "moddrift.help.active": "Quanti di quei tipi sono davvero presenti nella tua economia (types.xml + moded_types).",
+    "moddrift.help.missing": "Tipi forniti dal mod ma assenti dalla tua economia — non compariranno finché non vengono uniti.",
+    "leaderboard.metrics": "Scegli il criterio di classifica: tempo di gioco totale, uccisioni, rapporto uccisioni/morti o numero di sessioni.",
     "server.hostname": "Il nome del server mostrato nel browser di DayZ. Tienilo corto e facile da cercare.",
     "server.password": "Password di accesso. Vuota = server pubblico; impostala per renderlo privato.",
     "server.passwordAdmin": "Password admin in gioco (#login). Diversa da quella RCon — tienila segreta.",

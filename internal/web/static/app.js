@@ -3272,9 +3272,9 @@ Views.events = async (root) => {
       hlp(h('th', { class: 'num', i18n: 'events.field.nominal' }), 'events.nominal'),
       hlp(h('th', { class: 'num', i18n: 'events.field.min' }), 'events.minmax'),
       h('th', { class: 'num', i18n: 'events.field.max' }),
-      h('th', { class: 'num', i18n: 'events.field.lifetime' }),
-      h('th', { i18n: 'events.field.active' }),
-      h('th', { class: 'num', i18n: 'events.field.children' }),
+      hlp(h('th', { class: 'num', i18n: 'events.field.lifetime' }), 'events.lifetime'),
+      hlp(h('th', { i18n: 'events.field.active' }), 'events.active'),
+      hlp(h('th', { class: 'num', i18n: 'events.field.children' }), 'events.children'),
       h('th', { text: '' }),
     ])));
     const tbody = h('tbody');
@@ -3321,10 +3321,13 @@ Views.events = async (root) => {
 
     const inputs = {};
     const grid = h('div', { class: 'grid-3' });
+    const EV_FIELD_HELP = { nominal: 'events.nominal', min: 'events.minmax', max: 'events.minmax',
+      lifetime: 'events.lifetime', restock: 'events.restock', saveable: 'events.saveable', active: 'events.active' };
     for (const k of NUM_FIELDS) {
       const el = h('input', { type: 'number', value: ev[k] ?? '' });
       inputs[k] = el;
-      grid.append(h('div', {}, [h('label', { i18n: `events.field.${k}` }), el]));
+      const label = h('label', { i18n: `events.field.${k}` });
+      grid.append(h('div', {}, [EV_FIELD_HELP[k] ? withHelp(label, EV_FIELD_HELP[k]) : label, el]));
     }
 
     // Children editor.
@@ -4358,12 +4361,12 @@ Views.weather = async (root) => {
     ]);
     return { row, get: () => unit === '%' ? Number(range.value) / 100 : Number(range.value) };
   };
-  const oc = sliderRow('weather.overcast', 'cloudy', params.overcast);
-  const fog = sliderRow('weather.fog', 'foggy', params.fog);
-  const rain = sliderRow('weather.rain', 'rainy', params.rain);
-  const snow = sliderRow('weather.snowfall', 'snowy', params.snowfall);
+  const oc = sliderRow('weather.overcast', 'cloudy', params.overcast, { help: 'weather.overcast' });
+  const fog = sliderRow('weather.fog', 'foggy', params.fog, { help: 'weather.fog' });
+  const rain = sliderRow('weather.rain', 'rainy', params.rain, { help: 'weather.rain' });
+  const snow = sliderRow('weather.snowfall', 'snowy', params.snowfall, { help: 'weather.snowfall' });
   const storm = sliderRow('weather.storm', 'storm', params.stormDensity, { help: 'weather.storm' });
-  const wind = sliderRow('weather.wind', 'wind', params.wind, { unit: 'm/s', max: 20, step: '0.5' });
+  const wind = sliderRow('weather.wind', 'wind', params.wind, { unit: 'm/s', max: 20, step: '0.5', help: 'weather.wind' });
   const dynChk = h('input', { type: 'checkbox', class: 'switch' });
   dynChk.checked = !!params.dynamic;
   // How gradually weather moves. The old build hard-coded 2-minute ramps with
@@ -5883,9 +5886,12 @@ Views.leaderboard = async (root) => {
 
   function render() {
     card.innerHTML = '';
-    card.append(h('div', { class: 'lb-metrics' }, Object.keys(metrics).map(k =>
-      h('button', { class: 'lb-tab' + (k === cur ? ' active' : ''), i18n: metrics[k].label,
-        onclick: () => { cur = k; render(); applyI18n(); } }))));
+    card.append(h('div', { class: 'lb-metrics' }, [
+      ...Object.keys(metrics).map(k =>
+        h('button', { class: 'lb-tab' + (k === cur ? ' active' : ''), i18n: metrics[k].label,
+          onclick: () => { cur = k; render(); applyI18n(); } })),
+      help('leaderboard.metrics'),
+    ]));
 
     const m = metrics[cur];
     const ranked = list.slice()
@@ -6549,9 +6555,9 @@ Views.moddrift = async (root) => {
   tbl.append(h('thead', {}, h('tr', {}, [
     h('th', { text: '' }),
     h('th', { i18n: 'moddrift.mod' }),
-    h('th', { class: 'num', i18n: 'moddrift.ships' }),
-    h('th', { class: 'num', i18n: 'moddrift.active' }),
-    h('th', { class: 'num', i18n: 'moddrift.missing' }),
+    hlp(h('th', { class: 'num', i18n: 'moddrift.ships' }), 'moddrift.help.ships'),
+    hlp(h('th', { class: 'num', i18n: 'moddrift.active' }), 'moddrift.help.active'),
+    hlp(h('th', { class: 'num', i18n: 'moddrift.missing' }), 'moddrift.help.missing'),
   ])));
   const tb = h('tbody');
   for (const m of list) {

@@ -258,6 +258,18 @@
     }
   ],
   "help": {
+    "weather.overcast": "Nebulosidade, 0–100%. Mais alta = mais cinzenta e escura; também ativa a chuva — precisa de nebulosidade acima de ~70%.",
+    "weather.fog": "Densidade do nevoeiro, 0–100%. Nevoeiro denso corta muito a visão — tenso para lootar, duro para snipers.",
+    "weather.rain": "Intensidade da chuva, 0–100%. Só cai com nebulosidade suficiente; molha o jogador e mascara o som.",
+    "weather.snowfall": "Intensidade da neve, 0–100% (visível sobretudo em mapas com neve como Sakhal).",
+    "weather.wind": "Velocidade do vento em m/s. Move as nuvens e, com a opção dinâmica, a rapidez da mudança do tempo.",
+    "events.lifetime": "Segundos que um grupo gerado permanece no mundo antes de desaparecer se não for tocado.",
+    "events.restock": "Segundos até um evento limpo ou esgotado voltar a aparecer. 0 = reabastece assim que possível.",
+    "events.saveable": "1 = o grupo gerado é gravado na persistência e sobrevive a um reinício; 0 = é gerado de novo a cada arranque.",
+    "moddrift.help.ships": "Quantos tipos de loot o próprio ficheiro types deste mod define.",
+    "moddrift.help.active": "Quantos desses tipos estão realmente na tua economia (types.xml + moded_types).",
+    "moddrift.help.missing": "Tipos que o mod traz mas a tua economia não tem — não aparecem até serem fundidos.",
+    "leaderboard.metrics": "Escolhe por que ordenar: tempo total de jogo, abates, rácio abates/mortes ou número de sessões.",
     "server.hostname": "O nome do servidor mostrado no navegador do DayZ. Mantém curto e fácil de procurar.",
     "server.password": "Palavra-passe de entrada. Vazia = servidor público; define-a para o tornar privado.",
     "server.passwordAdmin": "Palavra-passe de admin no jogo (#login). Diferente da de RCon — mantém-na secreta.",

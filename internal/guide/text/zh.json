@@ -258,6 +258,18 @@
     }
   ],
   "help": {
+    "weather.overcast": "云量，0–100%。越高越灰暗；同时控制降雨——降雨需要云量高于约 70%。",
+    "weather.fog": "雾的浓度，0–100%。浓雾大幅缩短视野——搜刷紧张，狙击艰难。",
+    "weather.rain": "降雨强度，0–100%。只有云量足够时才真正下雨；淋湿玩家并掩盖声音。",
+    "weather.snowfall": "降雪强度，0–100%（主要在 Sakhal 等雪地地图可见）。",
+    "weather.wind": "风速（米/秒）。驱动云的移动，并在开启动态时影响天气变化的快慢。",
+    "events.lifetime": "生成的组在无人触碰时于世界中存在多少秒后消失。",
+    "events.restock": "被清除/耗尽的事件再次生成前的秒数。0 = 尽快补充。",
+    "events.saveable": "1 = 生成的组写入持久化并在重启后保留；0 = 每次启动重新随机。",
+    "moddrift.help.ships": "此模组自身的 types 文件定义了多少种战利品类型。",
+    "moddrift.help.active": "其中有多少类型实际存在于你的经济中（types.xml + moded_types）。",
+    "moddrift.help.missing": "模组自带但你的经济没有的类型——在合并前这些物品不会刷新。",
+    "leaderboard.metrics": "选择排名依据：总游戏时长、击杀、击杀/死亡比或场次数。",
     "server.hostname": "在 DayZ 浏览器中显示的服务器名称。保持简短、易于搜索。",
     "server.password": "进入密码。留空 = 公开服务器；设置后即为私人服务器。",
     "server.passwordAdmin": "游戏内管理员密码（#login）。与 RCon 密码不同——请保密。",

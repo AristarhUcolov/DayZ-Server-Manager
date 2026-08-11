@@ -258,6 +258,18 @@
     }
   ],
   "help": {
+    "weather.overcast": "Bewölkung, 0–100%. Höher = grauer und dunkler; schaltet auch Regen frei — Regen braucht Bewölkung über ~70%.",
+    "weather.fog": "Nebeldichte, 0–100%. Dichter Nebel senkt die Sicht stark — spannend fürs Looten, hart für Sniper.",
+    "weather.rain": "Regenstärke, 0–100%. Fällt nur bei ausreichender Bewölkung; macht den Spieler nass und dämpft Geräusche.",
+    "weather.snowfall": "Schneefallstärke, 0–100% (vor allem auf Schneekarten wie Sakhal sichtbar).",
+    "weather.wind": "Windgeschwindigkeit in m/s. Treibt die Wolken und – mit der Dynamik-Option – wie schnell das Wetter zieht.",
+    "events.lifetime": "Sekunden, die eine gespawnte Gruppe in der Welt bleibt, bevor sie unberührt despawnt.",
+    "events.restock": "Sekunden, bis ein geräumtes oder aufgebrauchtes Event erneut spawnt. 0 = füllt sofort wieder auf.",
+    "events.saveable": "1 = die Gruppe wird in die Persistenz geschrieben und übersteht einen Neustart; 0 = bei jedem Start neu ausgewürfelt.",
+    "moddrift.help.ships": "Wie viele Loot-Typen die eigene types-Datei dieses Mods definiert.",
+    "moddrift.help.active": "Wie viele davon tatsächlich in deiner Ökonomie sind (types.xml + moded_types).",
+    "moddrift.help.missing": "Typen, die der Mod liefert, deine Ökonomie aber nicht hat — diese Items spawnen erst nach dem Zusammenführen.",
+    "leaderboard.metrics": "Wähle das Ranking-Kriterium: Gesamtspielzeit, Kills, K/D-Verhältnis oder Anzahl der Sitzungen.",
     "server.hostname": "Der im DayZ-Browser angezeigte Servername. Kurz und leicht auffindbar halten.",
     "server.password": "Beitritts-Passwort. Leer = öffentlicher Server; setzen, um ihn privat zu machen.",
     "server.passwordAdmin": "In-Game-Admin-Passwort (#login). Getrennt vom RCon-Passwort — geheim halten.",

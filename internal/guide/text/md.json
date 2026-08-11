@@ -258,6 +258,18 @@
     }
   ],
   "help": {
+    "weather.overcast": "Înnorare, 0–100%. Mai mare = mai gri și mai întunecat; activează și ploaia — ploaia are nevoie de înnorare peste ~70%.",
+    "weather.fog": "Densitatea ceții, 0–100%. Ceața deasă reduce mult vizibilitatea — tensionat pentru loot, greu pentru lunetiști.",
+    "weather.rain": "Intensitatea ploii, 0–100%. Cade cu adevărat doar la înnorare suficientă; udă jucătorul și maschează sunetul.",
+    "weather.snowfall": "Intensitatea ninsorii, 0–100% (vizibilă mai ales pe hărți cu zăpadă precum Sakhal).",
+    "weather.wind": "Viteza vântului în m/s. Mișcă norii și, cu opțiunea dinamică, cât de repede se schimbă vremea.",
+    "events.lifetime": "Secunde cât un grup apărut rămâne în lume înainte să dispară dacă nu e atins.",
+    "events.restock": "Secunde până când un eveniment curățat sau epuizat apare din nou. 0 = reaprovizionează imediat ce poate.",
+    "events.saveable": "1 = grupul apărut este scris în persistență și supraviețuiește unei reporniri; 0 = regenerat la fiecare pornire.",
+    "moddrift.help.ships": "Câte tipuri de pradă definește fișierul types propriu al acestui mod.",
+    "moddrift.help.active": "Câte dintre acele tipuri sunt de fapt în economia ta (types.xml + moded_types).",
+    "moddrift.help.missing": "Tipuri pe care modul le aduce dar economia ta nu le are — nu vor apărea până nu sunt îmbinate.",
+    "leaderboard.metrics": "Alege după ce se face clasamentul: timp total de joc, ucideri, raport ucideri/morți sau număr de sesiuni.",
     "server.hostname": "Numele serverului afișat în browserul DayZ. Ține-l scurt și ușor de căutat.",
     "server.password": "Parola de intrare. Goală = server public; seteaz-o pentru a-l face privat.",
     "server.passwordAdmin": "Parola de admin în joc (#login). Diferită de cea RCon — ține-o secretă.",

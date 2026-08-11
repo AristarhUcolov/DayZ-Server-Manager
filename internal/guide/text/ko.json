@@ -258,6 +258,18 @@
     }
   ],
   "help": {
+    "weather.overcast": "구름량, 0–100%. 높을수록 더 흐리고 어둠니다. 비 여부도 좌우하며, 비는 구름량 ~70% 이상이 필요합니다.",
+    "weather.fog": "안개 밀도, 0–100%. 짙은 안개는 시야를 크게 줄입니다 — 파밍은 긴장, 저격은 어려움.",
+    "weather.rain": "비 강도, 0–100%. 구름량이 충분할 때만 실제로 내립니다. 플레이어를 적시고 소리를 가립니다.",
+    "weather.snowfall": "눈 강도, 0–100% (주로 Sakhal 같은 설원 맵에서 보임).",
+    "weather.wind": "풍속(m/s). 구름을 움직이고, 동적 옵션에서는 날씨가 바뀌는 속도에도 영향.",
+    "events.lifetime": "스폰된 그룹이 건드리지 않으면 사라지기 전까지 월드에 남는 초.",
+    "events.restock": "정리/소진된 이벤트가 다시 스폰될 때까지의 초. 0 = 가능한 빨리 보충.",
+    "events.saveable": "1 = 스폰된 그룹을 지속성에 기록해 재시작 후에도 유지, 0 = 시작할 때마다 다시 굴림.",
+    "moddrift.help.ships": "이 모드 자체 types 파일이 정의하는 전리품 유형 수.",
+    "moddrift.help.active": "그중 실제로 경제(types.xml + moded_types)에 있는 유형 수.",
+    "moddrift.help.missing": "모드가 제공하지만 경제에 없는 유형 — 병합하기 전에는 이 아이템들이 스폰되지 않습니다.",
+    "leaderboard.metrics": "순위 기준 선택: 총 플레이 시간, 킬, 킬/데스 비율 또는 세션 수.",
     "server.hostname": "DayZ 브라우저에 표시되는 서버 이름. 짧고 검색하기 쉽게 유지하세요.",
     "server.password": "접속 비밀번호. 비우면 공개 서버, 설정하면 비공개 서버가 됩니다.",
     "server.passwordAdmin": "게임 내 관리자 비밀번호(#login). RCon 비밀번호와 별개 — 비밀로 유지하세요.",

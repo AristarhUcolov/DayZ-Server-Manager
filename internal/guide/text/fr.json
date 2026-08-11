@@ -258,6 +258,18 @@
     }
   ],
   "help": {
+    "weather.overcast": "Couverture nuageuse, 0–100%. Plus haut = plus gris et sombre ; conditionne aussi la pluie — il faut un ciel couvert au-dessus de ~70%.",
+    "weather.fog": "Densité du brouillard, 0–100%. Un brouillard épais réduit fortement la visibilité — tendu pour le loot, dur pour les snipers.",
+    "weather.rain": "Intensité de la pluie, 0–100%. Ne tombe vraiment qu'avec un ciel assez couvert ; mouille le joueur et masque le son.",
+    "weather.snowfall": "Intensité de la neige, 0–100% (visible surtout sur les cartes enneigées comme Sakhal).",
+    "weather.wind": "Vitesse du vent en m/s. Déplace les nuages et, avec l'option dynamique, la vitesse d'évolution de la météo.",
+    "events.lifetime": "Secondes pendant lesquelles un groupe apparu reste dans le monde avant de disparaître s'il n'est pas touché.",
+    "events.restock": "Secondes avant qu'un événement nettoyé ou épuisé réapparaisse. 0 = réapprovisionne dès que possible.",
+    "events.saveable": "1 = le groupe apparu est écrit en persistance et survit à un redémarrage ; 0 = régénéré à chaque démarrage.",
+    "moddrift.help.ships": "Combien de types de butin le fichier types propre à ce mod définit.",
+    "moddrift.help.active": "Combien de ces types sont réellement présents dans votre économie (types.xml + moded_types).",
+    "moddrift.help.missing": "Types fournis par le mod mais absents de votre économie — ils n'apparaîtront pas tant qu'ils ne sont pas fusionnés.",
+    "leaderboard.metrics": "Choisissez le critère de classement : temps de jeu total, kills, ratio kills/morts ou nombre de sessions.",
     "server.hostname": "Le nom du serveur affiché dans le navigateur DayZ. Gardez-le court et facile à trouver.",
     "server.password": "Mot de passe de connexion. Vide = serveur public ; renseignez-le pour le rendre privé.",
     "server.passwordAdmin": "Mot de passe admin en jeu (#login). Distinct du mot de passe RCon — gardez-le secret.",
