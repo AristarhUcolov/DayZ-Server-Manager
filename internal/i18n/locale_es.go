@@ -464,7 +464,7 @@ var es = Bundle{
 	"validator.title":            "Validador",
 	"validator.none":             "No se encontraron problemas.",
 	"validator.fix":              "Corrección automática",
-	"validator.fix.hint":         "La auto-corrección solo añade: incluye usage/value/tag/category desconocidos de tus types en cfglimitsdefinition.xml Y registra los archivos moded_types que falten en cfgeconomycore.xml, las dos causas de que el botín modeado desaparezca en silencio. Se guarda un .bak por archivo. Requiere el servidor detenido.",
+	"validator.fix.hint":         "El auto-arreglo repara las causas comunes de botín que desaparece en silencio: añade usage/value/tag/category desconocidos a cfglimitsdefinition.xml, registra archivos moded_types que faltan en cfgeconomycore.xml, elimina entradas <type> duplicadas (dentro de un archivo y copias de un nombre base de types.xml) y quita las posiciones de aparición de eventos que ya no existen. Se guarda un .bak por archivo. Requiere el servidor detenido.",
 	"validator.fix.none":         "Nada que corregir automáticamente.",
 	"validator.fix.done":         "{n} elemento(s) corregido(s). Revalidando…",
 	"validator.severity.error":   "Error",

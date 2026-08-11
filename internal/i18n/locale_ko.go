@@ -464,7 +464,7 @@ var ko = Bundle{
 	"validator.title":            "검사기",
 	"validator.none":             "문제가 발견되지 않았습니다.",
 	"validator.fix":              "자동 수정",
-	"validator.fix.hint":         "자동 수정은 추가만 합니다: types의 알 수 없는 usage/value/tag/category를 cfglimitsdefinition.xml에 등록하고 cfgeconomycore.xml에 없는 moded_types 파일을 등록합니다 — 모드 전리품이 조용히 사라지는 두 가지 원인입니다. 파일마다 .bak을 보관합니다. 서버를 중지해야 합니다.",
+	"validator.fix.hint":         "자동 수정은 전리품이 조용히 사라지는 흔한 원인을 고칩니다: 알 수 없는 usage/value/tag/category를 cfglimitsdefinition.xml에 추가하고, cfgeconomycore.xml에 없는 moded_types 파일을 등록하고, 중복된 <type>(파일 내부 및 types.xml 기본 이름의 사본)을 제거하고, 더 이상 존재하지 않는 이벤트의 스폰 위치를 삭제합니다. 파일마다 .bak을 보관합니다. 서버 정지가 필요합니다.",
 	"validator.fix.none":         "자동으로 수정할 항목이 없습니다.",
 	"validator.fix.done":         "{n}개 항목을 수정했습니다. 다시 검사 중…",
 	"validator.severity.error":   "오류",

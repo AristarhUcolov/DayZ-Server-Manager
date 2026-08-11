@@ -522,6 +522,88 @@ func AutoFix(serverDir, missionTemplate string) ([]string, error) {
 		}
 	}
 
+	// ---- 4. strip moded_types entries that duplicate a base types.xml name ----
+	// A moded file redefining a vanilla type name is a cross-file duplicate:
+	// DayZ's resolution is undefined, so the base types.xml effectively wins and
+	// the moded copy is dead weight. Remove only the moded copy (types.xml is
+	// never touched) so the loot is deterministic; comments are preserved.
+	baseNames := map[string]bool{}
+	if doc, err := dztypes.Load(filepath.Join(missionDir, "db", "types.xml")); err == nil {
+		for i := range doc.Types {
+			baseNames[strings.ToLower(doc.Types[i].Name)] = true
+		}
+	}
+	if len(baseNames) > 0 {
+		if entries, err := os.ReadDir(moded); err == nil {
+			for _, e := range entries {
+				if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".xml") {
+					continue
+				}
+				p := filepath.Join(moded, e.Name())
+				doc, err := dztypes.Load(p)
+				if err != nil {
+					continue
+				}
+				dup := map[string]bool{}
+				for i := range doc.Types {
+					if k := strings.ToLower(doc.Types[i].Name); baseNames[k] {
+						dup[k] = true
+					}
+				}
+				if len(dup) == 0 {
+					continue
+				}
+				if err := util.BackupBeforeWrite(p); err != nil {
+					return nil, err
+				}
+				removed, err := dztypes.RemoveTypesInSet(p, dup)
+				if err != nil {
+					return nil, err
+				}
+				if len(removed) > 0 {
+					sort.Strings(removed)
+					out = append(out, fmt.Sprintf("removed %d type %s from %s that duplicate types.xml (%s)",
+						len(removed), plural(len(removed), "entry", "entries"), filepath.Base(p), strings.Join(removed, ", ")))
+				}
+			}
+		}
+	}
+
+	// ---- 5. drop orphan spawn positions (event not in events.xml) ----
+	// Positions for an event that events.xml no longer defines are ignored by
+	// DayZ — the classic leftover from renaming an event. Remove the dead blocks
+	// so cfgeventspawns.xml matches reality.
+	if evDoc, err := dztypes.LoadEvents(filepath.Join(missionDir, "db", "events.xml")); err == nil {
+		known := map[string]bool{}
+		for i := range evDoc.Events {
+			known[strings.ToLower(evDoc.Events[i].Name)] = true
+		}
+		spawnsPath := filepath.Join(missionDir, "cfgeventspawns.xml")
+		if spDoc, err := dztypes.LoadEventSpawns(spawnsPath); err == nil {
+			kept := spDoc.Events[:0]
+			var orphans []string
+			for _, ev := range spDoc.Events {
+				if known[strings.ToLower(ev.Name)] {
+					kept = append(kept, ev)
+				} else {
+					orphans = append(orphans, ev.Name)
+				}
+			}
+			if len(orphans) > 0 {
+				spDoc.Events = kept
+				if err := util.BackupBeforeWrite(spawnsPath); err != nil {
+					return nil, err
+				}
+				if err := dztypes.SaveEventSpawns(spawnsPath, spDoc); err != nil {
+					return nil, err
+				}
+				sort.Strings(orphans)
+				out = append(out, fmt.Sprintf("removed spawn positions for %d orphan %s in cfgeventspawns.xml (%s)",
+					len(orphans), plural(len(orphans), "event", "events"), strings.Join(orphans, ", ")))
+			}
+		}
+	}
+
 	return out, nil
 }
 

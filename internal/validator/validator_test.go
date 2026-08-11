@@ -135,6 +135,62 @@ func TestAutoFixRegistersUnregisteredModedFile(t *testing.T) {
 	}
 }
 
+// AutoFix must also strip moded_types entries that duplicate a base types.xml
+// name (keeping types.xml untouched) and drop cfgeventspawns positions for
+// events that events.xml no longer defines.
+func TestAutoFixRemovesCrossFileDupesAndOrphanSpawns(t *testing.T) {
+	dir := t.TempDir()
+	mission := "dayzOffline.test"
+	missionDir := filepath.Join(dir, "mpmissions", mission)
+	moded := filepath.Join(missionDir, "moded_types")
+	db := filepath.Join(missionDir, "db")
+	for _, d := range []string{moded, db} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.WriteFile(filepath.Join(missionDir, "cfgeconomycore.xml"), []byte(`<?xml version="1.0"?>
+<economycore><ce folder="moded_types"><file name="mod.xml" type="types" /></ce></economycore>`), 0o644)
+	os.WriteFile(filepath.Join(db, "types.xml"), []byte(
+		`<?xml version="1.0"?><types><type name="carp"><nominal>3</nominal></type></types>`), 0o644)
+	// The mod redefines vanilla "carp" (cross-file dup) plus its own "ModItem".
+	os.WriteFile(filepath.Join(moded, "mod.xml"), []byte(
+		`<?xml version="1.0"?><types><type name="carp"><nominal>9</nominal></type><type name="ModItem"><nominal>1</nominal></type></types>`), 0o644)
+	os.WriteFile(filepath.Join(db, "events.xml"), []byte(
+		`<events><event name="Good"><nominal>1</nominal></event></events>`), 0o644)
+	os.WriteFile(filepath.Join(missionDir, "cfgeventspawns.xml"), []byte(
+		`<?xml version="1.0"?><eventposdef><event name="Good"><pos x="1" z="2"/></event><event name="Ghost"><pos x="3" z="4"/></event></eventposdef>`), 0o644)
+
+	if _, err := AutoFix(dir, mission); err != nil {
+		t.Fatal(err)
+	}
+
+	modDoc, err := dztypes.Load(filepath.Join(moded, "mod.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if modDoc.Find("carp") != nil {
+		t.Error("cross-file duplicate \"carp\" was not removed from the moded file")
+	}
+	if modDoc.Find("ModItem") == nil {
+		t.Error("the mod's own \"ModItem\" was wrongly removed")
+	}
+	baseDoc, _ := dztypes.Load(filepath.Join(db, "types.xml"))
+	if baseDoc.Find("carp") == nil {
+		t.Error("types.xml was touched — its \"carp\" must stay")
+	}
+	spDoc, err := dztypes.LoadEventSpawns(filepath.Join(missionDir, "cfgeventspawns.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spDoc.Find("Ghost") != nil {
+		t.Error("orphan spawn positions for \"Ghost\" were not removed")
+	}
+	if spDoc.Find("Good") == nil {
+		t.Error("valid spawn positions for \"Good\" were wrongly removed")
+	}
+}
+
 // The shape BI actually ships: <user> nested inside <usageflags>/<valueflags>.
 // The old parser looked for <user> at the root and silently merged nothing, so
 // every types entry using a group name was about to be reported as unknown.

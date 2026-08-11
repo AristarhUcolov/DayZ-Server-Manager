@@ -464,7 +464,7 @@ var fr = Bundle{
 	"validator.title":            "Validateur",
 	"validator.none":             "Aucun problème trouvé.",
 	"validator.fix":              "Correction automatique",
-	"validator.fix.hint":         "La correction auto ne fait qu'ajouter : elle inscrit les usage/value/tag/category inconnus de vos types dans cfglimitsdefinition.xml ET enregistre les fichiers moded_types absents de cfgeconomycore.xml — les deux causes qui font disparaître le butin modé. Un .bak est conservé par fichier. Nécessite le serveur arrêté.",
+	"validator.fix.hint":         "La correction automatique répare les causes courantes de butin qui disparaît sans bruit : ajoute les usage/value/tag/category inconnus à cfglimitsdefinition.xml, enregistre les fichiers moded_types absents de cfgeconomycore.xml, supprime les entrées <type> en double (dans un fichier et les copies d'un nom de base de types.xml) et retire les positions d'apparition d'événements qui n'existent plus. Un .bak est conservé par fichier. Serveur arrêté requis.",
 	"validator.fix.none":         "Rien à corriger automatiquement.",
 	"validator.fix.done":         "{n} élément(s) corrigé(s). Revalidation…",
 	"validator.severity.error":   "Erreur",

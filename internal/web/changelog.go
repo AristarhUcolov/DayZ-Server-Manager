@@ -27,6 +27,23 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "0.28.0", Date: "2026-08-12",
+		EN: []string{
+			"Presets editor now works like Attachments — item class names autocomplete from your types.xml (mods included), unknown classes are flagged as you type, and the row layout matches (name / weight / real chance).",
+			"Validator auto-fix handles more: it removes cross-file duplicate types (a moded_types entry redefining a base types.xml name — the base is kept) and deletes orphan spawn positions for events no longer in events.xml. Every fixed file keeps a .bak.",
+			"Loot economy: the ×1 (restore) button now sits between ×1.5 and ×0.5 so the tuning row reads high to low.",
+			"Sponsors moved to the second row of the sidebar, under Dashboard, with the section's normal icon colour — easy to find without scrolling.",
+			"More hover help (Weather channels, Events fields, mod-loot columns, Leaderboard) and refreshed screenshots throughout.",
+		},
+		RU: []string{
+			"Редактор пресетов теперь работает как Обвесы — имена классов автодополняются из вашего types.xml (включая моды), неизвестные классы подсвечиваются при вводе, а раскладка строки совпадает (имя / вес / реальный шанс).",
+			"Авто-исправление валидатора умеет больше: убирает кросс-файловые дубликаты типов (запись moded_types, переопределяющая имя из базового types.xml — базовый остаётся) и удаляет осиротевшие спавн-позиции для событий, которых больше нет в events.xml. Для каждого исправленного файла сохраняется .bak.",
+			"Экономика лута: кнопка ×1 (сброс) теперь между ×1.5 и ×0.5, чтобы ряд читался от большего к меньшему.",
+			"«Спонсоры» переехали во второй ряд сайдбара, под «Панель», с обычным цветом иконки раздела — легко найти без прокрутки.",
+			"Больше подсказок по наведению (каналы погоды, поля событий, колонки проверки лута модов, лидерборд) и обновлённые скриншоты.",
+		},
+	},
+	{
 		Version: "0.27.0", Date: "2026-08-11",
 		EN: []string{
 			"Presets editor — the old read-only \"Random presets\" page is now a full editor: create your own cargo/attachment presets or tweak the ready-made ones, then reference them by name in the Attachments editor.",

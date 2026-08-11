@@ -96,8 +96,10 @@
   `cfgeconomycore.xml`, ловит дубликаты types и отмечает спавн-позиции событий,
   вылетающие за карту. **Авто-исправление** вносит неизвестные
   `usage/value/tag/category` в `cfglimitsdefinition.xml`, регистрирует
-  незарегистрированные файлы moded_types в `cfgeconomycore.xml` и убирает
-  дубликаты `<type>` (оставляя первый, комментарии сохраняются) — всё с бэкапом.
+  незарегистрированные файлы moded_types в `cfgeconomycore.xml`, убирает
+  дубликаты `<type>` — и внутри файла, и копии базовых имён из `types.xml`
+  (оставляя первый, комментарии сохраняются) — и удаляет осиротевшие
+  спавн-позиции для событий, которых больше нет в `events.xml`. Всё с бэкапом.
 - **RCon.** Список игроков, kick/ban, broadcast в чат, произвольная команда.
   Пароль RCon задаётся прямо в панели — манагер пишет его в
   `battleye/beserver_x64.cfg` (создаёт файл при необходимости).
@@ -225,7 +227,9 @@
   предмета нет usage — в обычном луте зданий он не появится.
 - **Редактор пресетов.** `cfgrandompresets.xml`: создавай свои и правь готовые
   группы cargo/attachments с реальным шансом каждого предмета (шанс группы ×
-  вес ÷ сумма весов); затем ссылайся на них по имени в разделе обвесов.
+  вес ÷ сумма весов); затем ссылайся на них по имени в разделе обвесов. Как в
+  Обвесах: автодополнение классов из твоего `types.xml` (включая моды) и
+  подсветка классов, которых там нет.
 - **Проверка лута модов.** Для каждого установленного мода показывает, весь ли
   его лут есть в экономике: «не смержен» / «частично» / активен, со списком
   отсутствующих типов — главная причина, почему предметы мода не спавнятся.
@@ -495,8 +499,10 @@ panels.
   `cfgeconomycore.xml` exist, flags duplicate types and event spawn positions
   that fall off the map. **Auto-fix** whitelists unknown
   `usage/value/tag/category` into `cfglimitsdefinition.xml`, registers
-  unregistered moded_types files in `cfgeconomycore.xml`, and removes duplicate
-  `<type>` entries (keeping the first, comments preserved) — all with a `.bak`.
+  unregistered moded_types files in `cfgeconomycore.xml`, removes duplicate
+  `<type>` entries — both inside one file and moded copies of a base
+  `types.xml` name (keeping the first, comments preserved) — and deletes orphan
+  spawn positions for events no longer in `events.xml`. All with a `.bak`.
 - **RCon.** Player list, kick/ban, chat broadcast, raw command. Set the
   RCon password right in the panel — the manager writes it into
   `battleye/beserver_x64.cfg` (creating the file if needed).
@@ -628,7 +634,8 @@ panels.
 - **Presets editor.** `cfgrandompresets.xml`: create your own and edit the
   ready-made cargo/attachment groups, each with an item's real spawn chance
   (group chance × weight ÷ sum of weights); then reference them by name in the
-  Attachments editor.
+  Attachments editor. Just like Attachments: item class names autocomplete from
+  your `types.xml` (mods included) and unknown classes are flagged.
 - **Mod loot check.** For each installed mod, shows whether all its loot is in
   the economy: not merged / partly missing / active, with the missing type names
   — the top reason a mod's items don't spawn.

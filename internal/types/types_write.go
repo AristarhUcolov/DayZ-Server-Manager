@@ -176,6 +176,47 @@ func DedupTypesFile(path string) ([]string, error) {
 	return removed, nil
 }
 
+// RemoveTypesInSet removes every <type> whose lower-cased name is in drop,
+// keeping comments and everything else byte-for-byte. Used to strip moded_types
+// entries that merely duplicate a name already defined in the base types.xml
+// (DayZ's behaviour on a cross-file duplicate is undefined, so the base wins).
+// Returns the removed names.
+func RemoveTypesInSet(path string, drop map[string]bool) ([]string, error) {
+	if len(drop) == 0 {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	src := string(data)
+	masked := maskComments(src) // same length, indices map 1:1
+	locs := dedupBlockRe.FindAllStringSubmatchIndex(masked, -1)
+	type span struct {
+		start, end int
+		name       string
+	}
+	var rm []span
+	for _, m := range locs {
+		name := src[m[2]:m[3]]
+		if drop[strings.ToLower(name)] {
+			rm = append(rm, span{m[0], m[1], name})
+		}
+	}
+	if len(rm) == 0 {
+		return nil, nil
+	}
+	removed := make([]string, 0, len(rm))
+	for i := len(rm) - 1; i >= 0; i-- {
+		src = src[:rm[i].start] + src[rm[i].end:]
+		removed = append(removed, rm[i].name)
+	}
+	if err := writeAtomic(path, []byte(src)); err != nil {
+		return nil, err
+	}
+	return removed, nil
+}
+
 // findTypeName recovers the file's own casing for a lower-cased name.
 func findTypeName(src, lowerName string) (string, bool) {
 	re := regexp.MustCompile(`<type\s+name="([^"]+)"`)

@@ -464,7 +464,7 @@ var ja = Bundle{
 	"validator.title":            "バリデーター",
 	"validator.none":             "問題は見つかりませんでした。",
 	"validator.fix":              "自動修正",
-	"validator.fix.hint":         "自動修正は追加のみ：types の未知の usage/value/tag/category を cfglimitsdefinition.xml に登録し、cfgeconomycore.xml にない moded_types ファイルを登録します—MODルートが黙って消える二つの原因です。ファイルごとに .bak を保存。サーバー停止が必要。",
+	"validator.fix.hint":         "自動修正はルートが黙って消える一般的な原因を修復します：不明な usage/value/tag/category を cfglimitsdefinition.xml に追加し、cfgeconomycore.xml にない moded_types ファイルを登録し、重複した <type>（ファイル内および types.xml のベース名のコピー）を削除し、存在しないイベントのスポーン位置を除去します。ファイルごとに .bak を保持。サーバー停止が必要です。",
 	"validator.fix.none":         "自動修正する項目はありません。",
 	"validator.fix.done":         "{n} 件を修正しました。再検証中…",
 	"validator.severity.error":   "エラー",

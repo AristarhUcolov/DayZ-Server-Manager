@@ -464,7 +464,7 @@ var pt = Bundle{
 	"validator.title":            "Validador",
 	"validator.none":             "Nenhum problema encontrado.",
 	"validator.fix":              "Correção automática",
-	"validator.fix.hint":         "A corre-ção automática apenas adiciona: inclui usage/value/tag/category desconhecidos dos seus types em cfglimitsdefinition.xml E registra os arquivos moded_types ausentes em cfgeconomycore.xml — as duas causas de o loot modado sumir em silêncio. Um .bak é mantido por arquivo. Requer o servidor parado.",
+	"validator.fix.hint":         "A correção automática repara as causas comuns de loot que desaparece em silêncio: adiciona usage/value/tag/category desconhecidos ao cfglimitsdefinition.xml, regista ficheiros moded_types em falta no cfgeconomycore.xml, remove entradas <type> duplicadas (dentro de um ficheiro e cópias de um nome base de types.xml) e retira as posições de spawn de eventos que já não existem. É mantido um .bak por ficheiro. Requer o servidor parado.",
 	"validator.fix.none":         "Nada a corrigir automaticamente.",
 	"validator.fix.done":         "{n} item(ns) corrigido(s). Revalidando…",
 	"validator.severity.error":   "Erro",

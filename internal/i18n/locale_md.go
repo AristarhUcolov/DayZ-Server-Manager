@@ -464,7 +464,7 @@ var md = Bundle{
 	"validator.title":            "Validator",
 	"validator.none":             "Nicio problemă găsită.",
 	"validator.fix":              "Corectare automată",
-	"validator.fix.hint":         "Auto-corectarea doar adaugă: înscrie usage/value/tag/category necunoscute din types în cfglimitsdefinition.xml ȘI înregistrează fișierele moded_types lipsă din cfgeconomycore.xml — cele două cauze pentru care loot-ul moddat dispare în tăcere. Se păstrează un .bak per fișier. Necesită serverul oprit.",
+	"validator.fix.hint":         "Corectarea automată repară cauzele frecvente ale prăzii care dispare în tăcere: adaugă usage/value/tag/category necunoscute în cfglimitsdefinition.xml, înregistrează fișierele moded_types lipsă din cfgeconomycore.xml, elimină intrările <type> duplicate (în interiorul unui fișier și copiile unui nume de bază din types.xml) și scoate pozițiile de spawn ale evenimentelor care nu mai există. Se păstrează un .bak pentru fiecare fișier. Necesită serverul oprit.",
 	"validator.fix.none":         "Nimic de corectat automat.",
 	"validator.fix.done":         "{n} element(e) corectate. Se revalidează…",
 	"validator.severity.error":   "Eroare",

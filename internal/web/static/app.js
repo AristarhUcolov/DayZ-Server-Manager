@@ -2532,17 +2532,18 @@ Views.economy = async (root) => {
     tuneCard.innerHTML = '';
     tuneCard.append(withHelp(h('h3', { i18n: 'economy.tune.title' }), 'economy.tune'), h('p', { class: 'hint', i18n: 'economy.tune.hint' }));
     if (running) tuneCard.append(runningBanner());
-    const presets = [
-      { f: 2, label: 'economy.tune.x2' },
-      { f: 1.5, label: 'economy.tune.x15' },
-      { f: 0.5, label: 'economy.tune.half' },
-      { f: 0.25, label: 'economy.tune.quarter' },
-    ];
-    const btns = presets.map(p =>
-      h('button', { class: 'secondary', i18n: p.label, disabled: running, onclick: (e) => tune(p.f, e.currentTarget) }));
+    const scaleBtn = (p) =>
+      h('button', { class: 'secondary', i18n: p.label, disabled: running, onclick: (e) => tune(p.f, e.currentTarget) });
     // ×1 restores the amounts captured before the first scaling — a one-click undo.
-    btns.push(h('button', { class: 'secondary', i18n: 'economy.tune.reset', title: t('economy.tune.reset.hint'), disabled: running, onclick: (e) => tuneReset(e.currentTarget) }));
-    tuneCard.append(h('div', { class: 'toolbar' }, btns));
+    // It sits between the "more" and "less" presets so the row reads high→low.
+    const resetBtn = h('button', { class: 'secondary', i18n: 'economy.tune.reset', title: t('economy.tune.reset.hint'), disabled: running, onclick: (e) => tuneReset(e.currentTarget) });
+    tuneCard.append(h('div', { class: 'toolbar' }, [
+      scaleBtn({ f: 2, label: 'economy.tune.x2' }),
+      scaleBtn({ f: 1.5, label: 'economy.tune.x15' }),
+      resetBtn,
+      scaleBtn({ f: 0.5, label: 'economy.tune.half' }),
+      scaleBtn({ f: 0.25, label: 'economy.tune.quarter' }),
+    ]));
     const scaleMin = h('input', { type: 'checkbox' });
     scaleMin.checked = true;
     tuneCard.append(h('label', { class: 'inline-check' }, [scaleMin, h('span', { i18n: 'economy.tune.scaleMin' })]));
@@ -6600,6 +6601,14 @@ Views.randompresets = async (root) => {
   let dirty = false;
   const parseNum = (v) => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
 
+  // Class-name autocomplete + unknown-class flagging, exactly like Attachments.
+  let classNames = [];
+  try { classNames = (await api.get('/api/spawnable/classnames')).names || []; } catch {}
+  const classSet = new Set(classNames);
+  const classDL = h('datalist', { id: 'dz-preset-classes' });
+  for (const n of classNames.slice(0, 5000)) classDL.append(h('option', { value: n }));
+  root.append(classDL);
+
   const search = h('input', { type: 'search', placeholder: t('randompresets.search') });
   const saveBtn = h('button', { class: 'primary', i18n: 'action.save', disabled: true });
   const updateSave = () => { saveBtn.disabled = !dirty || running; };
@@ -6654,16 +6663,34 @@ Views.randompresets = async (root) => {
         }
       };
       chanceInp.oninput = () => { p.chance = chanceInp.value; markDirty(); recompute(); };
+      if (p.items.length) {
+        itemsHost.append(h('div', { class: 'preset-item-head' }, [
+          h('span', { i18n: 'col.name' }),
+          h('span', { class: 'preset-col-wt', i18n: 'randompresets.weight' }),
+          h('span', { class: 'preset-col-real', i18n: 'randompresets.real' }),
+          h('span', { class: 'preset-col-x' }),
+        ]));
+      }
       for (const it of p.items) {
-        const nm = h('input', { type: 'text', class: 'mono item-name-inp', value: it.name, placeholder: t('randompresets.itemPh'), disabled: running });
-        nm.addEventListener('input', () => { it.name = nm.value; markDirty(); });
+        const nm = h('input', { type: 'text', class: 'mono item-name-inp', value: it.name, list: 'dz-preset-classes', placeholder: t('randompresets.itemPh'), disabled: running });
+        const warn = h('span', { class: 'attach-warn', text: '!', title: t('attach.unknownClass'), style: { display: 'none' } });
         const wt = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: it.chance, disabled: running });
         wt.addEventListener('input', () => { it.chance = wt.value; markDirty(); recompute(); });
         const real = h('span', { class: 'preset-real' });
         const rm = h('button', { class: 'danger icon-btn', text: '×', title: t('action.delete'), disabled: running,
           onclick: () => { p.items = p.items.filter(x => x !== it); markDirty(); renderItems(); } });
+        const row = h('div', { class: 'preset-item-row' }, [h('span', { class: 'preset-name-wrap' }, [nm, warn]), wt, real, rm]);
+        // A class absent from types.xml never spawns — flag it live as it is typed.
+        const checkName = () => {
+          const nmv = (it.name || '').trim();
+          const unknown = !!nmv && classNames.length > 0 && !classSet.has(nmv);
+          warn.style.display = unknown ? '' : 'none';
+          row.classList.toggle('unknown', unknown);
+        };
+        nm.addEventListener('input', () => { it.name = nm.value; markDirty(); checkName(); });
+        checkName();
         rows.push({ it, real });
-        itemsHost.append(h('div', { class: 'preset-item-row' }, [nm, wt, real, rm]));
+        itemsHost.append(row);
       }
       const addItem = h('button', { class: 'secondary small', i18n: 'randompresets.addItem', disabled: running,
         onclick: () => { p.items.push({ name: '', chance: '1' }); markDirty(); renderItems(); } });
