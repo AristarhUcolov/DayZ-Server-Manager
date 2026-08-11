@@ -76,9 +76,16 @@ type Manager struct {
 	// while the server is running (e.g. every 30 min: "Join our Discord").
 	IntervalAnnouncements []IntervalAnnouncement `json:"intervalAnnouncements"`
 
+	// Config-profile swaps on a daily schedule (applied inside a restart).
+	ScheduledProfiles []ScheduledProfile `json:"scheduledProfiles"`
+
 	// Saved quick broadcast messages ("announcement presets") — one-click sends
 	// from the RCon page. Persisted here so they survive a manager restart.
 	BroadcastPresets []string `json:"broadcastPresets"`
+
+	// World-size overrides for the interactive map, keyed by world (e.g. a modded
+	// map whose edge length differs from the 15360 default). Metres.
+	MapSizes map[string]int `json:"mapSizes,omitempty"`
 
 	// Workshop mod collection URLs users can re-import in one click.
 	// Stored as raw URLs or bare IDs.
@@ -126,6 +133,15 @@ type IntervalAnnouncement struct {
 	IntervalMinutes int    `json:"intervalMinutes"`
 	Message         string `json:"message"`
 	Enabled         bool   `json:"enabled"`
+}
+
+// ScheduledProfile applies a saved config profile at a daily HH:MM time. The
+// swap runs inside a restart (announced with the usual countdown), so it only
+// fires while the server is running — e.g. a "Weekend" profile Friday evening.
+type ScheduledProfile struct {
+	Time    string `json:"time"`    // "HH:MM"
+	Profile string `json:"profile"` // profile slug (see /api/config-profiles)
+	Enabled bool   `json:"enabled"`
 }
 
 func defaultManager() *Manager {

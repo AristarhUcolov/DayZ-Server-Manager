@@ -1447,6 +1447,10 @@ input.attach-num {
 .cleanup-label { font-weight: 600; min-width: 140px; }
 .cleanup-size { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
+/* Sponsors nav link — a gentle heart-pink tint so it draws the eye up top. */
+.nav a.nav-sponsors .nav-icon svg { color: #ff5c8a; }
+.nav a.nav-sponsors.active .nav-icon svg { color: inherit; }
+
 /* Sponsors — a thank-you wall. */
 .sponsors-intro { font-size: 15px; line-height: 1.6; margin: 0; }
 .sponsors-wall { display: flex; flex-direction: column; gap: 12px; }
@@ -1870,6 +1874,16 @@ tr.lb-top > td { background: var(--surface-2); }
 }
 .inline-check { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
 
+/* Live chat -------------------------------------------------------------- */
+.chat-feed {
+  max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--surface-2);
+}
+.chat-line { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
+.chat-time { color: var(--text-tertiary); font-variant-numeric: tabular-nums; flex: 0 0 auto; font-size: 12px; }
+.chat-player { font-weight: 700; color: var(--accent); flex: 0 0 auto; }
+.chat-text { color: var(--text); word-break: break-word; }
+
 /* RCon — announcement presets -------------------------------------------- */
 .preset-list { display: flex; flex-direction: column; gap: 6px; }
 .preset-msg { display: flex; align-items: center; gap: 6px; }
@@ -1931,6 +1945,19 @@ tr.lb-top > td { background: var(--surface-2); }
 .preset-block:first-of-type { border-top: none; }
 .preset-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .preset-name { font-weight: 700; font-family: var(--mono, ui-monospace, monospace); }
+
+/* Preset editor (cfgrandompresets.xml) --------------------------------- */
+.preset-edit { padding: 14px 16px; }
+.preset-edit-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.preset-name-inp { flex: 1 1 220px; font-family: var(--mono, ui-monospace, monospace); font-weight: 700; }
+.chance-lbl { display: inline-flex; align-items: center; gap: 6px; }
+.chance-inp { width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
+.preset-items { display: flex; flex-direction: column; gap: 6px; }
+.preset-item-row { display: flex; align-items: center; gap: 8px; }
+.preset-item-row .item-name-inp { flex: 1 1 auto; }
+.preset-real { min-width: 54px; text-align: right; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.preset-add-row { margin-top: 2px; }
+button.small { padding: 4px 10px; font-size: 12px; }
 
 /* Where does it spawn ---------------------------------------------------- */
 .loot-hit { padding: 10px 0; border-top: 1px solid var(--border); }

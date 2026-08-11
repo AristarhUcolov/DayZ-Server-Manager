@@ -27,6 +27,27 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "0.27.0", Date: "2026-08-11",
+		EN: []string{
+			"Presets editor — the old read-only \"Random presets\" page is now a full editor: create your own cargo/attachment presets or tweak the ready-made ones, then reference them by name in the Attachments editor.",
+			"Loot economy ×1 — a new reset button restores a types file to the amounts it had before your first scaling, so ×2 / ×0.5 tuning is always reversible.",
+			"Temporary bans — the player profile can now ban for a set number of days (1–30) as well as permanently, and shows the time left on the ban badge.",
+			"Disk cleanup split — Server health now clears ADM logs and old wipe snapshots as their own buttons (keeping the newest of each), next to logs and backups.",
+			"Validator does more — one-click auto-fix now removes duplicate <type> entries (keeping the first, comments preserved), and it flags event spawn positions that fall off the map.",
+			"Live chat page + watchlist connect pings, scheduled config profiles (swap a saved profile at a daily time during a restart), and modded-map support (each world gets its own uploaded picture and an adjustable size).",
+			"More hover help (ⓘ) on the Server and Loot economy pages, a new guide chapter on the loot economy & presets, refreshed screenshots throughout, and the Sponsors link moved up near the top so it is easy to find.",
+		},
+		RU: []string{
+			"Редактор пресетов — бывшая страница «Рандом-пресеты» (только чтение) стала полноценным редактором: создавайте свои cargo/attachments-пресеты или правьте готовые, затем ссылайтесь на них по имени в Обвесах.",
+			"×1 в экономике лута — новая кнопка сброса возвращает файл types к значениям до первого масштабирования, так что тюнинг ×2 / ×0.5 всегда обратим.",
+			"Временные баны — в профиле игрока теперь можно забанить на срок в днях (1–30), а не только навсегда; остаток показывается на бейдже бана.",
+			"Очистка диска подробнее — «Здоровье сервера» теперь чистит ADM-логи и старые снимки вайпов отдельными кнопками (оставляя новейший), рядом с логами и бэкапами.",
+			"Валидатор умнее — авто-фикс в один клик убирает дубликаты <type> (оставляя первый, комментарии сохраняются) и отмечает спавн-позиции событий, вылетающие за карту.",
+			"Страница живого чата + пинги подключения из watchlist, профили конфигов по расписанию (смена сохранённого профиля в заданное время во время рестарта) и поддержка модовских карт (у каждого мира своя загруженная картинка и настраиваемый размер).",
+			"Больше подсказок по наведению (ⓘ) на страницах Сервер и Экономика лута, новая глава гайда про экономику лута и пресеты, обновлённые скриншоты и ссылка «Спонсоры», поднятая наверх, чтобы её было легко найти.",
+		},
+	},
+	{
 		Version: "0.26.0", Date: "2026-08-11",
 		EN: []string{
 			"Player profile — click any name to open an admin panel: identity and stats, recent combat, note & watch, and ban / unban / kick / message.",

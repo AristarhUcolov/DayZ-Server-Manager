@@ -157,8 +157,9 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// "Where does this item spawn?" reverse loot lookup.
 	mux.HandleFunc("/api/loot/where", methods(h.lootWhere, http.MethodGet))
 
-	// cfgrandompresets.xml library (real per-item spawn chance).
+	// cfgrandompresets.xml editor (real per-item spawn chance; add/edit/delete).
 	mux.HandleFunc("/api/randompresets", methods(h.randomPresetsList, http.MethodGet))
+	mux.HandleFunc("/api/randompresets/save", methods(h.randomPresetsSave, http.MethodPost))
 
 	// Mod types drift — which installed mods ship loot missing from the economy.
 	mux.HandleFunc("/api/mods/drift", methods(h.modsDrift, http.MethodGet))
@@ -181,11 +182,13 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/players/profile", methods(h.playerProfile, http.MethodGet))
 	mux.HandleFunc("/api/players/ban", methods(h.playerBan, http.MethodPost))
 	mux.HandleFunc("/api/players/unban", methods(h.playerUnban, http.MethodPost))
+	mux.HandleFunc("/api/watchlist/activity", methods(h.watchlistActivity, http.MethodGet))
 	mux.HandleFunc("/api/map/heat", methods(h.mapHeat, http.MethodGet))
 	mux.HandleFunc("/api/map/live", methods(h.mapLive, http.MethodGet))
 	// Admin-supplied map background image (serve / upload / remove).
 	mux.HandleFunc("/api/map/image", methods(h.mapImage, http.MethodGet, http.MethodPost))
 	mux.HandleFunc("/api/map/image/delete", methods(h.mapImageDelete, http.MethodPost))
+	mux.HandleFunc("/api/map/size", methods(h.mapSize, http.MethodPost))
 	mux.HandleFunc("/api/gameplay", methods(h.gameplay, http.MethodGet, http.MethodPost))
 	mux.HandleFunc("/api/metrics/history", methods(h.metricsHistory, http.MethodGet))
 	mux.HandleFunc("/api/spawnable", methods(h.spawnableList, http.MethodGet))

@@ -233,9 +233,46 @@
       "tips": [
         "Il n'y a toujours pas d'identification. N'exposez jamais le panneau directement sur internet : placez Caddy ou nginx avec mot de passe devant."
       ]
+    },
+    {
+      "id": "presets",
+      "title": "Économie de butin & préréglages",
+      "intro": "Au-delà de l'édition item par item, trois outils façonnent le butin en masse : un tableau de bord qui montre ce que génère votre carte, une mise à l'échelle en un clic de tout le fichier, et des préréglages réutilisables que vous liez aux items par nom.",
+      "steps": [
+        {
+          "title": "Voir la forme de votre butin",
+          "body": "Ouvrez Économie de butin pour totaliser le nominal et le min de chaque item et les ventiler par catégorie, palier et usage — le moyen le plus rapide de repérer une carte noyée sous une chose et privée d'une autre."
+        },
+        {
+          "title": "Mettre à l'échelle en un clic",
+          "body": "Les préréglages d'ajustement multiplient tous les nominal et min d'un coup — ×2 pour un serveur riche en butin, ×0.5 pour du hardcore. ×1 restaure les valeurs d'avant votre premier ajustement, donc toujours réversible."
+        },
+        {
+          "title": "Réutiliser des groupes avec les préréglages",
+          "body": "Un préréglage est un groupe d'items nommé avec une chance d'apparition. Créez-en un sur la page Préréglages, puis référencez-le par nom depuis l'emplacement d'accessoire d'une arme ou le cargo d'un conteneur au lieu de répéter la même liste partout."
+        }
+      ],
+      "tips": [
+        "La mise à l'échelle et les préréglages écrivent des fichiers de mission, le serveur doit donc être arrêté pour les enregistrer."
+      ]
     }
   ],
   "help": {
+    "server.hostname": "Le nom du serveur affiché dans le navigateur DayZ. Gardez-le court et facile à trouver.",
+    "server.password": "Mot de passe de connexion. Vide = serveur public ; renseignez-le pour le rendre privé.",
+    "server.passwordAdmin": "Mot de passe admin en jeu (#login). Distinct du mot de passe RCon — gardez-le secret.",
+    "server.timeAccel": "Multiplicateur de vitesse du jour (1 = temps réel, 24 = une journée en une heure). Plage ~0.1–64.",
+    "server.nightTimeAccel": "Multiplicateur de vitesse de nuit supplémentaire au-dessus du jour, pour des nuits plus rapides.",
+    "server.timePersistent": "Conserver l'heure du monde entre les redémarrages (1) au lieu de la remettre à serverTime (0).",
+    "server.whitelist": "Seuls les joueurs de votre liste peuvent se connecter. Laissez désactivé sans fichier whitelist.",
+    "server.forceSameBuild": "Exiger des clients exactement la même version du jeu (1). Évite les plantages de version.",
+    "server.storageAutoFix": "Laisser DayZ réparer un stockage de persistance corrompu au chargement (1) au lieu d'échouer.",
+    "server.loginQueue": "Combien de joueurs se connectent à la fois et attendent dans la file — lisse les afflux.",
+    "economy.items": "Combien de types d'objets distincts ce fichier définit.",
+    "economy.nominal": "Somme du nominal de chaque objet — la quantité cible que la carte tente de garder générée.",
+    "economy.categories": "Combien de catégories de butin (armes, nourriture, outils…) figurent dans ce fichier.",
+    "economy.min": "Somme du min de chaque objet — le seuil jusqu'auquel l'économie recharge chaque objet.",
+    "economy.tune": "Mise à l'échelle en un clic de tous les nominal/min du fichier. ×2 = deux fois plus de butin ; ×1 restaure l'origine.",
     "types.nominal": "Combien d'exemplaires de cet objet le serveur essaie de maintenir dans le monde à la fois. 0 signifie qu'il n'apparaît jamais.",
     "types.min": "Quand la quantité descend à ce niveau, le serveur programme une réapparition. Ne doit pas dépasser nominal : DayZ le ramène à nominal et note un avertissement.",
     "types.lifetime": "Secondes pendant lesquelles un objet intact survit avant de disparaître. 3888000 font 45 jours.",

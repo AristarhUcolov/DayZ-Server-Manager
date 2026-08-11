@@ -233,9 +233,46 @@
       "tips": [
         "Einen Login gibt es weiterhin nicht. Stelle das Panel niemals direkt ins Internet — setze Caddy oder nginx mit Passwort davor."
       ]
+    },
+    {
+      "id": "presets",
+      "title": "Loot-Ökonomie & Presets",
+      "intro": "Neben dem Bearbeiten einzelner Items formen drei Werkzeuge den Loot in Masse: ein Dashboard zeigt, was deine Karte spawnt, Ein-Klick-Skalierung ändert die ganze Datei, und wiederverwendbare Presets bindest du per Name an Items.",
+      "steps": [
+        {
+          "title": "Die Form deines Loots sehen",
+          "body": "Öffne Loot-Ökonomie, um nominal und min aller Items zu summieren und nach Kategorie, Stufe und Nutzung aufzuschlüsseln — der schnellste Weg, eine Karte zu erkennen, die in einem Ding ertrinkt und an einem anderen verhungert."
+        },
+        {
+          "title": "Mit einem Klick skalieren",
+          "body": "Die Tuning-Presets multiplizieren alle nominal und min auf einmal — ×2 für einen loot-reichen Server, ×0.5 für Hardcore. ×1 stellt die Werte von vor der ersten Skalierung wieder her, also stets umkehrbar."
+        },
+        {
+          "title": "Gruppen mit Presets wiederverwenden",
+          "body": "Ein Preset ist eine benannte Item-Gruppe mit Spawn-Chance. Erstelle eines auf der Presets-Seite und referenziere es dann per Name aus dem Aufsatz-Slot einer Waffe oder dem Cargo eines Behälters, statt dieselbe Liste überall zu wiederholen."
+        }
+      ],
+      "tips": [
+        "Skalierung und Presets schreiben Mission-Dateien, daher muss der Server zum Speichern gestoppt sein."
+      ]
     }
   ],
   "help": {
+    "server.hostname": "Der im DayZ-Browser angezeigte Servername. Kurz und leicht auffindbar halten.",
+    "server.password": "Beitritts-Passwort. Leer = öffentlicher Server; setzen, um ihn privat zu machen.",
+    "server.passwordAdmin": "In-Game-Admin-Passwort (#login). Getrennt vom RCon-Passwort — geheim halten.",
+    "server.timeAccel": "Tag-Geschwindigkeitsmultiplikator (1 = Echtzeit, 24 = ein Tag in einer Stunde). Bereich ~0.1–64.",
+    "server.nightTimeAccel": "Zusätzlicher Nacht-Geschwindigkeitsmultiplikator über der Tagesrate, damit Nächte schneller vergehen.",
+    "server.timePersistent": "Weltuhr über Neustarts behalten (1), statt sie auf serverTime zurückzusetzen (0).",
+    "server.whitelist": "Nur gelistete Spieler dürfen beitreten. Aus lassen, wenn du keine Whitelist-Datei pflegst.",
+    "server.forceSameBuild": "Clients denselben Spiel-Build erzwingen (1). Verhindert Abstürze durch Versionskonflikte.",
+    "server.storageAutoFix": "DayZ beschädigten Persistenz-Speicher beim Laden reparieren lassen (1), statt zu scheitern.",
+    "server.loginQueue": "Wie viele Spieler gleichzeitig verbinden und in der Warteschlange warten — glättet Ansturm.",
+    "economy.items": "Wie viele verschiedene Item-Typen diese Datei definiert.",
+    "economy.nominal": "Summe aller nominal-Werte — die Zielmenge, die die Karte gespawnt zu halten versucht.",
+    "economy.categories": "Wie viele Loot-Kategorien (Waffen, Essen, Werkzeuge…) in dieser Datei vorkommen.",
+    "economy.min": "Summe aller min-Werte — der Wert, bis zu dem die Ökonomie jedes Item wieder auffüllt.",
+    "economy.tune": "Ein-Klick-Skalierung aller nominal/min in dieser Datei. ×2 = doppelter Loot; ×1 stellt das Original wieder her.",
     "types.nominal": "Wie viele Exemplare dieses Items der Server gleichzeitig in der Welt halten will. 0 heißt, es spawnt nie.",
     "types.min": "Fällt die Anzahl darauf, plant der Server einen Respawn. Darf nominal nicht übersteigen — DayZ kappt es und meldet eine Warnung.",
     "types.lifetime": "Sekunden, die ein unberührtes Item überlebt, bevor es verschwindet. 3888000 sind 45 Tage.",

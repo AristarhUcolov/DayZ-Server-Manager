@@ -28,6 +28,12 @@ func New(a *app.App, bind string, port int) *Server {
 	h := &handlers{app: a}
 	h.register(mux)
 
+	// Let the scheduler apply a config profile during a restart's down-window.
+	a.Server.ApplyProfile = func(slug string) error {
+		_, _, err := h.applyProfileBySlug(slug)
+		return err
+	}
+
 	sub, _ := fs.Sub(staticFS, "static")
 	mux.Handle("/", etagStatic(sub, http.FileServer(http.FS(sub))))
 

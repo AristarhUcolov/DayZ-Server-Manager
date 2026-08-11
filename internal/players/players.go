@@ -85,6 +85,15 @@ type Store struct {
 	// not log positions continuously, so these can be stale between events.
 	lastPos   map[string][]float64
 	lastPosAt map[string]time.Time
+	// Recent connects of watch-flagged players — a transient notification feed
+	// for the panel, not persisted (a fresh feed after a restart is fine).
+	watchLog []WatchEvent
+}
+
+// WatchEvent is one connect by a watch-flagged player.
+type WatchEvent struct {
+	Name string `json:"name"`
+	At   string `json:"at"` // RFC3339
 }
 
 const (
@@ -272,6 +281,12 @@ func (s *Store) apply(ev admlog.Event, stamp string, at time.Time) bool {
 		p.Sessions++
 		s.open[p.Key] = at
 		s.recordPos(p.Key, xz(ev.Pos), at)
+		if p.Watch {
+			s.watchLog = append(s.watchLog, WatchEvent{Name: p.Name, At: at.Format(time.RFC3339)})
+			if len(s.watchLog) > 50 {
+				s.watchLog = s.watchLog[len(s.watchLog)-50:]
+			}
+		}
 		return true
 	case "disconnect":
 		p := s.player(ev.ID, ev.Player, stamp)
@@ -438,6 +453,16 @@ func (s *Store) SetMeta(key, note string, watch bool) bool {
 	p.Watch = watch
 	s.save()
 	return true
+}
+
+// WatchActivity returns the recent connects of watch-flagged players, oldest
+// first. Used by the panel's watchlist ping.
+func (s *Store) WatchActivity() []WatchEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]WatchEvent, len(s.watchLog))
+	copy(out, s.watchLog)
+	return out
 }
 
 func contains(list []string, s string) bool {

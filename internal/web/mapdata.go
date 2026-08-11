@@ -6,6 +6,7 @@
 package web
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -13,15 +14,36 @@ import (
 	"strings"
 	"time"
 
+	"dayzmanager/internal/config"
 	"dayzmanager/internal/players"
 )
 
 type mapInfo struct {
-	Key      string  `json:"key"`                // "chernarus" | "livonia" | "sakhal" | "unknown"
+	Key      string  `json:"key"`                // "chernarus" | "livonia" | "sakhal" | <world name>
 	Name     string  `json:"name"`               // display name
 	Size     float64 `json:"size"`               // world edge length in metres (maps are square)
+	Official bool    `json:"official"`           // one of the three shipped worlds (size is known)
 	HasImage bool    `json:"hasImage"`           // an admin-supplied background image exists
 	ImageVer int64   `json:"imageVer,omitempty"` // its mtime, used to bust the browser cache
+}
+
+// sanitizeKey keeps a world key filesystem- and URL-safe (it names the uploaded
+// image file and the size override).
+func sanitizeKey(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	k := b.String()
+	if len(k) > 40 {
+		k = k[:40]
+	}
+	if k == "" {
+		k = "unknown"
+	}
+	return k
 }
 
 // worldFromTemplate resolves the DayZ world of the active mission from its
@@ -35,21 +57,36 @@ func worldFromTemplate(template string) mapInfo {
 	t := strings.ToLower(template)
 	switch {
 	case strings.Contains(t, "enoch"), strings.Contains(t, "livonia"):
-		return mapInfo{Key: "livonia", Name: "Livonia", Size: 12800}
+		return mapInfo{Key: "livonia", Name: "Livonia", Size: 12800, Official: true}
 	case strings.Contains(t, "sakhal"):
-		return mapInfo{Key: "sakhal", Name: "Sakhal", Size: 16384}
+		return mapInfo{Key: "sakhal", Name: "Sakhal", Size: 16384, Official: true}
 	case strings.Contains(t, "chernarus"):
-		return mapInfo{Key: "chernarus", Name: "Chernarus", Size: 15360}
+		return mapInfo{Key: "chernarus", Name: "Chernarus", Size: 15360, Official: true}
 	default:
-		// Unknown/modded world: still plot on a generic square. 15360 is the
-		// most common edge length, so points land in a sensible range.
-		return mapInfo{Key: "unknown", Name: template, Size: 15360}
+		// Modded/custom world: key it by the world name (the part after the last
+		// dot) so each map keeps its own uploaded image and size override. The
+		// default 15360 is the most common edge length; the admin can set the
+		// real size so points and grid line up.
+		world := template
+		if i := strings.LastIndex(template, "."); i >= 0 {
+			world = template[i+1:]
+		}
+		key := sanitizeKey(world)
+		name := world
+		if strings.TrimSpace(name) == "" {
+			name = key
+		}
+		return mapInfo{Key: key, Name: name, Size: 15360}
 	}
 }
 
 func (h *handlers) currentMap() mapInfo {
 	tpl, _ := h.missionTemplate()
 	mi := worldFromTemplate(tpl)
+	// Admin-set world-size override (for modded maps whose real size differs).
+	if sz := h.app.Cfg().MapSizes[mi.Key]; sz > 0 {
+		mi.Size = float64(sz)
+	}
 	if p := h.mapImageFile(mi.Key); p != "" {
 		mi.HasImage = true
 		if st, err := os.Stat(p); err == nil {
@@ -148,6 +185,39 @@ func (h *handlers) mapImageUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]interface{}{"status": "saved", "map": key})
+}
+
+// mapSize sets the world-size override for a map key (metres), so a modded map
+// with a different edge length plots points and grid correctly.
+func (h *handlers) mapSize(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Map  string `json:"map"`
+		Size int    `json:"size"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	key := sanitizeKey(req.Map)
+	if key == "" {
+		http.Error(w, "map key required", http.StatusBadRequest)
+		return
+	}
+	if req.Size < 1000 || req.Size > 65536 {
+		http.Error(w, "size out of range (1000–65536)", http.StatusBadRequest)
+		return
+	}
+	if err := h.app.MutateConfig(func(c *config.Manager) error {
+		if c.MapSizes == nil {
+			c.MapSizes = map[string]int{}
+		}
+		c.MapSizes[key] = req.Size
+		return nil
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"status": "saved", "map": key, "size": req.Size})
 }
 
 // mapImageDelete removes a map's custom background image.

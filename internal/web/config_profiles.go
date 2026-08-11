@@ -226,11 +226,27 @@ func (h *handlers) cfgProfileApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "profile slug required", http.StatusBadRequest)
 		return
 	}
-	path := filepath.Join(h.cfgProfilesDir(), filepath.Base(req.Slug)+".zip")
+	restored, skipped, err := h.applyProfileBySlug(req.Slug)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if os.IsNotExist(err) {
+			code = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), code)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"restored": restored, "skipped": skipped, "count": len(restored)})
+}
+
+// applyProfileBySlug restores every file in a saved profile over the live config
+// and refreshes derived state (schedule/RCon) if manager.json was restored. The
+// caller must ensure the server is stopped (the HTTP path via acquireWrite, the
+// scheduler via the restart down-window). Also used by scheduled profile swaps.
+func (h *handlers) applyProfileBySlug(slug string) (restored, skipped []string, err error) {
+	path := filepath.Join(h.cfgProfilesDir(), filepath.Base(slug)+".zip")
 	zr, err := zip.OpenReader(path)
 	if err != nil {
-		http.Error(w, "profile not found", http.StatusNotFound)
-		return
+		return nil, nil, err
 	}
 	defer zr.Close()
 
@@ -238,8 +254,8 @@ func (h *handlers) cfgProfileApply(w http.ResponseWriter, r *http.Request) {
 	for _, it := range h.backupItems() {
 		targets[it[1]] = it[0]
 	}
-	restored := []string{}
-	skipped := []string{}
+	restored = []string{}
+	skipped = []string{}
 	for _, zf := range zr.File {
 		if zf.FileInfo().IsDir() {
 			continue
@@ -254,16 +270,14 @@ func (h *handlers) cfgProfileApply(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if err := restoreOne(zf, abs); err != nil {
-			http.Error(w, fmt.Sprintf("restore %s: %v", name, err), http.StatusInternalServerError)
-			return
+			return restored, skipped, fmt.Errorf("restore %s: %w", name, err)
 		}
 		restored = append(restored, name)
 	}
 	for _, n := range restored {
 		if n == "manager.json" {
 			if err := h.app.ReloadConfig(); err != nil {
-				http.Error(w, "reload config: "+err.Error(), http.StatusInternalServerError)
-				return
+				return restored, skipped, fmt.Errorf("reload config: %w", err)
 			}
 			// A restored manager.json can carry a different schedule / RCon
 			// password — refresh the derived state the same way /api/config does.
@@ -273,7 +287,7 @@ func (h *handlers) cfgProfileApply(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	writeJSON(w, map[string]interface{}{"restored": restored, "skipped": skipped, "count": len(restored)})
+	return restored, skipped, nil
 }
 
 // cfgProfileDelete removes a saved profile.

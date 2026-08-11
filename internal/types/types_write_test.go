@@ -48,6 +48,60 @@ func writeTypes(t *testing.T) string {
 	return p
 }
 
+// DedupTypesFile must keep the first live copy, drop the later ones, and never
+// touch a commented-out block that merely shares the name.
+func TestDedupTypesFile(t *testing.T) {
+	const src = `<?xml version="1.0" encoding="UTF-8"?>
+<types>
+    <type name="Dup">
+        <nominal>5</nominal>
+    </type>
+    <!-- <type name="Dup"><nominal>99</nominal></type> -->
+    <type name="Keep">
+        <nominal>1</nominal>
+    </type>
+    <type name="Dup">
+        <nominal>7</nominal>
+    </type>
+    <type name="dup">
+        <nominal>8</nominal>
+    </type>
+</types>
+`
+	p := filepath.Join(t.TempDir(), "types.xml")
+	if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := DedupTypesFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 2 { // the second "Dup" and the case-variant "dup"
+		t.Fatalf("removed %d, want 2: %v", len(removed), removed)
+	}
+	out, _ := os.ReadFile(p)
+	s := string(out)
+	// First live copy (nominal 5) kept; later ones (7, 8) gone.
+	if !strings.Contains(s, "<nominal>5</nominal>") {
+		t.Error("first Dup was removed")
+	}
+	if strings.Contains(s, "<nominal>7</nominal>") || strings.Contains(s, "<nominal>8</nominal>") {
+		t.Error("a later duplicate survived")
+	}
+	// The commented-out block is preserved verbatim.
+	if !strings.Contains(s, "<!-- <type name=\"Dup\"><nominal>99</nominal></type> -->") {
+		t.Error("the commented-out block was disturbed")
+	}
+	if !strings.Contains(s, `<type name="Keep">`) {
+		t.Error("Keep was lost")
+	}
+	// Idempotent: a second pass finds nothing.
+	again, err := DedupTypesFile(p)
+	if err != nil || len(again) != 0 {
+		t.Fatalf("second pass changed %d (err %v)", len(again), err)
+	}
+}
+
 // The regression this file exists for: editing one entry used to re-encode the
 // whole document, deleting every comment and every commented-out <type>.
 func TestSaveTypesPreservesCommentsAndUntouchedEntries(t *testing.T) {

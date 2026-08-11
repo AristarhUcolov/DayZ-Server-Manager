@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"encoding/xml"
 	"os"
+	"strconv"
+	"strings"
 )
 
 type PresetItem struct {
@@ -53,4 +55,50 @@ func LoadRandomPresets(path string) (*RandomPresetsDoc, error) {
 		return nil, err
 	}
 	return &doc, nil
+}
+
+// fmtChance renders a chance with the shortest exact decimal (0.3, 1, 0.05) so
+// re-saving never invents precision the admin didn't type.
+func fmtChance(v float64) string {
+	if v < 0 {
+		v = 0
+	}
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+func attrEsc(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, `"`, "&quot;")
+	return s
+}
+
+// MarshalRandomPresets renders a cfgrandompresets.xml byte-for-byte in DayZ's
+// own style: tab indentation, self-closing <item> tags, chance before name on
+// groups. Kept hand-rolled (not encoding/xml) so the output matches vanilla and
+// stays diff-friendly across saves.
+func MarshalRandomPresets(doc *RandomPresetsDoc) []byte {
+	var b bytes.Buffer
+	b.WriteString(xml.Header) // <?xml version="1.0" encoding="UTF-8"?>\n
+	b.WriteString("<randompresets>\n")
+	writeGroup := func(tag string, ps []RandomPreset) {
+		for _, p := range ps {
+			if strings.TrimSpace(p.Name) == "" {
+				continue
+			}
+			b.WriteString("\t<" + tag + " chance=\"" + fmtChance(p.Chance) + "\" name=\"" + attrEsc(p.Name) + "\">\n")
+			for _, it := range p.Items {
+				if strings.TrimSpace(it.Name) == "" {
+					continue
+				}
+				b.WriteString("\t\t<item name=\"" + attrEsc(it.Name) + "\" chance=\"" + fmtChance(it.Chance) + "\"/>\n")
+			}
+			b.WriteString("\t</" + tag + ">\n")
+		}
+	}
+	writeGroup("cargo", doc.Cargo)
+	writeGroup("attachments", doc.Attachments)
+	b.WriteString("</randompresets>\n")
+	return b.Bytes()
 }

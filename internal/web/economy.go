@@ -10,6 +10,8 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 
 	dztypes "dayzmanager/internal/types"
@@ -130,8 +132,21 @@ func countMapToSorted(m map[string]int, limit int) []nameCount {
 	return out
 }
 
-// economyTune scales <nominal>/<min> across a types file by a factor. Writes
-// the file only when something changed. Requires the server stopped.
+// lootBaselinePath is where the untouched copy of a types file is kept the
+// first time it is scaled, so the ×1 "reset" can restore the original amounts.
+// Lives under the manager's own data dir, never inside the mission.
+func (h *handlers) lootBaselinePath(file string) string {
+	raw := file
+	if raw == "" {
+		raw = "types.xml"
+	}
+	// sanitizeKey caps length; distinct short types-file names don't collide.
+	return filepath.Join(h.app.ManagerDir, "loot-baseline", sanitizeKey(filepath.Base(raw))+".xml")
+}
+
+// economyTune scales <nominal>/<min> across a types file by a factor, or (when
+// reset is set) restores the pre-tuning amounts from the baseline snapshot.
+// Writes the file only when something changed. Requires the server stopped.
 func (h *handlers) economyTune(w http.ResponseWriter, r *http.Request) {
 	unlock, ok := h.acquireWrite(w)
 	if !ok {
@@ -144,11 +159,35 @@ func (h *handlers) economyTune(w http.ResponseWriter, r *http.Request) {
 		Nominal  bool    `json:"nominal"`
 		Min      bool    `json:"min"`
 		Category string  `json:"category"`
+		Reset    bool    `json:"reset"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	doc, path, err := h.loadTypesFile(req.File)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	basePath := h.lootBaselinePath(req.File)
+
+	// ×1 — restore the original amounts captured before the first scaling.
+	if req.Reset {
+		data, rerr := os.ReadFile(basePath)
+		if rerr != nil {
+			// Never scaled through here, so there's nothing to restore.
+			writeJSON(w, map[string]interface{}{"reset": true, "hadBaseline": false})
+			return
+		}
+		if err := writeFileAtomic(path, data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]interface{}{"reset": true, "hadBaseline": true})
+		return
+	}
+
 	if req.Factor < 0.05 || req.Factor > 20 {
 		http.Error(w, "factor out of range (0.05–20)", http.StatusBadRequest)
 		return
@@ -157,10 +196,13 @@ func (h *handlers) economyTune(w http.ResponseWriter, r *http.Request) {
 	if !req.Nominal && !req.Min {
 		req.Nominal = true
 	}
-	doc, path, err := h.loadTypesFile(req.File)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	// Snapshot the untouched file the first time it's scaled, so ×1 can undo
+	// every later scaling back to these amounts.
+	if _, serr := os.Stat(basePath); os.IsNotExist(serr) {
+		if orig, oerr := os.ReadFile(path); oerr == nil {
+			_ = os.MkdirAll(filepath.Dir(basePath), 0o755)
+			_ = writeFileAtomic(basePath, orig)
+		}
 	}
 	touched := doc.Scale(req.Factor, dztypes.ScaleOpts{Nominal: req.Nominal, Min: req.Min, Category: req.Category})
 	if touched > 0 {

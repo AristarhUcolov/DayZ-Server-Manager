@@ -233,9 +233,46 @@
       "tips": [
         "There is still no login. Never expose the panel straight to the internet — put Caddy or nginx with a password in front of it."
       ]
+    },
+    {
+      "id": "presets",
+      "title": "Loot economy & presets",
+      "intro": "Beyond editing one item at a time, three tools shape loot in bulk: a dashboard that shows what your map spawns, one-click scaling for the whole file, and reusable presets you attach to items by name.",
+      "steps": [
+        {
+          "title": "See the shape of your loot",
+          "body": "Open Loot economy to total every item's nominal and min and break them down by category, tier and usage — the fastest way to spot a map drowning in one thing and starved of another."
+        },
+        {
+          "title": "Scale it in one click",
+          "body": "The tuning presets multiply every nominal and min at once — ×2 for a loot-rich server, ×0.5 for hardcore. ×1 restores the amounts from before your first scaling, so it is always reversible."
+        },
+        {
+          "title": "Reuse groups with presets",
+          "body": "A preset is a named group of items with a spawn chance. Build one on the Presets page, then reference it by name from a weapon's attachment slot or a container's cargo instead of repeating the same list everywhere."
+        }
+      ],
+      "tips": [
+        "Scaling and presets both write mission files, so the server must be stopped to save them."
+      ]
     }
   ],
   "help": {
+    "server.hostname": "The server name shown in the DayZ browser. Keep it short and searchable.",
+    "server.password": "Join password. Leave empty for a public server; set it to make the server private.",
+    "server.passwordAdmin": "In-game admin password (#login). Separate from the RCon password — keep it secret.",
+    "server.timeAccel": "Daytime speed multiplier (1 = real time, 24 = a full day in one hour). Range ~0.1–64.",
+    "server.nightTimeAccel": "Extra night-speed multiplier on top of the day rate, so nights can pass faster than days.",
+    "server.timePersistent": "Keep the world clock across restarts (1) instead of resetting to serverTime each launch (0).",
+    "server.whitelist": "Only players you listed may join. Leave off unless you maintain a whitelist file.",
+    "server.forceSameBuild": "Require clients to run the exact same game build (1). Prevents version-mismatch crashes.",
+    "server.storageAutoFix": "Let DayZ repair a corrupted persistence storage on load (1) instead of failing to start.",
+    "server.loginQueue": "How many players may connect at once and wait in the join queue — smooths big join rushes.",
+    "economy.items": "How many distinct item types this file defines.",
+    "economy.nominal": "Sum of every item's nominal — the target number of that item the map tries to keep spawned.",
+    "economy.categories": "How many loot categories (weapons, food, tools…) appear in this file.",
+    "economy.min": "Sum of every item's min — the floor the central economy refills each item back up to.",
+    "economy.tune": "One-click scaling of every nominal/min in this file. ×2 = twice the loot; ×1 restores the originals.",
     "attach.itemWeight": "A relative weight, not a percentage — DayZ picks exactly ONE item from the slot. Weights 60 and 40 mean 60% and 40% of the slot's own chance.",
     "attach.slotChance": "Probability that this slot spawns anything at all. 1.0 = always, 0.35 = 35% of the time.",
     "mods.order": "DayZ loads mods left to right. Frameworks must come first: @CF before anything depending on it, Expansion Core before its addons. Wrong order is a common reason a server refuses to boot.",

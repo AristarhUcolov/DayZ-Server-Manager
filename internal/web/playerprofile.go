@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,12 +59,14 @@ func (h *handlers) playerProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	banned := false
+	banMinutes := ""
 	if pl.ID != "" {
 		if data, err := os.ReadFile(h.bansPath()); err == nil {
 			bans, _ := parseBans(string(data))
 			for _, b := range bans {
 				if strings.EqualFold(strings.TrimSpace(b.ID), pl.ID) {
 					banned = true
+					banMinutes = strings.TrimSpace(b.Minutes)
 					break
 				}
 			}
@@ -82,10 +85,11 @@ func (h *handlers) playerProfile(w http.ResponseWriter, r *http.Request) {
 	pl.Online = online
 
 	writeJSON(w, map[string]interface{}{
-		"player":   pl,
-		"events":   events,
-		"banned":   banned,
-		"onlineId": onlineID,
+		"player":     pl,
+		"events":     events,
+		"banned":     banned,
+		"banMinutes": banMinutes,
+		"onlineId":   onlineID,
 	})
 }
 
@@ -95,6 +99,7 @@ func (h *handlers) playerBan(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		GUID   string `json:"guid"`
 		Reason string `json:"reason"`
+		Days   int    `json:"days"` // 0 = permanent; otherwise the ban lifts after N days
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -105,6 +110,15 @@ func (h *handlers) playerBan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "valid GUID required", http.StatusBadRequest)
 		return
 	}
+	// BattlEye's second column is minutes remaining ("0" = permanent). A day is
+	// 1440 minutes; BE counts it down and lifts the ban when it hits zero.
+	mins := "0"
+	if req.Days > 0 {
+		if req.Days > 3650 {
+			req.Days = 3650
+		}
+		mins = strconv.Itoa(req.Days * 1440)
+	}
 	path := h.bansPath()
 	data, _ := os.ReadFile(path)
 	bans, comments := parseBans(string(data))
@@ -114,7 +128,7 @@ func (h *handlers) playerBan(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	bans = append(bans, banEntry{ID: guid, Minutes: "0", Reason: strings.TrimSpace(req.Reason)})
+	bans = append(bans, banEntry{ID: guid, Minutes: mins, Reason: strings.TrimSpace(req.Reason)})
 	if err := os.MkdirAll(h.beDir(), 0o755); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

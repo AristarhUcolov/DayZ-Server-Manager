@@ -218,6 +218,49 @@ func checkEvents(eventsPath, spawnsPath string) []Issue {
 	return out
 }
 
+// checkEventSpawnBounds flags cfgeventspawns.xml positions whose coordinates
+// fall outside any real DayZ map — negative, or past the largest official world
+// (Sakhal, 16384). Those are almost always a typo: DayZ clamps or ignores them,
+// so the event silently never spawns there. The 20000 ceiling clears every
+// shipped map with headroom, so this never fires on a stock mission.
+func checkEventSpawnBounds(spawnsPath string) []Issue {
+	data, err := os.ReadFile(spawnsPath)
+	if err != nil {
+		return nil
+	}
+	var doc struct {
+		Events []struct {
+			Name string `xml:"name,attr"`
+			Pos  []struct {
+				X float64 `xml:"x,attr"`
+				Z float64 `xml:"z,attr"`
+			} `xml:"pos"`
+		} `xml:"event"`
+	}
+	if xml.Unmarshal(data, &doc) != nil {
+		return nil
+	}
+	const maxCoord = 20000.0
+	var out []Issue
+	for _, e := range doc.Events {
+		bad := 0
+		for _, p := range e.Pos {
+			if p.X < 0 || p.Z < 0 || p.X > maxCoord || p.Z > maxCoord {
+				bad++
+			}
+		}
+		if bad > 0 {
+			suffix := ""
+			if bad != 1 {
+				suffix = "s"
+			}
+			out = append(out, Issue{File: spawnsPath, Severity: SevWarning,
+				Message: fmt.Sprintf("event %q has %d spawn position%s out of range (x/z outside 0..20000) — likely a typo; DayZ ignores or clamps them", e.Name, bad, suffix)})
+		}
+	}
+	return out
+}
+
 // eventSpawnNames lists the event names cfgeventspawns.xml defines positions
 // for. Returns nothing if the file is absent or unreadable — a missing file is
 // not an error worth two reports.

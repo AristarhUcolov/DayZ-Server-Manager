@@ -127,6 +127,55 @@ func SaveTypes(path string, doc *TypesDoc) error {
 	return nil
 }
 
+// dedupBlockRe matches one live <type name="X"> block, capturing the name.
+// Same shape as typesBlockRe but name-agnostic, for scanning the whole file.
+var dedupBlockRe = regexp.MustCompile(`(?s)[ \t]*<type\s+name="([^"]+)"\s*(?:/>|>.*?</type>)[ \t]*\r?\n?`)
+
+// DedupTypesFile removes <type> entries that repeat a name within one file,
+// keeping the first occurrence. DayZ keeps only one of a duplicate pair and
+// which one is undefined, so collapsing them makes the loot deterministic.
+// Comments — including commented-out <type> blocks — are ignored and preserved
+// byte-for-byte. Returns the removed names (one entry per removed block).
+func DedupTypesFile(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	src := string(data)
+	masked := maskComments(src) // same length, so indices map 1:1 to src
+	locs := dedupBlockRe.FindAllStringSubmatchIndex(masked, -1)
+
+	seen := map[string]bool{}
+	type span struct {
+		start, end int
+		name       string
+	}
+	var drop []span
+	for _, m := range locs {
+		name := src[m[2]:m[3]]
+		key := strings.ToLower(name)
+		if seen[key] {
+			drop = append(drop, span{m[0], m[1], name})
+		} else {
+			seen[key] = true
+		}
+	}
+	if len(drop) == 0 {
+		return nil, nil
+	}
+	// Remove from last to first so earlier offsets stay valid.
+	removed := make([]string, 0, len(drop))
+	for i := len(drop) - 1; i >= 0; i-- {
+		d := drop[i]
+		src = src[:d.start] + src[d.end:]
+		removed = append(removed, d.name)
+	}
+	if err := writeAtomic(path, []byte(src)); err != nil {
+		return nil, err
+	}
+	return removed, nil
+}
+
 // findTypeName recovers the file's own casing for a lower-cased name.
 func findTypeName(src, lowerName string) (string, bool) {
 	re := regexp.MustCompile(`<type\s+name="([^"]+)"`)

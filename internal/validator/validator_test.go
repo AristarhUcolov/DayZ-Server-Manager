@@ -283,6 +283,28 @@ func TestCheckEvents(t *testing.T) {
 	}
 }
 
+func TestCheckEventSpawnBounds(t *testing.T) {
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "cfgeventspawns.xml")
+	os.WriteFile(sp, []byte(`<eventposdef>
+  <event name="OK"><pos x="7500" z="9000"/><pos x="1" z="2"/></event>
+  <event name="Typo"><pos x="-5" z="2"/><pos x="99999" z="1"/><pos x="1" z="1"/></event>
+</eventposdef>`), 0o644)
+
+	got := checkEventSpawnBounds(sp)
+	joined := ""
+	for _, i := range got {
+		joined += i.Message + "\n"
+	}
+	if !strings.Contains(joined, `event "Typo" has 2 spawn positions out of range`) {
+		t.Errorf("missing Typo out-of-range report in:\n%s", joined)
+	}
+	// A within-bounds event (including a large-but-valid 9000) must not fire.
+	if strings.Contains(joined, `event "OK"`) {
+		t.Errorf("valid coordinates were wrongly flagged:\n%s", joined)
+	}
+}
+
 // Braces inside a quoted value are data, not structure.
 func TestValidateCFGIgnoresBracesInStrings(t *testing.T) {
 	dir := t.TempDir()

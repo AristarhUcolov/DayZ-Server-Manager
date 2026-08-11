@@ -1228,12 +1228,22 @@ Views.server = async (root) => {
   // Only the keys whose effect is non-obvious get an explanation; the rest
   // are self-describing and a marker on every row would be noise.
   const CFG_HELP = {
+    hostname: 'server.hostname',
+    password: 'server.password',
+    passwordAdmin: 'server.passwordAdmin',
     maxPlayers: 'server.maxPlayers',
-    instanceId: 'server.instanceId',
-    verifySignatures: 'server.verifySignatures',
-    disable3rdPerson: 'server.thirdPerson',
+    serverTimeAcceleration: 'server.timeAccel',
+    serverNightTimeAcceleration: 'server.nightTimeAccel',
+    serverTimePersistent: 'server.timePersistent',
+    enableWhitelist: 'server.whitelist',
     disableVoN: 'server.von',
-    password: 'rcon.password',
+    disable3rdPerson: 'server.thirdPerson',
+    verifySignatures: 'server.verifySignatures',
+    forceSameBuild: 'server.forceSameBuild',
+    instanceId: 'server.instanceId',
+    storageAutoFix: 'server.storageAutoFix',
+    loginQueueConcurrentPlayers: 'server.loginQueue',
+    loginQueueMaxPlayers: 'server.loginQueue',
   };
   for (const k of KEYS) {
     const val = data.values[k] ?? '';
@@ -2505,7 +2515,9 @@ Views.economy = async (root) => {
   const chartsHost = h('div');
   root.append(chartsHost);
 
-  const tile = (key, val) => h('div', { class: 'card' }, [h('h3', { i18n: key }), h('div', { class: 'metric-num', text: val })]);
+  const tile = (key, val, helpKey) => h('div', { class: 'card' }, [
+    helpKey ? withHelp(h('h3', { i18n: key }), helpKey) : h('h3', { i18n: key }),
+    h('div', { class: 'metric-num', text: val })]);
 
   function hbar(label, value, max, sub) {
     const pct = max > 0 ? Math.max(2, Math.round(value / max * 100)) : 0;
@@ -2518,7 +2530,7 @@ Views.economy = async (root) => {
 
   function renderTune() {
     tuneCard.innerHTML = '';
-    tuneCard.append(h('h3', { i18n: 'economy.tune.title' }), h('p', { class: 'hint', i18n: 'economy.tune.hint' }));
+    tuneCard.append(withHelp(h('h3', { i18n: 'economy.tune.title' }), 'economy.tune'), h('p', { class: 'hint', i18n: 'economy.tune.hint' }));
     if (running) tuneCard.append(runningBanner());
     const presets = [
       { f: 2, label: 'economy.tune.x2' },
@@ -2526,8 +2538,11 @@ Views.economy = async (root) => {
       { f: 0.5, label: 'economy.tune.half' },
       { f: 0.25, label: 'economy.tune.quarter' },
     ];
-    tuneCard.append(h('div', { class: 'toolbar' }, presets.map(p =>
-      h('button', { class: 'secondary', i18n: p.label, disabled: running, onclick: (e) => tune(p.f, e.currentTarget) }))));
+    const btns = presets.map(p =>
+      h('button', { class: 'secondary', i18n: p.label, disabled: running, onclick: (e) => tune(p.f, e.currentTarget) }));
+    // ×1 restores the amounts captured before the first scaling — a one-click undo.
+    btns.push(h('button', { class: 'secondary', i18n: 'economy.tune.reset', title: t('economy.tune.reset.hint'), disabled: running, onclick: (e) => tuneReset(e.currentTarget) }));
+    tuneCard.append(h('div', { class: 'toolbar' }, btns));
     const scaleMin = h('input', { type: 'checkbox' });
     scaleMin.checked = true;
     tuneCard.append(h('label', { class: 'inline-check' }, [scaleMin, h('span', { i18n: 'economy.tune.scaleMin' })]));
@@ -2546,6 +2561,17 @@ Views.economy = async (root) => {
     });
   }
 
+  async function tuneReset(btn) {
+    if (!(await confirmModal(t('economy.tune.reset.confirm')))) return;
+    await withBusy(btn, async () => {
+      try {
+        const r = await api.post('/api/economy/tune', { file: curFile, reset: true });
+        if (r.hadBaseline) { toast(t('economy.tune.reset.done'), 'ok'); await loadStats(); }
+        else toast(t('economy.tune.reset.none'), 'warn');
+      } catch (e) { handleErr(e); }
+    });
+  }
+
   function barCard(titleKey, rows, valOf, subOf, limit) {
     if (!rows || !rows.length) return null;
     const max = Math.max.apply(null, rows.map(valOf));
@@ -2560,10 +2586,10 @@ Views.economy = async (root) => {
     catch (e) { handleErr(e); return; }
     tiles.innerHTML = '';
     tiles.append(
-      tile('economy.tiles.items', String(d.total || 0)),
-      tile('economy.tiles.nominal', String(d.totalNominal || 0)),
-      tile('economy.tiles.categories', String((d.categories || []).length)),
-      tile('economy.tiles.min', String(d.totalMin || 0)),
+      tile('economy.tiles.items', String(d.total || 0), 'economy.items'),
+      tile('economy.tiles.nominal', String(d.totalNominal || 0), 'economy.nominal'),
+      tile('economy.tiles.categories', String((d.categories || []).length), 'economy.categories'),
+      tile('economy.tiles.min', String(d.totalMin || 0), 'economy.min'),
     );
     chartsHost.innerHTML = '';
     const cards = [
@@ -3465,6 +3491,83 @@ function scheduledRestartsCard(c, F, onChange) {
         : null,
     ]),
   ]);
+}
+
+// scheduledProfilesCard — apply a saved config profile at a daily HH:MM (the
+// swap runs inside a restart). Rows are {time, profile, enabled}; the getter on
+// F is picked up by the main Settings save, like scheduledRestarts.
+function scheduledProfilesCard(c, F, onChange) {
+  const fire = () => onChange && onChange();
+  const state = {
+    items: (c.scheduledProfiles || []).map(a => ({
+      time: a.time || '', profile: a.profile || '', enabled: !!a.enabled,
+    })),
+  };
+  let profiles = []; // {slug, name}
+
+  const card = h('div', { class: 'card' }, [
+    h('h3', { i18n: 'settings.schedprofiles.title' }),
+    h('p', { class: 'hint', i18n: 'settings.schedprofiles.hint' }),
+  ]);
+  if (!(c.rconPassword || '').trim()) {
+    card.append(h('p', { class: 'warning-bar', i18n: 'settings.rconNeeded' }));
+  }
+  const list = h('div');
+  card.append(list);
+
+  function profileSelect(cur, onch) {
+    const sel = h('select', { style: { flex: '1' } });
+    sel.append(h('option', { value: '', text: '—' }));
+    for (const p of profiles) {
+      const o = h('option', { value: p.slug, text: p.name || p.slug });
+      if (p.slug === cur) o.selected = true;
+      sel.append(o);
+    }
+    if (cur && !profiles.some(p => p.slug === cur)) { // a deleted profile — keep it visible
+      const o = h('option', { value: cur, text: cur });
+      o.selected = true;
+      sel.append(o);
+    }
+    sel.onchange = onch;
+    return sel;
+  }
+
+  function render() {
+    list.innerHTML = '';
+    if (!profiles.length) list.append(h('p', { class: 'hint', i18n: 'settings.schedprofiles.none' }));
+    state.items.forEach((a, i) => {
+      const time = h('input', { type: 'text', value: a.time, placeholder: 'HH:MM', style: { width: '80px' } });
+      const sel = profileSelect(a.profile, () => { state.items[i].profile = sel.value; fire(); });
+      const en = h('input', { type: 'checkbox', class: 'switch' });
+      en.checked = !!a.enabled;
+      time.onchange = () => { state.items[i].time = time.value.trim(); };
+      en.onchange = () => { state.items[i].enabled = en.checked; };
+      list.append(h('div', { class: 'row', style: { gap: '8px', marginBottom: '6px' } }, [
+        time, sel, h('label', {}, [en]),
+        h('button', { class: 'danger', text: '×', onclick: () => { state.items.splice(i, 1); render(); fire(); } }),
+      ]));
+    });
+    applyI18n();
+  }
+  render();
+  api.get('/api/config-profiles')
+    .then(d => { profiles = (d.profiles || []).map(p => ({ slug: p.slug, name: p.name })); render(); })
+    .catch(() => {});
+
+  F.scheduledProfiles = {
+    type: 'list-schedprofiles',
+    get value() {
+      return state.items
+        .map(a => ({ time: (a.time || '').trim(), profile: (a.profile || '').trim(), enabled: !!a.enabled }))
+        .filter(a => a.time && a.profile);
+    },
+  };
+
+  card.append(h('div', { class: 'actions' }, [
+    h('button', { i18n: 'settings.schedprofiles.add',
+      onclick: () => { state.items.push({ time: '18:00', profile: '', enabled: true }); render(); fire(); } }),
+  ]));
+  return card;
 }
 
 function announcementsCard(c, F, onChange) {
@@ -4657,6 +4760,8 @@ Views.settings = async (root) => {
 
     scheduledRestartsCard(c, F, autoSave),
 
+    scheduledProfilesCard(c, F, autoSave),
+
     announcementsCard(c, F, autoSave),
 
     intervalAnnouncementsCard(c, F, autoSave),
@@ -5110,6 +5215,7 @@ async function main() {
     // the exe has been updated since the last visit.
     setupVersionBadge();
     maybeShowWhatsNew();
+    startWatchlistPing();
     // Restore the section from the URL hash so a reload keeps the user where
     // they were (defaults to dashboard for a fresh load / unknown hash).
     await navigate(routeFromHash());
@@ -5121,6 +5227,34 @@ async function main() {
 function currentRoute() {
   const active = document.querySelector('.nav a.active');
   return active ? active.dataset.route : 'dashboard';
+}
+
+// startWatchlistPing polls for connects by watch-flagged players and toasts new
+// ones. The newest already-seen timestamp lives in localStorage, so a page
+// reload never re-announces old connects, and the first run only sets a baseline
+// (no backlog spam).
+function startWatchlistPing() {
+  const KEY = 'watchSeenAt';
+  async function poll(seedOnly) {
+    let d;
+    try { d = await api.get('/api/watchlist/activity'); }
+    catch { return; }
+    const events = d.events || [];
+    if (!events.length) return;
+    const newest = events[events.length - 1].at;
+    const seen = localStorage.getItem(KEY) || '';
+    if (!seedOnly && seen) {
+      const fresh = events.filter(e => e.at > seen);
+      for (const e of fresh.slice(-3)) {
+        toast('👁 ' + t('watchping.connected').replace('{name}', e.name), 'warn');
+      }
+    }
+    localStorage.setItem(KEY, newest);
+  }
+  poll(true).then(() => {
+    if (window._watchInterval) clearInterval(window._watchInterval);
+    window._watchInterval = setInterval(() => poll(false), 45000);
+  });
 }
 
 // ---- What's new -----------------------------------------------------------
@@ -5367,6 +5501,15 @@ function playerNameLink(p, opts = {}) {
     onclick: () => openPlayerProfile(p.key) }, opts));
 }
 
+// banBadgeLabel turns bans.txt minutes-remaining into "Banned" (permanent) or
+// "Banned · 3d left". "0"/"-1"/blank all mean permanent in BattlEye.
+function banBadgeLabel(mins) {
+  const n = parseInt(mins, 10);
+  if (!n || n <= 0) return t('profile.banned');
+  const left = n >= 1440 ? Math.round(n / 1440) + 'd' : (n >= 60 ? Math.round(n / 60) + 'h' : n + 'm');
+  return t('profile.banned') + ' · ' + t('profile.banLeft').replace('{left}', left);
+}
+
 // openPlayerProfile shows a per-player admin panel: identity, stats, moderation
 // actions (ban/unban/kick/message + note & watch) and recent combat.
 async function openPlayerProfile(key) {
@@ -5380,7 +5523,7 @@ async function openPlayerProfile(key) {
   const badges = h('div', { class: 'profile-badges' }, [
     p.online ? h('span', { class: 'badge ok', i18n: 'players.onlineBadge' }) : null,
     p.watch ? h('span', { class: 'badge warn', text: '★ ' + t('players.watched') }) : null,
-    d.banned ? h('span', { class: 'badge err', i18n: 'profile.banned' }) : null,
+    d.banned ? h('span', { class: 'badge err', text: banBadgeLabel(d.banMinutes) }) : null,
   ]);
   const identity = h('div', { class: 'profile-id' }, [
     h('div', {}, [h('span', { class: 'hint', i18n: 'profile.guid' }), h('span', { class: 'mono', text: ' ' + (p.id || '—') })]),
@@ -5400,7 +5543,7 @@ async function openPlayerProfile(key) {
   ]);
 
   // Note + watch.
-  const ta = h('textarea', { rows: '2', style: { width: '100%', height: '58px' }, placeholder: t('players.note.placeholder') });
+  const ta = h('textarea', { rows: '2', style: { width: '100%', height: '58px', minHeight: '58px' }, placeholder: t('players.note.placeholder') });
   ta.value = p.note || '';
   const watchCb = h('input', { type: 'checkbox' });
   watchCb.checked = !!p.watch;
@@ -5420,9 +5563,20 @@ async function openPlayerProfile(key) {
 
   // Moderation actions.
   const actions = h('div', { class: 'actions profile-mod' });
+  // 0 = permanent; otherwise the ban lifts itself after N days (BattlEye counts down).
+  const banDur = h('select', { class: 'ban-dur', title: t('profile.banDur') }, [
+    h('option', { value: '0', i18n: 'profile.banDur.perm' }),
+    h('option', { value: '1', text: t('profile.banDur.days').replace('{n}', 1) }),
+    h('option', { value: '3', text: t('profile.banDur.days').replace('{n}', 3) }),
+    h('option', { value: '7', text: t('profile.banDur.days').replace('{n}', 7) }),
+    h('option', { value: '14', text: t('profile.banDur.days').replace('{n}', 14) }),
+    h('option', { value: '30', text: t('profile.banDur.days').replace('{n}', 30) }),
+  ]);
   async function doBan(btn) {
-    if (!(await confirmModal(t('profile.banConfirm').replace('{name}', p.name || '—'), { danger: true, okText: t('profile.ban') }))) return;
-    await withBusy(btn, async () => { try { await api.post('/api/players/ban', { guid: p.id, reason: '' }); toast(t('profile.banned.msg'), 'ok'); reopen(); } catch (e) { handleErr(e); } });
+    const days = parseInt(banDur.value, 10) || 0;
+    const durTxt = days > 0 ? t('profile.banDur.days').replace('{n}', days) : t('profile.banDur.perm');
+    if (!(await confirmModal(t('profile.banConfirm').replace('{name}', p.name || '—').replace('{dur}', durTxt), { danger: true, okText: t('profile.ban') }))) return;
+    await withBusy(btn, async () => { try { await api.post('/api/players/ban', { guid: p.id, reason: '', days }); toast(t('profile.banned.msg'), 'ok'); reopen(); } catch (e) { handleErr(e); } });
   }
   async function doUnban(btn) {
     if (!(await confirmModal(t('profile.unbanConfirm').replace('{name}', p.name || '—')))) return;
@@ -5441,8 +5595,8 @@ async function openPlayerProfile(key) {
     actions.append(h('button', { class: 'secondary', i18n: 'profile.unban', onclick: (e) => doUnban(e.currentTarget) }));
   } else {
     const b = h('button', { class: 'danger', i18n: 'profile.ban', onclick: (e) => doBan(e.currentTarget) });
-    if (!p.id) { b.disabled = true; b.title = t('profile.noGuid'); }
-    actions.append(b);
+    if (!p.id) { b.disabled = true; b.title = t('profile.noGuid'); banDur.disabled = true; }
+    actions.append(banDur, b);
   }
   if (d.onlineId >= 0) {
     actions.append(
@@ -5922,6 +6076,21 @@ function mapImageControls(map, onDone) {
         onDone && onDone();
       } catch (e) { handleErr(e); }
     } }));
+  }
+  // Modded/custom worlds: let the admin set the real edge length so the grid and
+  // plotted points line up. Official worlds have a known size, so no field.
+  if (map && !map.official) {
+    const sizeInp = h('input', { type: 'number', value: map.size || 15360, min: '1000', style: { width: '110px' } });
+    wrap.append(
+      h('label', { class: 'map-size-lbl', i18n: 'map.size' }),
+      sizeInp,
+      h('button', { class: 'secondary', i18n: 'action.save', title: t('map.size.hint'), onclick: async () => {
+        const v = parseInt(sizeInp.value, 10);
+        if (!(v >= 1000 && v <= 65536)) { toast(t('map.size.range'), 'warn'); return; }
+        try { await api.post('/api/map/size', { map: key, size: v }); toast(t('msg.saved'), 'ok'); onDone && onDone(); }
+        catch (e) { handleErr(e); }
+      } }),
+    );
   }
   return wrap;
 }
@@ -6411,54 +6580,93 @@ Views.moddrift = async (root) => {
 
 Views.randompresets = async (root) => {
   root.append(pageHeader('nav.randompresets', 'randompresets.subtitle'));
+  const running = State.serverStatus.running;
   let d;
   try { d = await api.get('/api/randompresets'); }
   catch (e) { handleErr(e); return; }
-  if (!d.exists) {
-    root.append(h('div', { class: 'card' }, h('div', { class: 'empty-state' },
-      h('div', { class: 'es-hint', i18n: 'randompresets.missing' }))));
-    return;
-  }
-  const presets = d.presets || [];
+
+  // Editable working copy. Chances are kept as strings while editing so a
+  // locale keyboard's comma never corrupts the value; parseNum reads them.
+  let presets = (d.presets || []).map(p => ({
+    kind: p.kind, name: p.name, chance: String(p.chance),
+    items: (p.items || []).map(it => ({ name: it.name, chance: String(it.chance) })),
+  }));
+  let dirty = false;
+  const parseNum = (v) => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
+
   const search = h('input', { type: 'search', placeholder: t('randompresets.search') });
-  const list = h('div', { class: 'card' });
-  root.append(h('div', { class: 'card' }, h('div', { class: 'toolbar' }, [search])));
+  const saveBtn = h('button', { class: 'primary', i18n: 'action.save', disabled: true });
+  const updateSave = () => { saveBtn.disabled = !dirty || running; };
+  const markDirty = () => { dirty = true; updateSave(); };
+  saveBtn.addEventListener('click', () => doSave(saveBtn));
+  const addCargo = h('button', { class: 'secondary', i18n: 'randompresets.addCargo', disabled: running, onclick: () => addPreset('cargo') });
+  const addAttach = h('button', { class: 'secondary', i18n: 'randompresets.addAttach', disabled: running, onclick: () => addPreset('attachments') });
+
+  root.append(h('div', { class: 'card' }, [
+    h('p', { class: 'hint', i18n: 'randompresets.editHint' }),
+    running ? runningBanner() : null,
+    h('div', { class: 'toolbar' }, [search, h('span', { class: 'grow' }), addCargo, addAttach, saveBtn]),
+  ]));
+  const list = h('div');
   root.append(list);
+
+  function addPreset(kind) {
+    presets.unshift({ kind, name: '', chance: kind === 'attachments' ? '1' : '0.3', items: [] });
+    markDirty();
+    render();
+  }
 
   function matches(p, q) {
     if (!q) return true;
-    if (p.name.toLowerCase().includes(q)) return true;
-    return (p.items || []).some(it => it.name.toLowerCase().includes(q));
+    if ((p.name || '').toLowerCase().includes(q)) return true;
+    return p.items.some(it => (it.name || '').toLowerCase().includes(q));
   }
 
-  function presetBlock(p) {
-    const items = p.items || [];
-    const sum = items.reduce((a, it) => a + (it.chance || 0), 0);
-    const block = h('div', { class: 'preset-block' }, [
-      h('div', { class: 'preset-head' }, [
-        h('span', { class: 'badge ' + (p.kind === 'cargo' ? 'info' : 'mute'), text: p.kind }),
-        h('span', { class: 'preset-name', text: p.name }),
-        h('span', { class: 'hint', text: t('randompresets.group').replace('{pct}', (p.chance * 100).toFixed(0)) }),
-      ]),
+  function presetCard(p) {
+    const nameInp = h('input', { type: 'text', class: 'preset-name-inp', value: p.name, placeholder: t('randompresets.namePh'), disabled: running });
+    nameInp.addEventListener('input', () => { p.name = nameInp.value; markDirty(); });
+    const chanceInp = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: p.chance, disabled: running });
+    const del = h('button', { class: 'danger icon-btn', text: '×', title: t('action.delete'), disabled: running,
+      onclick: () => { presets = presets.filter(x => x !== p); markDirty(); render(); } });
+    const head = h('div', { class: 'preset-edit-head' }, [
+      h('span', { class: 'badge ' + (p.kind === 'cargo' ? 'info' : 'mute'), text: p.kind }),
+      nameInp,
+      h('label', { class: 'chance-lbl' }, [h('span', { class: 'hint', i18n: 'randompresets.groupChance' }), chanceInp]),
+      del,
     ]);
-    const tbl = h('table');
-    tbl.append(h('thead', {}, h('tr', {}, [
-      h('th', { i18n: 'col.name' }),
-      h('th', { class: 'num', i18n: 'randompresets.weight' }),
-      h('th', { class: 'num', i18n: 'randompresets.real' }),
-    ])));
-    const tb = h('tbody');
-    for (const it of items) {
-      const real = sum > 0 ? (p.chance * (it.chance || 0) / sum * 100) : 0;
-      tb.append(h('tr', {}, [
-        h('td', { class: 'mono', text: it.name }),
-        h('td', { class: 'num hint', text: String(it.chance) }),
-        h('td', { class: 'num', style: { fontWeight: '700' }, text: real.toFixed(1) + '%' }),
-      ]));
+    const itemsHost = h('div', { class: 'preset-items' });
+    const card = h('div', { class: 'card preset-edit' }, [head, itemsHost]);
+
+    function renderItems() {
+      itemsHost.innerHTML = '';
+      const rows = [];
+      const recompute = () => {
+        const gc = parseNum(chanceInp.value);
+        const sum = p.items.reduce((a, x) => a + parseNum(x.chance), 0);
+        for (const r of rows) {
+          r.real.textContent = (sum > 0 ? gc * parseNum(r.it.chance) / sum * 100 : 0).toFixed(1) + '%';
+        }
+      };
+      chanceInp.oninput = () => { p.chance = chanceInp.value; markDirty(); recompute(); };
+      for (const it of p.items) {
+        const nm = h('input', { type: 'text', class: 'mono item-name-inp', value: it.name, placeholder: t('randompresets.itemPh'), disabled: running });
+        nm.addEventListener('input', () => { it.name = nm.value; markDirty(); });
+        const wt = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: it.chance, disabled: running });
+        wt.addEventListener('input', () => { it.chance = wt.value; markDirty(); recompute(); });
+        const real = h('span', { class: 'preset-real' });
+        const rm = h('button', { class: 'danger icon-btn', text: '×', title: t('action.delete'), disabled: running,
+          onclick: () => { p.items = p.items.filter(x => x !== it); markDirty(); renderItems(); } });
+        rows.push({ it, real });
+        itemsHost.append(h('div', { class: 'preset-item-row' }, [nm, wt, real, rm]));
+      }
+      const addItem = h('button', { class: 'secondary small', i18n: 'randompresets.addItem', disabled: running,
+        onclick: () => { p.items.push({ name: '', chance: '1' }); markDirty(); renderItems(); } });
+      itemsHost.append(h('div', { class: 'preset-add-row' }, addItem));
+      recompute();
+      applyI18n();
     }
-    tbl.append(tb);
-    block.append(h('div', { class: 'table-scroll' }, tbl));
-    return block;
+    renderItems();
+    return card;
   }
 
   function render() {
@@ -6466,16 +6674,92 @@ Views.randompresets = async (root) => {
     list.innerHTML = '';
     const shown = presets.filter(p => matches(p, q));
     list.append(h('p', { class: 'hint', text: shown.length + ' / ' + presets.length }));
-    if (!shown.length) {
-      list.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'randompresets.none' })));
+    if (!presets.length) {
+      list.append(h('div', { class: 'card' }, h('div', { class: 'empty-state' },
+        h('div', { class: 'es-hint', i18n: 'randompresets.empty' }))));
+    }
+    for (const p of shown) list.append(presetCard(p));
+    updateSave();
+    applyI18n();
+  }
+
+  async function doSave(btn) {
+    const payload = presets.map(p => ({
+      kind: p.kind, name: (p.name || '').trim(), chance: parseNum(p.chance),
+      items: p.items.map(it => ({ name: (it.name || '').trim(), chance: parseNum(it.chance) })).filter(it => it.name),
+    }));
+    if (payload.some(p => !p.name)) { toast(t('randompresets.needName'), 'err'); return; }
+    const names = {};
+    for (const p of payload) {
+      const key = p.kind + '|' + p.name.toLowerCase();
+      if (names[key]) { toast(t('randompresets.dupName').replace('{name}', p.name), 'err'); return; }
+      names[key] = true;
+    }
+    await withBusy(btn, async () => {
+      try {
+        await api.post('/api/randompresets/save', { presets: payload });
+        toast(t('randompresets.saved'), 'ok');
+        dirty = false; updateSave();
+      } catch (e) { handleErr(e); }
+    });
+  }
+
+  search.addEventListener('input', render);
+  render();
+};
+
+// ------------------------------------------------------------------- live chat
+
+Views.chat = async (root) => {
+  const myNav = _navSeq;
+  root.append(pageHeader('nav.chat', 'chat.subtitle'));
+
+  const feed = h('div', { class: 'chat-feed' });
+  const input = h('input', { type: 'text', placeholder: t('chat.placeholder') });
+  root.append(h('div', { class: 'card' }, [
+    feed,
+    h('div', { class: 'row', style: { marginTop: '10px' } }, [
+      input, h('button', { class: 'primary', i18n: 'chat.send', onclick: send }),
+    ]),
+  ]));
+
+  let timer = null;
+  root._teardown = () => { if (timer) clearInterval(timer); };
+
+  async function send() {
+    const v = input.value.trim();
+    if (!v) return;
+    try { await api.post('/api/rcon/say', { message: v }); input.value = ''; toast(t('msg.sent'), 'ok'); }
+    catch (e) { handleErr(e); }
+  }
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+
+  async function refresh() {
+    let d;
+    try { d = await api.get('/api/admlog/recent?type=chat&limit=100'); }
+    catch { return; }
+    if (myNav !== _navSeq) { if (timer) clearInterval(timer); return; }
+    const events = d.events || [];
+    const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
+    feed.innerHTML = '';
+    if (!events.length) {
+      feed.append(h('p', { class: 'hint', i18n: 'chat.none' }));
       applyI18n();
       return;
     }
-    for (const p of shown) list.append(presetBlock(p));
+    for (const e of events) {
+      feed.append(h('div', { class: 'chat-line' }, [
+        h('span', { class: 'chat-time', text: e.time || '' }),
+        h('span', { class: 'chat-player', text: e.player || '' }),
+        h('span', { class: 'chat-text', text: e.message || '' }),
+      ]));
+    }
+    if (atBottom) feed.scrollTop = feed.scrollHeight; // don't yank the view while reading up
     applyI18n();
   }
-  search.addEventListener('input', render);
-  render();
+  await refresh();
+  feed.scrollTop = feed.scrollHeight;
+  timer = setInterval(refresh, 6000);
 };
 
 // --------------------------------------------------------------------- gameplay
@@ -6793,7 +7077,9 @@ Views.health = async (root) => {
       ]);
     };
     cleanupHost.append(row('logs', 'health.cleanup.logs', c.logs || {}));
+    cleanupHost.append(row('adm', 'health.cleanup.adm', c.adm || {}));
     cleanupHost.append(row('backups', 'health.cleanup.backups', c.backups || {}));
+    cleanupHost.append(row('wipes', 'health.cleanup.wipes', c.wipes || {}));
     applyI18n();
   }
   renderCleanup();

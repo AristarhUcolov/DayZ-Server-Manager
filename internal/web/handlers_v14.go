@@ -97,6 +97,14 @@ func (h *handlers) playerNote(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{"status": "saved", "key": req.Key, "note": strings.TrimSpace(req.Note), "watch": req.Watch})
 }
 
+// watchlistActivity returns recent connects of watch-flagged players, for the
+// panel's watchlist ping. Ingests first so it reflects the live tail.
+func (h *handlers) watchlistActivity(w http.ResponseWriter, r *http.Request) {
+	db := h.playersDB()
+	db.Ingest(h.profilesAbs())
+	writeJSON(w, map[string]interface{}{"events": db.WatchActivity()})
+}
+
 // playersIngestLoop keeps the database current even when nobody has the page
 // open, so session/playtime math stays accurate.
 func (h *handlers) playersIngestLoop(ctx context.Context) {

@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	dztypes "dayzmanager/internal/types"
@@ -190,6 +191,8 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 		// events.xml + the spawn positions that reference it.
 		issues = append(issues, checkEvents(filepath.Join(missionDir, "db", "events.xml"),
 			filepath.Join(missionDir, "cfgeventspawns.xml"))...)
+		// Spawn coordinates that fall off the map (typos).
+		issues = append(issues, checkEventSpawnBounds(filepath.Join(missionDir, "cfgeventspawns.xml"))...)
 		// cfgspawnabletypes.xml preset references.
 		issues = append(issues, checkSpawnable(missionDir)...)
 	}
@@ -463,7 +466,71 @@ func AutoFix(serverDir, missionTemplate string) ([]string, error) {
 		}
 	}
 
+	// ---- 3. remove duplicate <type> entries (keep the first) ----
+	// A repeated name in one file makes DayZ pick one at random; collapsing to
+	// the first makes the loot deterministic. Only files that actually have a
+	// duplicate are backed up and rewritten; comments survive untouched.
+	dedupOne := func(p string) error {
+		doc, err := dztypes.Load(p)
+		if err != nil {
+			return nil // parse failures are reported by ValidateAll, not fixed here
+		}
+		seen := map[string]bool{}
+		hasDup := false
+		for i := range doc.Types {
+			k := strings.ToLower(doc.Types[i].Name)
+			if seen[k] {
+				hasDup = true
+				break
+			}
+			seen[k] = true
+		}
+		if !hasDup {
+			return nil
+		}
+		if err := util.BackupBeforeWrite(p); err != nil {
+			return err
+		}
+		removed, err := dztypes.DedupTypesFile(p)
+		if err != nil {
+			return err
+		}
+		counts := map[string]int{}
+		for _, n := range removed {
+			counts[n]++
+		}
+		names := make([]string, 0, len(counts))
+		for n := range counts {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		out = append(out, fmt.Sprintf("removed %d duplicate <type> %s in %s (%s)",
+			len(removed), plural(len(removed), "entry", "entries"), filepath.Base(p), strings.Join(names, ", ")))
+		return nil
+	}
+	if err := dedupOne(filepath.Join(missionDir, "db", "types.xml")); err != nil {
+		return nil, err
+	}
+	if entries, err := os.ReadDir(moded); err == nil {
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".xml") {
+				continue
+			}
+			if err := dedupOne(filepath.Join(moded, e.Name())); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	return out, nil
+}
+
+// plural picks the singular or plural word for n.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // whitelistLimits inserts the missing names into the right section of

@@ -93,9 +93,11 @@
   в `types.xml` нет — обычная причина, почему обвес «не спавнится».
 - **Валидатор с авто-исправлением.** Сканирует все `.xml` под `mpmissions/`,
   балансирует скобки в `.cfg`, проверяет существование файлов из
-  `cfgeconomycore.xml`, ловит дубликаты types. **Авто-исправление** вносит
-  неизвестные `usage/value/tag/category` в `cfglimitsdefinition.xml` (с
-  бэкапом) — чинит модовский лут, который DayZ иначе молча выкидывает.
+  `cfgeconomycore.xml`, ловит дубликаты types и отмечает спавн-позиции событий,
+  вылетающие за карту. **Авто-исправление** вносит неизвестные
+  `usage/value/tag/category` в `cfglimitsdefinition.xml`, регистрирует
+  незарегистрированные файлы moded_types в `cfgeconomycore.xml` и убирает
+  дубликаты `<type>` (оставляя первый, комментарии сохраняются) — всё с бэкапом.
 - **RCon.** Список игроков, kick/ban, broadcast в чат, произвольная команда.
   Пароль RCon задаётся прямо в панели — манагер пишет его в
   `battleye/beserver_x64.cfg` (создаёт файл при необходимости).
@@ -201,8 +203,9 @@
   экономики с одного взгляда, с графиками.
 - **Пресеты тюнинга CE.** Кнопки ×2 / ×1.5 / ×0.5 / ×0.25 масштабируют
   количество спавна (`nominal`, при желании и `min`) во всём файле types в
-  один клик, сохраняя правило `min ≤ nominal`. Требует остановленного сервера,
-  делает бэкап.
+  один клик, сохраняя правило `min ≤ nominal`. Кнопка **×1** возвращает
+  значения к тем, что были до первого масштабирования, — тюнинг всегда
+  обратим. Требует остановленного сервера, делает бэкап.
 - **Карта сервера.** Схематичная карта Chernarus/Livonia/Sakhal с сеткой 1 км
   и ландмарками — общий компонент для трёх инструментов ниже. Береговые контуры
   пока не рисуются; координатная сетка и города дают ориентир.
@@ -220,22 +223,32 @@
 - **«Где найти».** Обратный поиск лута: вводишь класс предмета → категория,
   локации (usage), тир (value), теги, nominal/min. Предупреждает, если у
   предмета нет usage — в обычном луте зданий он не появится.
-- **Библиотека рандом-пресетов.** `cfgrandompresets.xml`: группы cargo/attachments
-  с реальным шансом каждого предмета (шанс группы × вес ÷ сумма весов), как в
-  разделе обвесов.
+- **Редактор пресетов.** `cfgrandompresets.xml`: создавай свои и правь готовые
+  группы cargo/attachments с реальным шансом каждого предмета (шанс группы ×
+  вес ÷ сумма весов); затем ссылайся на них по имени в разделе обвесов.
 - **Проверка лута модов.** Для каждого установленного мода показывает, весь ли
   его лут есть в экономике: «не смержен» / «частично» / активен, со списком
   отсутствующих типов — главная причина, почему предметы мода не спавнятся.
 - **Профиль игрока.** Клик по нику где угодно открывает мини админ-панель:
   GUID, алиасы, первый/последний вход, статистика (сессии, наиграно, K/D),
-  недавние бои из килфида, заметка + watch, и модерация — бан/разбан по GUID
-  (в `bans.txt`, применяется через RCon `loadBans` без рестарта), кик и личное
-  сообщение, когда игрок онлайн.
+  недавние бои из килфида, заметка + watch, и модерация — бан навсегда или на
+  срок в днях / разбан по GUID (в `bans.txt`, применяется через RCon `loadBans`
+  без рестарта), кик и личное сообщение, когда игрок онлайн.
 - **Умные рестарты.** Рестарт только когда сервер пуст (плановый/интервальный
   откладывается, пока есть игроки, до заданного предела) и рестарт при
   превышении памяти процессом DayZ — освобождает утечку на долгом аптайме.
 - **Пресеты анонсов.** Сохранённые быстрые сообщения на странице RCon: клик —
   бродкаст всем, «Save» — добавить текущее. Хранятся в конфиге.
+- **Живой чат.** Отдельная страница внутриигрового чата из админ-лога с
+  авто-обновлением и полем ответа (бродкаст через RCon).
+- **Пинг watchlist.** Когда игрок под наблюдением заходит на сервер, панель
+  показывает всплывающее уведомление.
+- **Профили конфигов по расписанию.** Применить сохранённый профиль в заданное
+  время суток; смена происходит во время рестарта — например профиль «Выходные»
+  в пятницу вечером.
+- **Очистка диска.** На странице «Здоровье» — отдельные кнопки: логи сервера
+  (кроме новейшего RPT), ADM-логи, бэкапы конфигов и старые снимки вайпов
+  (новейший оставляется для отмены).
 - **Обвесы: ссылки на рандом-пресеты.** В редакторе обвесов можно добавлять
   группы-ссылки на пресеты из `cfgrandompresets.xml` (шестерёнка ⚙) с
   автоподсказкой имён — и для обвесов, и для содержимого — рядом с явными
@@ -243,16 +256,18 @@
 - **Фон карты.** По умолчанию рисуется схематичная Chernarus (сетка + берег +
   города); своё топ-даун изображение карты (официальное или модовское) грузится
   с любой страницы карты и показывается автоматически для этого мира. Готовые
-  рендеры не встроены (авторское право) — каждый ставит своё локально.
-- **Инструкция для новичков.** Десять глав прямо в панели: с чего начать,
-  моды, лут и экономика, обвесы, стартовый набор, RCon, погода, обслуживание,
-  здоровье сервера, доступ с телефона. Каждая — с пошаговыми действиями,
+  рендеры не встроены (авторское право) — каждый ставит своё локально. Для
+  неофициальных карт задаётся размер мира, чтобы точки и сетка совпали.
+- **Инструкция для новичков.** Одиннадцать глав прямо в панели: с чего начать,
+  моды, лут и экономика, экономика лута и пресеты, обвесы, стартовый набор,
+  RCon, погода, обслуживание, здоровье сервера, доступ с телефона. Каждая — с пошаговыми действиями,
   скриншотом раздела, блоком «полезно знать» и кнопкой, которая открывает
   нужную страницу панели.
 - **Подсказки при наведении.** У ключевых полей есть значок «i»: наведи —
   и получишь объяснение, что именно делает `nominal`, чем `min` отличается
-  от него, почему вес обвеса — не проценты, и почему новый пароль RCon
-  начинает работать только после рестарта. Работает и с клавиатуры.
+  от него, почему вес обвеса — не проценты, что дают ускорение времени и
+  «тот же билд» на странице Сервер, и что означают цифры на дашборде Экономики
+  лута. Работает и с клавиатуры.
 - **Плавная смена погоды.** Появился выбор плавности перехода: «Плавно»
   (~30 минут мелкими шагами, как в ванильном DayZ), «Обычно» (~10 минут)
   и «Быстро» (~2 минуты). Раньше менеджер всегда писал двухминутный переход
@@ -477,10 +492,11 @@ panels.
   attachment never spawns.
 - **Validator with auto-fix.** Scans every `.xml` under `mpmissions/`,
   checks brace balance in `.cfg`, verifies files referenced by
-  `cfgeconomycore.xml` exist, flags duplicate types. **Auto-fix**
-  whitelists unknown `usage/value/tag/category` into
-  `cfglimitsdefinition.xml` (with a `.bak`) — the fix for modded loot DayZ
-  otherwise silently drops.
+  `cfgeconomycore.xml` exist, flags duplicate types and event spawn positions
+  that fall off the map. **Auto-fix** whitelists unknown
+  `usage/value/tag/category` into `cfglimitsdefinition.xml`, registers
+  unregistered moded_types files in `cfgeconomycore.xml`, and removes duplicate
+  `<type>` entries (keeping the first, comments preserved) — all with a `.bak`.
 - **RCon.** Player list, kick/ban, chat broadcast, raw command. Set the
   RCon password right in the panel — the manager writes it into
   `battleye/beserver_x64.cfg` (creating the file if needed).
@@ -588,7 +604,9 @@ panels.
   a glance, with charts.
 - **CE tuning presets.** ×2 / ×1.5 / ×0.5 / ×0.25 buttons scale spawn amounts
   (`nominal`, and `min` when checked) across a whole types file in one click,
-  keeping the `min ≤ nominal` rule. Requires the server stopped, keeps a backup.
+  keeping the `min ≤ nominal` rule. A **×1** button restores the amounts from
+  before your first scaling, so tuning is always reversible. Requires the server
+  stopped, keeps a backup.
 - **Server map.** A schematic Chernarus/Livonia/Sakhal map with a 1 km grid and
   landmarks — a shared component behind the three tools below. Coastlines aren't
   traced yet; the grid and towns give orientation.
@@ -607,37 +625,50 @@ panels.
 - **Where to find.** A reverse loot lookup: type an item's class name → category,
   locations (usage), tier (value), tags, nominal/min. Warns when an item has no
   usage — it won't appear in normal building loot.
-- **Random presets library.** `cfgrandompresets.xml`: cargo/attachment groups
-  with each item's real spawn chance (group chance × weight ÷ sum of weights),
-  the same math as Attachments.
+- **Presets editor.** `cfgrandompresets.xml`: create your own and edit the
+  ready-made cargo/attachment groups, each with an item's real spawn chance
+  (group chance × weight ÷ sum of weights); then reference them by name in the
+  Attachments editor.
 - **Mod loot check.** For each installed mod, shows whether all its loot is in
   the economy: not merged / partly missing / active, with the missing type names
   — the top reason a mod's items don't spawn.
 - **Player profile.** Clicking a name anywhere opens a mini admin panel: GUID,
   aliases, first/last seen, stats (sessions, playtime, K/D), recent combat from
-  the killfeed, note + watch, and moderation — ban/unban by GUID (in `bans.txt`,
-  applied via RCon `loadBans` without a restart), kick and a private message when
-  the player is online.
+  the killfeed, note + watch, and moderation — ban permanently or for a set
+  number of days / unban by GUID (in `bans.txt`, applied via RCon `loadBans`
+  without a restart), kick and a private message when the player is online.
 - **Smart restarts.** Restart only when the server is empty (a scheduled/interval
   restart is deferred while players are online, up to a cap) and restart when the
   DayZ process memory passes a threshold — freeing the creep of long uptimes.
 - **Announcement presets.** Saved quick messages on the RCon page: click to
   broadcast to everyone, "Save" to add the current one. Stored in the config.
+- **Live chat.** A dedicated page for in-game chat from the admin log, auto-
+  refreshing, with a reply box (broadcast via RCon).
+- **Watchlist connect pings.** When a watched player joins the server, the panel
+  shows a toast.
+- **Scheduled config profiles.** Apply a saved profile at a daily time; the swap
+  runs during a restart — e.g. a "Weekend" profile on Friday evening.
+- **Disk cleanup.** On Server health, separate buttons clear server logs (keeping
+  the newest RPT), ADM logs, config backups and old wipe snapshots (the newest is
+  kept so a wipe stays undoable).
 - **Attachments: random-preset references.** The attachments editor can add
   preset-reference groups from `cfgrandompresets.xml` (the gear ⚙) with name
   autocomplete — for both attachments and cargo — alongside explicit items.
 - **Map background.** A schematic Chernarus is drawn by default (grid + coast +
   towns); your own top-down map picture (official or modded) uploads from any map
   page and shows automatically for that world. Ready-made renders are not bundled
-  (copyright) — each admin adds their own locally.
-- **Beginner's guide.** Eight chapters inside the panel: getting started,
-  mods, loot and economy, attachments, RCon, weather, maintenance, remote
-  access. Each has numbered steps, a screenshot of the section, a
-  "worth knowing" box, and a button that opens the page it describes.
+  (copyright) — each admin adds their own locally. Modded maps take a world size
+  so points and the grid line up.
+- **Beginner's guide.** Eleven chapters inside the panel: getting started,
+  mods, loot and economy, loot economy & presets, attachments, fresh-spawn
+  loadout, RCon, weather, maintenance, server health, remote access. Each has
+  numbered steps, a screenshot of the section, a "worth knowing" box, and a
+  button that opens the page it describes.
 - **Hover help.** Key fields carry an "i" marker: hover it to read what
   `nominal` actually does, how `min` differs from it, why an attachment
-  weight is not a percentage, and why a new RCon password only takes effect
-  after a restart. Keyboard-reachable too.
+  weight is not a percentage, what the time-acceleration and same-build settings
+  on the Server page do, and what the numbers on the Loot economy dashboard mean.
+  Keyboard-reachable too.
 - **Smooth weather transitions.** A transition-speed picker: Smooth
   (~30 minutes in small steps, like vanilla DayZ), Normal (~10 minutes) and
   Fast (~2 minutes). Earlier builds always wrote a two-minute ramp with

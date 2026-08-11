@@ -45,6 +45,13 @@ type Controller struct {
 	// scheduled/auto restarts with a countdown.
 	Broadcast Broadcaster
 
+	// Optional config-profile apply hook — set by web wiring. Restores a saved
+	// profile's files; called during the restart down-window (server stopped) so
+	// the config write is safe. Nil = scheduled profile swaps are unavailable.
+	ApplyProfile func(slug string) error
+	pendingMu    sync.Mutex
+	pendingProf  string // profile to apply on the next restart, set by the schedule
+
 	// Optional online-player-count hook — set by app wiring (queries RCon).
 	// Returns the number online, or -1 when it cannot be determined (server
 	// down / RCon not connected). Nil = the smart "restart only when empty"
@@ -105,6 +112,7 @@ type scheduleConfig struct {
 	scheduledRestarts  []string
 	announcements      []config.ScheduledAnnouncement
 	intervalAnnounces  []config.IntervalAnnouncement
+	scheduledProfiles  []config.ScheduledProfile
 
 	// Mod auto-update (item 2).
 	autoUpdateOnRestart    bool
@@ -160,6 +168,7 @@ func (c *Controller) SetScheduleConfig(cfg *config.Manager) {
 		scheduledRestarts:      append([]string(nil), cfg.ScheduledRestarts...),
 		announcements:          append([]config.ScheduledAnnouncement(nil), cfg.ScheduledAnnouncements...),
 		intervalAnnounces:      append([]config.IntervalAnnouncement(nil), cfg.IntervalAnnouncements...),
+		scheduledProfiles:      append([]config.ScheduledProfile(nil), cfg.ScheduledProfiles...),
 		autoUpdateOnRestart:    cfg.AutoUpdateModsOnRestart,
 		autoUpdateCheckMinutes: cfg.AutoUpdateCheckMinutes,
 		vanillaPath:            cfg.VanillaDayZPath,
@@ -428,6 +437,20 @@ func (c *Controller) retryStart() {
 // call on every restart — it no-ops without the hook, a vanilla path, or a
 // reason to update.
 func (c *Controller) beforeRestart() {
+	// Apply a scheduled config-profile swap while the server is down (the only
+	// safe time to overwrite mission/config files).
+	c.pendingMu.Lock()
+	prof := c.pendingProf
+	c.pendingProf = ""
+	c.pendingMu.Unlock()
+	if prof != "" && c.ApplyProfile != nil {
+		if err := c.ApplyProfile(prof); err != nil {
+			c.log.Printf("scheduled profile %q: %v", prof, err)
+		} else {
+			c.log.Printf("scheduled profile applied: %s", prof)
+		}
+	}
+
 	forced := c.forceModUpdate.Swap(false)
 	s := c.schedSnapshot()
 	if !forced && !s.autoUpdateOnRestart {
@@ -598,6 +621,8 @@ func (c *Controller) StartAutoRestartLoop() {
 	go c.modUpdateCheckLoop(stop)
 	// Smart restart on high memory (memory creep on long uptimes).
 	go c.memRestartLoop(stop)
+	// Scheduled config-profile swaps (applied inside a restart).
+	go c.scheduledProfileLoop(stop)
 
 	// Interval-based auto-restart (the classic .bat behavior).
 	go func() {
@@ -777,6 +802,53 @@ func (c *Controller) scheduledRestartLoop(stop <-chan struct{}) {
 			go func() {
 				if err := c.restartWithCountdown(warnMins); err != nil {
 					c.log.Printf("restart failed: %v", err)
+				}
+			}()
+			break
+		}
+	}
+}
+
+// scheduledProfileLoop fires at each configured HH:MM and swaps in a saved
+// config profile. It stages the profile (pendingProf) and triggers a restart;
+// the profile is actually restored during the down-window in beforeRestart,
+// then the countdown-announced restart brings the server back on the new config.
+// Only runs while the server is up — a swap on a stopped server is a no-op.
+func (c *Controller) scheduledProfileLoop(stop <-chan struct{}) {
+	fired := map[string]string{} // "time|profile" → last yyyy-mm-ddTHH:MM fired
+	for {
+		now := time.Now()
+		next := now.Truncate(time.Minute).Add(time.Minute)
+		select {
+		case <-stop:
+			return
+		case <-time.After(time.Until(next)):
+		}
+		if !c.IsRunning() || c.loopPaused.Load() || c.ApplyProfile == nil {
+			continue
+		}
+		now = time.Now()
+		hhmm := now.Format("15:04")
+		stamp := now.Format("2006-01-02T15:04")
+		s := c.schedSnapshot()
+		for _, sp := range s.scheduledProfiles {
+			slug := strings.TrimSpace(sp.Profile)
+			if !sp.Enabled || slug == "" || strings.TrimSpace(sp.Time) != hhmm {
+				continue
+			}
+			key := sp.Time + "|" + slug
+			if fired[key] == stamp {
+				continue
+			}
+			fired[key] = stamp
+			warnMins := s.restartWarnMinutes
+			c.pendingMu.Lock()
+			c.pendingProf = slug
+			c.pendingMu.Unlock()
+			c.log.Printf("scheduled profile %q at %s — restarting to apply", slug, sp.Time)
+			go func() {
+				if err := c.restartWithCountdown(warnMins); err != nil {
+					c.log.Printf("scheduled profile restart failed: %v", err)
 				}
 			}()
 			break

@@ -233,9 +233,46 @@
       "tips": [
         "Autentificare tot nu există. Nu expune niciodată panoul direct pe internet: pune în față Caddy sau nginx cu parolă."
       ]
+    },
+    {
+      "id": "presets",
+      "title": "Economia prăzii și preseturi",
+      "intro": "Pe lângă editarea articolelor unul câte unul, trei instrumente modelează prada în masă: un panou care arată ce generează harta, scalarea întregului fișier dintr-un clic și preseturi reutilizabile pe care le legi de articole după nume.",
+      "steps": [
+        {
+          "title": "Vezi forma prăzii tale",
+          "body": "Deschide Economia prăzii pentru a totaliza nominal și min ale fiecărui articol și a le împărți pe categorie, nivel și utilizare — cel mai rapid mod de a observa o hartă înecată într-un lucru și lipsită de altul."
+        },
+        {
+          "title": "Scalează dintr-un clic",
+          "body": "Preseturile de reglare înmulțesc toate valorile nominal și min deodată — ×2 pentru un server bogat în pradă, ×0.5 pentru hardcore. ×1 restaurează valorile de dinainte de prima scalare, deci mereu reversibil."
+        },
+        {
+          "title": "Reutilizează grupuri cu preseturi",
+          "body": "Un preset este un grup de articole cu nume și o șansă de apariție. Creează unul pe pagina Preseturi, apoi referențiază-l după nume din slotul de accesoriu al unei arme sau din cargo-ul unui recipient în loc să repeți aceeași listă."
+        }
+      ],
+      "tips": [
+        "Scalarea și preseturile scriu fișiere ale misiunii, deci serverul trebuie oprit pentru a le salva."
+      ]
     }
   ],
   "help": {
+    "server.hostname": "Numele serverului afișat în browserul DayZ. Ține-l scurt și ușor de căutat.",
+    "server.password": "Parola de intrare. Goală = server public; seteaz-o pentru a-l face privat.",
+    "server.passwordAdmin": "Parola de admin în joc (#login). Diferită de cea RCon — ține-o secretă.",
+    "server.timeAccel": "Multiplicator viteză zi (1 = timp real, 24 = o zi într-o oră). Interval ~0.1–64.",
+    "server.nightTimeAccel": "Multiplicator suplimentar de viteză noaptea peste cel de zi, ca nopțile să treacă mai repede.",
+    "server.timePersistent": "Păstrează ora lumii între reporniri (1) în loc să o reseteze la serverTime (0).",
+    "server.whitelist": "Doar jucătorii din listă pot intra. Lasă oprit dacă nu ții un fișier whitelist.",
+    "server.forceSameBuild": "Cere clienților exact aceeași versiune de joc (1). Previne crash-urile din nepotrivire de versiune.",
+    "server.storageAutoFix": "Lasă DayZ să repare un storage de persistență corupt la încărcare (1) în loc să eșueze.",
+    "server.loginQueue": "Câți jucători se conectează simultan și așteaptă la coadă — atenuează valurile de intrare.",
+    "economy.items": "Câte tipuri distincte de articole definește acest fișier.",
+    "economy.nominal": "Suma nominal a fiecărui articol — cantitatea-țintă pe care harta încearcă să o mențină generată.",
+    "economy.categories": "Câte categorii de pradă (arme, mâncare, unelte…) apar în acest fișier.",
+    "economy.min": "Suma min a fiecărui articol — pragul până la care economia reface fiecare articol.",
+    "economy.tune": "Scalare într-un clic a tuturor nominal/min din fișier. ×2 = de două ori mai multă pradă; ×1 restaurează originalele.",
     "types.nominal": "Câte exemplare din acest obiect încearcă serverul să mențină simultan în lume. 0 înseamnă că nu apare niciodată.",
     "types.min": "Când cantitatea scade la această valoare, serverul programează o reapariție. Nu trebuie să depășească nominal: DayZ o reduce și notează un avertisment.",
     "types.lifetime": "Secunde cât supraviețuiește un obiect neatins înainte să dispară. 3888000 înseamnă 45 de zile.",

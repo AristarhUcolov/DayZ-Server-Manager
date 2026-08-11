@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -100,34 +101,32 @@ func (h *handlers) walkCleanup(fn func(path string, info fs.FileInfo)) {
 	}
 }
 
+// isAdmArtifact reports whether a filename is a DayZ admin log (.ADM). Split
+// out so the cleanup can offer "ADM logs" as its own target — an admin often
+// wants to clear chat/kill history without touching RPT crash diagnostics.
+func isAdmArtifact(name string) bool {
+	return strings.EqualFold(filepath.Ext(name), ".adm")
+}
+
 // cleanupSelect computes which files a target would remove and their total
-// size. For logs it keeps the single newest .RPT and .ADM so current
-// diagnostics and the admin log survive. dryRun stops it deleting.
+// size. "logs" keeps the newest .RPT (so start-failure diagnosis survives) and
+// excludes .ADM; "adm" keeps the newest .ADM. dryRun stops it deleting.
 func (h *handlers) cleanupSelect(target string, dryRun bool) (count int, freed int64) {
 	keep := map[string]bool{}
-	if target == "logs" {
-		var newestRPT, newestADM string
-		var tRPT, tADM time.Time
+	if target == "logs" || target == "adm" {
+		var newest string
+		var newestT time.Time
+		wantExt := ".rpt"
+		if target == "adm" {
+			wantExt = ".adm"
+		}
 		h.walkCleanup(func(p string, info fs.FileInfo) {
-			if !isServerLogArtifact(filepath.Base(p)) {
-				return
-			}
-			switch strings.ToLower(filepath.Ext(p)) {
-			case ".rpt":
-				if info.ModTime().After(tRPT) {
-					tRPT, newestRPT = info.ModTime(), p
-				}
-			case ".adm":
-				if info.ModTime().After(tADM) {
-					tADM, newestADM = info.ModTime(), p
-				}
+			if strings.EqualFold(filepath.Ext(p), wantExt) && info.ModTime().After(newestT) {
+				newestT, newest = info.ModTime(), p
 			}
 		})
-		if newestRPT != "" {
-			keep[newestRPT] = true
-		}
-		if newestADM != "" {
-			keep[newestADM] = true
+		if newest != "" {
+			keep[newest] = true
 		}
 	}
 	h.walkCleanup(func(p string, info fs.FileInfo) {
@@ -135,7 +134,9 @@ func (h *handlers) cleanupSelect(target string, dryRun bool) (count int, freed i
 		match := false
 		switch target {
 		case "logs":
-			match = isServerLogArtifact(base)
+			match = isServerLogArtifact(base) && !isAdmArtifact(base)
+		case "adm":
+			match = isAdmArtifact(base)
 		case "backups":
 			match = backupStampRe.MatchString(base)
 		}
@@ -155,13 +156,68 @@ func (h *handlers) cleanupSelect(target string, dryRun bool) (count int, freed i
 	return count, freed
 }
 
-// cleanupScan reports the count and size of removable logs and backups.
+// wipesCleanup reports or removes old wipe snapshots under .dayz-manager/wipes/.
+// The newest snapshot is always kept so the most recent wipe stays undoable;
+// older ones are stale (the server long since rebuilt that state) and just eat
+// disk. Counts whole snapshots, not files.
+func (h *handlers) wipesCleanup(dryRun bool) (count int, freed int64) {
+	dir := filepath.Join(h.app.ManagerDir, "wipes")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, 0
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(names))) // timestamp names → newest first
+	for i, name := range names {
+		if i == 0 {
+			continue // keep the newest for undo
+		}
+		full := filepath.Join(dir, name)
+		sz := dirSize(full)
+		if dryRun {
+			count++
+			freed += sz
+			continue
+		}
+		if os.RemoveAll(full) == nil {
+			count++
+			freed += sz
+		}
+	}
+	return count, freed
+}
+
+// dirSize sums the size of every file under root (best-effort).
+func dirSize(root string) int64 {
+	var total int64
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			if info, e := d.Info(); e == nil {
+				total += info.Size()
+			}
+		}
+		return nil
+	})
+	return total
+}
+
+// cleanupScan reports the count and size of removable logs, ADM logs, backups
+// and old wipe snapshots.
 func (h *handlers) cleanupScan(w http.ResponseWriter, r *http.Request) {
 	lc, lb := h.cleanupSelect("logs", true)
+	ac, ab := h.cleanupSelect("adm", true)
 	bc, bb := h.cleanupSelect("backups", true)
+	wc, wb := h.wipesCleanup(true)
 	writeJSON(w, map[string]interface{}{
 		"logs":    map[string]interface{}{"count": lc, "bytes": lb},
+		"adm":     map[string]interface{}{"count": ac, "bytes": ab},
 		"backups": map[string]interface{}{"count": bc, "bytes": bb},
+		"wipes":   map[string]interface{}{"count": wc, "bytes": wb},
 	})
 }
 
@@ -175,11 +231,19 @@ func (h *handlers) cleanupRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if req.Target != "logs" && req.Target != "backups" {
-		http.Error(w, "target must be logs or backups", http.StatusBadRequest)
+	switch req.Target {
+	case "logs", "adm", "backups", "wipes":
+	default:
+		http.Error(w, "target must be logs, adm, backups or wipes", http.StatusBadRequest)
 		return
 	}
-	count, freed := h.cleanupSelect(req.Target, false)
+	var count int
+	var freed int64
+	if req.Target == "wipes" {
+		count, freed = h.wipesCleanup(false)
+	} else {
+		count, freed = h.cleanupSelect(req.Target, false)
+	}
 	h.app.Log.Printf("cleanup %s: removed %d file(s), freed %d bytes", req.Target, count, freed)
 	writeJSON(w, map[string]interface{}{"deleted": count, "freed": freed})
 }
