@@ -27,6 +27,23 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "0.26.0", Date: "2026-08-11",
+		EN: []string{
+			"Player profile — click any name to open an admin panel: identity and stats, recent combat, note & watch, and ban / unban / kick / message.",
+			"Smart restarts — restart only when the server is empty (defer while players are online), and restart when the DayZ process memory passes a threshold.",
+			"Announcement presets — save quick broadcast messages and send them to everyone in one click from the RCon page.",
+			"Attachments now support random-preset references (the gear ⚙): add a preset from cfgrandompresets.xml, with name autocomplete, alongside explicit items.",
+			"Maps got a background: a built-in schematic Chernarus is drawn by default, and you can upload your own top-down map picture (official or modded) from any map page — it then shows automatically for that world.",
+		},
+		RU: []string{
+			"Профиль игрока — клик по нику открывает админ-панель: идентификация и статистика, недавние бои, заметка и watch, бан / разбан / кик / сообщение.",
+			"Умные рестарты — рестарт только когда сервер пуст (отложить, пока есть игроки) и рестарт при превышении памяти процессом DayZ.",
+			"Пресеты анонсов — сохраняйте быстрые сообщения и отправляйте их всем в один клик со страницы RCon.",
+			"В Обвесах теперь есть ссылки на рандом-пресеты (шестерёнка ⚙): добавляйте пресет из cfgrandompresets.xml с автоподсказкой имени, рядом с явными предметами.",
+			"У карты появился фон: по умолчанию рисуется схематичная Chernarus, а своё топ-даун изображение карты (официальное или модовское) можно загрузить с любой страницы карты — дальше оно показывается автоматически для этого мира.",
+		},
+	},
+	{
 		Version: "0.25.0", Date: "2026-08-11",
 		EN: []string{
 			"New map pages — a schematic map (Chernarus, Livonia, Sakhal) with a 1 km grid and landmarks.",

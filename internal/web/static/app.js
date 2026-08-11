@@ -2956,6 +2956,9 @@ Views.rcon = async (root) => {
   const sayInp = h('input', { type: 'text', placeholder: t('rcon.broadcast.ph') });
   const cmdInp = h('input', { type: 'text', placeholder: t('rcon.rawCommand.ph') });
   const cmdOut = h('pre', { class: 'log-pane', style: { height: '180px' } });
+  // Saved quick broadcast messages ("announcement presets") — one-click to send.
+  const presetsHost = h('div', { class: 'preset-list' });
+  const presets = Array.isArray(State.config.broadcastPresets) ? State.config.broadcastPresets.slice() : [];
 
   let timer = 0;
   // Never arm the poll if this view has been superseded (navigated away) — the
@@ -3129,6 +3132,11 @@ Views.rcon = async (root) => {
       h('div', { class: 'row' }, [
         sayInp,
         h('button', { class: 'primary', i18n: 'rcon.say', onclick: doSay }),
+        h('button', { i18n: 'rcon.presets.save', title: t('rcon.presets.saveHint'), onclick: addPreset }),
+      ]),
+      h('div', { style: { marginTop: '12px' } }, [
+        h('h4', { i18n: 'rcon.presets.title' }),
+        presetsHost,
       ]),
     ]),
     h('div', { style: { marginTop: '22px' } }, [
@@ -3146,6 +3154,38 @@ Views.rcon = async (root) => {
     try { await api.post('/api/rcon/say', { message: sayInp.value }); sayInp.value = ''; toast(t('msg.sent'), 'ok'); }
     catch (e) { handleErr(e); }
   }
+
+  // Announcement presets: saved messages persisted in the manager config so
+  // they survive restarts. Sending one is a normal RCon broadcast.
+  function renderPresets() {
+    presetsHost.innerHTML = '';
+    if (!presets.length) { presetsHost.append(h('p', { class: 'hint', i18n: 'rcon.presets.none' })); applyI18n(); return; }
+    for (const [i, msg] of presets.entries()) {
+      presetsHost.append(h('div', { class: 'preset-msg' }, [
+        h('button', { class: 'secondary preset-send', text: msg, title: t('rcon.presets.sendHint'), onclick: () => sendPreset(msg) }),
+        h('button', { class: 'icon-x', text: '×', title: t('action.delete'), onclick: () => removePreset(i) }),
+      ]));
+    }
+  }
+  async function savePresets() {
+    try { State.config = await api.post('/api/config', { broadcastPresets: presets }); }
+    catch (e) { handleErr(e); }
+  }
+  async function sendPreset(msg) {
+    try { await api.post('/api/rcon/say', { message: msg }); toast(t('msg.sent'), 'ok'); }
+    catch (e) { handleErr(e); }
+  }
+  async function addPreset() {
+    const v = sayInp.value.trim();
+    if (!v) { toast(t('rcon.presets.needText'), 'warn'); return; }
+    if (!presets.includes(v)) { presets.push(v); await savePresets(); renderPresets(); toast(t('msg.saved'), 'ok'); }
+  }
+  async function removePreset(i) {
+    presets.splice(i, 1);
+    await savePresets();
+    renderPresets();
+  }
+  renderPresets();
   // Raw console keeps an echoed transcript + ArrowUp/Down history, like a
   // real terminal — output no longer overwrites the previous command's.
   const cmdHist = [];
@@ -4453,6 +4493,10 @@ Views.settings = async (root) => {
     autoUpdateCheckMinutes: h('input', { type: 'number', value: c.autoUpdateCheckMinutes ?? 0 }),
     autoUpdateModsOnRestart: h('input', { type: 'checkbox', class: 'switch' }),
     restartOnCrash: h('input', { type: 'checkbox', class: 'switch' }),
+    restartOnlyWhenEmpty: h('input', { type: 'checkbox', class: 'switch' }),
+    restartEmptyMaxWaitMinutes: h('input', { type: 'number', min: '0', value: c.restartEmptyMaxWaitMinutes ?? 60 }),
+    restartOnHighMem: h('input', { type: 'checkbox', class: 'switch' }),
+    restartMemThresholdMB: h('input', { type: 'number', min: '0', value: c.restartMemThresholdMB ?? 8000 }),
     backupIntervalHours: h('input', { type: 'number', min: '0', value: c.backupIntervalHours ?? 0 }),
     backupKeep: h('input', { type: 'number', min: '1', value: c.backupKeep || 10 }),
     discordEnabled: h('input', { type: 'checkbox', class: 'switch' }),
@@ -4465,7 +4509,7 @@ Views.settings = async (root) => {
   };
   fillLangSelect(F.language, c.language, false);
   F.exposure.value = c.exposure || 'local';
-  for (const k of ['autoRestartEnabled','autoUpdateModsOnRestart','restartOnCrash','discordEnabled','doLogs','adminLog','netLog','freezeCheck','filePatching']) {
+  for (const k of ['autoRestartEnabled','autoUpdateModsOnRestart','restartOnCrash','restartOnlyWhenEmpty','restartOnHighMem','discordEnabled','doLogs','adminLog','netLog','freezeCheck','filePatching']) {
     F[k].checked = !!c[k];
   }
 
@@ -4584,6 +4628,18 @@ Views.settings = async (root) => {
       h('p', { class: 'hint', i18n: 'settings.autorestart.hint' }),
       h('label', {}, [F.restartOnCrash, h('span', { i18n: 'settings.watchdog' }), help('settings.watchdog')]),
       h('small', { class: 'hint', i18n: 'settings.watchdog.hint' }),
+
+      h('h4', { i18n: 'settings.smartrestart.title', style: { marginTop: '16px' } }),
+      h('label', {}, [F.restartOnlyWhenEmpty, h('span', { i18n: 'settings.smartrestart.empty' })]),
+      h('small', { class: 'hint', i18n: 'settings.smartrestart.empty.hint' }),
+      h('div', { style: { marginTop: '8px' } }, [
+        h('label', { i18n: 'settings.smartrestart.maxwait' }), F.restartEmptyMaxWaitMinutes,
+      ]),
+      h('label', { style: { marginTop: '12px' } }, [F.restartOnHighMem, h('span', { i18n: 'settings.smartrestart.mem' })]),
+      h('small', { class: 'hint', i18n: 'settings.smartrestart.mem.hint' }),
+      h('div', { style: { marginTop: '8px' } }, [
+        h('label', { i18n: 'settings.smartrestart.memthresh' }), F.restartMemThresholdMB,
+      ]),
     ]),
 
     section('settings.autoupdate.title', [
@@ -5305,6 +5361,126 @@ Views.missiondb = async (root) => {
 
 // --------------------------------------------------------------------- players
 
+// playerNameLink is a clickable player name that opens their profile panel.
+function playerNameLink(p, opts = {}) {
+  return h('span', Object.assign({ class: 'player-link', text: p.name || '—',
+    onclick: () => openPlayerProfile(p.key) }, opts));
+}
+
+// openPlayerProfile shows a per-player admin panel: identity, stats, moderation
+// actions (ban/unban/kick/message + note & watch) and recent combat.
+async function openPlayerProfile(key) {
+  let d;
+  try { d = await api.get('/api/players/profile?key=' + encodeURIComponent(key)); }
+  catch (e) { handleErr(e); return; }
+  const p = d.player || {};
+  const m = openModal({ title: p.name || '—', wide: true });
+  const reopen = () => { m.close(); openPlayerProfile(key); };
+
+  const badges = h('div', { class: 'profile-badges' }, [
+    p.online ? h('span', { class: 'badge ok', i18n: 'players.onlineBadge' }) : null,
+    p.watch ? h('span', { class: 'badge warn', text: '★ ' + t('players.watched') }) : null,
+    d.banned ? h('span', { class: 'badge err', i18n: 'profile.banned' }) : null,
+  ]);
+  const identity = h('div', { class: 'profile-id' }, [
+    h('div', {}, [h('span', { class: 'hint', i18n: 'profile.guid' }), h('span', { class: 'mono', text: ' ' + (p.id || '—') })]),
+    (p.aliases && p.aliases.length) ? h('div', { class: 'hint', text: t('players.aliases') + ': ' + p.aliases.join(', ') }) : null,
+    h('div', { class: 'hint', text: fmtWhen(p.firstSeen) + ' → ' + fmtWhen(p.lastSeen) }),
+  ]);
+
+  const kd = p.deaths ? ((p.kills || 0) / p.deaths) : (p.kills || 0);
+  const stat = (label, val) => h('div', { class: 'profile-stat' }, [
+    h('div', { class: 'ps-num', text: val }), h('div', { class: 'hint', i18n: label })]);
+  const stats = h('div', { class: 'profile-stats' }, [
+    stat('col.sessions', String(p.sessions || 0)),
+    stat('col.playtime', fmtMinutes(p.playtimeMinutes || 0)),
+    stat('col.kills', String(p.kills || 0)),
+    stat('col.deaths', String(p.deaths || 0)),
+    stat('col.kd', kd.toFixed(2)),
+  ]);
+
+  // Note + watch.
+  const ta = h('textarea', { rows: '2', style: { width: '100%', height: '58px' }, placeholder: t('players.note.placeholder') });
+  ta.value = p.note || '';
+  const watchCb = h('input', { type: 'checkbox' });
+  watchCb.checked = !!p.watch;
+  async function saveNote(btn) {
+    await withBusy(btn, async () => {
+      try { await api.post('/api/players/note', { key: p.key, note: ta.value, watch: watchCb.checked }); toast(t('msg.saved'), 'ok'); reopen(); }
+      catch (e) { handleErr(e); }
+    });
+  }
+  const noteRow = h('div', {}, [
+    ta,
+    h('div', { class: 'actions' }, [
+      h('label', { class: 'inline-check' }, [watchCb, h('span', { i18n: 'players.watch.flag' })]),
+      h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => saveNote(e.currentTarget) }),
+    ]),
+  ]);
+
+  // Moderation actions.
+  const actions = h('div', { class: 'actions profile-mod' });
+  async function doBan(btn) {
+    if (!(await confirmModal(t('profile.banConfirm').replace('{name}', p.name || '—'), { danger: true, okText: t('profile.ban') }))) return;
+    await withBusy(btn, async () => { try { await api.post('/api/players/ban', { guid: p.id, reason: '' }); toast(t('profile.banned.msg'), 'ok'); reopen(); } catch (e) { handleErr(e); } });
+  }
+  async function doUnban(btn) {
+    if (!(await confirmModal(t('profile.unbanConfirm').replace('{name}', p.name || '—')))) return;
+    await withBusy(btn, async () => { try { await api.post('/api/players/unban', { guid: p.id }); toast(t('profile.unbanned.msg'), 'ok'); reopen(); } catch (e) { handleErr(e); } });
+  }
+  async function doKick(btn) {
+    if (!(await confirmModal(t('profile.kickConfirm').replace('{name}', p.name || '—')))) return;
+    await withBusy(btn, async () => { try { await api.post('/api/rcon/kick', { playerId: d.onlineId, reason: '' }); toast(t('msg.saved'), 'ok'); reopen(); } catch (e) { handleErr(e); } });
+  }
+  async function doMsg(btn) {
+    const txt = await promptModal(t('profile.messagePrompt').replace('{name}', p.name || '—'), { okText: t('profile.message') });
+    if (!txt) return;
+    await withBusy(btn, async () => { try { await api.post('/api/rcon/say', { playerId: d.onlineId, message: txt }); toast(t('msg.saved'), 'ok'); } catch (e) { handleErr(e); } });
+  }
+  if (d.banned) {
+    actions.append(h('button', { class: 'secondary', i18n: 'profile.unban', onclick: (e) => doUnban(e.currentTarget) }));
+  } else {
+    const b = h('button', { class: 'danger', i18n: 'profile.ban', onclick: (e) => doBan(e.currentTarget) });
+    if (!p.id) { b.disabled = true; b.title = t('profile.noGuid'); }
+    actions.append(b);
+  }
+  if (d.onlineId >= 0) {
+    actions.append(
+      h('button', { class: 'secondary', i18n: 'profile.kick', onclick: (e) => doKick(e.currentTarget) }),
+      h('button', { class: 'secondary', i18n: 'profile.message', onclick: (e) => doMsg(e.currentTarget) }),
+    );
+  }
+
+  // Recent combat.
+  const activity = h('div', { class: 'profile-activity' });
+  if (!(d.events && d.events.length)) {
+    activity.append(h('p', { class: 'hint', i18n: 'profile.noActivity' }));
+  } else {
+    for (const k of d.events) {
+      const kind = k.kind || (k.suicide ? 'suicide' : (k.killer ? 'pvp' : 'env'));
+      const by = kind === 'pvp' ? k.killer : (kind === 'env' ? k.source : '');
+      const pieces = [
+        h('span', { class: 'adm-time', text: k.time || '' }),
+        h('span', { class: 'adm-type adm-kill', text: t('kill.kind.' + kind) }),
+      ];
+      if (by) { pieces.push(h('span', { class: 'adm-meta', text: by }), h('span', { class: 'adm-arrow', text: '→' })); }
+      pieces.push(h('span', { class: 'adm-player', text: k.victim }));
+      const meta = [];
+      if (k.weapon) meta.push(k.weapon);
+      if (k.distance) meta.push(k.distance + 'm');
+      if (meta.length) pieces.push(h('span', { class: 'adm-meta', text: '(' + meta.join(', ') + ')' }));
+      activity.append(h('div', { class: 'adm-row' }, pieces));
+    }
+  }
+
+  m.body.append(
+    badges, identity, stats,
+    h('h4', { i18n: 'profile.mod' }), noteRow, actions,
+    h('h4', { i18n: 'profile.activity' }), activity,
+  );
+  applyI18n();
+}
+
 Views.players = async (root) => {
   const myNav = _navSeq;
   root.append(pageHeader('nav.players', 'players.subtitle'));
@@ -5394,7 +5570,7 @@ Views.players = async (root) => {
   function playerRow(p) {
     const nameCell = h('td', {}, [
       h('div', { style: { fontWeight: '600', display: 'flex', gap: '8px', alignItems: 'center' } }, [
-        h('span', { text: p.name || '—' }),
+        playerNameLink(p),
         p.online ? h('span', { class: 'badge ok', i18n: 'players.onlineBadge' }) : null,
       ]),
       p.aliases && p.aliases.length
@@ -5590,7 +5766,7 @@ Views.leaderboard = async (root) => {
           ? h('span', { class: 'lb-medal', text: medals[i] })
           : h('span', { text: String(i + 1) })),
         h('td', {}, [
-          h('span', { style: { fontWeight: '600' }, text: p.name || '—' }),
+          playerNameLink(p, { style: { fontWeight: '600' } }),
           p.watch ? h('span', { class: 'badge mute', text: '★', title: t('players.watched'), style: { marginLeft: '6px' } }) : null,
         ]),
         ...cols.map(c => h('td', { class: 'num' + (c.key === cur ? ' lb-score' : ''), text: c.val(p) })),
@@ -5619,6 +5795,26 @@ const MAP_LANDMARKS = {
   ],
 };
 
+// MAP_SHAPES holds a license-safe, hand-drawn schematic landmass for a world
+// (original artwork, not a copy of any commercial map) in world metres [x, z].
+// Only Chernarus is traced; other worlds fall back to the bare grid until their
+// shapes are drawn or the admin uploads a real map image. buildGameMap draws
+// water under the land polygon so the coast reads at a glance.
+const MAP_SHAPES = {
+  chernarus: {
+    // Perimeter clockwise from the NW corner; the sea fills the SE/S wedge.
+    land: [
+      [0, 15360], [15360, 15360], [15360, 7200], [14300, 6200], [13600, 4300],
+      [12200, 2700], [10000, 2000], [7000, 1700], [4000, 1700], [2000, 2100],
+      [800, 2900], [0, 3800],
+    ],
+    islands: [
+      // Skalisty Island, off the SE coast.
+      [[12700, 4750], [13350, 4600], [13450, 4050], [12800, 3980], [12600, 4350]],
+    ],
+  },
+};
+
 const SVGNS = 'http://www.w3.org/2000/svg';
 function svgEl(tag, attrs, parent) {
   const el = document.createElementNS(SVGNS, tag);
@@ -5637,8 +5833,26 @@ function buildGameMap(map) {
   const w2s = (x, z) => [x / size * S, S - z / size * S];        // flip Z (north up)
   const s2w = (sx, sy) => [sx / S * size, (S - sy) / S * size];  // inverse
 
-  const svg = svgEl('svg', { viewBox: `0 0 ${S} ${S}`, class: 'game-map', preserveAspectRatio: 'xMidYMid meet' });
+  const hasImage = !!(map && map.hasImage);
+  const svg = svgEl('svg', { viewBox: `0 0 ${S} ${S}`, class: 'game-map' + (hasImage ? ' has-img' : ''), preserveAspectRatio: 'xMidYMid meet' });
   svgEl('rect', { x: 0, y: 0, width: S, height: S, class: 'gm-bg' }, svg);
+
+  // Admin-supplied background image, stretched to the world square so positions
+  // line up. The version param busts the cache after a re-upload.
+  if (hasImage) {
+    const img = svgEl('image', { x: 0, y: 0, width: S, height: S, preserveAspectRatio: 'none' }, svg);
+    img.setAttribute('href', '/api/map/image?map=' + encodeURIComponent(map.key) + (map.imageVer ? '&v=' + map.imageVer : ''));
+  }
+
+  // Built-in schematic landmass (when there's no uploaded image).
+  const shape = (!hasImage && map) ? MAP_SHAPES[map.key] : null;
+  if (shape) {
+    svg.classList.add('gm-has-shape');
+    svgEl('rect', { x: 0, y: 0, width: S, height: S, class: 'gm-water' }, svg);
+    const toPath = (pts) => pts.map((p, i) => (i ? 'L' : 'M') + w2s(p[0], p[1]).join(' ')).join(' ') + ' Z';
+    svgEl('path', { d: toPath(shape.land), class: 'gm-land' }, svg);
+    for (const isl of (shape.islands || [])) svgEl('path', { d: toPath(isl), class: 'gm-land' }, svg);
+  }
 
   const grid = svgEl('g', { class: 'gm-grid-g' }, svg);
   for (let m = 0; m <= size + 1; m += 1000) {
@@ -5652,8 +5866,9 @@ function buildGameMap(map) {
     }
   }
 
+  // Landmark labels only when there's no image — a real map carries its own.
   const marks = svgEl('g', { class: 'gm-marks' }, svg);
-  for (const [name, x, z] of (MAP_LANDMARKS[map && map.key] || [])) {
+  for (const [name, x, z] of (hasImage ? [] : (MAP_LANDMARKS[map && map.key] || []))) {
     const [sx, sy] = w2s(x, z);
     svgEl('circle', { cx: sx, cy: sy, r: 2.2, class: 'gm-town' }, marks);
     const label = svgEl('text', { x: sx + 4, y: sy + 3, class: 'gm-town-label' }, marks);
@@ -5676,6 +5891,41 @@ function mapCoordReadout(gm, readoutEl) {
   gm.svg.addEventListener('mouseleave', () => { readoutEl.textContent = ''; });
 }
 
+// mapImageControls returns an upload/remove control for a map's background
+// image. onDone re-renders the host view so the new (or removed) image shows.
+function mapImageControls(map, onDone) {
+  const key = (map && map.key) || 'unknown';
+  const fileInput = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', style: { display: 'none' } });
+  fileInput.addEventListener('change', async () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('image', f);
+    try {
+      const r = await fetch('/api/map/image?map=' + encodeURIComponent(key), { method: 'POST', body: fd });
+      if (!r.ok) throw new Error(await r.text());
+      toast(t('map.image.uploaded'), 'ok');
+      onDone && onDone();
+    } catch (e) { handleErr(e); }
+    fileInput.value = '';
+  });
+  const wrap = h('div', { class: 'map-img-ctl' }, [
+    h('button', { class: 'secondary', i18n: 'map.image.upload', title: t('map.image.hint'),
+      onclick: () => fileInput.click() }),
+    fileInput,
+  ]);
+  if (map && map.hasImage) {
+    wrap.append(h('button', { class: 'secondary', i18n: 'map.image.remove', onclick: async () => {
+      try {
+        await api.post('/api/map/image/delete?map=' + encodeURIComponent(key), {});
+        toast(t('map.image.removed'), 'ok');
+        onDone && onDone();
+      } catch (e) { handleErr(e); }
+    } }));
+  }
+  return wrap;
+}
+
 Views.heatmap = async (root) => {
   const myNav = _navSeq;
   root.append(pageHeader('nav.heatmap', 'heatmap.subtitle'));
@@ -5692,12 +5942,8 @@ Views.heatmap = async (root) => {
   if (d.map && d.map.key === 'unknown') {
     card.append(h('p', { class: 'hint', i18n: 'map.genericGrid' }));
   }
-  if (!points.length) {
-    card.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'heatmap.none' })));
-    return;
-  }
-
-  // Filters + legend.
+  // Filters + legend + map-image controls. The map shows even with no deaths
+  // yet, so the background image can be set on a fresh server.
   const show = { pvp: true, env: true, suicide: true };
   const legend = h('div', { class: 'map-legend' });
   const readout = h('div', { class: 'map-readout' });
@@ -5715,12 +5961,19 @@ Views.heatmap = async (root) => {
       h('span', { i18n: key }), h('span', { class: 'hint', text: '(' + (counts[k] || 0) + ')' }),
     ]));
   }
-  card.append(h('div', { class: 'map-toolbar' }, [legend, h('div', { class: 'grow' }), readout]));
+  card.append(h('div', { class: 'map-toolbar' }, [
+    legend, mapImageControls(d.map, () => navigate('heatmap')),
+    h('div', { class: 'grow' }), readout,
+  ]));
 
   const gm = buildGameMap(d.map);
   mapCoordReadout(gm, readout);
   card.append(h('div', { class: 'map-wrap' }, gm.svg));
-  card.append(h('p', { class: 'hint', text: (d.map ? d.map.name + ' · ' : '') + t('heatmap.points').replace('{n}', d.total || 0) }));
+  if (!points.length) {
+    card.append(h('p', { class: 'hint', i18n: 'heatmap.none' }));
+  } else {
+    card.append(h('p', { class: 'hint', text: (d.map ? d.map.name + ' · ' : '') + t('heatmap.points').replace('{n}', d.total || 0) }));
+  }
 
   function draw() {
     gm.layer.innerHTML = '';
@@ -5797,6 +6050,7 @@ Views.eventmap = async (root) => {
   const card = h('div', { class: 'card' }, [
     h('div', { class: 'map-toolbar' }, [
       h('label', { i18n: 'eventmap.event' }), sel,
+      mapImageControls(d.map, () => { if (dirty) toast(t('map.image.savedReload'), 'ok'); else navigate('eventmap'); }),
       h('div', { class: 'grow' }), countLbl, readout,
     ]),
     h('p', { class: 'hint', i18n: 'eventmap.help' }),
@@ -5904,9 +6158,10 @@ Views.livemap = async (root) => {
   const myNav = _navSeq;
   root.append(pageHeader('nav.livemap', 'livemap.subtitle'));
   const status = h('p', { class: 'hint' });
+  const ctlHost = h('div', { class: 'map-toolbar' });
   const mapHost = h('div');
   root.append(h('div', { class: 'card' }, [
-    status, mapHost, h('p', { class: 'hint', i18n: 'livemap.note' }),
+    status, ctlHost, mapHost, h('p', { class: 'hint', i18n: 'livemap.note' }),
   ]));
 
   let gm = null, timer = null;
@@ -5930,6 +6185,8 @@ Views.livemap = async (root) => {
       mapHost.innerHTML = '';
       gm = buildGameMap(d.map);
       mapHost.append(h('div', { class: 'map-wrap' }, gm.svg));
+      ctlHost.innerHTML = '';
+      ctlHost.append(mapImageControls(d.map, () => { gm = null; refresh(); }));
     }
     const players = d.players || [];
     status.textContent = t('livemap.count')
@@ -6618,6 +6875,15 @@ Views.attachments = async (root) => {
   catch (e) { handleErr(e); return; }
   try { presets = (await api.get('/api/spawnable/presets')).presets || []; } catch {}
   try { classNames = (await api.get('/api/spawnable/classnames')).names || []; } catch {}
+  // Random-preset names (cfgrandompresets.xml) for the ⚙ preset-reference groups,
+  // split by kind so the cargo/attachments datalists offer the right ones.
+  const rpNames = { cargo: [], attachments: [] };
+  try {
+    const rp = await api.get('/api/randompresets');
+    for (const p of (rp.presets || [])) {
+      (p.kind === 'cargo' ? rpNames.cargo : rpNames.attachments).push(p.name);
+    }
+  } catch {}
   if (myNav !== _navSeq) return; // types.xml parsing is not instant
 
   // A shared <datalist> lets every class-name input autocomplete against the
@@ -6626,6 +6892,11 @@ Views.attachments = async (root) => {
   const dl = h('datalist', { id: 'dz-classnames' });
   for (const n of classNames.slice(0, 5000)) dl.append(h('option', { value: n }));
   root.append(dl);
+  const dlCargoP = h('datalist', { id: 'dz-cargopresets' });
+  for (const n of rpNames.cargo) dlCargoP.append(h('option', { value: n }));
+  const dlAttachP = h('datalist', { id: 'dz-attachpresets' });
+  for (const n of rpNames.attachments) dlAttachP.append(h('option', { value: n }));
+  root.append(dlCargoP, dlAttachP);
 
   const card = h('div', { class: 'card' }, [
     h('h2', { i18n: 'nav.attach' }),
@@ -6784,12 +7055,45 @@ Views.attachments = async (root) => {
 
     const groupsHost = h('div');
 
+    // Renders a ⚙ preset-reference group: a name (autocompleted from
+    // cfgrandompresets.xml) plus the chance the whole preset spawns.
+    function renderPresetGroup(host, list, g, gi, kindKey) {
+      const chanceInp = h('input', { type: 'text', value: g.chance ?? '1.00',
+        class: 'attach-num', title: t('attach.slotChance') });
+      chanceInp.oninput = () => { g.chance = chanceInp.value.trim(); };
+      const nameInp = h('input', { type: 'text', value: g.preset || '',
+        list: kindKey === 'cargo' ? 'dz-cargopresets' : 'dz-attachpresets',
+        placeholder: t('attach.preset.ph') });
+      nameInp.oninput = () => { g.preset = nameInp.value.trim(); };
+      host.append(h('div', { class: 'attach-group attach-preset' }, [
+        h('div', { class: 'attach-head' }, [
+          h('span', { class: 'attach-slot-no', text: '#' + (gi + 1) }),
+          h('span', { class: 'attach-gear', text: '⚙' }),
+          h('span', { class: 'attach-head-label', i18n: 'attach.preset' }),
+          h('span', { class: 'grow' }),
+          h('button', { class: 'icon-x', text: '×', title: t('attach.removeSlot'),
+            onclick: () => { list.splice(gi, 1); renderAll(); } }),
+        ]),
+        h('div', { class: 'attach-body' }, [
+          h('div', { class: 'attach-preset-row' }, [
+            nameInp,
+            h('span', { class: 'attach-head-label', i18n: 'attach.slotChance' }),
+            chanceInp,
+          ]),
+          h('p', { class: 'hint', i18n: 'attach.preset.hint' }),
+        ]),
+      ]));
+    }
+
     // Draws one list of slots — <attachments> or <cargo>. They share the exact
     // same shape in the file, so they share the renderer; only the label and
     // the array differ.
     function renderSlots(host, list, kindKey) {
       host.innerHTML = '';
       list.forEach((g, gi) => {
+        // A ⚙ group references a named preset in cfgrandompresets.xml and has no
+        // explicit items — render it as a preset picker instead of an item list.
+        if (typeof g.preset === 'string') { renderPresetGroup(host, list, g, gi, kindKey); return; }
         const items = g.items || (g.items = []);
 
         const chanceInp = h('input', { type: 'text', value: g.chance ?? '1.00',
@@ -6907,6 +7211,10 @@ Views.attachments = async (root) => {
       list.push({ chance: '1.00', items: [{ name: '', chance: '1.00' }] });
       renderAll(); applyI18n();
     };
+    const addPresetGroup = (list) => {
+      list.push({ chance: '1.00', preset: '' });
+      renderAll(); applyI18n();
+    };
 
     m.body.append(
       h('div', {}, [withHelp(h('label', { i18n: 'attach.weapon' }), 'attach.class'), nameInp]),
@@ -6916,7 +7224,10 @@ Views.attachments = async (root) => {
         withHelp(h('h3', { i18n: 'attach.section.attachments' }), 'attach.slotChance'),
         h('p', { class: 'hint', i18n: 'attach.help' }),
         groupsHost,
-        h('button', { class: 'attach-add', i18n: 'attach.addSlot', onclick: () => addSlot(model.attachments) }),
+        h('div', { class: 'attach-add-row' }, [
+          h('button', { class: 'attach-add', i18n: 'attach.addSlot', onclick: () => addSlot(model.attachments) }),
+          h('button', { class: 'attach-add', i18n: 'attach.addPreset', onclick: () => addPresetGroup(model.attachments) }),
+        ]),
       ]),
 
       // --- cargo: what is INSIDE it. Half of cfgspawnabletypes.xml is this,
@@ -6925,7 +7236,10 @@ Views.attachments = async (root) => {
         withHelp(h('h3', { i18n: 'attach.section.cargo' }), 'attach.cargo'),
         h('p', { class: 'hint', i18n: 'attach.cargo.help' }),
         cargoHost,
-        h('button', { class: 'attach-add', i18n: 'attach.addCargo', onclick: () => addSlot(model.cargo) }),
+        h('div', { class: 'attach-add-row' }, [
+          h('button', { class: 'attach-add', i18n: 'attach.addCargo', onclick: () => addSlot(model.cargo) }),
+          h('button', { class: 'attach-add', i18n: 'attach.addPreset', onclick: () => addPresetGroup(model.cargo) }),
+        ]),
       ]),
 
       // --- properties that apply to the whole entry ---
@@ -6965,14 +7279,17 @@ Views.attachments = async (root) => {
 
     async function doSave() {
       if (!model.name) { toast(t('attach.needName'), 'error'); return; }
+      // Drop preset-reference groups whose name was left blank — an empty
+      // preset="" is meaningless and would clutter the file.
+      const cleanGroups = (list) => list.filter(g => (typeof g.preset === 'string') ? g.preset.trim() !== '' : true);
       const payload = {
         name: model.name,
         hoarder: model.hoarder,
         damageMin: model.damageMin,
         damageMax: model.damageMax,
         tags: model.tags,
-        attachments: model.attachments,
-        cargo: model.cargo,
+        attachments: cleanGroups(model.attachments),
+        cargo: cleanGroups(model.cargo),
       };
       try {
         await api.post('/api/spawnable/item', payload);

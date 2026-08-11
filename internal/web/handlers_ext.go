@@ -178,6 +178,37 @@ func parseBans(data string) (bans []banEntry, comments []string) {
 	return
 }
 
+// banFileBytes renders a bans.txt from a ban list, keeping any leading comment
+// lines. Shared by the bans editor and the per-player ban/unban actions so the
+// file format never diverges.
+func banFileBytes(bans []banEntry, comments []string) []byte {
+	var b strings.Builder
+	for _, c := range comments {
+		b.WriteString(c)
+		b.WriteString("\r\n")
+	}
+	for _, ban := range bans {
+		id := strings.TrimSpace(ban.ID)
+		if id == "" || strings.ContainsAny(id, " \t") {
+			continue
+		}
+		mins := strings.TrimSpace(ban.Minutes)
+		if mins == "" {
+			mins = "0" // permanent
+		}
+		reason := strings.ReplaceAll(strings.TrimSpace(ban.Reason), "\n", " ")
+		b.WriteString(id)
+		b.WriteString(" ")
+		b.WriteString(mins)
+		if reason != "" {
+			b.WriteString(" ")
+			b.WriteString(reason)
+		}
+		b.WriteString("\r\n")
+	}
+	return []byte(b.String())
+}
+
 func (h *handlers) battleyeBans(w http.ResponseWriter, r *http.Request) {
 	path := h.bansPath()
 	if r.Method == http.MethodGet {
@@ -208,36 +239,12 @@ func (h *handlers) battleyeBans(w http.ResponseWriter, r *http.Request) {
 	if data, err := os.ReadFile(path); err == nil {
 		_, comments = parseBans(string(data))
 	}
-	var b strings.Builder
-	for _, c := range comments {
-		b.WriteString(c)
-		b.WriteString("\r\n")
-	}
-	for _, ban := range req.Bans {
-		id := strings.TrimSpace(ban.ID)
-		if id == "" || strings.ContainsAny(id, " \t") {
-			continue
-		}
-		mins := strings.TrimSpace(ban.Minutes)
-		if mins == "" {
-			mins = "0" // permanent
-		}
-		reason := strings.ReplaceAll(strings.TrimSpace(ban.Reason), "\n", " ")
-		b.WriteString(id)
-		b.WriteString(" ")
-		b.WriteString(mins)
-		if reason != "" {
-			b.WriteString(" ")
-			b.WriteString(reason)
-		}
-		b.WriteString("\r\n")
-	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	_ = util.BackupBeforeWrite(path)
-	if err := writeFileAtomic(path, []byte(b.String())); err != nil {
+	if err := writeFileAtomic(path, banFileBytes(req.Bans, comments)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

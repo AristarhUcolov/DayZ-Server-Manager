@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"dayzmanager/internal/config"
+	"dayzmanager/internal/util"
 )
 
 // Broadcaster is implemented by rcon.Manager — kept as an interface here so
@@ -43,6 +44,17 @@ type Controller struct {
 	// Optional RCon broadcaster — set by app wiring. Used to announce
 	// scheduled/auto restarts with a countdown.
 	Broadcast Broadcaster
+
+	// Optional online-player-count hook — set by app wiring (queries RCon).
+	// Returns the number online, or -1 when it cannot be determined (server
+	// down / RCon not connected). Nil = the smart "restart only when empty"
+	// feature is unavailable and restarts proceed normally.
+	PlayerCount func() int
+
+	// Guards against overlapping restart goroutines: a scheduled restart that is
+	// deferred (waiting for the server to empty) must not run alongside a second
+	// trigger. Set for the whole restartWithCountdown lifetime.
+	restarting atomic.Bool
 
 	// Optional lifecycle-event sink — set by app wiring (Discord webhooks).
 	// Called with a short event key ("started", "stopped", "crashed",
@@ -102,6 +114,12 @@ type scheduleConfig struct {
 	// Crash watchdog.
 	restartOnCrash bool
 
+	// Smart restarts.
+	restartOnlyWhenEmpty bool
+	restartEmptyMaxWait  int
+	restartOnHighMem     bool
+	restartMemThreshMB   int
+
 	// Launch parameters — buildArgs reads these instead of the live shared
 	// *config.Manager. Start() runs from scheduler goroutines concurrently
 	// with web config POSTs (App.MutateConfig replaces *Config wholesale), so
@@ -146,6 +164,11 @@ func (c *Controller) SetScheduleConfig(cfg *config.Manager) {
 		autoUpdateCheckMinutes: cfg.AutoUpdateCheckMinutes,
 		vanillaPath:            cfg.VanillaDayZPath,
 		restartOnCrash:         cfg.RestartOnCrash,
+
+		restartOnlyWhenEmpty: cfg.RestartOnlyWhenEmpty,
+		restartEmptyMaxWait:  cfg.RestartEmptyMaxWaitMinutes,
+		restartOnHighMem:     cfg.RestartOnHighMem,
+		restartMemThreshMB:   cfg.RestartMemThresholdMB,
 
 		serverCfg:    cfg.ServerCfg,
 		serverPort:   cfg.ServerPort,
@@ -428,6 +451,27 @@ func (c *Controller) beforeRestart() {
 // warnMinutes (largest first), sleeping between them, then restarts.
 // If Broadcast is nil or any announce fails, it proceeds silently.
 func (c *Controller) restartWithCountdown(warnMinutes []int) error {
+	// Only one restart flow at a time — a deferred (waiting-for-empty) restart
+	// must not overlap with a second trigger.
+	if !c.restarting.CompareAndSwap(false, true) {
+		c.log.Printf("restart already pending — ignoring duplicate trigger")
+		return nil
+	}
+	defer c.restarting.Store(false)
+
+	// Smart "restart only when empty": defer while players are online. If the
+	// server empties, restart immediately (nobody to warn — skip the countdown).
+	// If the max wait is hit with players still on, fall through to the normal
+	// countdown so the restart still happens.
+	s := c.schedSnapshot()
+	if s.restartOnlyWhenEmpty && c.PlayerCount != nil {
+		if c.waitForEmpty(s.restartEmptyMaxWait) {
+			c.log.Printf("smart restart: server empty — restarting now")
+			return c.Restart()
+		}
+		c.log.Printf("smart restart: max wait reached with players online — restarting with countdown")
+	}
+
 	if c.Broadcast != nil && len(warnMinutes) > 0 {
 		// sort descending
 		m := append([]int(nil), warnMinutes...)
@@ -468,6 +512,68 @@ func (c *Controller) restartWithCountdown(warnMinutes []int) error {
 	return c.Restart()
 }
 
+// waitForEmpty blocks until the server has no players online, returning true.
+// Returns false when maxWaitMin (>0) elapses with players still connected, so
+// the caller falls back to a normal countdown restart. A count of -1 (unknown —
+// RCon down) also returns false: we can't confirm empty, so don't defer.
+func (c *Controller) waitForEmpty(maxWaitMin int) bool {
+	if c.PlayerCount == nil {
+		return true
+	}
+	start := time.Now()
+	for {
+		if !c.IsRunning() || c.loopPaused.Load() {
+			return true // already down / paused — nothing to wait for
+		}
+		switch n := c.PlayerCount(); {
+		case n == 0:
+			return true
+		case n < 0:
+			return false // unknown — proceed with countdown instead of deferring
+		}
+		if maxWaitMin > 0 && time.Since(start) >= time.Duration(maxWaitMin)*time.Minute {
+			return false
+		}
+		time.Sleep(30 * time.Second)
+	}
+}
+
+// memRestartLoop cycles the server when the DayZServer process RSS crosses the
+// configured threshold (memory creep on long uptimes). The restarting guard and
+// the fact that RSS resets after a restart stop it from firing repeatedly.
+func (c *Controller) memRestartLoop(stop <-chan struct{}) {
+	for {
+		select {
+		case <-stop:
+			return
+		case <-time.After(time.Minute):
+		}
+		s := c.schedSnapshot()
+		if !s.restartOnHighMem || s.restartMemThreshMB <= 0 || !c.IsRunning() || c.loopPaused.Load() {
+			continue
+		}
+		if c.restarting.Load() {
+			continue // a restart is already pending
+		}
+		pid := c.PID()
+		if pid <= 0 {
+			continue
+		}
+		_, memBytes, err := util.ProcessStats(uint32(pid))
+		if err != nil || memBytes == 0 {
+			continue
+		}
+		if memBytes >= uint64(s.restartMemThreshMB)*1024*1024 {
+			c.log.Printf("smart restart: memory %d MB >= threshold %d MB — restarting",
+				memBytes/1024/1024, s.restartMemThreshMB)
+			c.notify("memrestart")
+			if err := c.restartWithCountdown(s.restartWarnMinutes); err != nil {
+				c.log.Printf("memory restart failed: %v", err)
+			}
+		}
+	}
+}
+
 // StartAutoRestartLoop starts a goroutine that restarts the server on the
 // configured interval. Mirrors the `timeout 14390 && taskkill && goto start`
 // behavior of the reference .bat.
@@ -490,6 +596,8 @@ func (c *Controller) StartAutoRestartLoop() {
 	go c.intervalAnnounceLoop(stop)
 	// Periodic mod-update check → update + restart when a new version appears.
 	go c.modUpdateCheckLoop(stop)
+	// Smart restart on high memory (memory creep on long uptimes).
+	go c.memRestartLoop(stop)
 
 	// Interval-based auto-restart (the classic .bat behavior).
 	go func() {

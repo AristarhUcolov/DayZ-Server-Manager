@@ -226,6 +226,24 @@
 - **Проверка лута модов.** Для каждого установленного мода показывает, весь ли
   его лут есть в экономике: «не смержен» / «частично» / активен, со списком
   отсутствующих типов — главная причина, почему предметы мода не спавнятся.
+- **Профиль игрока.** Клик по нику где угодно открывает мини админ-панель:
+  GUID, алиасы, первый/последний вход, статистика (сессии, наиграно, K/D),
+  недавние бои из килфида, заметка + watch, и модерация — бан/разбан по GUID
+  (в `bans.txt`, применяется через RCon `loadBans` без рестарта), кик и личное
+  сообщение, когда игрок онлайн.
+- **Умные рестарты.** Рестарт только когда сервер пуст (плановый/интервальный
+  откладывается, пока есть игроки, до заданного предела) и рестарт при
+  превышении памяти процессом DayZ — освобождает утечку на долгом аптайме.
+- **Пресеты анонсов.** Сохранённые быстрые сообщения на странице RCon: клик —
+  бродкаст всем, «Save» — добавить текущее. Хранятся в конфиге.
+- **Обвесы: ссылки на рандом-пресеты.** В редакторе обвесов можно добавлять
+  группы-ссылки на пресеты из `cfgrandompresets.xml` (шестерёнка ⚙) с
+  автоподсказкой имён — и для обвесов, и для содержимого — рядом с явными
+  предметами.
+- **Фон карты.** По умолчанию рисуется схематичная Chernarus (сетка + берег +
+  города); своё топ-даун изображение карты (официальное или модовское) грузится
+  с любой страницы карты и показывается автоматически для этого мира. Готовые
+  рендеры не встроены (авторское право) — каждый ставит своё локально.
 - **Инструкция для новичков.** Десять глав прямо в панели: с чего начать,
   моды, лут и экономика, обвесы, стартовый набор, RCon, погода, обслуживание,
   здоровье сервера, доступ с телефона. Каждая — с пошаговыми действиями,
@@ -595,6 +613,23 @@ panels.
 - **Mod loot check.** For each installed mod, shows whether all its loot is in
   the economy: not merged / partly missing / active, with the missing type names
   — the top reason a mod's items don't spawn.
+- **Player profile.** Clicking a name anywhere opens a mini admin panel: GUID,
+  aliases, first/last seen, stats (sessions, playtime, K/D), recent combat from
+  the killfeed, note + watch, and moderation — ban/unban by GUID (in `bans.txt`,
+  applied via RCon `loadBans` without a restart), kick and a private message when
+  the player is online.
+- **Smart restarts.** Restart only when the server is empty (a scheduled/interval
+  restart is deferred while players are online, up to a cap) and restart when the
+  DayZ process memory passes a threshold — freeing the creep of long uptimes.
+- **Announcement presets.** Saved quick messages on the RCon page: click to
+  broadcast to everyone, "Save" to add the current one. Stored in the config.
+- **Attachments: random-preset references.** The attachments editor can add
+  preset-reference groups from `cfgrandompresets.xml` (the gear ⚙) with name
+  autocomplete — for both attachments and cargo — alongside explicit items.
+- **Map background.** A schematic Chernarus is drawn by default (grid + coast +
+  towns); your own top-down map picture (official or modded) uploads from any map
+  page and shows automatically for that world. Ready-made renders are not bundled
+  (copyright) — each admin adds their own locally.
 - **Beginner's guide.** Eight chapters inside the panel: getting started,
   mods, loot and economy, attachments, RCon, weather, maintenance, remote
   access. Each has numbered steps, a screenshot of the section, a

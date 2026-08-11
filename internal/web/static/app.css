@@ -1780,6 +1780,18 @@ input.attach-num {
   .chip.running .dot { animation: none; }
 }
 
+/* Player profile panel --------------------------------------------------- */
+.player-link { cursor: pointer; }
+.player-link:hover { color: var(--accent); text-decoration: underline; }
+.profile-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.profile-badges:empty { display: none; }
+.profile-id { margin-bottom: 12px; line-height: 1.7; }
+.profile-stats { display: flex; flex-wrap: wrap; gap: 18px; margin: 6px 0 14px; }
+.profile-stat { text-align: center; min-width: 60px; }
+.ps-num { font-size: 20px; font-weight: 700; }
+.profile-mod { flex-wrap: wrap; margin: 10px 0 4px; }
+.profile-activity { max-height: 260px; overflow-y: auto; margin-top: 4px; }
+
 /* Players — watch flag + admin notes ------------------------------------- */
 .star-cell { width: 34px; text-align: center; padding-left: 4px; padding-right: 4px; }
 .star-btn {
@@ -1858,6 +1870,19 @@ tr.lb-top > td { background: var(--surface-2); }
 }
 .inline-check { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
 
+/* RCon — announcement presets -------------------------------------------- */
+.preset-list { display: flex; flex-direction: column; gap: 6px; }
+.preset-msg { display: flex; align-items: center; gap: 6px; }
+.preset-send { flex: 1 1 auto; text-align: left; justify-content: flex-start;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Attachments — preset-reference (⚙) groups ------------------------------ */
+.attach-add-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.attach-group.attach-preset { border-left: 3px solid var(--accent); }
+.attach-gear { margin: 0 4px; font-size: 15px; }
+.attach-preset-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.attach-preset-row > input[type="text"]:first-child { flex: 1 1 220px; }
+
 /* Game map + heatmap ----------------------------------------------------- */
 .map-wrap {
   max-width: 760px; margin: 0 auto; border: 1px solid var(--border);
@@ -1880,6 +1905,14 @@ tr.lb-top > td { background: var(--surface-2); }
   font-variant-numeric: tabular-nums; color: var(--text-tertiary);
   font-size: 12px; min-width: 150px; text-align: right;
 }
+.map-img-ctl { display: flex; gap: 6px; align-items: center; }
+.game-map.has-img .gm-grid { stroke-opacity: 0.3; }
+.game-map.gm-has-shape .gm-grid { stroke: #ffffff; stroke-opacity: 0.12; }
+.gm-water { fill: #2b4257; }
+.gm-land { fill: #45573f; }
+.game-map.gm-has-shape .gm-axis { fill: #cfe0d8; }
+.game-map.gm-has-shape .gm-town { fill: #f0f4ef; }
+.game-map.gm-has-shape .gm-town-label { fill: #eef3ea; }
 .heat { stroke: none; }
 .heat-pvp { fill: var(--error); fill-opacity: 0.42; }
 .heat-env { fill: var(--warn); fill-opacity: 0.38; }

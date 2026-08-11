@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"dayzmanager/internal/config"
 	"dayzmanager/internal/i18n"
@@ -108,6 +109,20 @@ func New(serverDir, name, version, author string) (*App, error) {
 	// goroutines; the HTTP POST runs detached so nothing in server management
 	// ever waits on Discord.
 	ctrl.Notify = func(event string) { go a.NotifyDiscord(event) }
+
+	// Online-player-count hook for smart "restart only when empty". Returns -1
+	// when the count can't be determined (server down / RCon unavailable), so the
+	// controller falls back to a normal countdown instead of deferring forever.
+	ctrl.PlayerCount = func() int {
+		if !ctrl.IsRunning() {
+			return -1
+		}
+		ps, err := rc.PlayersCached(15 * time.Second)
+		if err != nil {
+			return -1
+		}
+		return len(ps)
+	}
 
 	// Configure RCon from beserver_x64.cfg / manager.json up front so the
 	// scheduler's countdown warnings and announcements can connect without

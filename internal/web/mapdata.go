@@ -6,7 +6,10 @@
 package web
 
 import (
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,9 +17,11 @@ import (
 )
 
 type mapInfo struct {
-	Key  string  `json:"key"`  // "chernarus" | "livonia" | "sakhal" | "unknown"
-	Name string  `json:"name"` // display name
-	Size float64 `json:"size"` // world edge length in metres (maps are square)
+	Key      string  `json:"key"`                // "chernarus" | "livonia" | "sakhal" | "unknown"
+	Name     string  `json:"name"`               // display name
+	Size     float64 `json:"size"`               // world edge length in metres (maps are square)
+	HasImage bool    `json:"hasImage"`           // an admin-supplied background image exists
+	ImageVer int64   `json:"imageVer,omitempty"` // its mtime, used to bust the browser cache
 }
 
 // worldFromTemplate resolves the DayZ world of the active mission from its
@@ -44,7 +49,114 @@ func worldFromTemplate(template string) mapInfo {
 
 func (h *handlers) currentMap() mapInfo {
 	tpl, _ := h.missionTemplate()
-	return worldFromTemplate(tpl)
+	mi := worldFromTemplate(tpl)
+	if p := h.mapImageFile(mi.Key); p != "" {
+		mi.HasImage = true
+		if st, err := os.Stat(p); err == nil {
+			mi.ImageVer = st.ModTime().Unix()
+		}
+	}
+	return mi
+}
+
+// mapImageExts are the picture formats accepted for a custom map background.
+var mapImageExts = []string{".webp", ".png", ".jpg", ".jpeg"}
+
+func (h *handlers) mapImageDir() string {
+	return filepath.Join(h.app.ManagerDir, "maps")
+}
+
+// mapImageFile returns the stored background image for a map key, or "" when
+// none has been uploaded. Base() guards against a key with path separators.
+func (h *handlers) mapImageFile(key string) string {
+	key = filepath.Base(key)
+	if key == "" || key == "." {
+		return ""
+	}
+	for _, ext := range mapImageExts {
+		p := filepath.Join(h.mapImageDir(), key+ext)
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+func (h *handlers) mapImageKey(r *http.Request) string {
+	if k := strings.TrimSpace(r.URL.Query().Get("map")); k != "" {
+		return filepath.Base(k)
+	}
+	return h.currentMap().Key
+}
+
+// mapImage serves (GET) or stores (POST) the admin-supplied background image for
+// a map. The image is a top-down picture covering the whole world square; the
+// interactive map stretches it to the world bounds so positions line up.
+func (h *handlers) mapImage(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		h.mapImageUpload(w, r)
+		return
+	}
+	p := h.mapImageFile(h.mapImageKey(r))
+	if p == "" {
+		http.NotFound(w, r)
+		return
+	}
+	// Long cache — the URL carries an mtime version, so a new upload busts it.
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeFile(w, r, p)
+}
+
+const maxMapImageBytes = 25 << 20 // 25 MB — a full-map export is a few MB
+
+func (h *handlers) mapImageUpload(w http.ResponseWriter, r *http.Request) {
+	key := h.mapImageKey(r)
+	if err := r.ParseMultipartForm(4 << 20); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	file, fh, err := r.FormFile("image")
+	if err != nil {
+		http.Error(w, "missing image field", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+	ext := strings.ToLower(filepath.Ext(fh.Filename))
+	if !contains(mapImageExts, ext) {
+		http.Error(w, "image must be .webp, .png, .jpg or .jpeg", http.StatusBadRequest)
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxMapImageBytes+1))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(data) > maxMapImageBytes {
+		http.Error(w, "image too large (max 25 MB)", http.StatusRequestEntityTooLarge)
+		return
+	}
+	if err := os.MkdirAll(h.mapImageDir(), 0o755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Replace any existing image for this key (possibly a different extension).
+	for _, e := range mapImageExts {
+		_ = os.Remove(filepath.Join(h.mapImageDir(), key+e))
+	}
+	if err := os.WriteFile(filepath.Join(h.mapImageDir(), key+ext), data, 0o644); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"status": "saved", "map": key})
+}
+
+// mapImageDelete removes a map's custom background image.
+func (h *handlers) mapImageDelete(w http.ResponseWriter, r *http.Request) {
+	key := h.mapImageKey(r)
+	for _, e := range mapImageExts {
+		_ = os.Remove(filepath.Join(h.mapImageDir(), key+e))
+	}
+	writeJSON(w, map[string]string{"status": "deleted"})
 }
 
 type heatPoint struct {

@@ -76,6 +76,10 @@ type Manager struct {
 	// while the server is running (e.g. every 30 min: "Join our Discord").
 	IntervalAnnouncements []IntervalAnnouncement `json:"intervalAnnouncements"`
 
+	// Saved quick broadcast messages ("announcement presets") — one-click sends
+	// from the RCon page. Persisted here so they survive a manager restart.
+	BroadcastPresets []string `json:"broadcastPresets"`
+
 	// Workshop mod collection URLs users can re-import in one click.
 	// Stored as raw URLs or bare IDs.
 	WorkshopCollections []string `json:"workshopCollections"`
@@ -84,6 +88,18 @@ type Manager struct {
 	// it to (crash), start it again after a short grace period. Crash-loop
 	// protection (3 exits / 5 min) still pauses everything.
 	RestartOnCrash bool `json:"restartOnCrash"`
+
+	// Smart restarts (item F). RestartOnlyWhenEmpty defers a scheduled/interval
+	// restart while players are online, re-checking until the server empties, so
+	// nobody is kicked mid-session. RestartEmptyMaxWaitMinutes caps that wait (0 =
+	// wait indefinitely) — past it, the restart proceeds with the normal RCon
+	// countdown. RestartOnHighMem cycles the server when the DayZServer process
+	// RSS passes RestartMemThresholdMB (memory creep on long uptimes); the same
+	// empty-server rule then applies to that restart too.
+	RestartOnlyWhenEmpty       bool `json:"restartOnlyWhenEmpty"`
+	RestartEmptyMaxWaitMinutes int  `json:"restartEmptyMaxWaitMinutes"`
+	RestartOnHighMem           bool `json:"restartOnHighMem"`
+	RestartMemThresholdMB      int  `json:"restartMemThresholdMB"`
 
 	// Automatic backups: write the same zip the manual "Download backup"
 	// produces into .dayz-manager/backups/ every N hours (0 = off), keeping
@@ -134,6 +150,9 @@ func defaultManager() *Manager {
 		Exposure:           "local",
 
 		RestartWarnMinutes: []int{5, 3, 1},
+
+		RestartEmptyMaxWaitMinutes: 60,
+		RestartMemThresholdMB:      8000,
 	}
 }
 
