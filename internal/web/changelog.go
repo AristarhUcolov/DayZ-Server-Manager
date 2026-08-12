@@ -27,6 +27,17 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "0.29.0", Date: "2026-08-12",
+		EN: []string{
+			"Player spawns editor — a new page under Server that edits cfgplayerspawnpoints.xml on the map: switch between Fresh / Hop / Travel, see each named group as a coloured cluster, and click to add a point, drag to move, right-click to delete. Add/rename/delete groups and tune the spawn / generator / group parameters; the distance and grid settings round-trip untouched.",
+			"Accessibility pass — every form field across the panel now has a programmatically-associated label (via for/id or aria-label, in all 11 languages), so screen readers announce what each input is. Icon buttons and images were already labelled.",
+		},
+		RU: []string{
+			"Редактор точек спавна — новая страница в разделе «Сервер», правит cfgplayerspawnpoints.xml на карте: переключение Fresh / Hop / Travel, каждая именованная группа — цветной кластер, клик — добавить точку, перетащить — двигать, правый клик — удалить. Добавляйте/переименовывайте/удаляйте группы и настраивайте параметры спавна / генератора / групп; настройки дистанций и сетки сохраняются нетронутыми.",
+			"Проход по доступности — у каждого поля формы в панели теперь есть программно связанная подпись (через for/id или aria-label, на всех 11 языках), чтобы скринридеры озвучивали назначение каждого поля. Иконки-кнопки и картинки уже были подписаны.",
+		},
+	},
+	{
 		Version: "0.28.0", Date: "2026-08-12",
 		EN: []string{
 			"Presets editor now works like Attachments — item class names autocomplete from your types.xml (mods included), unknown classes are flagged as you type, and the row layout matches (name / weight / real chance).",

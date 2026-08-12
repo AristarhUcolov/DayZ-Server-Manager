@@ -149,6 +149,8 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// Event spawn-point editor (cfgeventspawns.xml on the map).
 	mux.HandleFunc("/api/eventspawns", methods(h.eventSpawnsList, http.MethodGet))
 	mux.HandleFunc("/api/eventspawns/save", methods(h.eventSpawnsSave, http.MethodPost))
+	// Player spawn-point editor (cfgplayerspawnpoints.xml on the map).
+	mux.HandleFunc("/api/spawnpoints", methods(h.spawnPoints, http.MethodGet, http.MethodPost))
 
 	// globals.xml variable form.
 	mux.HandleFunc("/api/globals", methods(h.globalsGet, http.MethodGet))

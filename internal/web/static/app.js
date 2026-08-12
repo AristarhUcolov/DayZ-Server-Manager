@@ -171,6 +171,15 @@ function withHelp(node, key) {
 // <span> would be invalid markup (a <th> inside <tr>, an <option>, an input).
 function hlp(node, key) { node.dataset.help = key; return node; }
 
+// assocId gives a form control an id and returns it, so a sibling <label> can
+// point at it with `for=` — a visual label sitting next to an input is not
+// enough; a screen reader needs the association. No-op if it already has one.
+let _assocSeq = 0;
+function assocId(el) {
+  if (el && !el.id && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName || '')) el.id = 'fld-' + (++_assocSeq);
+  return el ? el.id : '';
+}
+
 // --------------------------------------------------------------------- toast
 
 // Stacked toasts: each call appends its own element to #toast-region so a
@@ -1249,14 +1258,14 @@ Views.server = async (root) => {
     const val = data.values[k] ?? '';
     const input = h('input', { type: 'text', value: val });
     bag[k] = input;
-    const label = h('label', { text: k });
+    const label = h('label', { text: k, for: assocId(input) });
     form.append(h('div', {}, [
       CFG_HELP[k] ? withHelp(label, CFG_HELP[k]) : label,
       input,
     ]));
   }
 
-  const missionSelect = h('select', { id: 'mission-input', 'data-help': 'server.mission' });
+  const missionSelect = h('select', { id: 'mission-input', 'data-help': 'server.mission', 'aria-label': t('sync.mission') });
   let missions = { missions: [], active: data.mission || '' };
   try { missions = await api.get('/api/missions'); } catch {}
   for (const m of missions.missions) {
@@ -1686,7 +1695,7 @@ Views.types = async (root) => {
   // Heavy fetch ahead — remember which navigation we are. If the user
   // switches section while it runs, we must not append into their new page.
   const myNav = _navSeq;
-  const fileSelect = h('select', {});
+  const fileSelect = h('select', { 'aria-label': t('economy.file') });
   fileSelect.append(h('option', { value: '', text: 'types.xml (base)' }));
   try {
     const moded = await api.get('/api/moded');
@@ -1868,7 +1877,7 @@ Views.types = async (root) => {
     ])));
     const tbody = h('tbody');
     for (const row of slice) {
-      const cb = h('input', { type: 'checkbox' });
+      const cb = h('input', { type: 'checkbox', 'aria-label': t('col.select') + ' ' + row.name });
       cb.dataset.name = row.name;
       let tr;
       const mkCell = (field, numeric) => {
@@ -1876,6 +1885,7 @@ Views.types = async (root) => {
         const inp = h('input', {
           type: numeric ? 'number' : 'text', class: 'inline-cell',
           value: has ? dirty[row.name][field] : (row[field] ?? ''),
+          'aria-label': row.name + ' ' + field,
         });
         inp.onchange = () => {
           const orig = row[field] ?? '';
@@ -1913,7 +1923,7 @@ Views.types = async (root) => {
     const next = h('button', { text: '→', onclick: () => { currentPage++; refreshTable(); } });
     if (currentPage <= 1) prev.disabled = true;
     if (currentPage >= totalPages) next.disabled = true;
-    const jump = h('input', { type: 'number', value: currentPage, min: 1, max: totalPages });
+    const jump = h('input', { type: 'number', value: currentPage, min: 1, max: totalPages, 'aria-label': t('pager.jump') });
     jump.onchange = () => {
       const n = parseInt(jump.value, 10);
       if (Number.isFinite(n) && n >= 1 && n <= totalPages) { currentPage = n; refreshTable(); }
@@ -1956,7 +1966,7 @@ Views.types = async (root) => {
     const grid = h('div', { class: 'grid-3' });
     grid.append(
       ...Object.entries(fields).map(([k, el]) => {
-        const label = h('label', { text: k });
+        const label = h('label', { text: k, for: assocId(el) });
         return h('div', {}, [FIELD_HELP[k] ? withHelp(label, FIELD_HELP[k]) : label, el]);
       })
     );
@@ -3298,7 +3308,7 @@ Views.events = async (root) => {
     const next = h('button', { text: '→', onclick: () => { currentPage++; refreshTable(); } });
     if (currentPage <= 1) prev.disabled = true;
     if (currentPage >= totalPages) next.disabled = true;
-    const jump = h('input', { type: 'number', value: currentPage, min: 1, max: totalPages });
+    const jump = h('input', { type: 'number', value: currentPage, min: 1, max: totalPages, 'aria-label': t('pager.jump') });
     jump.onchange = () => {
       const n = parseInt(jump.value, 10);
       if (Number.isFinite(n) && n >= 1 && n <= totalPages) { currentPage = n; refreshTable(); }
@@ -3520,7 +3530,7 @@ function scheduledProfilesCard(c, F, onChange) {
   card.append(list);
 
   function profileSelect(cur, onch) {
-    const sel = h('select', { style: { flex: '1' } });
+    const sel = h('select', { style: { flex: '1' }, 'aria-label': t('settings.schedprofiles.title') });
     sel.append(h('option', { value: '', text: '—' }));
     for (const p of profiles) {
       const o = h('option', { value: p.slug, text: p.name || p.slug });
@@ -4348,7 +4358,7 @@ Views.weather = async (root) => {
     const cur = toDisplay(val);
     const out = h('span', { class: 'slider-val', text: fmt(cur) });
     const range = h('input', { type: 'range', class: 'wslider', min: '0', max: String(max), step,
-      value: String(cur), style: { flex: '1' } });
+      value: String(cur), style: { flex: '1' }, 'aria-label': t(labelKey) });
     const fill = () => range.style.setProperty('--val', (Number(range.value) / max * 100) + '%');
     range.oninput = () => { out.textContent = fmt(Number(range.value)); fill(); };
     fill();
@@ -4372,7 +4382,7 @@ Views.weather = async (root) => {
   dynChk.checked = !!params.dynamic;
   // How gradually weather moves. The old build hard-coded 2-minute ramps with
   // full-range steps, which is why changes felt like a light switch.
-  const transSel = h('select', { id: 'weather-trans', style: { maxWidth: '260px' } }, [
+  const transSel = h('select', { id: 'weather-trans', style: { maxWidth: '260px' }, 'aria-label': t('weather.trans.title') }, [
     h('option', { value: 'smooth', i18n: 'weather.trans.smooth' }),
     h('option', { value: 'normal', i18n: 'weather.trans.normal' }),
     h('option', { value: 'fast',   i18n: 'weather.trans.fast' }),
@@ -4424,11 +4434,14 @@ Views.weather = async (root) => {
     ['weather.time.start.night', '2024/7/1/0/0'],
   ].map(([k, val]) => h('button', { class: 'pill', i18n: k, onclick: () => { sTime.value = val; } })));
 
-  const tRow = (labelKey, el, extra, hintKey) => h('div', { style: { marginBottom: '12px' } }, [
-    h('label', { i18n: labelKey }), el,
-    extra || null,
-    hintKey ? h('small', { class: 'hint', i18n: hintKey }) : null,
-  ]);
+  const tRow = (labelKey, el, extra, hintKey) => {
+    const id = assocId(el);
+    return h('div', { style: { marginBottom: '12px' } }, [
+      h('label', id ? { i18n: labelKey, for: id } : { i18n: labelKey }), el,
+      extra || null,
+      hintKey ? h('small', { class: 'hint', i18n: hintKey }) : null,
+    ]);
+  };
 
   wrap.append(h('div', { class: 'card' }, [
     withHelp(h('h3', { i18n: 'weather.time.title' }), 'weather.accel'),
@@ -4584,8 +4597,8 @@ Views.settings = async (root) => {
   const c = State.config;
   const F = {
     language:        h('select', {}),
-    vanillaDayZPath: h('input',  { type: 'text', value: c.vanillaDayZPath || '' }),
-    exposure:        h('select', {}, [
+    vanillaDayZPath: h('input',  { type: 'text', value: c.vanillaDayZPath || '', 'aria-label': t('settings.vanillaPath') }),
+    exposure:        h('select', { 'aria-label': t('settings.exposure') }, [
                        h('option', { value: 'local',    i18n: 'settings.exposure.local' }),
                        h('option', { value: 'lan',      i18n: 'settings.exposure.lan' }),
                        h('option', { value: 'internet', i18n: 'settings.exposure.internet' }),
@@ -4597,13 +4610,13 @@ Views.settings = async (root) => {
     profilesDir:     h('input',  { type: 'text', value: c.profilesDir }),
     autoRestartSeconds: h('input', { type: 'number', value: c.autoRestartSeconds }),
     autoRestartEnabled: h('input', { type: 'checkbox', class: 'switch' }),
-    autoUpdateCheckMinutes: h('input', { type: 'number', value: c.autoUpdateCheckMinutes ?? 0 }),
+    autoUpdateCheckMinutes: h('input', { type: 'number', value: c.autoUpdateCheckMinutes ?? 0, 'aria-label': t('settings.autoupdate.check') }),
     autoUpdateModsOnRestart: h('input', { type: 'checkbox', class: 'switch' }),
     restartOnCrash: h('input', { type: 'checkbox', class: 'switch' }),
     restartOnlyWhenEmpty: h('input', { type: 'checkbox', class: 'switch' }),
-    restartEmptyMaxWaitMinutes: h('input', { type: 'number', min: '0', value: c.restartEmptyMaxWaitMinutes ?? 60 }),
+    restartEmptyMaxWaitMinutes: h('input', { type: 'number', min: '0', value: c.restartEmptyMaxWaitMinutes ?? 60, 'aria-label': t('settings.smartrestart.maxwait') }),
     restartOnHighMem: h('input', { type: 'checkbox', class: 'switch' }),
-    restartMemThresholdMB: h('input', { type: 'number', min: '0', value: c.restartMemThresholdMB ?? 8000 }),
+    restartMemThresholdMB: h('input', { type: 'number', min: '0', value: c.restartMemThresholdMB ?? 8000, 'aria-label': t('settings.smartrestart.memthresh') }),
     backupIntervalHours: h('input', { type: 'number', min: '0', value: c.backupIntervalHours ?? 0 }),
     backupKeep: h('input', { type: 'number', min: '1', value: c.backupKeep || 10 }),
     discordEnabled: h('input', { type: 'checkbox', class: 'switch' }),
@@ -4634,7 +4647,10 @@ Views.settings = async (root) => {
   }});
 
   const section = (title, rows) => h('div', { class: 'card' }, [h('h3', { i18n: title }), ...rows]);
-  const row = (labelKey, el) => h('div', {}, [h('label', { i18n: labelKey }), el]);
+  const row = (labelKey, el) => {
+    const id = assocId(el);
+    return h('div', {}, [h('label', id ? { i18n: labelKey, for: id } : { i18n: labelKey }), el]);
+  };
 
   const themeSel = h('select', {}, [
     h('option', { value: 'dark',  i18n: 'settings.theme.dark' }),
@@ -4903,7 +4919,7 @@ function networkCard() {
 }
 
 function backupCard() {
-  const fileInp = h('input', { type: 'file', accept: '.zip' });
+  const fileInp = h('input', { type: 'file', accept: '.zip', 'aria-label': t('settings.backup.import') });
   fileInp.style.display = 'none';
   const resultBox = h('div', { class: 'hint' });
 
@@ -6056,7 +6072,7 @@ function mapCoordReadout(gm, readoutEl) {
 // image. onDone re-renders the host view so the new (or removed) image shows.
 function mapImageControls(map, onDone) {
   const key = (map && map.key) || 'unknown';
-  const fileInput = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', style: { display: 'none' } });
+  const fileInput = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', style: { display: 'none' }, 'aria-label': t('map.image.upload') });
   fileInput.addEventListener('change', async () => {
     const f = fileInput.files && fileInput.files[0];
     if (!f) return;
@@ -6328,6 +6344,255 @@ Views.eventmap = async (root) => {
   applyI18n();
 };
 
+// --------------------------------------------------------- player spawn points
+
+// PS_PARAM_INFO gives each cfgplayerspawnpoints param a readable label + a
+// one-line tooltip. Unknown keys fall back to the raw XML name (which DayZ
+// admins recognise anyway), so a modded field still round-trips and shows.
+const PS_PARAM_INFO = {
+  min_dist_infected: { label: 'Min distance to infected', tip: 'Do not spawn closer than this (m) to a zombie.' },
+  max_dist_infected: { label: 'Max distance to infected', tip: 'Preferred maximum distance (m) to zombies.' },
+  min_dist_player: { label: 'Min distance to players', tip: 'Do not spawn closer than this (m) to another player.' },
+  max_dist_player: { label: 'Max distance to players', tip: 'Preferred maximum distance (m) to other players.' },
+  min_dist_static: { label: 'Min distance to static', tip: 'Min distance (m) to static objects / loot.' },
+  max_dist_static: { label: 'Max distance to static', tip: 'Max distance (m) to static objects / loot.' },
+  grid_density: { label: 'Grid density', tip: 'Generator grid density.' },
+  grid_width: { label: 'Grid width', tip: 'Generator grid cell width (m).' },
+  grid_height: { label: 'Grid height', tip: 'Generator grid cell height (m).' },
+  min_steepness: { label: 'Min steepness', tip: 'Reject spawns on terrain flatter than this (deg).' },
+  max_steepness: { label: 'Max steepness', tip: 'Reject spawns on terrain steeper than this (deg).' },
+  enablegroups: { label: 'Enable groups', tip: 'Use the named position groups (true/false).' },
+  groups_as_regular: { label: 'Groups as regular', tip: 'Treat groups as regular spawn points (true/false).' },
+  lifetime: { label: 'Lifetime', tip: 'How long a generated bubble lives (s).' },
+  counter: { label: 'Counter', tip: 'Group counter.' },
+};
+
+Views.spawnpoints = async (root) => {
+  const myNav = _navSeq;
+  root.append(pageHeader('nav.spawnpoints', 'spawnpoints.subtitle'));
+  const running = !!State.serverStatus.running;
+  if (running) root.append(runningBanner());
+
+  let d;
+  try { d = await api.get('/api/spawnpoints'); }
+  catch (e) { handleErr(e); return; }
+  if (myNav !== _navSeq) return;
+
+  const SECTIONS = ['fresh', 'hop', 'travel'];
+  const doc = d.doc || {};
+  for (const s of SECTIONS) {
+    doc[s] = doc[s] || {};
+    doc[s].groups = doc[s].groups || [];
+    doc[s].spawnParams = doc[s].spawnParams || [];
+    doc[s].genParams = doc[s].genParams || [];
+    doc[s].groupParams = doc[s].groupParams || [];
+  }
+  let curSection = SECTIONS.find(s => doc[s].present) || 'fresh';
+  doc[curSection].present = true;
+  let curGroup = 0;
+  let dirty = false;
+  const PALETTE = ['#ff7a2b', '#4da3ff', '#4dd08a', '#e05c8a', '#b98cff', '#f2c14e', '#3fb9bd', '#f07b54', '#8fca4d', '#ff6b6b'];
+  const colorFor = (i) => PALETTE[i % PALETTE.length];
+  const sec = () => doc[curSection];
+
+  const gm = buildGameMap(d.map);
+  gm.svg.classList.add('gm-edit');
+
+  const saveBtn = h('button', { class: 'primary', i18n: 'action.save', disabled: true });
+  const markDirty = () => { dirty = true; saveBtn.disabled = running; };
+  saveBtn.addEventListener('click', () => save(saveBtn));
+
+  const readout = h('div', { class: 'map-readout' });
+  const countLbl = h('span', { class: 'hint' });
+
+  // ---- section tabs ----
+  const tabsHost = h('div', { class: 'sp-tabs' });
+  function renderTabs() {
+    tabsHost.innerHTML = '';
+    for (const s of SECTIONS) {
+      const present = !!doc[s].present;
+      const tab = h('button', {
+        class: 'sp-tab' + (s === curSection ? ' active' : '') + (present ? '' : ' sp-absent'),
+        text: t('spawnpoints.section.' + s) + (present ? '' : ' +'),
+        title: present ? '' : t('spawnpoints.addSection'),
+        onclick: () => {
+          if (!doc[s].present) { doc[s].present = true; markDirty(); }
+          curSection = s; curGroup = 0; renderAll();
+        },
+      });
+      tabsHost.append(tab);
+    }
+  }
+
+  // ---- group chips + add ----
+  const groupHost = h('div', { class: 'sp-groups' });
+  function renderGroups() {
+    groupHost.innerHTML = '';
+    const gs = sec().groups;
+    if (curGroup >= gs.length) curGroup = Math.max(0, gs.length - 1);
+    gs.forEach((g, i) => {
+      groupHost.append(h('button', {
+        class: 'sp-group-chip' + (i === curGroup ? ' active' : ''),
+        onclick: () => { curGroup = i; renderMap(); renderGroups(); renderGroupEdit(); },
+      }, [
+        h('span', { class: 'sp-dot', style: { background: colorFor(i) } }),
+        h('span', { class: 'sp-gname', text: g.name || '—' }),
+        h('span', { class: 'sp-gcount', text: String((g.pos || []).length) }),
+      ]));
+    });
+    groupHost.append(h('button', { class: 'secondary small', i18n: 'spawnpoints.addGroup', disabled: running,
+      onclick: () => {
+        sec().groups.push({ name: 'group' + (sec().groups.length + 1), block: 0, pos: [] });
+        curGroup = sec().groups.length - 1; markDirty(); renderGroups(); renderGroupEdit(); renderMap();
+      } }));
+  }
+
+  // ---- active-group name / delete ----
+  const groupEdit = h('div', { class: 'sp-group-edit' });
+  function renderGroupEdit() {
+    groupEdit.innerHTML = '';
+    const g = sec().groups[curGroup];
+    if (!g) { groupEdit.append(h('p', { class: 'hint', i18n: 'spawnpoints.noGroup' })); applyI18n(); return; }
+    const nameInp = h('input', { type: 'text', value: g.name, placeholder: t('spawnpoints.groupName'), disabled: running });
+    nameInp.addEventListener('input', () => { g.name = nameInp.value; markDirty(); });
+    nameInp.addEventListener('change', renderGroups);
+    const del = h('button', { class: 'danger small', i18n: 'spawnpoints.delGroup', disabled: running,
+      onclick: async () => {
+        if (!(await confirmModal(t('spawnpoints.delGroupConfirm').replace('{name}', g.name || '—')))) return;
+        sec().groups.splice(curGroup, 1); curGroup = Math.max(0, curGroup - 1); markDirty(); renderAll();
+      } });
+    groupEdit.append(
+      h('span', { class: 'sp-active-lbl' }, [h('span', { class: 'sp-dot', style: { background: colorFor(curGroup) } }), h('span', { i18n: 'spawnpoints.activeGroup' })]),
+      nameInp, del);
+  }
+
+  // ---- map points ----
+  const circles = [];
+  function renderMap() {
+    gm.layer.innerHTML = '';
+    circles.length = 0;
+    const gs = sec().groups;
+    gs.forEach((g, gi) => {
+      const active = gi === curGroup;
+      (g.pos || []).forEach((p, j) => {
+        const [sx, sy] = gm.w2s(p.x, p.z);
+        const c = svgEl('circle', { cx: sx, cy: sy, r: active ? 5 : 3.5,
+          class: 'sp-pt' + (active ? ' sp-pt-active' : ''), fill: colorFor(gi) }, gm.layer);
+        if (active) {
+          c.style.cursor = 'grab';
+          c.addEventListener('mousedown', (e) => startDrag(j, e));
+          c.addEventListener('contextmenu', (e) => { e.preventDefault(); g.pos.splice(j, 1); markDirty(); renderMap(); renderGroups(); });
+          circles[j] = c;
+        } else {
+          c.style.opacity = '.4';
+        }
+      });
+    });
+    const g = gs[curGroup];
+    countLbl.textContent = t('spawnpoints.points').replace('{n}', (g && g.pos.length) || 0);
+  }
+
+  let drag = null, justDragged = false;
+  function startDrag(j, e) {
+    if (e.button !== 0 || running) return;
+    e.stopPropagation();
+    drag = { j, moved: false };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+  function onMove(e) {
+    if (!drag) return;
+    drag.moved = true;
+    const g = sec().groups[curGroup]; if (!g) return;
+    const [wx, wz] = clientToWorld(gm, e);
+    g.pos[drag.j].x = Math.round(wx * 100) / 100;
+    g.pos[drag.j].z = Math.round(wz * 100) / 100;
+    const [sx, sy] = gm.w2s(g.pos[drag.j].x, g.pos[drag.j].z);
+    if (circles[drag.j]) { circles[drag.j].setAttribute('cx', sx); circles[drag.j].setAttribute('cy', sy); }
+    readout.textContent = 'X ' + Math.round(wx) + ' · Z ' + Math.round(wz);
+  }
+  function onUp() {
+    if (drag && drag.moved) { markDirty(); justDragged = true; setTimeout(() => { justDragged = false; }, 0); }
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    drag = null;
+  }
+  gm.svg.addEventListener('click', (e) => {
+    if (justDragged || running) return;
+    if (e.target && e.target.classList && e.target.classList.contains('sp-pt')) return;
+    const g = sec().groups[curGroup]; if (!g) return;
+    const [wx, wz] = clientToWorld(gm, e);
+    g.pos.push({ x: Math.round(wx * 100) / 100, z: Math.round(wz * 100) / 100 });
+    markDirty(); renderMap(); renderGroups();
+  });
+
+  // ---- params (spawn / generator / group) ----
+  const paramsHost = h('div', { class: 'sp-params' });
+  function renderParams() {
+    paramsHost.innerHTML = '';
+    const s = sec();
+    const block = (titleKey, kvs, openIt) => {
+      if (!kvs || !kvs.length) return null;
+      const grid = h('div', { class: 'sp-param-grid' });
+      kvs.forEach(kv => {
+        const info = PS_PARAM_INFO[kv.key] || {};
+        const inp = h('input', { type: 'text', value: kv.value, disabled: running });
+        const id = assocId(inp);
+        const label = h('label', { text: info.label || kv.key, for: id, title: info.tip ? info.tip + ' (' + kv.key + ')' : kv.key });
+        inp.addEventListener('input', () => { kv.value = inp.value; markDirty(); });
+        grid.append(h('div', { class: 'sp-param' }, [label, inp]));
+      });
+      const det = h('details', { class: 'sp-param-block' }, [h('summary', { i18n: titleKey }), grid]);
+      if (openIt) det.setAttribute('open', '');
+      return det;
+    };
+    const bs = [
+      block('spawnpoints.spawnParams', s.spawnParams, true),
+      block('spawnpoints.genParams', s.genParams, false),
+      block('spawnpoints.groupParams', s.groupParams, false),
+    ].filter(Boolean);
+    if (!bs.length) paramsHost.append(h('p', { class: 'hint', i18n: 'spawnpoints.noParams' }));
+    else bs.forEach(b => paramsHost.append(b));
+  }
+
+  root.append(h('div', { class: 'card' }, [
+    tabsHost,
+    h('p', { class: 'hint', i18n: 'spawnpoints.help' }),
+    groupHost,
+    groupEdit,
+    h('div', { class: 'map-toolbar' }, [
+      mapImageControls(d.map, () => { if (dirty) toast(t('map.image.savedReload'), 'ok'); else navigate('spawnpoints'); }),
+      h('div', { class: 'grow' }), countLbl, readout,
+    ]),
+    h('div', { class: 'map-wrap' }, gm.svg),
+    h('h3', { i18n: 'spawnpoints.paramsTitle', style: { marginTop: '14px' } }),
+    paramsHost,
+    h('div', { class: 'actions' }, [saveBtn]),
+  ]));
+  mapCoordReadout(gm, readout);
+
+  function renderAll() { renderTabs(); renderGroups(); renderGroupEdit(); renderMap(); renderParams(); applyI18n(); }
+
+  async function save(btn) {
+    for (const s of SECTIONS) {
+      if (doc[s].present) {
+        for (const g of doc[s].groups) {
+          if (!(g.name || '').trim()) { toast(t('spawnpoints.needGroupName'), 'err'); return; }
+        }
+      }
+    }
+    await withBusy(btn, async () => {
+      try {
+        await api.post('/api/spawnpoints', doc);
+        toast(t('spawnpoints.saved'), 'ok');
+        dirty = false; saveBtn.disabled = true;
+      } catch (e) { handleErr(e); }
+    });
+  }
+
+  renderAll();
+};
+
 // ---------------------------------------------------------------- live map
 
 Views.livemap = async (root) => {
@@ -6476,7 +6741,7 @@ Views.globals = async (root) => {
     // make untouched floats look changed and rewrite them on every save. Text
     // keeps the exact string, so change-detection by equality is reliable.
     const inp = h('input', { type: 'text', value: v.value,
-      inputmode: v.type === '1' ? 'decimal' : 'numeric' });
+      inputmode: v.type === '1' ? 'decimal' : 'numeric', 'aria-label': prettifyVar(v.name) });
     inp.dataset.name = v.name;
     inp.dataset.orig = v.value;
     const labelText = h('span', { text: prettifyVar(v.name) });
@@ -6640,7 +6905,7 @@ Views.randompresets = async (root) => {
   function presetCard(p) {
     const nameInp = h('input', { type: 'text', class: 'preset-name-inp', value: p.name, placeholder: t('randompresets.namePh'), disabled: running });
     nameInp.addEventListener('input', () => { p.name = nameInp.value; markDirty(); });
-    const chanceInp = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: p.chance, disabled: running });
+    const chanceInp = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: p.chance, disabled: running, 'aria-label': t('randompresets.groupChance') });
     const del = h('button', { class: 'danger icon-btn', text: '×', title: t('action.delete'), disabled: running,
       onclick: () => { presets = presets.filter(x => x !== p); markDirty(); render(); } });
     const head = h('div', { class: 'preset-edit-head' }, [
@@ -6674,7 +6939,7 @@ Views.randompresets = async (root) => {
       for (const it of p.items) {
         const nm = h('input', { type: 'text', class: 'mono item-name-inp', value: it.name, list: 'dz-preset-classes', placeholder: t('randompresets.itemPh'), disabled: running });
         const warn = h('span', { class: 'attach-warn', text: '!', title: t('attach.unknownClass'), style: { display: 'none' } });
-        const wt = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: it.chance, disabled: running });
+        const wt = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: it.chance, disabled: running, 'aria-label': t('randompresets.weight') });
         wt.addEventListener('input', () => { it.chance = wt.value; markDirty(); recompute(); });
         const real = h('span', { class: 'preset-real' });
         const rm = h('button', { class: 'danger icon-btn', text: '×', title: t('action.delete'), disabled: running,
@@ -7254,7 +7519,7 @@ Views.attachments = async (root) => {
   };
   buildChips();
 
-  const presetSel = h('select', { style: { maxWidth: '240px' } });
+  const presetSel = h('select', { style: { maxWidth: '240px' }, 'aria-label': t('attach.preset.pick') });
   presetSel.append(h('option', { value: '', text: t('attach.preset.pick') }));
   // Grouped by kind: the file covers weapons, clothing, containers and
   // vehicles, and the picker should make that visible rather than implying

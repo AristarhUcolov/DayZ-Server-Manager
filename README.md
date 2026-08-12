@@ -216,6 +216,11 @@
 - **Редактор точек событий.** `cfgeventspawns.xml` на карте: клик — добавить
   точку, тащить — двигать, правый клик — удалить. Кросс-чек с `events.xml`:
   показывает события без точек (не заспавнятся) и осиротевшие точки.
+- **Редактор точек спавна игроков.** `cfgplayerspawnpoints.xml` на карте:
+  переключение разделов Fresh / Hop / Travel, именованные группы как цветные
+  кластеры, клик — добавить точку, тащить — двигать, правый клик — удалить.
+  Добавление/переименование/удаление групп и настройка параметров спавна,
+  генератора и групп; настройки дистанций и сетки сохраняются нетронутыми.
 - **Живая карта.** Последняя известная позиция онлайн-игроков, авто-обновление.
   Ванильный DayZ пишет позиции только при входе/бою/чате, поэтому точка может
   отставать; позиции старше 5 минут приглушены.
@@ -622,6 +627,11 @@ panels.
 - **Event spawn editor.** `cfgeventspawns.xml` on the map: click to add a point,
   drag to move, right-click to delete. Cross-checked against `events.xml`, so
   events with no spawn points (they never spawn) and orphan points are flagged.
+- **Player spawns editor.** `cfgplayerspawnpoints.xml` on the map: switch between
+  Fresh / Hop / Travel, each named group shown as a coloured cluster, click to add
+  a point, drag to move, right-click to delete. Add/rename/delete groups and tune
+  the spawn / generator / group parameters; the distance and grid settings
+  round-trip untouched.
 - **Live map.** The last-known position of online players, auto-refreshing.
   Vanilla DayZ logs positions only on connect, combat and chat, so a dot can lag;
   positions older than 5 minutes are dimmed.

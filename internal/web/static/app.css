@@ -1936,6 +1936,31 @@ tr.lb-top > td { background: var(--surface-2); }
 .live-label { fill: var(--text); font-size: 10px; font-weight: 700; }
 .live-label.stale { fill: var(--text-tertiary); font-weight: 600; }
 
+/* Player spawn-point editor --------------------------------------------- */
+.sp-pt { stroke: #fff; stroke-width: 1; }
+.sp-pt-active { cursor: grab; stroke-width: 1.4; }
+.sp-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.sp-tab { padding: 6px 14px; }
+.sp-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sp-tab.sp-absent { opacity: .6; border-style: dashed; }
+.sp-groups { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; align-items: center; }
+.sp-group-chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); cursor: pointer; }
+.sp-group-chip.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.sp-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.sp-gname { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
+.sp-gcount { font-size: 11px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.sp-group-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.sp-group-edit input { flex: 0 0 220px; font-family: var(--mono, ui-monospace, monospace); }
+.sp-active-lbl { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.sp-params { display: flex; flex-direction: column; gap: 8px; }
+.sp-param-block { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 12px; }
+.sp-param-block > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.sp-param-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 14px; padding: 8px 0 4px; }
+.sp-param { display: flex; flex-direction: column; gap: 3px; }
+.sp-param label { font-size: 12px; color: var(--text-secondary); }
+.sp-param input { width: 100%; }
+
 /* Random presets library ------------------------------------------------- */
 .preset-block { padding: 12px 0; border-top: 1px solid var(--border); }
 .preset-block:first-of-type { border-top: none; }
