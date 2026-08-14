@@ -189,6 +189,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/map/live", methods(h.mapLive, http.MethodGet))
 	// Admin-supplied map background image (serve / upload / remove).
 	mux.HandleFunc("/api/map/image", methods(h.mapImage, http.MethodGet, http.MethodPost))
+	mux.HandleFunc("/api/map/image/fetch", methods(h.mapImageFetch, http.MethodPost))
 	mux.HandleFunc("/api/map/image/delete", methods(h.mapImageDelete, http.MethodPost))
 	mux.HandleFunc("/api/map/size", methods(h.mapSize, http.MethodPost))
 	mux.HandleFunc("/api/gameplay", methods(h.gameplay, http.MethodGet, http.MethodPost))
@@ -234,6 +235,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 
 	// RCon.
 	mux.HandleFunc("/api/rcon/players", methods(h.rconPlayers, http.MethodGet))
+	mux.HandleFunc("/api/rcon/chat/recent", methods(h.rconChatRecent, http.MethodGet))
 	mux.HandleFunc("/api/rcon/say", methods(h.rconSay, http.MethodPost))
 	mux.HandleFunc("/api/rcon/kick", methods(h.rconKick, http.MethodPost))
 	mux.HandleFunc("/api/rcon/ban", methods(h.rconBan, http.MethodPost))
@@ -1442,6 +1444,27 @@ func (h *handlers) rconPlayers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]interface{}{"players": players, "count": len(players)})
+}
+
+// rconChatRecent returns recent in-game chat captured from the BattlEye message
+// stream (see internal/rcon/chat.go). It never blocks on the network: it kicks a
+// throttled background connect so the stream stays warm while the Chat page is
+// open, then returns the ring buffer plus connection state so the UI can show a
+// clear "RCon not connected / not configured" message instead of a blank feed.
+func (h *handlers) rconChatRecent(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if s := r.URL.Query().Get("limit"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 && n <= 300 {
+			limit = n
+		}
+	}
+	rc := h.app.RCon
+	rc.TouchConnect()
+	writeJSON(w, map[string]interface{}{
+		"messages":   rc.RecentChat(limit),
+		"connected":  rc.IsConnected(),
+		"configured": rc.Configured(),
+	})
 }
 
 func (h *handlers) rconSay(w http.ResponseWriter, r *http.Request) {

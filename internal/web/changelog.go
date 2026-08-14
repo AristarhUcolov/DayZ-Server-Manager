@@ -27,6 +27,25 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "0.30.0", Date: "2026-08-14",
+		EN: []string{
+			"Real-time chat — the Chat page now shows in-game chat live, straight from the server's BattlEye RCon stream (before, only your outgoing broadcasts worked). A status badge shows whether the live feed is connected, and a clear message explains when RCon isn't set up or the server is offline.",
+			"Live map — player dots now appear even when RCon can't confirm who's online, drawn from the last-known positions (marked as such) so the map is no longer blank. An honest note reminds you that vanilla DayZ only logs positions on connect, combat and chat.",
+			"Maps that never go blank — Livonia and Sakhal now have their own built-in schematics (coastline, water); any other or modded world shows a clean placeholder inviting you to upload a top-down map image.",
+			"Zoom & pan on every map — use the mouse wheel or the on-screen +/− buttons to zoom, and drag to pan, for precise point placement; world coordinates stay correct at any zoom.",
+			"Every world supported — the manager recognises the map from the mission name (3 official plus ~50 popular modded maps: Namalsk, Deer Isle, Banov, Chiemsee, Rostow, Takistan, Esseker, Sarov, Nyheim…) and auto-registers any other. Set the real map yourself: upload an image or paste an image URL the manager downloads. No third-party map art is bundled — you point it at a source you have the right to use.",
+			"Stability — the dashboard now says \"RCon not connected\" instead of a misleading \"0 players\", the performance graph no longer records a false 0 when RCon is unreachable, dead RCon connections are dropped promptly instead of stalling a command, and pages that read the admin log warn you when -adminlog is off.",
+		},
+		RU: []string{
+			"Чат в реальном времени — страница «Чат» теперь показывает игровой чат вживую, прямо из потока BattlEye RCon сервера (раньше работала только отправка ваших сообщений). Бейдж показывает, подключён ли живой поток, а понятное сообщение объясняет, если RCon не настроен или сервер офлайн.",
+			"Живая карта — точки игроков теперь появляются даже когда RCon не может подтвердить, кто онлайн: они берутся из последних известных позиций (с пометкой), и карта больше не пустая. Честная подсказка напоминает, что ванильный DayZ пишет позиции только при входе, бое и чате.",
+			"Карты, которые больше не пустые — у Ливонии и Сахалина появились собственные встроенные схемы (береговая линия, вода); любой другой или модовый мир показывает аккуратный плейсхолдер с призывом загрузить топ-даун карту.",
+			"Зум и панорама на каждой карте — колесом мыши или экранными кнопками +/− можно приближать, а перетаскиванием — двигать карту для точного размещения точек; мировые координаты остаются верными на любом масштабе.",
+			"Поддержка всех карт — менеджер распознаёт карту по названию миссии (3 официальных плюс ~50 популярных модовых: Namalsk, Deer Isle, Banov, Chiemsee, Rostow, Takistan, Esseker, Sarov, Nyheim…), а любую другую заводит автоматически. Настоящую карту задаёте сами: загрузите картинку или вставьте URL (менеджер скачает). Чужие изображения карт в сборку не включаются — вы указываете источник, которым вправе пользоваться.",
+			"Стабильность — на панели теперь пишется «RCon не подключён» вместо обманчивых «0 игроков», график производительности не записывает ложный 0 при недоступном RCon, мёртвые RCon-соединения закрываются сразу, а не подвешивают команду, и страницы, читающие админ-лог, предупреждают, если -adminlog выключен.",
+		},
+	},
+	{
 		Version: "0.29.0", Date: "2026-08-12",
 		EN: []string{
 			"Player spawns editor — a new page under Server that edits cfgplayerspawnpoints.xml on the map: switch between Fresh / Hop / Travel, see each named group as a coloured cluster, and click to add a point, drag to move, right-click to delete. Add/rename/delete groups and tune the spawn / generator / group parameters; the distance and grid settings round-trip untouched.",

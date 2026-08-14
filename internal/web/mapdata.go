@@ -6,10 +6,14 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -46,38 +50,137 @@ func sanitizeKey(s string) string {
 	return k
 }
 
-// worldFromTemplate resolves the DayZ world of the active mission from its
-// template folder name (e.g. "dayzOffline.chernarusplus" → Chernarus). Custom
-// missions keep the world name after the dot, so a substring match is enough.
+// defaultWorldSize is the fallback square edge (metres) for a world whose real
+// size we don't know — the most common DayZ terrain size. The admin can override
+// per map (config.MapSizes) so points and the grid line up.
+const defaultWorldSize = 15360
+
+// worldDef is one recognised world in the registry below.
+type worldDef struct {
+	Key      string   // stable slug (names the uploaded image + size override)
+	Name     string   // display name
+	Size     float64  // square terrain edge in metres; 0 → defaultWorldSize
+	Official bool     // a Bohemia-shipped world (size is authoritative)
+	Aliases  []string // normalised (lowercase-alphanumeric) substrings to match in the template
+}
+
+// worldRegistry recognises official and popular community worlds from the mission
+// template name (e.g. "dayzOffline.chernarusplus", "regular.deerisle"). It's
+// matched fuzzily (see worldFromTemplate) so a modded map installed and selected
+// on the server is recognised automatically. Anything not listed still gets its
+// own slot via the fallback in worldFromTemplate — so every world is supported,
+// listed or not.
 //
-// Sizes: Chernarus 15360 and Livonia 12800 are the long-known engine values;
-// Sakhal (Frostline) uses 16384 here — adjust in one place if BI's figure
-// differs, the heatmap plots positions as a fraction of Size either way.
-func worldFromTemplate(template string) mapInfo {
-	t := strings.ToLower(template)
-	switch {
-	case strings.Contains(t, "enoch"), strings.Contains(t, "livonia"):
-		return mapInfo{Key: "livonia", Name: "Livonia", Size: 12800, Official: true}
-	case strings.Contains(t, "sakhal"):
-		return mapInfo{Key: "sakhal", Name: "Sakhal", Size: 16384, Official: true}
-	case strings.Contains(t, "chernarus"):
-		return mapInfo{Key: "chernarus", Name: "Chernarus", Size: 15360, Official: true}
-	default:
-		// Modded/custom world: key it by the world name (the part after the last
-		// dot) so each map keeps its own uploaded image and size override. The
-		// default 15360 is the most common edge length; the admin can set the
-		// real size so points and grid line up.
-		world := template
-		if i := strings.LastIndex(template, "."); i >= 0 {
-			world = template[i+1:]
+// Sizes: the three official worlds are authoritative; a few widely-cited
+// community sizes are filled in (Deer Isle 16384, Chiemsee 10240, Rostow 14336,
+// Takistan 12800). Where a size isn't reliably known it's left 0 (defaults,
+// admin-overridable) rather than asserting a wrong value that would silently
+// mis-scale points. This list covers the real, identifiable community maps; dev
+// builds, WIP and one-off terrains aren't listed but still work via the fallback
+// (their own slot, default size). Add more worlds here as needed — one line
+// each. Order matters: the first alias hit wins, so official worlds come first,
+// and aliases are distinctive tokens (never short fragments) to avoid matching a
+// different map by accident.
+var worldRegistry = []worldDef{
+	{Key: "chernarus", Name: "Chernarus", Size: 15360, Official: true, Aliases: []string{"chernarusplus", "chernarus"}},
+	{Key: "livonia", Name: "Livonia", Size: 12800, Official: true, Aliases: []string{"livonia", "enoch"}},
+	{Key: "sakhal", Name: "Sakhal", Size: 16384, Official: true, Aliases: []string{"sakhal"}},
+	// Community worlds (alphabetical). Sizes default unless widely known.
+	{Key: "alteria", Name: "Alteria", Aliases: []string{"alteria"}},
+	{Key: "anastara", Name: "Anastara", Aliases: []string{"anastara"}},
+	{Key: "antoria", Name: "Antoria", Aliases: []string{"antoria"}},
+	{Key: "arcadia", Name: "Arcadia", Aliases: []string{"arcadia"}},
+	{Key: "arsteinen", Name: "Arsteinen", Aliases: []string{"arsteinen"}},
+	{Key: "avalon", Name: "Avalon", Aliases: []string{"avalon"}},
+	{Key: "azalea", Name: "Azalea", Aliases: []string{"azalea"}},
+	{Key: "banov", Name: "Banov", Aliases: []string{"banov"}},
+	{Key: "barrington", Name: "Barrington", Aliases: []string{"barrington"}},
+	{Key: "bearisland", Name: "Bear Island", Aliases: []string{"bearisland"}},
+	{Key: "bitterroot", Name: "Bitterroot", Aliases: []string{"bitterroot"}},
+	{Key: "chiemsee", Name: "Chiemsee", Size: 10240, Aliases: []string{"chiemsee"}},
+	{Key: "deadfall", Name: "Deadfall", Aliases: []string{"deadfall"}},
+	{Key: "deerisle", Name: "Deer Isle", Size: 16384, Aliases: []string{"deerisle"}},
+	{Key: "doorcounty", Name: "Door County", Aliases: []string{"doorcounty"}},
+	{Key: "esseker", Name: "Esseker", Aliases: []string{"esseker"}},
+	{Key: "evelone", Name: "Evelone", Aliases: []string{"evelone"}},
+	{Key: "fogfall", Name: "FogFall", Aliases: []string{"fogfall"}},
+	{Key: "hashima", Name: "Hashima Islands", Aliases: []string{"hashima"}},
+	{Key: "iztek", Name: "Iztek", Aliases: []string{"iztek"}},
+	{Key: "japan", Name: "Japan", Aliases: []string{"japan"}},
+	{Key: "malvinas", Name: "Malvinas", Aliases: []string{"malvinas"}},
+	{Key: "melkart", Name: "Melkart", Aliases: []string{"melkart"}},
+	{Key: "mensk", Name: "Mensk Island", Aliases: []string{"mensk"}},
+	{Key: "metropolis", Name: "Metropolis", Aliases: []string{"metropolis"}},
+	{Key: "mysteryisland", Name: "Mystery Island", Aliases: []string{"mysteryisland"}},
+	{Key: "namalsk", Name: "Namalsk", Aliases: []string{"namalsk"}},
+	{Key: "newyork", Name: "New York", Aliases: []string{"newyork"}},
+	{Key: "novikostok", Name: "Novikostok", Aliases: []string{"novikostok"}},
+	{Key: "nyheim", Name: "Nyheim", Aliases: []string{"nyheim"}},
+	{Key: "orsek", Name: "Orsek", Aliases: []string{"orsek"}},
+	{Key: "pripyat", Name: "Pripyat", Aliases: []string{"pripyat"}},
+	{Key: "prisonisland", Name: "Prison Island", Aliases: []string{"prisonisland"}},
+	{Key: "prominsk", Name: "Prominsk", Aliases: []string{"prominsk"}},
+	{Key: "raman", Name: "Raman", Aliases: []string{"raman"}},
+	{Key: "rostow", Name: "Rostow", Size: 14336, Aliases: []string{"rostow", "rostov"}},
+	{Key: "sahinkaya", Name: "Sahinkaya", Aliases: []string{"sahinkaya"}},
+	{Key: "sahrani", Name: "Sahrani", Aliases: []string{"sahrani"}},
+	{Key: "sangudo", Name: "Sangudo", Aliases: []string{"sangudo"}},
+	{Key: "sarov", Name: "Sarov", Aliases: []string{"sarov"}},
+	{Key: "saxonya", Name: "Saxonya", Aliases: []string{"saxonya"}},
+	{Key: "scalasaig", Name: "Scalasaig", Aliases: []string{"scalasaig"}},
+	{Key: "scotland", Name: "Scotland", Aliases: []string{"scotland"}},
+	{Key: "siberia", Name: "Siberia", Aliases: []string{"siberia"}},
+	{Key: "stuartisland", Name: "Stuart Island", Aliases: []string{"stuartisland"}},
+	{Key: "swansisland", Name: "Swans Island", Aliases: []string{"swansisland"}},
+	{Key: "takistan", Name: "Takistan", Size: 12800, Aliases: []string{"takistan"}},
+	{Key: "togenia", Name: "Togenia", Aliases: []string{"togenia"}},
+	{Key: "valning", Name: "Valning", Aliases: []string{"valning"}},
+	{Key: "vela", Name: "Vela", Aliases: []string{"vela"}},
+	{Key: "yiprit", Name: "Yiprit", Aliases: []string{"yiprit"}},
+	{Key: "zaha", Name: "Zaha", Aliases: []string{"zaha"}},
+}
+
+// normWorld reduces a template to lowercase alphanumerics for fuzzy matching, so
+// "dayzOffline.ChernarusPlus", "Chernarus+" and "chernarusplus" all compare equal.
+func normWorld(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
 		}
-		key := sanitizeKey(world)
-		name := world
-		if strings.TrimSpace(name) == "" {
-			name = key
-		}
-		return mapInfo{Key: key, Name: name, Size: 15360}
 	}
+	return b.String()
+}
+
+// worldFromTemplate resolves the DayZ world of the active mission from its
+// template folder name. It first tries the registry (fuzzy alias match) and
+// falls back to keying an unknown world by the token after the last dot, so it
+// keeps its own uploaded image + size override.
+func worldFromTemplate(template string) mapInfo {
+	norm := normWorld(template)
+	for _, wd := range worldRegistry {
+		for _, a := range wd.Aliases {
+			if strings.Contains(norm, a) {
+				size := wd.Size
+				if size == 0 {
+					size = defaultWorldSize
+				}
+				return mapInfo{Key: wd.Key, Name: wd.Name, Size: size, Official: wd.Official}
+			}
+		}
+	}
+	// Unknown/custom world: key it by the world name (the part after the last
+	// dot) so each map keeps its own uploaded image and size override.
+	world := template
+	if i := strings.LastIndex(template, "."); i >= 0 {
+		world = template[i+1:]
+	}
+	key := sanitizeKey(world)
+	name := world
+	if strings.TrimSpace(name) == "" {
+		name = key
+	}
+	return mapInfo{Key: key, Name: name, Size: defaultWorldSize}
 }
 
 func (h *handlers) currentMap() mapInfo {
@@ -129,6 +232,9 @@ func (h *handlers) mapImageKey(r *http.Request) string {
 // mapImage serves (GET) or stores (POST) the admin-supplied background image for
 // a map. The image is a top-down picture covering the whole world square; the
 // interactive map stretches it to the world bounds so positions line up.
+//
+// The imagery is always admin-provided (uploaded or fetched from a URL the admin
+// chooses) — the manager ships no third-party map art. See mapImageFetch.
 func (h *handlers) mapImage(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		h.mapImageUpload(w, r)
@@ -172,15 +278,110 @@ func (h *handlers) mapImageUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "image too large (max 25 MB)", http.StatusRequestEntityTooLarge)
 		return
 	}
-	if err := os.MkdirAll(h.mapImageDir(), 0o755); err != nil {
+	if err := h.storeMapImage(key, ext, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// Replace any existing image for this key (possibly a different extension).
+	writeJSON(w, map[string]interface{}{"status": "saved", "map": key})
+}
+
+// storeMapImage writes data as the background image for key, replacing any
+// existing image (possibly under a different extension). Shared by the upload
+// and URL-fetch paths.
+func (h *handlers) storeMapImage(key, ext string, data []byte) error {
+	if err := os.MkdirAll(h.mapImageDir(), 0o755); err != nil {
+		return err
+	}
 	for _, e := range mapImageExts {
 		_ = os.Remove(filepath.Join(h.mapImageDir(), key+e))
 	}
-	if err := os.WriteFile(filepath.Join(h.mapImageDir(), key+ext), data, 0o644); err != nil {
+	return os.WriteFile(filepath.Join(h.mapImageDir(), key+ext), data, 0o644)
+}
+
+// imageExtFor picks a stored extension from the HTTP content-type, the URL path,
+// then a content sniff — returning "" when the bytes aren't a supported image.
+func imageExtFor(contentType, urlPath string, data []byte) string {
+	ct := strings.ToLower(strings.TrimSpace(contentType))
+	if i := strings.IndexByte(ct, ';'); i >= 0 {
+		ct = strings.TrimSpace(ct[:i])
+	}
+	switch ct {
+	case "image/webp":
+		return ".webp"
+	case "image/png":
+		return ".png"
+	case "image/jpeg", "image/jpg":
+		return ".jpg"
+	}
+	if ext := strings.ToLower(path.Ext(urlPath)); contains(mapImageExts, ext) {
+		if ext == ".jpeg" {
+			return ".jpg"
+		}
+		return ext
+	}
+	switch sn := http.DetectContentType(data); {
+	case strings.HasPrefix(sn, "image/webp"):
+		return ".webp"
+	case strings.HasPrefix(sn, "image/png"):
+		return ".png"
+	case strings.HasPrefix(sn, "image/jpeg"):
+		return ".jpg"
+	}
+	return ""
+}
+
+// mapImageFetch downloads a map background from a URL the admin supplies and
+// stores it in the per-map slot (same validation/limits as an upload). The fetch
+// is server-side so the picture works offline afterwards and no third party is
+// hit per viewer. The manager ships no imagery — the admin points it at a source
+// they have the right to use.
+func (h *handlers) mapImageFetch(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Map string `json:"map"`
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	key := sanitizeKey(req.Map)
+	if key == "" || key == "unknown" {
+		key = h.currentMap().Key
+	}
+	u, err := url.Parse(strings.TrimSpace(req.URL))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		http.Error(w, "a valid http(s) image URL is required", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+	greq, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	greq.Header.Set("User-Agent", "DayZ-Server-Manager")
+	resp, err := http.DefaultClient.Do(greq)
+	if err != nil {
+		http.Error(w, "fetch failed: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, fmt.Sprintf("fetch failed: HTTP %d", resp.StatusCode), http.StatusBadGateway)
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxMapImageBytes+1))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if len(data) > maxMapImageBytes {
+		http.Error(w, "image too large (max 25 MB)", http.StatusRequestEntityTooLarge)
+		return
+	}
+	ext := imageExtFor(resp.Header.Get("Content-Type"), u.Path, data)
+	if ext == "" {
+		http.Error(w, "URL is not a supported image (.webp/.png/.jpg/.jpeg)", http.StatusUnsupportedMediaType)
+		return
+	}
+	if err := h.storeMapImage(key, ext, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -278,34 +479,70 @@ func (h *handlers) mapHeat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// mapLive returns the last-known position of every currently-connected player.
-// Positions come from the .ADM log, which vanilla DayZ writes only on connect,
-// combat and chat — so a position can be stale (surfaced as its age). Players
-// who are online but haven't produced a positioned line yet simply aren't
-// plotted, which is why onlineCount can exceed the number of points.
+// liveWindow bounds how old a last-known position may be to still be plotted
+// when we can't confirm the player is online (RCon down/unconfigured). Keeps the
+// best-effort map from showing hours-old ghosts.
+const liveWindow = 30 * time.Minute
+
+// livePlot is a plotted position plus whether RCon currently confirms the player
+// is online (vs a best-effort last-known point). Embeds LivePos so its fields
+// (key/name/x/z/ageSec) flatten into the same JSON object.
+type livePlot struct {
+	players.LivePos
+	Online bool `json:"online"`
+}
+
+// mapLive returns player positions for the live map. Positions come from the
+// .ADM log, which vanilla DayZ writes only on connect, combat and chat — so a
+// position can be stale (surfaced as its age). This is best-effort:
+//   - When RCon answers, we know exactly who's online: online players are always
+//     plotted (marked online), and recently-seen players (< liveWindow) are also
+//     shown as last-known so the map isn't empty between their ADM lines.
+//   - When RCon is down or unconfigured, we can't know who's online, so we plot
+//     every recently-seen position (< liveWindow) as last-known. The frontend
+//     surfaces this honestly instead of showing a blank map.
 func (h *handlers) mapLive(w http.ResponseWriter, r *http.Request) {
 	db := h.playersDB()
 	db.Ingest(h.profilesAbs())
 
 	running := h.app.ServerIsRunning()
 	online := map[string]bool{}
-	if running {
-		for _, p := range h.app.RCon.PlayersFresh(10 * time.Second) {
+	rconErr := ""
+	rconOK := false
+	if running && h.app.RCon.Configured() {
+		list := h.app.RCon.PlayersFresh(10 * time.Second)
+		if err := h.app.RCon.LastPlayersErr(); err != nil {
+			rconErr = err.Error()
+		} else {
+			rconOK = true
+		}
+		for _, p := range list {
 			online[strings.ToLower(p.Name)] = true
 		}
 	}
 
-	plotted := []players.LivePos{}
-	for _, lp := range db.LivePositions() {
-		if online[strings.ToLower(lp.Name)] {
-			plotted = append(plotted, lp)
+	windowSec := int(liveWindow.Seconds())
+	plotted := []livePlot{}
+	if running {
+		for _, lp := range db.LivePositions() {
+			isOnline := rconOK && online[strings.ToLower(lp.Name)]
+			// Drop ancient last-known points; keep confirmed-online players at any age.
+			if !isOnline && lp.AgeSec > windowSec {
+				continue
+			}
+			plotted = append(plotted, livePlot{LivePos: lp, Online: isOnline})
 		}
 	}
 
-	writeJSON(w, map[string]interface{}{
-		"map":         h.currentMap(),
-		"players":     plotted,
-		"running":     running,
-		"onlineCount": len(online),
-	})
+	out := map[string]interface{}{
+		"map":            h.currentMap(),
+		"players":        plotted,
+		"running":        running,
+		"onlineCount":    len(online),
+		"rconConfigured": h.app.RCon.Configured(),
+	}
+	if rconErr != "" {
+		out["rconError"] = rconErr
+	}
+	writeJSON(w, out)
 }

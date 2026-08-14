@@ -43,6 +43,14 @@ type Manager struct {
 	cacheAt    time.Time
 	cacheErr   error
 	refreshing bool
+
+	// Live chat ring buffer, fed by the BattlEye message stream (OnMessage).
+	chatMu sync.Mutex
+	chat   []ChatMsg
+
+	// Throttle for TouchConnect's background dial (guarded by mu).
+	touching bool
+	touchAt  time.Time
 }
 
 func NewManager() *Manager { return &Manager{} }
@@ -75,8 +83,56 @@ func (m *Manager) Connect() error {
 	if err != nil {
 		return err
 	}
+	// Capture the live BattlEye message stream (chat + kill/connect lines) into
+	// the chat ring buffer. Wired on every (re)connect since Dial makes a fresh
+	// Conn each time. See chat.go.
+	c.OnMessage = m.onServerMessage
 	m.conn = c
 	return nil
+}
+
+// Configured reports whether host/port/password are set (RCon can be attempted).
+func (m *Manager) Configured() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.host != "" && m.port != 0 && m.pass != ""
+}
+
+// LastPlayersErr returns the error from the most recent player-list refresh (nil
+// when the last refresh succeeded). Lets the dashboard tell "RCon not connected"
+// apart from a genuinely empty server.
+func (m *Manager) LastPlayersErr() error {
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
+	return m.cacheErr
+}
+
+// IsConnected reports whether the RCon socket is currently open.
+func (m *Manager) IsConnected() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.conn != nil
+}
+
+// TouchConnect triggers a throttled, non-blocking connection attempt so the live
+// BattlEye message stream (chat) stays open while a client is watching the Chat
+// page — without ever blocking the caller on a 5 s dial timeout when the server
+// is down. A no-op if already connected, unconfigured, or attempted recently.
+func (m *Manager) TouchConnect() {
+	m.mu.Lock()
+	if m.conn != nil || m.host == "" || m.port == 0 || m.pass == "" ||
+		m.touching || time.Since(m.touchAt) < 5*time.Second {
+		m.mu.Unlock()
+		return
+	}
+	m.touching = true
+	m.mu.Unlock()
+	go func() {
+		_ = m.Connect()
+		m.mu.Lock()
+		m.touching, m.touchAt = false, time.Now()
+		m.mu.Unlock()
+	}()
 }
 
 func (m *Manager) Close() {

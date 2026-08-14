@@ -39,6 +39,10 @@ var (
 const (
 	keepAliveInterval = 30 * time.Second
 	readTimeout       = 5 * time.Second
+	// If no valid packet (command reply OR keep-alive echo) arrives for this
+	// long, the link is silently dead (e.g. the server restarted) — close it so
+	// the next command reconnects instead of stalling on a 5 s timeout.
+	staleTimeout = 3 * keepAliveInterval
 )
 
 // Conn is a live BattlEye RCon connection.
@@ -52,7 +56,8 @@ type Conn struct {
 	seq      uint32
 	pending  map[byte]*pending
 	closed   atomic.Bool
-	readErr  atomic.Value // error
+	readErr  atomic.Value  // error
+	lastRecv atomic.Int64  // unixnano of the last valid packet — liveness
 
 	// Multipart response assembly (very rare: >1 response per seq).
 	parts map[byte]map[byte][]byte // seq → partIdx → payload
@@ -94,6 +99,7 @@ func Dial(addr, password string) (*Conn, error) {
 		pending: map[byte]*pending{},
 		parts:   map[byte]map[byte][]byte{},
 	}
+	c.lastRecv.Store(time.Now().UnixNano())
 
 	// Login.
 	if err := c.sendFrame(append([]byte{0x00}, []byte(password)...)); err != nil {
@@ -226,6 +232,7 @@ func (c *Conn) readLoop() {
 			dbg("drop packet (%d bytes): %v", n, err)
 			continue
 		}
+		c.lastRecv.Store(time.Now().UnixNano()) // a valid packet — peer is alive
 		// parseHeader returns a slice that aliases the reusable read buffer.
 		// handleCommandReply hands the payload to another goroutine (the waiting
 		// Command) and stores multipart fragments for later assembly — both
@@ -300,6 +307,15 @@ func (c *Conn) keepAlive() {
 	defer t.Stop()
 	for range t.C {
 		if c.closed.Load() {
+			return
+		}
+		// Liveness: the server echoes our keep-alives and command replies, so a
+		// gap this long means the peer went away silently (a restart, a dropped
+		// route). Close so the manager's next command reconnects cleanly instead
+		// of blocking on a 5 s read timeout and then persisting a dead socket.
+		if time.Since(time.Unix(0, c.lastRecv.Load())) > staleTimeout {
+			dbg("keep-alive: no packet in %s — closing stale connection", staleTimeout)
+			_ = c.Close()
 			return
 		}
 		// Skip the keep-alive if a command is in flight. Keep-alive is an empty

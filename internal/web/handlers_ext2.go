@@ -190,6 +190,12 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 		players := h.app.RCon.PlayersFresh(8 * time.Second)
 		out["playerCount"] = len(players)
 		out["players"] = players
+		out["rconConfigured"] = h.app.RCon.Configured()
+		// Distinguish "RCon not connected / erroring" from a genuinely empty
+		// server so the dashboard shows an honest state, not a false "0 players".
+		if err := h.app.RCon.LastPlayersErr(); err != nil {
+			out["rconError"] = err.Error()
+		}
 	}
 
 	// Log sources with sizes.

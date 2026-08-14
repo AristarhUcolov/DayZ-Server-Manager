@@ -1877,8 +1877,14 @@ tr.lb-top > td { background: var(--surface-2); }
 }
 .chat-line { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
 .chat-time { color: var(--text-tertiary); font-variant-numeric: tabular-nums; flex: 0 0 auto; font-size: 12px; }
+.chat-ch { color: var(--text-tertiary); background: var(--surface-3, var(--surface)); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0 5px; font-size: 11px; flex: 0 0 auto; }
 .chat-player { font-weight: 700; color: var(--accent); flex: 0 0 auto; }
 .chat-text { color: var(--text); word-break: break-word; }
+.chat-status { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; font-size: 12px; color: var(--text-secondary); }
+.chat-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-tertiary); flex: 0 0 auto; }
+.chat-dot.on { background: var(--ok, #34c759); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok, #34c759) 25%, transparent); }
+.rcon-down { color: var(--warn); font-weight: 600; cursor: help; }
 
 /* RCon — announcement presets -------------------------------------------- */
 .preset-list { display: flex; flex-direction: column; gap: 6px; }
@@ -1895,12 +1901,26 @@ tr.lb-top > td { background: var(--surface-2); }
 
 /* Game map + heatmap ----------------------------------------------------- */
 .map-wrap {
+  position: relative;
   max-width: 760px; margin: 0 auto; border: 1px solid var(--border);
   border-radius: 12px; overflow: hidden;
 }
-.game-map { display: block; width: 100%; height: auto; background: var(--surface); }
+.game-map { display: block; width: 100%; height: auto; background: var(--surface); touch-action: none; }
+.game-map.gm-zoomed { cursor: grab; }
+.game-map.gm-panning { cursor: grabbing; }
 .gm-bg { fill: var(--surface-2); }
-.gm-grid { stroke: var(--border); stroke-width: 0.5; }
+.gm-grid { stroke: var(--border); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+/* Point outlines stay crisp (constant screen thickness) at any zoom. */
+.ev-pt, .sp-pt, .live-pt, .gm-town { vector-effect: non-scaling-stroke; }
+/* On-map zoom controls. */
+.gm-zoom { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 4px; }
+.gm-zbtn {
+  width: 30px; height: 30px; padding: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1; border: 1px solid var(--border); border-radius: 7px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent); color: var(--text);
+  cursor: pointer; backdrop-filter: blur(3px);
+}
+.gm-zbtn:hover { background: var(--surface-hover); border-color: var(--accent); }
 .gm-axis { fill: var(--text-tertiary); font-size: 11px; }
 .gm-town { fill: var(--text-secondary); }
 .gm-town-label { fill: var(--text-secondary); font-size: 9px; font-weight: 600; }
@@ -1915,14 +1935,23 @@ tr.lb-top > td { background: var(--surface-2); }
   font-variant-numeric: tabular-nums; color: var(--text-tertiary);
   font-size: 12px; min-width: 150px; text-align: right;
 }
-.map-img-ctl { display: flex; gap: 6px; align-items: center; }
+.map-img-ctl { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .game-map.has-img .gm-grid { stroke-opacity: 0.3; }
-.game-map.gm-has-shape .gm-grid { stroke: #ffffff; stroke-opacity: 0.12; }
+.game-map.gm-has-shape .gm-grid,
+.game-map.gm-placeholder .gm-grid { stroke: #ffffff; stroke-opacity: 0.12; }
 .gm-water { fill: #2b4257; }
 .gm-land { fill: #45573f; }
+/* Schematic rivers — a thin water-blue stroke, constant thickness at any zoom. */
+.gm-river { fill: none; stroke: #3f6d8c; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0.85; }
+/* Neutral land tint for worlds with neither an uploaded image nor a schematic. */
+.gm-land-soft { fill: #3a4636; }
 .game-map.gm-has-shape .gm-axis { fill: #cfe0d8; }
+.game-map.gm-placeholder .gm-axis { fill: #cfe0d8; }
 .game-map.gm-has-shape .gm-town { fill: #f0f4ef; }
 .game-map.gm-has-shape .gm-town-label { fill: #eef3ea; }
+/* Upload call-to-action on placeholder maps. */
+.gm-cta-title { fill: #eef3ea; font-size: 30px; font-weight: 800; opacity: 0.9; }
+.gm-cta-hint { fill: #cbd6cc; font-size: 17px; opacity: 0.85; }
 .heat { stroke: none; }
 .heat-pvp { fill: var(--error); fill-opacity: 0.42; }
 .heat-env { fill: var(--warn); fill-opacity: 0.38; }
@@ -1933,6 +1962,8 @@ tr.lb-top > td { background: var(--surface-2); }
 .chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .live-pt { fill: var(--ok); stroke: #fff; stroke-width: 1; }
 .live-pt.stale { fill: var(--text-tertiary); }
+/* Last-known (RCon can't confirm online): hollow marker so it reads as unconfirmed. */
+.live-pt.offline { fill: var(--surface-2); stroke: var(--warn); stroke-width: 1.5; }
 .live-label { fill: var(--text); font-size: 10px; font-weight: 700; }
 .live-label.stale { fill: var(--text-tertiary); font-weight: 600; }
 

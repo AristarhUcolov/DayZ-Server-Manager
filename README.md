@@ -208,9 +208,15 @@
   один клик, сохраняя правило `min ≤ nominal`. Кнопка **×1** возвращает
   значения к тем, что были до первого масштабирования, — тюнинг всегда
   обратим. Требует остановленного сервера, делает бэкап.
-- **Карта сервера.** Схематичная карта Chernarus/Livonia/Sakhal с сеткой 1 км
-  и ландмарками — общий компонент для трёх инструментов ниже. Береговые контуры
-  пока не рисуются; координатная сетка и города дают ориентир.
+- **Карта сервера.** Схематичная карта с сеткой 1 км и ландмарками — общий
+  компонент для инструментов ниже. Менеджер **распознаёт мир по названию миссии**
+  (3 официальных + ~50 популярных модовых: Namalsk, Deer Isle, Banov, Chiemsee,
+  Rostow, Takistan, Esseker, Sarov, Nyheim и др.), а любую другую карту заводит
+  автоматически со своим слотом и размером. **Настоящую карту** вы задаёте сами: загрузите картинку **или**
+  вставьте URL (менеджер скачает её). Чужие изображения карт в сборку не
+  включаются — вы указываете источник, которым вправе пользоваться. **Зум**
+  (колесо/кнопки) и **панорама** для точного размещения — координаты верны на
+  любом масштабе.
 - **Тепловая карта.** Где гибнут игроки и идут бои — из позиций в админ-логе.
   Разбивка на PvP, окружение и суициды, фильтры, координаты под курсором.
 - **Редактор точек событий.** `cfgeventspawns.xml` на карте: клик — добавить
@@ -221,7 +227,8 @@
   кластеры, клик — добавить точку, тащить — двигать, правый клик — удалить.
   Добавление/переименование/удаление групп и настройка параметров спавна,
   генератора и групп; настройки дистанций и сетки сохраняются нетронутыми.
-- **Живая карта.** Последняя известная позиция онлайн-игроков, авто-обновление.
+- **Живая карта.** Позиции игроков с авто-обновлением. Если RCon недоступен,
+  показываются последние известные позиции (с пометкой), так что карта не пустеет.
   Ванильный DayZ пишет позиции только при входе/бою/чате, поэтому точка может
   отставать; позиции старше 5 минут приглушены.
 - **Форма globals.xml.** Понятная форма над глобальными переменными экономики
@@ -248,8 +255,9 @@
   превышении памяти процессом DayZ — освобождает утечку на долгом аптайме.
 - **Пресеты анонсов.** Сохранённые быстрые сообщения на странице RCon: клик —
   бродкаст всем, «Save» — добавить текущее. Хранятся в конфиге.
-- **Живой чат.** Отдельная страница внутриигрового чата из админ-лога с
-  авто-обновлением и полем ответа (бродкаст через RCon).
+- **Живой чат.** Отдельная страница внутриигрового чата **в реальном времени** —
+  прямо из потока BattlEye RCon (ванильный DayZ не пишет чат в админ-лог).
+  Авто-обновление, поле ответа (бродкаст через RCon) и бейдж состояния соединения.
 - **Пинг watchlist.** Когда игрок под наблюдением заходит на сервер, панель
   показывает всплывающее уведомление.
 - **Профили конфигов по расписанию.** Применить сохранённый профиль в заданное
@@ -618,9 +626,15 @@ panels.
   keeping the `min ≤ nominal` rule. A **×1** button restores the amounts from
   before your first scaling, so tuning is always reversible. Requires the server
   stopped, keeps a backup.
-- **Server map.** A schematic Chernarus/Livonia/Sakhal map with a 1 km grid and
-  landmarks — a shared component behind the three tools below. Coastlines aren't
-  traced yet; the grid and towns give orientation.
+- **Server map.** A schematic map with a 1 km grid and landmarks — a shared
+  component behind the tools below. The manager **recognises the world from the
+  mission name** (3 official + ~50 popular modded: Namalsk, Deer Isle, Banov,
+  Chiemsee, Rostow, Takistan, Esseker, Sarov, Nyheim, …); any other map is
+  auto-registered with its own slot and size. You supply the **real map** yourself: upload an image **or** paste a URL
+  (the manager downloads it). We bundle no third-party map imagery — that's
+  copyrighted; you point it at a source you have the right to use. **Zoom**
+  (wheel/buttons) and **pan** for precise placement — coordinates stay correct at
+  any zoom.
 - **Heatmap.** Where players die and fights happen, from positions in the admin
   log. Split into PvP, environment and suicides, with filters and a coordinate
   readout under the cursor.
@@ -632,9 +646,10 @@ panels.
   a point, drag to move, right-click to delete. Add/rename/delete groups and tune
   the spawn / generator / group parameters; the distance and grid settings
   round-trip untouched.
-- **Live map.** The last-known position of online players, auto-refreshing.
-  Vanilla DayZ logs positions only on connect, combat and chat, so a dot can lag;
-  positions older than 5 minutes are dimmed.
+- **Live map.** Player positions, auto-refreshing. When RCon is unreachable it
+  falls back to the last-known positions (marked as such) so the map never goes
+  blank. Vanilla DayZ logs positions only on connect, combat and chat, so a dot
+  can lag; positions older than 5 minutes are dimmed.
 - **globals.xml form.** A friendly form over the central-economy globals (cleanup
   timers, spawn limits, login/logout, base decay) with a plain-language tooltip
   per known variable. Search, saves only what changed.
@@ -659,8 +674,10 @@ panels.
   DayZ process memory passes a threshold — freeing the creep of long uptimes.
 - **Announcement presets.** Saved quick messages on the RCon page: click to
   broadcast to everyone, "Save" to add the current one. Stored in the config.
-- **Live chat.** A dedicated page for in-game chat from the admin log, auto-
-  refreshing, with a reply box (broadcast via RCon).
+- **Live chat.** A dedicated page for in-game chat **in real time** — straight
+  from the BattlEye RCon stream (vanilla DayZ never writes chat to the admin log).
+  Auto-refreshing, with a reply box (broadcast via RCon) and a connection-status
+  badge.
 - **Watchlist connect pings.** When a watched player joins the server, the panel
   shows a toast.
 - **Scheduled config profiles.** Apply a saved profile at a daily time; the swap

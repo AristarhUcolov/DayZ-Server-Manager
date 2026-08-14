@@ -199,7 +199,7 @@ type histSample struct {
 	T       int64   `json:"t"` // unix seconds
 	CPU     float64 `json:"cpu"`
 	Mem     uint64  `json:"mem"`
-	Players int     `json:"players"`
+	Players *int    `json:"players"` // nil (null) = unknown, e.g. RCon errored — not a false 0
 	Running bool    `json:"running"`
 }
 
@@ -231,7 +231,13 @@ func (h *handlers) metricsSampler(ctx context.Context) {
 					s.Mem = mem
 				}
 			}
-			s.Players = len(h.app.RCon.PlayersFresh(45 * time.Second))
+			players := h.app.RCon.PlayersFresh(45 * time.Second)
+			// Record the count only when RCon actually answered; otherwise leave it
+			// nil (unknown) so a broken RCon doesn't graph a false 0-player dip.
+			if h.app.RCon.LastPlayersErr() == nil {
+				n := len(players)
+				s.Players = &n
+			}
 		}
 		metricsHist.mu.Lock()
 		metricsHist.samples = append(metricsHist.samples, s)

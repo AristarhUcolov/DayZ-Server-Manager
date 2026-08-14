@@ -358,6 +358,14 @@ function runningBanner() {
   return h('div', { class: 'warning-bar', i18n: 'guard.serverRunning' });
 }
 
+// adminLogWarning returns a warning bar for ADM-backed pages (players, live map,
+// activity) when -adminlog is off — those features read the admin log the server
+// writes, so without it they stay empty. Returns null when the log is enabled.
+function adminLogWarning() {
+  if (!State.config || State.config.adminLog !== false) return null;
+  return h('div', { class: 'warning-bar', i18n: 'warn.adminlogOff' });
+}
+
 // --------------------------------------------------------------------- CodeMirror lazy loader
 //
 // CM is vendored under /vendor/codemirror so the panel stays single-exe and
@@ -616,6 +624,9 @@ Views.dashboard = async (root) => {
     const mods = m.mods || { total: 0, installed: 0, active: 0 };
     const disk = m.diskFreeBytes != null ? bytes(m.diskFreeBytes) : '—';
     const players = m.playerCount != null ? m.playerCount : '—';
+    // RCon answered with an error while the server is up → show an honest
+    // "not connected" indicator rather than a misleading 0-player count.
+    const rconDown = !!(s.running && m.rconError);
     const recent = Array.isArray(m.recentAdm) ? m.recentAdm : [];
     const proc = m.proc || null;
     if (proc) {
@@ -650,7 +661,10 @@ Views.dashboard = async (root) => {
             h('div', { class: 'k', i18n: 'status.port' }),
             h('div', { text: s.port }),
             h('div', { class: 'k', i18n: 'status.players' }),
-            h('div', { text: String(players) }),
+            rconDown
+              ? h('div', { class: 'rcon-down', title: m.rconError },
+                  [h('span', { i18n: m.rconConfigured === false ? 'chat.needRcon.badge' : 'dashboard.rconDown' })])
+              : h('div', { text: String(players) }),
             ...(nextRestart ? [
               h('div', { class: 'k', i18n: 'status.nextRestart' }),
               h('div', { text: nextRestart }),
@@ -5658,6 +5672,7 @@ async function openPlayerProfile(key) {
 Views.players = async (root) => {
   const myNav = _navSeq;
   root.append(pageHeader('nav.players', 'players.subtitle'));
+  { const w = adminLogWarning(); if (w) root.append(w); }
   let d;
   try { d = await api.get('/api/players'); }
   catch (e) { handleErr(e); return; }
@@ -5870,6 +5885,12 @@ function fmtMinutes(min) {
   if (min < 60) return min + 'm';
   return Math.floor(min / 60) + 'h ' + (min % 60) + 'm';
 }
+// fmtAge turns a seconds count into a compact "12s" / "3m" / "1h 4m" label.
+function fmtAge(sec) {
+  sec = Math.max(0, Math.round(sec || 0));
+  if (sec < 60) return sec + 's';
+  return fmtMinutes(Math.floor(sec / 60));
+}
 
 // ------------------------------------------------------------------ leaderboard
 
@@ -5960,6 +5981,10 @@ Views.leaderboard = async (root) => {
 // Approximate world coordinates (metres, X east / Z north) of well-known
 // Chernarus locations, for orientation on the schematic map. Other worlds fall
 // back to the bare grid until their landmarks are traced.
+// Landmark labels [name, x, z] in world metres. Positions are best-effort
+// orientation aids on a schematic — Chernarus is well-placed; Livonia towns are
+// set from their known compass positions (north/south/NE/central), and Sakhal
+// carries its defining central volcano. Not a substitute for a real map image.
 const MAP_LANDMARKS = {
   chernarus: [
     ['Chernogorsk', 6650, 2050], ['Elektrozavodsk', 10380, 1980],
@@ -5970,16 +5995,30 @@ const MAP_LANDMARKS = {
     ['Krasnostav', 11200, 12200], ['Kamenka', 1900, 2200],
     ['Balota', 4900, 2450], ['Solnichniy', 13600, 6200], ['Gorka', 9500, 8800],
   ],
+  // Livonia (12800): Topolin north, Nadbór south (largest), Grabin/Tarnów/Sitnik
+  // north-east, Radunin central — placed by their known compass positions.
+  livonia: [
+    ['Topolin', 2800, 11000], ['Nadbor', 7600, 3200],
+    ['Tarnow', 8600, 8200], ['Sitnik', 10200, 8800],
+    ['Grabin', 9600, 10600], ['Radunin', 6200, 6000],
+  ],
+  // Sakhal (16384): its central volcano is the defining landmark.
+  sakhal: [
+    ['Volcano', 8200, 8200],
+  ],
 };
 
 // MAP_SHAPES holds a license-safe, hand-drawn schematic landmass for a world
 // (original artwork, not a copy of any commercial map) in world metres [x, z].
-// Only Chernarus is traced; other worlds fall back to the bare grid until their
-// shapes are drawn or the admin uploads a real map image. buildGameMap draws
-// water under the land polygon so the coast reads at a glance.
+// The three official worlds are drawn; other worlds fall back to a placeholder
+// with an upload/URL prompt. Each shape can carry: land (polygon), islands,
+// lakes (water polygons on land), rivers (open polylines) and a coast flag
+// (sea vs. land base). Approximate original art for orientation, not a copy of
+// any real map — for accuracy the admin sets a real image.
 const MAP_SHAPES = {
   chernarus: {
     // Perimeter clockwise from the NW corner; the sea fills the SE/S wedge.
+    coast: true,
     land: [
       [0, 15360], [15360, 15360], [15360, 7200], [14300, 6200], [13600, 4300],
       [12200, 2700], [10000, 2000], [7000, 1700], [4000, 1700], [2000, 2100],
@@ -5988,6 +6027,32 @@ const MAP_SHAPES = {
     islands: [
       // Skalisty Island, off the SE coast.
       [[12700, 4750], [13350, 4600], [13450, 4050], [12800, 3980], [12600, 4350]],
+    ],
+  },
+  // Livonia (Enoch), 12800 m: landlocked, so the base is land, not sea. The lake
+  // district and Biela river sit in the north-east near Grabin. Approximate
+  // original art for orientation — set a real image for accuracy.
+  livonia: {
+    coast: false,
+    land: [[0, 0], [12800, 0], [12800, 12800], [0, 12800]],
+    lakes: [
+      // Lakes in the north-east near Grabin.
+      [[8600, 9400], [9500, 9200], [9900, 9900], [9300, 10500], [8500, 10100]],
+      [[10100, 8000], [10800, 7900], [11000, 8500], [10300, 8700]],
+    ],
+    rivers: [
+      // The Biela river, winding up through the north-east lake district.
+      [[6800, 5200], [7600, 6800], [8400, 8200], [9100, 9600], [9600, 10800]],
+    ],
+  },
+  // Sakhal, 16384 m: a volcanic island, so a coastline reads accurately. Blocky
+  // original outline (not a trace of any commercial map) leaving a sea margin.
+  sakhal: {
+    coast: true,
+    land: [
+      [2200, 1800], [7000, 1500], [11500, 2100], [14200, 4200], [14600, 8000],
+      [13200, 11800], [9800, 14400], [5800, 14600], [2600, 12800], [1500, 9200],
+      [1700, 5200],
     ],
   },
 };
@@ -6004,7 +6069,15 @@ function svgEl(tag, attrs, parent) {
 // grid with kilometre labels, known landmarks (Chernarus), and an empty <g>
 // layer for callers to plot points into. Returns helpers to convert world
 // coordinates to the 0..1000 SVG space and back.
-function buildGameMap(map) {
+//
+// Pan/zoom is done by mutating the root viewBox (never a group transform) so
+// world coordinates read from getScreenCTM().inverse() stay correct at any zoom
+// or pan — see gm.userAt / clientToWorld / mapCoordReadout. opts.panLeft lets
+// read-only maps (heat/live) pan with the left button; editor maps keep the left
+// button for adding/dragging points and pan with the middle button instead.
+// Callers that plot points should set gm.onView(k) to re-scale point radii (gm.k
+// / gm.ptR) so markers keep a roughly constant on-screen size while zoomed.
+function buildGameMap(map, opts = {}) {
   const size = (map && map.size) || 15360;
   const S = 1000;
   const w2s = (x, z) => [x / size * S, S - z / size * S];        // flip Z (north up)
@@ -6025,10 +6098,22 @@ function buildGameMap(map) {
   const shape = (!hasImage && map) ? MAP_SHAPES[map.key] : null;
   if (shape) {
     svg.classList.add('gm-has-shape');
-    svgEl('rect', { x: 0, y: 0, width: S, height: S, class: 'gm-water' }, svg);
     const toPath = (pts) => pts.map((p, i) => (i ? 'L' : 'M') + w2s(p[0], p[1]).join(' ')).join(' ') + ' Z';
-    svgEl('path', { d: toPath(shape.land), class: 'gm-land' }, svg);
+    const toLine = (pts) => pts.map((p, i) => (i ? 'L' : 'M') + w2s(p[0], p[1]).join(' ')).join(' ');
+    // Base: sea for coastal/island worlds, land tint for landlocked ones.
+    svgEl('rect', { x: 0, y: 0, width: S, height: S, class: shape.coast === false ? 'gm-land' : 'gm-water' }, svg);
+    if (shape.land) svgEl('path', { d: toPath(shape.land), class: 'gm-land' }, svg);
     for (const isl of (shape.islands || [])) svgEl('path', { d: toPath(isl), class: 'gm-land' }, svg);
+    for (const lake of (shape.lakes || [])) svgEl('path', { d: toPath(lake), class: 'gm-water' }, svg);
+    // Rivers: open polylines (stroked, not filled), drawn over the land.
+    for (const river of (shape.rivers || [])) svgEl('path', { d: toLine(river), class: 'gm-river' }, svg);
+  } else if (!hasImage) {
+    // No schematic and no real image (Livonia/Sakhal have shapes; modded and
+    // unknown worlds land here): a neutral land tint instead of a bare grid, so
+    // the page never looks broken. A centred CTA (added after the grid) invites
+    // uploading a real top-down map for accurate placement.
+    svg.classList.add('gm-placeholder');
+    svgEl('rect', { x: 0, y: 0, width: S, height: S, class: 'gm-land-soft' }, svg);
   }
 
   const grid = svgEl('g', { class: 'gm-grid-g' }, svg);
@@ -6052,17 +6137,113 @@ function buildGameMap(map) {
     label.textContent = name;
   }
 
+  // Placeholder call-to-action: only when there's neither a real image nor a
+  // built-in schematic — invites the admin to upload a top-down map image.
+  if (!hasImage && !shape) {
+    const cta = svgEl('g', { class: 'gm-cta' }, svg);
+    const title = svgEl('text', { x: S / 2, y: S / 2 - 10, class: 'gm-cta-title', 'text-anchor': 'middle' }, cta);
+    title.textContent = (map && map.key && map.key !== 'unknown') ? (map.name || map.key) : t('map.unknownWorld');
+    const hint = svgEl('text', { x: S / 2, y: S / 2 + 16, class: 'gm-cta-hint', 'text-anchor': 'middle' }, cta);
+    hint.textContent = t('map.uploadCta');
+  }
+
   const layer = svgEl('g', { class: 'gm-layer' }, svg);
-  return { svg, w2s, s2w, size, layer, S };
+
+  // ---- pan / zoom (root viewBox mutation) -------------------------------
+  const view = { x: 0, y: 0, w: S, h: S };
+  const MINW = S / 10; // deepest zoom ≈ 10×
+  const gm = {
+    svg, w2s, s2w, size, layer, S,
+    onView: null,
+    get k() { return view.w / S; },              // <1 when zoomed in
+    ptR(base) { return Math.max(1.5, base * (view.w / S)); }, // ~constant on-screen radius
+  };
+
+  // Client pixel → user (0..1000) space via the live CTM, so it's correct at any
+  // zoom/pan. Falls back to a plain ratio if the CTM isn't available yet.
+  gm.userAt = (clientX, clientY) => {
+    const ctm = svg.getScreenCTM();
+    if (ctm && typeof svg.createSVGPoint === 'function') {
+      const pt = svg.createSVGPoint(); pt.x = clientX; pt.y = clientY;
+      const u = pt.matrixTransform(ctm.inverse());
+      return [u.x, u.y];
+    }
+    const r = svg.getBoundingClientRect();
+    return [view.x + (clientX - r.left) / r.width * view.w,
+            view.y + (clientY - r.top) / r.height * view.h];
+  };
+
+  function applyView() {
+    view.w = Math.min(S, Math.max(MINW, view.w));
+    view.h = view.w; // keep square
+    view.x = Math.min(S - view.w, Math.max(0, view.x));
+    view.y = Math.min(S - view.h, Math.max(0, view.y));
+    svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+    svg.classList.toggle('gm-zoomed', view.w < S - 0.5);
+    if (gm.onView) gm.onView(view.w / S);
+  }
+  function zoomTo(ux, uy, factor) {
+    const newW = Math.min(S, Math.max(MINW, view.w * factor));
+    const fx = (ux - view.x) / view.w, fy = (uy - view.y) / view.h; // cursor fraction
+    view.w = newW;
+    view.x = ux - fx * newW;
+    view.y = uy - fy * newW;
+    applyView();
+  }
+  gm.resetView = () => { view.x = 0; view.y = 0; view.w = S; view.h = S; applyView(); };
+
+  svg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const [ux, uy] = gm.userAt(e.clientX, e.clientY);
+    zoomTo(ux, uy, e.deltaY < 0 ? 0.83 : 1 / 0.83);
+  }, { passive: false });
+
+  // Drag-pan: middle button always; left button too when opts.panLeft. Listeners
+  // are added on grab and removed on release, so nothing leaks across views.
+  let pan = null;
+  const panMove = (e) => {
+    if (!pan) return;
+    const [ux, uy] = gm.userAt(e.clientX, e.clientY);
+    view.x += pan.ux - ux; // shift so the grabbed point stays under the cursor
+    view.y += pan.uy - uy;
+    applyView();
+  };
+  const panUp = () => {
+    pan = null;
+    svg.classList.remove('gm-panning');
+    window.removeEventListener('mousemove', panMove);
+    window.removeEventListener('mouseup', panUp);
+  };
+  svg.addEventListener('mousedown', (e) => {
+    const wantsPan = e.button === 1 || (e.button === 0 && opts.panLeft);
+    if (!wantsPan) return;
+    e.preventDefault();
+    const [ux, uy] = gm.userAt(e.clientX, e.clientY);
+    pan = { ux, uy };
+    svg.classList.add('gm-panning');
+    window.addEventListener('mousemove', panMove);
+    window.addEventListener('mouseup', panUp);
+  });
+
+  // On-screen controls (zoom in / out / reset) for discoverability.
+  const zbtn = (sym, key, fn) => h('button', { class: 'gm-zbtn', type: 'button',
+    title: t(key), 'aria-label': t(key), text: sym,
+    onclick: (e) => { e.preventDefault(); fn(); } });
+  gm.controls = h('div', { class: 'gm-zoom' }, [
+    zbtn('＋', 'map.zoomIn', () => zoomTo(view.x + view.w / 2, view.y + view.h / 2, 0.7)),
+    zbtn('－', 'map.zoomOut', () => zoomTo(view.x + view.w / 2, view.y + view.h / 2, 1 / 0.7)),
+    zbtn('⟲', 'map.zoomReset', () => gm.resetView()),
+  ]);
+
+  return gm;
 }
 
 // mapCoordReadout wires a hover readout showing the world X/Z under the cursor.
+// Uses the live CTM so the readout stays correct at any zoom/pan.
 function mapCoordReadout(gm, readoutEl) {
   gm.svg.addEventListener('mousemove', (e) => {
-    const r = gm.svg.getBoundingClientRect();
-    const sx = (e.clientX - r.left) / r.width * gm.S;
-    const sy = (e.clientY - r.top) / r.height * gm.S;
-    const [wx, wz] = gm.s2w(sx, sy);
+    const [ux, uy] = gm.userAt(e.clientX, e.clientY);
+    const [wx, wz] = gm.s2w(ux, uy);
     readoutEl.textContent = 'X ' + Math.round(wx) + ' · Z ' + Math.round(wz);
   });
   gm.svg.addEventListener('mouseleave', () => { readoutEl.textContent = ''; });
@@ -6086,9 +6267,23 @@ function mapImageControls(map, onDone) {
     } catch (e) { handleErr(e); }
     fileInput.value = '';
   });
+  // Fetch a map picture from a URL the admin supplies. The manager ships no map
+  // imagery — the admin points it at a source they have the right to use; the
+  // server downloads it into this map's slot (see /api/map/image/fetch).
+  async function fromUrl() {
+    const url = await promptModal(t('map.image.urlPrompt'), { title: t('map.image.fromUrl'), placeholder: 'https://…', okText: t('map.image.fromUrl') });
+    if (!url) return;
+    try {
+      await api.post('/api/map/image/fetch', { map: key, url });
+      toast(t('map.image.uploaded'), 'ok');
+      onDone && onDone();
+    } catch (e) { handleErr(e); }
+  }
   const wrap = h('div', { class: 'map-img-ctl' }, [
     h('button', { class: 'secondary', i18n: 'map.image.upload', title: t('map.image.hint'),
       onclick: () => fileInput.click() }),
+    h('button', { class: 'secondary', i18n: 'map.image.fromUrl', title: t('map.image.urlHint'),
+      onclick: fromUrl }),
     fileInput,
   ]);
   if (map && map.hasImage) {
@@ -6158,9 +6353,9 @@ Views.heatmap = async (root) => {
     h('div', { class: 'grow' }), readout,
   ]));
 
-  const gm = buildGameMap(d.map);
+  const gm = buildGameMap(d.map, { panLeft: true });
   mapCoordReadout(gm, readout);
-  card.append(h('div', { class: 'map-wrap' }, gm.svg));
+  card.append(h('div', { class: 'map-wrap' }, [gm.svg, gm.controls]));
   if (!points.length) {
     card.append(h('p', { class: 'hint', i18n: 'heatmap.none' }));
   } else {
@@ -6169,12 +6364,14 @@ Views.heatmap = async (root) => {
 
   function draw() {
     gm.layer.innerHTML = '';
+    const r = gm.ptR(4);
     for (const p of points) {
       if (!show[p.kind]) continue;
       const [sx, sy] = gm.w2s(p.x, p.z);
-      svgEl('circle', { cx: sx, cy: sy, r: 4, class: 'heat heat-' + p.kind }, gm.layer);
+      svgEl('circle', { cx: sx, cy: sy, r, class: 'heat heat-' + p.kind }, gm.layer);
     }
   }
+  gm.onView = draw; // re-plot at the new scale on zoom/pan
   draw();
   applyI18n();
 };
@@ -6182,10 +6379,8 @@ Views.heatmap = async (root) => {
 // ------------------------------------------------------------- event spawns
 
 function clientToWorld(gm, e) {
-  const r = gm.svg.getBoundingClientRect();
-  const sx = (e.clientX - r.left) / r.width * gm.S;
-  const sy = (e.clientY - r.top) / r.height * gm.S;
-  return gm.s2w(sx, sy);
+  const [ux, uy] = gm.userAt(e.clientX, e.clientY);
+  return gm.s2w(ux, uy);
 }
 
 Views.eventmap = async (root) => {
@@ -6246,11 +6441,12 @@ Views.eventmap = async (root) => {
       h('div', { class: 'grow' }), countLbl, readout,
     ]),
     h('p', { class: 'hint', i18n: 'eventmap.help' }),
-    h('div', { class: 'map-wrap' }, gm.svg),
+    h('div', { class: 'map-wrap' }, [gm.svg, gm.controls]),
     h('div', { class: 'actions' }, [saveBtn]),
   ]);
   root.append(card);
   mapCoordReadout(gm, readout);
+  gm.onView = render; // re-plot points at the new scale on zoom/pan
 
   // Validation panel.
   const noPos = d.noPositions || [];
@@ -6278,9 +6474,10 @@ Views.eventmap = async (root) => {
     gm.layer.innerHTML = '';
     circles.length = 0;
     countLbl.textContent = t('eventmap.points').replace('{n}', pos.length);
+    const r = gm.ptR(5);
     pos.forEach((p, i) => {
       const [sx, sy] = gm.w2s(p.x, p.z);
-      const c = svgEl('circle', { cx: sx, cy: sy, r: 5, class: 'ev-pt' }, gm.layer);
+      const c = svgEl('circle', { cx: sx, cy: sy, r, class: 'ev-pt' }, gm.layer);
       c.addEventListener('mousedown', (e) => startDrag(i, e));
       c.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -6472,11 +6669,12 @@ Views.spawnpoints = async (root) => {
     gm.layer.innerHTML = '';
     circles.length = 0;
     const gs = sec().groups;
+    const rA = gm.ptR(5), rI = gm.ptR(3.5);
     gs.forEach((g, gi) => {
       const active = gi === curGroup;
       (g.pos || []).forEach((p, j) => {
         const [sx, sy] = gm.w2s(p.x, p.z);
-        const c = svgEl('circle', { cx: sx, cy: sy, r: active ? 5 : 3.5,
+        const c = svgEl('circle', { cx: sx, cy: sy, r: active ? rA : rI,
           class: 'sp-pt' + (active ? ' sp-pt-active' : ''), fill: colorFor(gi) }, gm.layer);
         if (active) {
           c.style.cursor = 'grab';
@@ -6564,12 +6762,13 @@ Views.spawnpoints = async (root) => {
       mapImageControls(d.map, () => { if (dirty) toast(t('map.image.savedReload'), 'ok'); else navigate('spawnpoints'); }),
       h('div', { class: 'grow' }), countLbl, readout,
     ]),
-    h('div', { class: 'map-wrap' }, gm.svg),
+    h('div', { class: 'map-wrap' }, [gm.svg, gm.controls]),
     h('h3', { i18n: 'spawnpoints.paramsTitle', style: { marginTop: '14px' } }),
     paramsHost,
     h('div', { class: 'actions' }, [saveBtn]),
   ]));
   mapCoordReadout(gm, readout);
+  gm.onView = renderMap; // re-plot points at the new scale on zoom/pan
 
   function renderAll() { renderTabs(); renderGroups(); renderGroupEdit(); renderMap(); renderParams(); applyI18n(); }
 
@@ -6598,6 +6797,7 @@ Views.spawnpoints = async (root) => {
 Views.livemap = async (root) => {
   const myNav = _navSeq;
   root.append(pageHeader('nav.livemap', 'livemap.subtitle'));
+  { const w = adminLogWarning(); if (w) root.append(w); }
   const status = h('p', { class: 'hint' });
   const ctlHost = h('div', { class: 'map-toolbar' });
   const mapHost = h('div');
@@ -6605,8 +6805,27 @@ Views.livemap = async (root) => {
     status, ctlHost, mapHost, h('p', { class: 'hint', i18n: 'livemap.note' }),
   ]));
 
-  let gm = null, timer = null;
+  let gm = null, timer = null, lastPlayers = [];
   root._teardown = () => { if (timer) clearInterval(timer); };
+
+  // Plot the current player set; also the gm.onView hook so zoom/pan re-plots at
+  // the new scale (markers keep a roughly constant on-screen size).
+  function plotPlayers() {
+    if (!gm) return;
+    gm.layer.innerHTML = '';
+    const r = gm.ptR(5);
+    for (const p of lastPlayers) {
+      const [sx, sy] = gm.w2s(p.x, p.z);
+      const stale = p.ageSec > 300;
+      const offline = p.online === false; // last-known, not RCon-confirmed online
+      const cls = 'live-pt' + (offline ? ' offline' : (stale ? ' stale' : ''));
+      const c = svgEl('circle', { cx: sx, cy: sy, r, class: cls }, gm.layer);
+      c.append(svgEl('title', {}, null));
+      c.lastChild.textContent = p.name + ' · ' + fmtAge(p.ageSec) + (offline ? ' · ' + t('livemap.lastKnown') : '');
+      const label = svgEl('text', { x: sx + 7, y: sy + 3, class: 'live-label' + (stale || offline ? ' stale' : '') }, gm.layer);
+      label.textContent = p.name;
+    }
+  }
 
   async function refresh() {
     let d;
@@ -6624,23 +6843,20 @@ Views.livemap = async (root) => {
     }
     if (!gm) {
       mapHost.innerHTML = '';
-      gm = buildGameMap(d.map);
-      mapHost.append(h('div', { class: 'map-wrap' }, gm.svg));
+      gm = buildGameMap(d.map, { panLeft: true });
+      gm.onView = plotPlayers;
+      mapHost.append(h('div', { class: 'map-wrap' }, [gm.svg, gm.controls]));
       ctlHost.innerHTML = '';
       ctlHost.append(mapImageControls(d.map, () => { gm = null; refresh(); }));
     }
-    const players = d.players || [];
-    status.textContent = t('livemap.count')
+    lastPlayers = d.players || [];
+    let statusTxt = t('livemap.count')
       .replace('{online}', d.onlineCount || 0)
-      .replace('{shown}', players.length);
-    gm.layer.innerHTML = '';
-    for (const p of players) {
-      const [sx, sy] = gm.w2s(p.x, p.z);
-      const stale = p.ageSec > 300;
-      svgEl('circle', { cx: sx, cy: sy, r: 5, class: 'live-pt' + (stale ? ' stale' : '') }, gm.layer);
-      const label = svgEl('text', { x: sx + 7, y: sy + 3, class: 'live-label' + (stale ? ' stale' : '') }, gm.layer);
-      label.textContent = p.name;
-    }
+      .replace('{shown}', lastPlayers.length);
+    // Honest state when RCon can't confirm who's online: points are last-known.
+    if (d.rconError) statusTxt += ' · ' + t('livemap.rconOffline');
+    status.textContent = statusTxt;
+    plotPlayers();
     applyI18n();
   }
 
@@ -7012,9 +7228,16 @@ Views.chat = async (root) => {
   const myNav = _navSeq;
   root.append(pageHeader('nav.chat', 'chat.subtitle'));
 
+  // Connection status badge — chat is captured live from the BattlEye RCon
+  // stream, so the feed only fills while the server is running with RCon on.
+  const dot = h('span', { class: 'chat-dot' });
+  const statusTxt = h('span', {});
+  const status = h('div', { class: 'chat-status' }, [dot, statusTxt]);
+
   const feed = h('div', { class: 'chat-feed' });
   const input = h('input', { type: 'text', placeholder: t('chat.placeholder') });
   root.append(h('div', { class: 'card' }, [
+    status,
     feed,
     h('div', { class: 'row', style: { marginTop: '10px' } }, [
       input, h('button', { class: 'primary', i18n: 'chat.send', onclick: send }),
@@ -7022,6 +7245,7 @@ Views.chat = async (root) => {
   ]));
 
   let timer = null;
+  let lastSig = null; // avoid rebuilding the feed (and flickering) when nothing changed
   root._teardown = () => { if (timer) clearInterval(timer); };
 
   async function send() {
@@ -7032,32 +7256,59 @@ Views.chat = async (root) => {
   }
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
 
+  const fmtTime = (ms) => {
+    if (!ms) return '';
+    try { return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+    catch { return ''; }
+  };
+
+  function setStatus(connected, configured) {
+    dot.className = 'chat-dot' + (connected ? ' on' : '');
+    statusTxt.textContent = connected ? t('chat.live')
+      : configured ? t('chat.disc') : t('chat.needRcon.badge');
+  }
+
+  function emptyHint(configured, connected) {
+    const key = !configured ? 'chat.needRcon' : !connected ? 'chat.offline' : 'chat.none';
+    feed.innerHTML = '';
+    feed.append(h('p', { class: 'hint', i18n: key }));
+    applyI18n();
+  }
+
   async function refresh() {
     let d;
-    try { d = await api.get('/api/admlog/recent?type=chat&limit=100'); }
+    try { d = await api.get('/api/rcon/chat/recent?limit=100'); }
     catch { return; }
     if (myNav !== _navSeq) { if (timer) clearInterval(timer); return; }
-    const events = d.events || [];
-    const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
-    feed.innerHTML = '';
-    if (!events.length) {
-      feed.append(h('p', { class: 'hint', i18n: 'chat.none' }));
-      applyI18n();
+    const msgs = d.messages || [];
+    setStatus(!!d.connected, !!d.configured);
+
+    if (!msgs.length) {
+      const sig = 'empty:' + d.configured + ':' + d.connected;
+      if (sig !== lastSig) { emptyHint(!!d.configured, !!d.connected); lastSig = sig; }
       return;
     }
-    for (const e of events) {
+    // Cheap signature so a steady feed isn't torn down and rebuilt every poll.
+    const last = msgs[msgs.length - 1];
+    const sig = msgs.length + ':' + (last.at || 0) + ':' + (last.text || '');
+    if (sig === lastSig) return;
+    lastSig = sig;
+
+    const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
+    feed.innerHTML = '';
+    for (const m of msgs) {
       feed.append(h('div', { class: 'chat-line' }, [
-        h('span', { class: 'chat-time', text: e.time || '' }),
-        h('span', { class: 'chat-player', text: e.player || '' }),
-        h('span', { class: 'chat-text', text: e.message || '' }),
+        h('span', { class: 'chat-time', text: fmtTime(m.at) }),
+        m.channel ? h('span', { class: 'chat-ch', text: m.channel }) : null,
+        h('span', { class: 'chat-player', text: m.name || '' }),
+        h('span', { class: 'chat-text', text: m.text || '' }),
       ]));
     }
     if (atBottom) feed.scrollTop = feed.scrollHeight; // don't yank the view while reading up
-    applyI18n();
   }
   await refresh();
   feed.scrollTop = feed.scrollHeight;
-  timer = setInterval(refresh, 6000);
+  timer = setInterval(refresh, 2500);
 };
 
 // --------------------------------------------------------------------- gameplay
