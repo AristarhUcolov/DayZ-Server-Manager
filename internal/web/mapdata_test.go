@@ -16,19 +16,19 @@ func TestWorldFromTemplate(t *testing.T) {
 		{"regular.ChernarusPlus", "chernarus", "Chernarus", 15360, true},
 		{"dayzOffline.enoch", "livonia", "Livonia", 12800, true},
 		{"dayzOffline.livonia", "livonia", "Livonia", 12800, true},
-		{"dayzOffline.sakhal", "sakhal", "Sakhal", 16384, true},
-		// Community worlds — recognised by fuzzy alias; known sizes filled in.
+		{"dayzOffline.sakhal", "sakhal", "Sakhal", 15360, true},
+		// Community worlds — recognised by fuzzy alias; verified sizes filled in.
 		{"dayzOffline.deerisle", "deerisle", "Deer Isle", 16384, false},
 		{"empty.chiemsee", "chiemsee", "Chiemsee", 10240, false},
 		{"dayzOffline.rostow", "rostow", "Rostow", 14336, false},
-		{"regular.Namalsk", "namalsk", "Namalsk", defaultWorldSize, false}, // size unknown → default
-		{"dayzOffline.banov", "banov", "Banov", defaultWorldSize, false},
-		{"custom.pripyat_winter", "pripyat", "Pripyat", defaultWorldSize, false}, // substring match
+		{"regular.Namalsk", "namalsk", "Namalsk", 12800, false},
+		{"dayzOffline.banov", "banov", "Banov", 15360, false},
+		{"custom.pripyat_winter", "pripyat", "Pripyat", 20480, false}, // substring match
 		// Variants of a listed world fold onto its base entry (fuzzy alias).
-		{"regular.banovfrost", "banov", "Banov", defaultWorldSize, false},
+		{"regular.banovfrost", "banov", "Banov", 15360, false},
 		{"dayzOffline.takistanplus", "takistan", "Takistan", 12800, false},
-		{"custom.pripyatgamma", "pripyat", "Pripyat", defaultWorldSize, false},
-		{"dayzOffline.deadfall", "deadfall", "Deadfall", defaultWorldSize, false},
+		{"custom.pripyatgamma", "pripyat", "Pripyat", 20480, false},
+		{"dayzOffline.deadfall", "deadfall", "Deadfall", 10240, false},
 		{"empty.sahrani", "sahrani", "Sahrani", defaultWorldSize, false},
 		// Unknown/custom world — keyed by its own token, its own slot.
 		{"dayzOffline.someRandomMap", "somerandommap", "someRandomMap", defaultWorldSize, false},

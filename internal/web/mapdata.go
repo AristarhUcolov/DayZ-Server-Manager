@@ -71,56 +71,59 @@ type worldDef struct {
 // own slot via the fallback in worldFromTemplate — so every world is supported,
 // listed or not.
 //
-// Sizes: the three official worlds are authoritative; a few widely-cited
-// community sizes are filled in (Deer Isle 16384, Chiemsee 10240, Rostow 14336,
-// Takistan 12800). Where a size isn't reliably known it's left 0 (defaults,
-// admin-overridable) rather than asserting a wrong value that would silently
-// mis-scale points. This list covers the real, identifiable community maps; dev
-// builds, WIP and one-off terrains aren't listed but still work via the fallback
-// (their own slot, default size). Add more worlds here as needed — one line
-// each. Order matters: the first alias hit wins, so official worlds come first,
-// and aliases are distinctive tokens (never short fragments) to avoid matching a
-// different map by accident.
+// Sizes: the three official worlds are authoritative (Sakhal is 15360 — an
+// earlier 16384 here was wrong and mis-scaled points). Community sizes come from
+// a map-developer's compiled size list that
+// matched every value we could independently verify (Chernarus 15360, Livonia
+// 12800, Deer Isle 16384, Chiemsee 10240, Rostow 14336, Takistan 12800) and are
+// all valid terrain-grid sizes (multiples of 1024). Any that's still off is
+// admin-overridable per map in the UI. Worlds with no size fall back to the
+// default and can be overridden too. This list covers the real, identifiable
+// community maps; dev builds, WIP and one-off terrains aren't listed but still
+// work via the fallback (their own slot, default size). Add more worlds here as
+// needed — one line each. Order matters: the first alias hit wins, so official
+// worlds come first, and aliases are distinctive tokens (never short fragments)
+// to avoid matching a different map by accident.
 var worldRegistry = []worldDef{
 	{Key: "chernarus", Name: "Chernarus", Size: 15360, Official: true, Aliases: []string{"chernarusplus", "chernarus"}},
 	{Key: "livonia", Name: "Livonia", Size: 12800, Official: true, Aliases: []string{"livonia", "enoch"}},
-	{Key: "sakhal", Name: "Sakhal", Size: 16384, Official: true, Aliases: []string{"sakhal"}},
-	// Community worlds (alphabetical). Sizes default unless widely known.
-	{Key: "alteria", Name: "Alteria", Aliases: []string{"alteria"}},
-	{Key: "anastara", Name: "Anastara", Aliases: []string{"anastara"}},
+	{Key: "sakhal", Name: "Sakhal", Size: 15360, Official: true, Aliases: []string{"sakhal"}},
+	// Community worlds (alphabetical). Sizes from the verified developer list.
+	{Key: "alteria", Name: "Alteria", Size: 8192, Aliases: []string{"alteria"}},
+	{Key: "anastara", Name: "Anastara", Size: 10240, Aliases: []string{"anastara"}},
 	{Key: "antoria", Name: "Antoria", Aliases: []string{"antoria"}},
 	{Key: "arcadia", Name: "Arcadia", Aliases: []string{"arcadia"}},
-	{Key: "arsteinen", Name: "Arsteinen", Aliases: []string{"arsteinen"}},
+	{Key: "arsteinen", Name: "Arsteinen", Size: 15360, Aliases: []string{"arsteinen"}},
 	{Key: "avalon", Name: "Avalon", Aliases: []string{"avalon"}},
 	{Key: "azalea", Name: "Azalea", Aliases: []string{"azalea"}},
-	{Key: "banov", Name: "Banov", Aliases: []string{"banov"}},
-	{Key: "barrington", Name: "Barrington", Aliases: []string{"barrington"}},
-	{Key: "bearisland", Name: "Bear Island", Aliases: []string{"bearisland"}},
-	{Key: "bitterroot", Name: "Bitterroot", Aliases: []string{"bitterroot"}},
+	{Key: "banov", Name: "Banov", Size: 15360, Aliases: []string{"banov"}},
+	{Key: "barrington", Name: "Barrington", Size: 10240, Aliases: []string{"barrington"}},
+	{Key: "bearisland", Name: "Bear Island", Size: 10240, Aliases: []string{"bearisland"}},
+	{Key: "bitterroot", Name: "Bitterroot", Size: 12288, Aliases: []string{"bitterroot"}},
 	{Key: "chiemsee", Name: "Chiemsee", Size: 10240, Aliases: []string{"chiemsee"}},
-	{Key: "deadfall", Name: "Deadfall", Aliases: []string{"deadfall"}},
+	{Key: "deadfall", Name: "Deadfall", Size: 10240, Aliases: []string{"deadfall"}},
 	{Key: "deerisle", Name: "Deer Isle", Size: 16384, Aliases: []string{"deerisle"}},
 	{Key: "doorcounty", Name: "Door County", Aliases: []string{"doorcounty"}},
-	{Key: "esseker", Name: "Esseker", Aliases: []string{"esseker"}},
+	{Key: "esseker", Name: "Esseker", Size: 12800, Aliases: []string{"esseker"}},
 	{Key: "evelone", Name: "Evelone", Aliases: []string{"evelone"}},
-	{Key: "fogfall", Name: "FogFall", Aliases: []string{"fogfall"}},
-	{Key: "hashima", Name: "Hashima Islands", Aliases: []string{"hashima"}},
-	{Key: "iztek", Name: "Iztek", Aliases: []string{"iztek"}},
+	{Key: "fogfall", Name: "FogFall", Size: 20480, Aliases: []string{"fogfall"}},
+	{Key: "hashima", Name: "Hashima Islands", Size: 5120, Aliases: []string{"hashima"}},
+	{Key: "iztek", Name: "Iztek", Size: 8192, Aliases: []string{"iztek"}},
 	{Key: "japan", Name: "Japan", Aliases: []string{"japan"}},
 	{Key: "malvinas", Name: "Malvinas", Aliases: []string{"malvinas"}},
-	{Key: "melkart", Name: "Melkart", Aliases: []string{"melkart"}},
+	{Key: "melkart", Name: "Melkart", Size: 20480, Aliases: []string{"melkart"}},
 	{Key: "mensk", Name: "Mensk Island", Aliases: []string{"mensk"}},
 	{Key: "metropolis", Name: "Metropolis", Aliases: []string{"metropolis"}},
 	{Key: "mysteryisland", Name: "Mystery Island", Aliases: []string{"mysteryisland"}},
-	{Key: "namalsk", Name: "Namalsk", Aliases: []string{"namalsk"}},
+	{Key: "namalsk", Name: "Namalsk", Size: 12800, Aliases: []string{"namalsk"}},
 	{Key: "newyork", Name: "New York", Aliases: []string{"newyork"}},
 	{Key: "novikostok", Name: "Novikostok", Aliases: []string{"novikostok"}},
 	{Key: "nyheim", Name: "Nyheim", Aliases: []string{"nyheim"}},
 	{Key: "orsek", Name: "Orsek", Aliases: []string{"orsek"}},
-	{Key: "pripyat", Name: "Pripyat", Aliases: []string{"pripyat"}},
+	{Key: "pripyat", Name: "Pripyat", Size: 20480, Aliases: []string{"pripyat"}},
 	{Key: "prisonisland", Name: "Prison Island", Aliases: []string{"prisonisland"}},
 	{Key: "prominsk", Name: "Prominsk", Aliases: []string{"prominsk"}},
-	{Key: "raman", Name: "Raman", Aliases: []string{"raman"}},
+	{Key: "raman", Name: "Raman", Size: 32768, Aliases: []string{"raman"}},
 	{Key: "rostow", Name: "Rostow", Size: 14336, Aliases: []string{"rostow", "rostov"}},
 	{Key: "sahinkaya", Name: "Sahinkaya", Aliases: []string{"sahinkaya"}},
 	{Key: "sahrani", Name: "Sahrani", Aliases: []string{"sahrani"}},
@@ -131,12 +134,12 @@ var worldRegistry = []worldDef{
 	{Key: "scotland", Name: "Scotland", Aliases: []string{"scotland"}},
 	{Key: "siberia", Name: "Siberia", Aliases: []string{"siberia"}},
 	{Key: "stuartisland", Name: "Stuart Island", Aliases: []string{"stuartisland"}},
-	{Key: "swansisland", Name: "Swans Island", Aliases: []string{"swansisland"}},
+	{Key: "swansisland", Name: "Swans Island", Size: 2048, Aliases: []string{"swansisland"}},
 	{Key: "takistan", Name: "Takistan", Size: 12800, Aliases: []string{"takistan"}},
 	{Key: "togenia", Name: "Togenia", Aliases: []string{"togenia"}},
-	{Key: "valning", Name: "Valning", Aliases: []string{"valning"}},
-	{Key: "vela", Name: "Vela", Aliases: []string{"vela"}},
-	{Key: "yiprit", Name: "Yiprit", Aliases: []string{"yiprit"}},
+	{Key: "valning", Name: "Valning", Size: 10240, Aliases: []string{"valning"}},
+	{Key: "vela", Name: "Vela", Size: 10240, Aliases: []string{"vela"}},
+	{Key: "yiprit", Name: "Yiprit", Size: 20480, Aliases: []string{"yiprit"}},
 	{Key: "zaha", Name: "Zaha", Aliases: []string{"zaha"}},
 }
 

@@ -48,6 +48,10 @@ var (
 	rePlayerNP = regexp.MustCompile(`^Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(\s*id=([^)]*)\)\s*(.*)$`)
 	reChat     = regexp.MustCompile(`^Chat\("([^"]*)"\):\s*(.*)$`)
 	reHitBy    = regexp.MustCompile(`^(hit by|killed by)\s+(.*)$`)
+	// DayZ prints a health annotation between the position and the verb on hit
+	// lines: `pos=<…>)[HP: 98.19] hit by …`. Strip it so the verb detection sees
+	// "hit by …" (without this, no hit line parses → no live-map positions).
+	reHP = regexp.MustCompile(`^\[HP:[^\]]*\]\s*`)
 	reByPlayer = regexp.MustCompile(`Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(id=([^)]*?)\s*(?:pos=<[^>]*>)?\)\s*(.*)$`)
 	reWithWpn  = regexp.MustCompile(`(?:with|into)\s+([A-Za-z0-9_\-]+)`)
 	// Non-player killers: "killed by ZmbM_HermitSkinny_Beard with …",
@@ -90,45 +94,53 @@ func ParseLine(s string) (Event, bool) {
 		return ev, true
 	}
 
+	// Strip the "[HP: nn]" health annotation so a hit line's verb ("hit by …")
+	// starts the tail, then detect the event. Verb-first (chat/hit/kill/death)
+	// before connect/disconnect: real DayZ writes "is connected" (not just
+	// "connected"), so match on a "connect"/"disconnect" substring, checking
+	// disconnect first since "disconnect" contains "connect".
+	tail = strings.TrimSpace(reHP.ReplaceAllString(tail, ""))
+
+	if cm := reChat.FindStringSubmatch(tail); cm != nil {
+		ev.Type = "chat"
+		ev.Message = strings.TrimSpace(cm[1] + ": " + cm[2])
+		return ev, true
+	}
+	if hm := reHitBy.FindStringSubmatch(tail); hm != nil {
+		if hm[1] == "killed by" {
+			ev.Type = "kill"
+		} else {
+			ev.Type = "hit"
+		}
+		rest := hm[2]
+		if bm := reByPlayer.FindStringSubmatch(rest); bm != nil {
+			ev.Target = bm[1]
+			ev.TargetID = strings.TrimSpace(bm[2])
+			rest = bm[3]
+		} else if sm := reSource.FindStringSubmatch(rest); sm != nil {
+			ev.Source = sm[1]
+		}
+		if wm := reWithWpn.FindStringSubmatch(rest); wm != nil {
+			ev.Weapon = wm[1]
+		}
+		if dm := reDistance.FindStringSubmatch(rest); dm != nil {
+			ev.Distance = dm[1]
+		}
+		ev.Message = strings.TrimSpace(rest)
+		return ev, true
+	}
+	if strings.Contains(tail, "(DEAD)") || strings.HasPrefix(tail, "committed suicide") ||
+		strings.HasPrefix(tail, "died") || strings.Contains(body, "(DEAD)") {
+		ev.Type = "death"
+		ev.Message = tail
+		return ev, true
+	}
 	switch {
-	case tail == "connected":
-		ev.Type = "connect"
-	case tail == "disconnected" || strings.HasPrefix(tail, "has been disconnected"):
+	case strings.Contains(tail, "disconnect"):
 		ev.Type = "disconnect"
+	case strings.Contains(tail, "connect"):
+		ev.Type = "connect"
 	default:
-		if cm := reChat.FindStringSubmatch(tail); cm != nil {
-			ev.Type = "chat"
-			ev.Message = strings.TrimSpace(cm[1] + ": " + cm[2])
-			return ev, true
-		}
-		if hm := reHitBy.FindStringSubmatch(tail); hm != nil {
-			if hm[1] == "killed by" {
-				ev.Type = "kill"
-			} else {
-				ev.Type = "hit"
-			}
-			rest := hm[2]
-			if bm := reByPlayer.FindStringSubmatch(rest); bm != nil {
-				ev.Target = bm[1]
-				ev.TargetID = strings.TrimSpace(bm[2])
-				rest = bm[3]
-			} else if sm := reSource.FindStringSubmatch(rest); sm != nil {
-				ev.Source = sm[1]
-			}
-			if wm := reWithWpn.FindStringSubmatch(rest); wm != nil {
-				ev.Weapon = wm[1]
-			}
-			if dm := reDistance.FindStringSubmatch(rest); dm != nil {
-				ev.Distance = dm[1]
-			}
-			ev.Message = strings.TrimSpace(rest)
-			return ev, true
-		}
-		if strings.Contains(tail, "(DEAD)") || strings.HasPrefix(tail, "committed suicide") || strings.Contains(body, "(DEAD)") {
-			ev.Type = "death"
-			ev.Message = tail
-			return ev, true
-		}
 		ev.Type = "other"
 		ev.Message = tail
 	}

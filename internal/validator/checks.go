@@ -219,10 +219,10 @@ func checkEvents(eventsPath, spawnsPath string) []Issue {
 }
 
 // checkEventSpawnBounds flags cfgeventspawns.xml positions whose coordinates
-// fall outside any real DayZ map — negative, or past the largest official world
-// (Sakhal, 16384). Those are almost always a typo: DayZ clamps or ignores them,
-// so the event silently never spawns there. The 20000 ceiling clears every
-// shipped map with headroom, so this never fires on a stock mission.
+// fall outside any real DayZ map — negative, or far past the largest shipped
+// world. Those are almost always a typo: DayZ clamps or ignores them, so the
+// event silently never spawns there. The 20000 ceiling clears every official
+// world (all ≤ 15360) with headroom, so this never fires on a stock mission.
 func checkEventSpawnBounds(spawnsPath string) []Issue {
 	data, err := os.ReadFile(spawnsPath)
 	if err != nil {

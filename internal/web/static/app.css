@@ -1939,16 +1939,37 @@ tr.lb-top > td { background: var(--surface-2); }
 .game-map.has-img .gm-grid { stroke-opacity: 0.3; }
 .game-map.gm-has-shape .gm-grid,
 .game-map.gm-placeholder .gm-grid { stroke: #ffffff; stroke-opacity: 0.12; }
-.gm-water { fill: #2b4257; }
-.gm-land { fill: #45573f; }
+.gm-water { fill: #294055; }
+.gm-land { fill: #54674a; }   /* lowland base */
 /* Schematic rivers — a thin water-blue stroke, constant thickness at any zoom. */
 .gm-river { fill: none; stroke: #3f6d8c; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0.85; }
+/* Topographic schematic layers (fixed map colours, like the water/land above,
+   so a map looks like a map in either UI theme). Hypsometric elevation tints
+   (lowland → peak) plus contour lines give a real relief-map feel. */
+.gm-hi { opacity: 0.92; }
+.gm-hi1 { fill: #64744c; }   /* upland */
+.gm-hi2 { fill: #8a8155; }   /* highland */
+.gm-hi3 { fill: #a99a6b; }   /* peaks */
+.gm-contour { fill: none; stroke: #26331f; stroke-width: 0.7; opacity: 0.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.gm-shore { stroke: #1f3547; stroke-width: 1.2; opacity: 0.65; }
+.gm-lake { stroke: #22384a; stroke-width: 0.8; opacity: 0.9; vector-effect: non-scaling-stroke; }
+.gm-road { fill: none; stroke: #d8c79c; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0.7; }
+.gm-road-major { stroke: #efdcab; stroke-width: 2.2; opacity: 0.9; }
+.gm-city { fill: #f4e7c9; stroke: #6f5f3c; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+.gm-city-core { fill: #c14434; }
+.gm-city-label { font-size: 12px; font-weight: 800; }
+.gm-mil { fill: #db6f5c; stroke: #3c1b15; stroke-width: 0.4; vector-effect: non-scaling-stroke; }   /* military */
+.gm-air { fill: #86c8db; stroke: #1f434c; stroke-width: 0.4; vector-effect: non-scaling-stroke; }   /* airfield */
+.gm-poi { fill: none; stroke: #ebd489; stroke-width: 1; vector-effect: non-scaling-stroke; }        /* landmark */
 /* Neutral land tint for worlds with neither an uploaded image nor a schematic. */
 .gm-land-soft { fill: #3a4636; }
 .game-map.gm-has-shape .gm-axis { fill: #cfe0d8; }
 .game-map.gm-placeholder .gm-axis { fill: #cfe0d8; }
 .game-map.gm-has-shape .gm-town { fill: #f0f4ef; }
-.game-map.gm-has-shape .gm-town-label { fill: #eef3ea; }
+/* Labels get a dark halo (paint-order: stroke behind fill) so they stay legible
+   over any terrain tint — the touch that reads as a real cartographic label. */
+.game-map.gm-has-shape .gm-town-label { fill: #f4f7f0; paint-order: stroke;
+  stroke: #182015; stroke-width: 2.4px; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 /* Upload call-to-action on placeholder maps. */
 .gm-cta-title { fill: #eef3ea; font-size: 30px; font-weight: 800; opacity: 0.9; }
 .gm-cta-hint { fill: #cbd6cc; font-size: 17px; opacity: 0.85; }

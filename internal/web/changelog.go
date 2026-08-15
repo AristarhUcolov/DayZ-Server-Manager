@@ -27,6 +27,19 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "0.30.1", Date: "2026-08-15",
+		EN: []string{
+			"Fixed the live map and heatmap not showing players and deaths. The .ADM log parser didn't recognise the real vanilla format — the \"[HP: nn]\" health annotation before \"hit by\", and the \"is connected\" wording — so hit positions and connects were dropped. Player positions (from combat) and deaths now register.",
+			"Corrected map sizes — Sakhal is 15360 m (was 16384, which mis-scaled every point by a few percent), and accurate sizes are now filled in for ~20 more community maps (Namalsk, Banov, Esseker, Pripyat, Iztek and others) so positions line up out of the box. You can still override any map's size in the panel.",
+			"Built-in map schematics refined to a cleaner topographic look (relief shading, contour lines, labelled towns / airfields / landmarks), with five more community worlds drawn — Takistan, Chiemsee, Pripyat, Deer Isle and Namalsk. These are a fallback only: load your own top-down map image and it replaces the schematic for a precise map.",
+		},
+		RU: []string{
+			"Исправлены Живая карта и Тепловая карта, не показывавшие игроков и смерти. Разбор лога .ADM не узнавал реальный ванильный формат — аннотацию «[HP: nn]» перед «hit by» и формулировку «is connected» — из-за чего позиции из боёв и входы терялись. Теперь позиции игроков (из боя) и смерти учитываются.",
+			"Исправлены размеры карт — у Сахалина теперь 15360 м (было 16384, из-за чего все точки смещались на несколько процентов), и проставлены точные размеры ещё для ~20 модовых карт (Namalsk, Banov, Esseker, Pripyat, Iztek и др.), чтобы позиции совпадали сразу. Размер любой карты по-прежнему можно переопределить в панели.",
+			"Встроенные схемы карт доведены до аккуратного топографического вида (отмывка рельефа, изолинии, подписи городов / аэродромов / ориентиров), плюс дорисованы ещё пять модовых карт — Takistan, Chiemsee, Pripyat, Deer Isle и Namalsk. Это лишь запасной вариант: загрузите своё изображение карты, и оно заменит схему точной картой.",
+		},
+	},
+	{
 		Version: "0.30.0", Date: "2026-08-14",
 		EN: []string{
 			"Real-time chat — the Chat page now shows in-game chat live, straight from the server's BattlEye RCon stream (before, only your outgoing broadcasts worked). A status badge shows whether the live feed is connected, and a clear message explains when RCon isn't set up or the server is offline.",
