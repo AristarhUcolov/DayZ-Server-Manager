@@ -31,6 +31,7 @@ var ja = Bundle{
 	"sponsors.none": "まだスポンサーはいません。最初の一人になれます。",
 	"sponsors.reply.label": "開発者からの返信：",
 	"sponsors.anon.note": "匿名で支援されましたか？本名やSteamプロフィールをここに表示したい場合は、GitHubで開発者にご連絡ください。喜んで追加します。",
+	"sponsors.anonymous": "匿名",
 	"sponsors.cta.title": "プロジェクトの成長を応援しませんか？",
 	"sponsors.cta.hint": "どんな金額でも開発の励みになります。支援者はここに掲載できます。",
 	"health.checking": "確認中…",
@@ -69,6 +70,7 @@ var ja = Bundle{
 
 	"nav.group.server":  "サーバー",
 	"nav.group.economy": "経済",
+	"nav.group.maps":    "マップ",
 	"nav.group.config":  "設定",
 	"nav.group.live":    "ライブ",
 	"nav.group.system":  "システム",

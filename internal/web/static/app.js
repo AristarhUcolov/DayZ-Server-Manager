@@ -6005,13 +6005,14 @@ const MAP_SHAPES = {
     // Perimeter clockwise from the NW corner; sea fills the S wedge, the east
     // seaboard and the NE corner (so the coastal towns read as coastal).
     land: [
-      [0, 15360], [12600, 15360], [13100, 13600], [13650, 11500], [13500, 9300],
-      [12600, 8300], [12950, 6000], [12900, 4100], [11800, 2650], [9800, 1980],
-      [7000, 1650], [4000, 1650], [2000, 2100], [800, 2900], [0, 3800],
+      [0, 15360], [12700, 15360], [13500, 14300], [14200, 13100], [14100, 10700],
+      [13000, 9500], [12500, 9000], [13100, 7000], [13800, 6100], [13300, 4300],
+      [12700, 3000], [10800, 2000], [8000, 1700], [5200, 1650], [3000, 1750],
+      [1400, 1650], [600, 2200], [0, 3400],
     ],
     islands: [
-      // Skalisty Island, off the SE coast.
-      [[12700, 4750], [13350, 4600], [13450, 4050], [12800, 3980], [12600, 4350]],
+      // Skalisty Island, off the SE coast (south of Kamyshovo).
+      [[13100, 1450], [13650, 1400], [13800, 1900], [13400, 2150], [13000, 1850]],
     ],
     terrain: [
       // Northern highland belt — the north third rises into forested hills.
@@ -6019,7 +6020,7 @@ const MAP_SHAPES = {
       // Black Mountains — the high NW corner.
       { level: 2, poly: [[600, 11400], [2000, 11000], [3800, 11500], [4600, 12800], [4200, 14600], [2600, 15000], [900, 14700], [500, 13000]] },
       // Central ridge around Green Mountain / the Black Forest.
-      { level: 1, poly: [[3200, 6600], [4600, 6300], [6000, 6600], [6600, 7600], [6200, 8800], [4800, 9000], [3500, 8700], [3000, 7600]] },
+      { level: 1, poly: [[2600, 7000], [4200, 6700], [5400, 7100], [5600, 8600], [4600, 9600], [2900, 9500], [2200, 8300]] },
     ],
     lakes: [
       // Small reservoir near the central dam (stylised).
@@ -6032,50 +6033,53 @@ const MAP_SHAPES = {
     roads: [
       // Coastal highway (major): SW corner along the south coast and up the east.
       { major: true, pts: [
-        [1900, 2250], [3750, 2450], [4900, 2550], [6650, 2650], [7500, 3150],
-        [9800, 2350], [11600, 3200], [12500, 5000], [12200, 7900], [12800, 9200],
-        [13100, 11400], [12900, 13100],
+        [2000, 2050], [4700, 2550], [6650, 2600], [10380, 2350], [12100, 3600],
+        [13100, 5000], [13400, 5960], [12200, 8600], [11900, 9100], [12900, 9700],
+        [13400, 11500], [13850, 13250],
       ] },
       // Central spine (major): the south coast up through the Sobors to the north.
-      { major: true, pts: [[6650, 2750], [7000, 5200], [7350, 7650], [7800, 10400], [8050, 12600]] },
+      { major: true, pts: [[6650, 2600], [7000, 5200], [7350, 7650], [7900, 10400], [8100, 12550], [10500, 13200], [11850, 13400]] },
       // East–west connector: Zelenogorsk to Berezino through the Sobors.
-      { pts: [[2720, 5250], [4300, 6300], [5900, 6900], [7350, 7650], [9450, 8750], [11700, 8700]] },
+      { pts: [[2720, 5250], [4300, 6300], [5900, 6900], [7350, 7650], [9500, 8800], [11900, 9100]] },
       // North-west run: Zelenogorsk to the airfield and Grishino.
-      { pts: [[2720, 5250], [3800, 8950], [4550, 10350], [4950, 11150], [5850, 10150]] },
+      { pts: [[2720, 5250], [4050, 9250], [4550, 10450], [5100, 11000], [5900, 10100]] },
     ],
     pois: [
-      { n: 'Chernogorsk', x: 6650, z: 2350, t: 'city' },
-      { n: 'Elektrozavodsk', x: 10250, z: 2150, t: 'city' },
-      { n: 'Berezino', x: 12050, z: 8700, t: 'city' },
-      { n: 'Novodmitrovsk', x: 11700, z: 14050, t: 'city' },
-      { n: 'Severograd', x: 8050, z: 12650, t: 'city' },
+      { n: 'Chernogorsk', x: 6650, z: 2500, t: 'city' },
+      { n: 'Elektrozavodsk', x: 10380, z: 2200, t: 'city' },
+      { n: 'Berezino', x: 11900, z: 9100, t: 'city' },
+      { n: 'Novodmitrovsk', x: 11850, z: 13400, t: 'city' },
+      { n: 'Severograd', x: 8100, z: 12550, t: 'city' },
       { n: 'Zelenogorsk', x: 2720, z: 5250, t: 'city' },
-      { n: 'Kamenka', x: 1900, z: 2200, t: 'town' },
-      { n: 'Komarovo', x: 3750, z: 2400, t: 'town' },
-      { n: 'Prigorodky', x: 7450, z: 3050, t: 'town' },
-      { n: 'Kamyshovo', x: 12150, z: 3600, t: 'town' },
-      { n: 'Solnichniy', x: 12750, z: 6100, t: 'town' },
-      { n: 'Svetlojarsk', x: 12750, z: 13050, t: 'town' },
-      { n: 'Krasnostav', x: 11200, z: 12100, t: 'town' },
-      { n: 'Staroye', x: 9200, z: 6350, t: 'town' },
-      { n: 'Gorka', x: 9450, z: 8750, t: 'town' },
+      { n: 'Kamenka', x: 2000, z: 2000, t: 'town' },
+      { n: 'Komarovo', x: 3800, z: 2350, t: 'town' },
+      { n: 'Prigorodky', x: 7500, z: 3100, t: 'town' },
+      { n: 'Kamyshovo', x: 12100, z: 3450, t: 'town' },
+      { n: 'Solnichniy', x: 13400, z: 5960, t: 'town' },
+      { n: 'Svetlojarsk', x: 13850, z: 13250, t: 'town' },
+      { n: 'Krasnostav', x: 11100, z: 12100, t: 'town' },
+      { n: 'Staroye', x: 9200, z: 6400, t: 'town' },
+      { n: 'Gorka', x: 9500, z: 8800, t: 'town' },
       { n: 'Stary Sobor', x: 7350, z: 7650, t: 'town' },
-      { n: 'Novy Sobor', x: 7000, z: 8050, t: 'town' },
-      { n: 'Kabanino', x: 6350, z: 8300, t: 'town' },
-      { n: 'Grishino', x: 5850, z: 10150, t: 'town' },
-      { n: 'Novaya Petrovka', x: 4950, z: 11150, t: 'town' },
-      { n: 'Myshkino', x: 2050, z: 7450, t: 'town' },
-      { n: 'Guglovo', x: 8500, z: 7350, t: 'town' },
-      { n: 'Dubrovka', x: 11450, z: 10650, t: 'town' },
-      { n: 'NW Airfield', x: 4550, z: 10350, t: 'air' },
-      { n: 'NE Airfield', x: 12100, z: 12550, t: 'air' },
-      { n: 'Balota Airstrip', x: 4900, z: 2550, t: 'air' },
-      { n: 'Tisy Military', x: 1650, z: 13850, t: 'mil' },
-      { n: 'Vybor Military', x: 3900, z: 9250, t: 'mil' },
-      { n: 'Pavlovo Military', x: 2450, z: 3800, t: 'mil' },
-      { n: 'Green Mountain', x: 4500, z: 8350, t: 'poi' },
-      { n: "Devil's Castle", x: 9550, z: 9650, t: 'poi' },
-      { n: 'Skalisty Island', x: 13100, z: 4200, t: 'poi' },
+      { n: 'Novy Sobor', x: 7050, z: 7900, t: 'town' },
+      { n: 'Kabanino', x: 6400, z: 8100, t: 'town' },
+      { n: 'Grishino', x: 5900, z: 10100, t: 'town' },
+      { n: 'Novaya Petrovka', x: 4900, z: 11100, t: 'town' },
+      { n: 'Myshkino', x: 2050, z: 7500, t: 'town' },
+      { n: 'Guglovo', x: 8600, z: 7400, t: 'town' },
+      { n: 'Dubrovka', x: 11400, z: 10700, t: 'town' },
+      { n: 'Orlovets', x: 10600, z: 9500, t: 'town' },
+      { n: 'Nizhnoye', x: 12900, z: 9700, t: 'town' },
+      { n: 'Msta', x: 9700, z: 7400, t: 'town' },
+      { n: 'NW Airfield', x: 4550, z: 10450, t: 'air' },
+      { n: 'NE Airfield', x: 12150, z: 12550, t: 'air' },
+      { n: 'Balota Airstrip', x: 4700, z: 2500, t: 'air' },
+      { n: 'Tisy Military', x: 1600, z: 13850, t: 'mil' },
+      { n: 'Vybor Military', x: 4050, z: 9250, t: 'mil' },
+      { n: 'Pavlovo Military', x: 2450, z: 3850, t: 'mil' },
+      { n: 'Green Mountain', x: 3720, z: 8900, t: 'poi' },
+      { n: "Devil's Castle", x: 9550, z: 9560, t: 'poi' },
+      { n: 'Skalisty Island', x: 13400, z: 1750, t: 'poi' },
     ],
   },
   // Livonia (Enoch), 12800 m: landlocked, so the base is land, not sea. Nadbor
@@ -6087,53 +6091,88 @@ const MAP_SHAPES = {
     coast: false,
     land: [[0, 0], [12800, 0], [12800, 12800], [0, 12800]],
     terrain: [
-      // Karpaty range — the elevated south-east.
-      { level: 2, poly: [[8000, 700], [10200, 600], [11900, 1200], [12000, 3400], [11400, 5000], [9600, 5100], [8200, 4200], [7800, 2200]] },
-      // Rolling highland through the centre-north.
-      { level: 1, poly: [[3000, 6900], [5200, 6600], [7600, 6800], [9500, 7000], [9600, 9400], [8200, 10500], [5600, 10600], [3300, 10200], [2900, 8400]] },
+      // Rolling forested highland through the centre / centre-east (Livonia is
+      // gently hilly, not mountainous).
+      { level: 1, poly: [[3500, 5000], [7000, 4800], [9500, 5500], [10200, 8300], [7800, 10000], [4500, 9600], [3000, 7400]] },
     ],
     lakes: [
-      // Lakes in the north-east near Grabin.
-      [[8600, 9350], [9050, 9200], [9500, 9300], [9850, 9650], [9800, 10150], [9350, 10550], [8850, 10450], [8500, 10050], [8480, 9650]],
-      [[10150, 7950], [10600, 7850], [10950, 8100], [11000, 8500], [10700, 8750], [10300, 8720], [10120, 8350]],
+      // Lakes in the north-east (near Sitnik / Tymianka).
+      [[10600, 9000], [11300, 8850], [11700, 9300], [11500, 10000], [10800, 10050], [10450, 9600]],
+      [[9500, 9700], [10050, 9600], [10250, 10100], [9750, 10350], [9400, 10000]],
     ],
     rivers: [
-      // The Biela river, winding up through the north-east lake district.
-      [[6800, 5200], [7600, 6800], [8400, 8200], [9100, 9600], [9600, 10800]],
+      // River winding from the north-west down through the centre.
+      [[1500, 11400], [3000, 9500], [4300, 7600], [5300, 5600], [5900, 3600], [6300, 1600]],
     ],
     roads: [
-      { major: true, pts: [[7600, 3200], [7000, 6000], [6200, 8400], [4000, 10600], [2800, 11000]] },
-      { pts: [[7600, 3200], [8600, 8200], [9600, 10600]] },
+      // Northern belt: Lukow → Brena → Kolembrody → Tarnow → Grabin.
+      { major: true, pts: [[2500, 11000], [5000, 11400], [7000, 11600], [8500, 11500], [11000, 11400]] },
+      // Central spine: Nadbor up through Radunin to the north.
+      { major: true, pts: [[5000, 3000], [5800, 5800], [5500, 8500], [5300, 11300]] },
+      // East run: Nadbor → Wrzeszcz → Gieraltow, and up to Sitnik.
+      { pts: [[5000, 3000], [8000, 4000], [11000, 3600], [11000, 9000]] },
     ],
     pois: [
-      { n: 'Nadbor', x: 7600, z: 3200, t: 'city' },
-      { n: 'Topolin', x: 2800, z: 11000, t: 'town' },
-      { n: 'Tarnow', x: 8600, z: 8200, t: 'town' },
-      { n: 'Sitnik', x: 10200, z: 8800, t: 'town' },
-      { n: 'Grabin', x: 9600, z: 10600, t: 'town' },
-      { n: 'Radunin', x: 6200, z: 6000, t: 'town' },
-      { n: 'Sitce', x: 4400, z: 9000, t: 'town' },
-      { n: 'Lukow Airfield', x: 5300, z: 5200, t: 'air' },
+      { n: 'Nadbor', x: 5000, z: 3000, t: 'city' },
+      { n: 'Tarnow', x: 8500, z: 11500, t: 'town' },
+      { n: 'Grabin', x: 11000, z: 11500, t: 'town' },
+      { n: 'Kolembrody', x: 7000, z: 11600, t: 'town' },
+      { n: 'Brena', x: 5000, z: 11500, t: 'town' },
+      { n: 'Sitnik', x: 11000, z: 9000, t: 'town' },
+      { n: 'Gliniska', x: 4000, z: 10000, t: 'town' },
+      { n: 'Topolin', x: 1600, z: 7200, t: 'town' },
+      { n: 'Radunin', x: 6000, z: 6000, t: 'town' },
+      { n: 'Nidek', x: 5000, z: 7600, t: 'town' },
+      { n: 'Lembork', x: 8500, z: 6100, t: 'town' },
+      { n: 'Karlin', x: 10200, z: 7000, t: 'town' },
+      { n: 'Adamow', x: 3000, z: 6000, t: 'town' },
+      { n: 'Sarnowek', x: 4000, z: 4200, t: 'town' },
+      { n: 'Wrzeszcz', x: 8000, z: 4000, t: 'town' },
+      { n: 'Gieraltow', x: 11000, z: 3500, t: 'town' },
+      { n: 'Swarog', x: 5000, z: 1500, t: 'town' },
+      { n: 'Lukow Airfield', x: 2500, z: 11000, t: 'air' },
     ],
   },
-  // Sakhal, 15360 m: a volcanic island, so a coastline reads accurately. Blocky
-  // original outline (not a trace of any commercial map) leaving a sea margin.
-  // We only mark the defining central volcano and its volcanic highland — we
-  // don't invent Sakhal settlement names we're not sure of.
+  // Sakhal (15360): a large main island (centre / north-east) plus a smaller
+  // south-west island linked by a land bridge near Petropavlovsk; the volcano
+  // sits centre-east. Simplified original outline with positions read from the
+  // in-game map (facts), drawn our own way — not a trace of any commercial map.
   sakhal: {
     coast: true,
     land: [
-      [2200, 1800], [7000, 1500], [11500, 2100], [14200, 4200], [14600, 8000],
-      [13200, 11800], [9800, 14400], [5800, 14600], [2600, 12800], [1500, 9200],
-      [1700, 5200],
+      [4000, 7900], [4300, 10500], [5400, 13200], [7000, 14300], [9200, 13900],
+      [11200, 12900], [12900, 11600], [13600, 9800], [13200, 8300], [12400, 6900],
+      [11400, 6100], [9500, 5700], [7400, 5900], [5900, 6400], [4700, 7000],
+    ],
+    islands: [
+      // South-west island (Burukan / Neft), linked near Petropavlovsk.
+      [[3900, 8100], [2800, 7900], [1800, 7600], [1500, 9000], [2100, 11000], [3000, 12100], [3600, 11200], [3900, 9600]],
     ],
     terrain: [
-      // The central volcanic massif and its broader flanks.
-      { level: 2, poly: [[6600, 6600], [8200, 6200], [9900, 6600], [10300, 8200], [9700, 9800], [8100, 10100], [6700, 9600], [6300, 8000]] },
-      { level: 1, poly: [[4200, 4800], [7000, 4300], [10200, 4400], [11800, 6000], [12000, 9200], [10600, 11400], [7600, 11700], [4800, 11200], [3900, 8200], [4000, 6000]] },
+      // Central volcanic massif + its broader flanks.
+      { level: 2, poly: [[8000, 9400], [9400, 9000], [10500, 9600], [10600, 11100], [9400, 12000], [7900, 11600], [7300, 10400]] },
+      { level: 1, poly: [[5500, 7500], [9000, 6800], [11800, 7400], [12600, 10200], [10800, 12600], [7200, 12800], [5000, 10800], [4600, 8800]] },
+    ],
+    roads: [
+      { major: true, pts: [[4200, 8300], [6000, 7300], [8000, 7200], [10000, 7500], [11400, 6300]] },
+      { pts: [[4200, 8300], [3200, 11200]] },
     ],
     pois: [
-      { n: 'Volcano', x: 8200, z: 8200, t: 'poi' },
+      { n: 'Petropavlovsk', x: 4200, z: 8300, t: 'city' },
+      { n: 'Severomorsk', x: 6500, z: 13500, t: 'city' },
+      { n: 'Rudnogorsk', x: 12500, z: 11800, t: 'city' },
+      { n: 'Nogovo', x: 6000, z: 7200, t: 'city' },
+      { n: 'Aniva', x: 11400, z: 6400, t: 'town' },
+      { n: 'Vysokoye', x: 10000, z: 7500, t: 'town' },
+      { n: 'Baykovo', x: 12800, z: 8800, t: 'town' },
+      { n: 'Vostok', x: 12500, z: 7100, t: 'town' },
+      { n: 'Rybnoye', x: 10000, z: 12500, t: 'town' },
+      { n: 'Orlovo', x: 8500, z: 13200, t: 'town' },
+      { n: 'Yuzhnoye', x: 8500, z: 6300, t: 'town' },
+      { n: 'Volnoye', x: 4200, z: 9200, t: 'town' },
+      { n: 'Burukan', x: 2500, z: 11000, t: 'town' },
+      { n: 'Neft', x: 1900, z: 8400, t: 'town' },
+      { n: 'Volcano', x: 9000, z: 10500, t: 'poi' },
     ],
   },
   // ---- Popular community worlds (approximate original schematics from
@@ -6240,35 +6279,99 @@ const MAP_SHAPES = {
       { n: 'The Dam', x: 8200, z: 8200, t: 'poi' },
     ],
   },
-  // Namalsk (12800): an arctic island (plus the small Lantia island SW), the
-  // Brensk lake central, Vorkuta the main city. Positions are approximate.
+  // Namalsk (12800): an arctic island ringed by pack ice, with a large central
+  // lake, snow-capped mountains in the south-west, an airstrip centre-north and
+  // the small Lantia island off the south-west. Shape read from the in-game map;
+  // town positions approximate (the reference carries no labels).
   namalsk: {
     coast: true,
     land: [
-      [4000, 1500], [7500, 2000], [9500, 4000], [9200, 7500], [8000, 10500], [5500, 11500],
-      [3500, 10500], [2500, 7500], [2800, 4500], [3200, 2500],
+      [3000, 2000], [5500, 2200], [7500, 3200], [9000, 4500], [9200, 6500],
+      [8500, 8500], [9200, 10000], [7500, 11200], [5500, 11000], [4200, 9500],
+      [3500, 7500], [2500, 6000], [2800, 4000],
     ],
     islands: [
-      [[1500, 1800], [2600, 1600], [2900, 2600], [2000, 3000], [1300, 2600]],
+      // Lantia — small island off the south-west.
+      [[1400, 2200], [2400, 2000], [2700, 2900], [1900, 3300], [1200, 2900]],
     ],
     terrain: [
-      { level: 1, poly: [[3500, 5500], [7800, 5200], [8200, 9000], [4200, 9500], [3200, 7500]] },
-      { level: 2, poly: [[4600, 6600], [5700, 6300], [6800, 6500], [7100, 7500], [6700, 8400], [5500, 8600], [4600, 8200], [4300, 7300]] },
+      // Snow-capped mountains in the south-west.
+      { level: 2, poly: [[3000, 3000], [4500, 2800], [5200, 4000], [4600, 5200], [3200, 5000], [2700, 3900]] },
+      { level: 1, poly: [[3000, 5500], [6500, 5000], [8500, 6000], [8200, 9000], [5500, 10000], [3800, 8500]] },
     ],
     lakes: [
-      [[5600, 6600], [6600, 6500], [6900, 7200], [6300, 7800], [5500, 7500]],
+      // The large central lake.
+      [[5000, 6200], [6500, 6000], [7300, 6800], [7200, 8000], [6200, 8600], [5000, 8200], [4600, 7200]],
     ],
-    rivers: [
-      [[6000, 3000], [5800, 4800], [5900, 6200]],
+    roads: [
+      { major: true, pts: [[2800, 6800], [4500, 8500], [5500, 9500], [7000, 10500]] },
+      { pts: [[5500, 9500], [6500, 6000], [6800, 3200]] },
     ],
     pois: [
-      { n: 'Vorkuta', x: 3600, z: 6800, t: 'city' },
-      { n: 'Sebjan', x: 5000, z: 9800, t: 'town' },
-      { n: 'Norinsk', x: 6500, z: 3200, t: 'town' },
-      { n: 'Tara Harbor', x: 8300, z: 4200, t: 'town' },
-      { n: 'Jalovisko', x: 5200, z: 5500, t: 'town' },
-      { n: 'Brensk Lake', x: 6200, z: 7100, t: 'poi' },
-      { n: 'Lantia', x: 2000, z: 2300, t: 'poi' },
+      { n: 'Vorkuta', x: 2700, z: 6900, t: 'city' },
+      { n: 'Sebjan', x: 4700, z: 10200, t: 'town' },
+      { n: 'Norinsk', x: 6600, z: 3200, t: 'town' },
+      { n: 'Tara Harbor', x: 8400, z: 3800, t: 'town' },
+      { n: 'Jalovisko', x: 5200, z: 5600, t: 'town' },
+      { n: 'Airfield', x: 5500, z: 9000, t: 'air' },
+      { n: 'Namalsk Lake', x: 6000, z: 7300, t: 'poi' },
+      { n: 'Lantia', x: 1900, z: 2600, t: 'poi' },
+    ],
+  },
+  // Bitterroot (12288): a mountainous inland US region. Jackson Falls (W),
+  // Lakeland (centre), Tyler (SE), Broken Arrow (SW) are the main towns, with
+  // military bases (March / Glasgow AFB, Fort Simmons) and a river valley
+  // through the centre. Positions read from the in-game map.
+  bitterroot: {
+    coast: false,
+    land: [[0, 0], [12288, 0], [12288, 12288], [0, 12288]],
+    terrain: [
+      { level: 1, poly: [[500, 3000], [4000, 2500], [7000, 3500], [9500, 3000], [11700, 4000], [11700, 9500], [8500, 10500], [5000, 10000], [2000, 10500], [500, 9000]] },
+      { level: 2, poly: [[1500, 2500], [3800, 2200], [4600, 3800], [3800, 5200], [2000, 5000], [1200, 3800]] },
+      { level: 2, poly: [[9800, 3500], [11500, 3800], [11700, 6200], [10200, 6600], [9500, 5000]] },
+      { level: 2, poly: [[6000, 8200], [8200, 8000], [8600, 10000], [6400, 10200], [5600, 9000]] },
+    ],
+    lakes: [
+      [[2200, 1600], [2900, 1500], [3200, 2000], [2700, 2400], [2100, 2100]],
+      [[6900, 5600], [7500, 5500], [7700, 6100], [7100, 6300], [6700, 5900]],
+    ],
+    rivers: [
+      [[6200, 11200], [6800, 9000], [7400, 6500], [7600, 4000], [7600, 1500]],
+    ],
+    roads: [
+      { major: true, pts: [[2700, 8000], [5200, 5500], [7600, 5900], [10500, 4300], [10800, 900]] },
+      { major: true, pts: [[2700, 8000], [4300, 11300], [7600, 11670], [10450, 11670]] },
+      { pts: [[1500, 2500], [4300, 615], [7600, 615], [10800, 900]] },
+    ],
+    pois: [
+      { n: 'Jackson Falls', x: 2700, z: 8000, t: 'city' },
+      { n: 'Lakeland', x: 7600, z: 5900, t: 'city' },
+      { n: 'Tyler', x: 10800, z: 900, t: 'city' },
+      { n: 'Broken Arrow', x: 1500, z: 2500, t: 'city' },
+      { n: 'March AFB', x: 10450, z: 11670, t: 'air' },
+      { n: 'Glasgow AFB', x: 1230, z: 4300, t: 'air' },
+      { n: 'International Airport', x: 7600, z: 1470, t: 'air' },
+      { n: 'Bishop Air Station', x: 6760, z: 8600, t: 'air' },
+      { n: 'Fort Simmons', x: 11300, z: 8850, t: 'mil' },
+      { n: 'Hawkins Nuclear', x: 9600, z: 8850, t: 'mil' },
+      { n: 'Black Rock Barracks', x: 5530, z: 11430, t: 'mil' },
+      { n: 'Checkpoint West', x: 1230, z: 7130, t: 'mil' },
+      { n: 'Centerville', x: 5200, z: 5500, t: 'town' },
+      { n: 'Silver Springs', x: 5500, z: 3900, t: 'town' },
+      { n: 'Fairfax', x: 7400, z: 3440, t: 'town' },
+      { n: 'Juno', x: 8000, z: 2200, t: 'town' },
+      { n: 'Blairsville', x: 9460, z: 1840, t: 'town' },
+      { n: 'Darby', x: 10450, z: 4300, t: 'town' },
+      { n: 'Rolling Hills', x: 9800, z: 5530, t: 'town' },
+      { n: 'Riggins', x: 10700, z: 7130, t: 'town' },
+      { n: 'Collins', x: 6760, z: 10690, t: 'town' },
+      { n: 'Hamilton', x: 4300, z: 11300, t: 'town' },
+      { n: 'Dixie Town', x: 2090, z: 11670, t: 'town' },
+      { n: 'Jasper', x: 5900, z: 980, t: 'town' },
+      { n: 'Coleman', x: 8850, z: 980, t: 'town' },
+      { n: 'Eagle Mountain', x: 11400, z: 4670, t: 'town' },
+      { n: 'Bitterroot Speedway', x: 9840, z: 7130, t: 'poi' },
+      { n: 'Lake Horn', x: 2460, z: 1840, t: 'poi' },
     ],
   },
 };
@@ -6288,22 +6391,31 @@ function svgEl(tag, attrs, parent) {
 function drawPoi(parent, poi, w2s) {
   const [sx, sy] = w2s(poi.x, poi.z);
   const type = poi.t || 'town';
-  const tri = (r) => `M ${sx} ${sy - r} L ${sx + r} ${sy + r * 0.85} L ${sx - r} ${sy + r * 0.85} Z`;
-  const dia = (r) => `M ${sx} ${sy - r} L ${sx + r} ${sy} L ${sx} ${sy + r} L ${sx - r} ${sy} Z`;
+  // Each POI is a <g> translated to its point, marker + label drawn at the local
+  // origin. buildGameMap counter-scales the group by the zoom factor so the
+  // marker and label keep a constant on-screen size instead of ballooning, and
+  // reads data-sx/sy to rebuild the transform. Cities / airfields / military are
+  // "major" (labelled at any zoom); towns and landmarks are "minor" (labelled
+  // only once zoomed in — see the gm-lod-in toggle) so the overview stays clean.
+  const major = type === 'city' || type === 'air' || type === 'mil';
+  const g = svgEl('g', { class: 'gm-poi-g gm-tier-' + (major ? 'major' : 'minor'),
+    'data-sx': sx, 'data-sy': sy, transform: `translate(${sx} ${sy})` }, parent);
+  const tri = (r) => `M 0 ${-r} L ${r} ${r * 0.85} L ${-r} ${r * 0.85} Z`;
+  const dia = (r) => `M 0 ${-r} L ${r} 0 L 0 ${r} L ${-r} 0 Z`;
   if (type === 'city') {
-    svgEl('circle', { cx: sx, cy: sy, r: 3.4, class: 'gm-city' }, parent);
-    svgEl('circle', { cx: sx, cy: sy, r: 1.4, class: 'gm-city-core' }, parent);
+    svgEl('circle', { cx: 0, cy: 0, r: 3.4, class: 'gm-city' }, g);
+    svgEl('circle', { cx: 0, cy: 0, r: 1.4, class: 'gm-city-core' }, g);
   } else if (type === 'mil') {
-    svgEl('path', { d: tri(3.4), class: 'gm-mil' }, parent);
+    svgEl('path', { d: tri(3.4), class: 'gm-mil' }, g);
   } else if (type === 'air') {
-    svgEl('path', { d: dia(3.4), class: 'gm-air' }, parent);
+    svgEl('path', { d: dia(3.4), class: 'gm-air' }, g);
   } else if (type === 'poi') {
-    svgEl('circle', { cx: sx, cy: sy, r: 2.7, class: 'gm-poi' }, parent);
+    svgEl('circle', { cx: 0, cy: 0, r: 2.7, class: 'gm-poi' }, g);
   } else {
-    svgEl('circle', { cx: sx, cy: sy, r: 2, class: 'gm-town' }, parent);
+    svgEl('circle', { cx: 0, cy: 0, r: 2, class: 'gm-town' }, g);
   }
   const cls = type === 'city' ? 'gm-town-label gm-city-label' : 'gm-town-label';
-  svgEl('text', { x: sx + 4.8, y: sy + 3, class: cls }, parent).textContent = poi.n;
+  svgEl('text', { x: 4.8, y: 3, class: cls }, g).textContent = poi.n;
 }
 
 // buildGameMap draws a correctly-scaled, license-safe schematic map: a 1 km
@@ -6423,6 +6535,19 @@ function buildGameMap(map, opts = {}) {
             view.y + (clientY - r.top) / r.height * view.h];
   };
 
+  // Keep POI markers/labels a constant on-screen size (counter-scale each <g> by
+  // the zoom factor around its own point) and reveal the minor labels only once
+  // zoomed in, so the overview stays uncluttered.
+  let lastPoiK = -1;
+  function updatePois(k) {
+    marks.classList.toggle('gm-lod-in', k < 0.55);
+    if (Math.abs(k - lastPoiK) < 0.0005) return; // only rescale when zoom changed
+    lastPoiK = k;
+    const kk = k.toFixed(4);
+    for (const g of marks.querySelectorAll('.gm-poi-g')) {
+      g.setAttribute('transform', `translate(${g.getAttribute('data-sx')} ${g.getAttribute('data-sy')}) scale(${kk})`);
+    }
+  }
   function applyView() {
     view.w = Math.min(S, Math.max(MINW, view.w));
     view.h = view.w; // keep square
@@ -6430,6 +6555,7 @@ function buildGameMap(map, opts = {}) {
     view.y = Math.min(S - view.h, Math.max(0, view.y));
     svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
     svg.classList.toggle('gm-zoomed', view.w < S - 0.5);
+    updatePois(view.w / S);
     if (gm.onView) gm.onView(view.w / S);
   }
   function zoomTo(ux, uy, factor) {
@@ -7913,16 +8039,21 @@ Views.sponsors = async (root) => {
     const wall = h('div', { class: 'sponsors-wall' });
     for (const s of list) {
       const head = h('div', { class: 'sponsor-head' }, [
-        h('span', { class: 'sponsor-name', text: s.name || '—' }),
+        h('span', { class: 'sponsor-name', text: s.anon ? t('sponsors.anonymous') : (s.name || '—') }),
         s.amount ? h('span', { class: 'sponsor-amount', text: s.amount }) : null,
         s.date ? h('span', { class: 'sponsor-date', text: s.date }) : null,
       ]);
       const body = [head];
       if (s.link) body.push(h('a', { class: 'sponsor-link', href: s.link, target: '_blank', rel: 'noopener', text: s.link }));
-      if (s.message) body.push(h('blockquote', { class: 'sponsor-msg', text: '“' + s.message + '”' }));
-      if (s.reply) body.push(h('div', { class: 'sponsor-reply' }, [
+      // Testimonials are shown in the UI language when a translation exists,
+      // otherwise verbatim in the language the sponsor wrote them in.
+      const lang = State.lang || 'en';
+      const msg = (s.messageI18n && s.messageI18n[lang]) || s.message;
+      const reply = (s.replyI18n && s.replyI18n[lang]) || s.reply;
+      if (msg) body.push(h('blockquote', { class: 'sponsor-msg', text: '“' + msg + '”' }));
+      if (reply) body.push(h('div', { class: 'sponsor-reply' }, [
         h('span', { class: 'sponsor-reply-label', i18n: 'sponsors.reply.label' }),
-        h('span', { text: s.reply }),
+        h('span', { text: reply }),
       ]));
       if (s.anon) body.push(h('p', { class: 'hint sponsor-anon', i18n: 'sponsors.anon.note' }));
       wall.append(h('div', { class: 'card sponsor-card' }, body));

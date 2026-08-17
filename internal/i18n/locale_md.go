@@ -31,6 +31,7 @@ var md = Bundle{
 	"sponsors.none": "Încă niciun sponsor — ai putea fi primul.",
 	"sponsors.reply.label": "Răspunsul dezvoltatorului:",
 	"sponsors.anon.note": "Ai sponsorizat anonim? Dacă vrei ca aici să apară numele tău real sau profilul Steam, scrie dezvoltatorului pe GitHub — îl adăugăm cu plăcere.",
+	"sponsors.anonymous": "Anonim",
 	"sponsors.cta.title": "Vrei să ajuți proiectul să crească?",
 	"sponsors.cta.hint": "Orice sumă ajută și motivează dezvoltarea — iar susținătorii pot fi afișați aici.",
 	"health.checking": "Se verifică…",
@@ -69,6 +70,7 @@ var md = Bundle{
 
 	"nav.group.server":  "Server",
 	"nav.group.economy": "Economie",
+	"nav.group.maps":    "Hărți",
 	"nav.group.config":  "Configurare",
 	"nav.group.live":    "În direct",
 	"nav.group.system":  "Sistem",

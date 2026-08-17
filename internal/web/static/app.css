@@ -1970,6 +1970,12 @@ tr.lb-top > td { background: var(--surface-2); }
    over any terrain tint — the touch that reads as a real cartographic label. */
 .game-map.gm-has-shape .gm-town-label { fill: #f4f7f0; paint-order: stroke;
   stroke: #182015; stroke-width: 2.4px; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+/* Level-of-detail: town / landmark labels reveal only when zoomed in (JS toggles
+   .gm-lod-in on the marks group once past ~1.8x); cities / airfields / military
+   stay labelled at any zoom, so the overview reads clean. POI groups are
+   counter-scaled in JS so markers keep a constant on-screen size at any zoom. */
+.gm-tier-minor .gm-town-label { display: none; }
+.game-map.gm-has-shape .gm-marks.gm-lod-in .gm-tier-minor .gm-town-label { display: inline; }
 /* Upload call-to-action on placeholder maps. */
 .gm-cta-title { fill: #eef3ea; font-size: 30px; font-weight: 800; opacity: 0.9; }
 .gm-cta-hint { fill: #cbd6cc; font-size: 17px; opacity: 0.85; }

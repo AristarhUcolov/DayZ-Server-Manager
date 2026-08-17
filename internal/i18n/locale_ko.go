@@ -31,6 +31,7 @@ var ko = Bundle{
 	"sponsors.none": "아직 후원자가 없습니다 — 첫 번째가 되어 주세요.",
 	"sponsors.reply.label": "개발자의 답변:",
 	"sponsors.anon.note": "익명으로 후원하셨나요? 실명이나 Steam 프로필을 여기에 표시하고 싶으시면 GitHub에서 개발자에게 연락 주세요 — 기꺼이 추가하겠습니다.",
+	"sponsors.anonymous": "익명",
 	"sponsors.cta.title": "프로젝트 성장을 돕고 싶으신가요?",
 	"sponsors.cta.hint": "금액에 상관없이 개발에 큰 힘이 됩니다 — 후원자는 여기에 표시될 수 있습니다.",
 	"health.checking": "확인 중…",
@@ -69,6 +70,7 @@ var ko = Bundle{
 
 	"nav.group.server":  "서버",
 	"nav.group.economy": "경제",
+	"nav.group.maps":    "지도",
 	"nav.group.config":  "구성",
 	"nav.group.live":    "실시간",
 	"nav.group.system":  "시스템",

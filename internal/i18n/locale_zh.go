@@ -31,6 +31,7 @@ var zh = Bundle{
 	"sponsors.none": "还没有赞助者 — 你可以成为第一个。",
 	"sponsors.reply.label": "开发者的回复：",
 	"sponsors.anon.note": "匿名赞助了吗？如果希望在此显示你的真实昵称或 Steam 资料，请在 GitHub 联系开发者，我们很乐意添加。",
+	"sponsors.anonymous": "匿名",
 	"sponsors.cta.title": "想帮助项目成长吗？",
 	"sponsors.cta.hint": "任何金额都有帮助，也是继续开发的动力 — 支持者可以显示在这里。",
 	"health.checking": "检查中…",
@@ -69,6 +70,7 @@ var zh = Bundle{
 
 	"nav.group.server":  "服务器",
 	"nav.group.economy": "经济",
+	"nav.group.maps":    "地图",
 	"nav.group.config":  "配置",
 	"nav.group.live":    "实时",
 	"nav.group.system":  "系统",

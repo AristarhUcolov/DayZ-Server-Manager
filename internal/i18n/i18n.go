@@ -120,6 +120,7 @@ var en = Bundle{
 	"sponsors.none": "No sponsors yet — you could be the first.",
 	"sponsors.reply.label": "Reply from the developer:",
 	"sponsors.anon.note": "Sponsored anonymously? If you'd like your real name or Steam profile shown here, reach out to the developer on GitHub — we'll gladly add it.",
+	"sponsors.anonymous": "Anonymous",
 	"sponsors.cta.title": "Want to help the project grow?",
 	"sponsors.cta.hint": "Any amount helps and motivates further development — and supporters can be listed here.",
 	"health.checking": "Checking…",
@@ -158,6 +159,7 @@ var en = Bundle{
 
 	"nav.group.server":  "Server",
 	"nav.group.economy": "Economy",
+	"nav.group.maps":    "Maps",
 	"nav.group.config":  "Config",
 	"nav.group.live":    "Live",
 	"nav.group.system":  "System",
@@ -1023,6 +1025,7 @@ var ru = Bundle{
 	"sponsors.none": "Спонсоров пока нет — вы можете стать первым.",
 	"sponsors.reply.label": "Ответ разработчика:",
 	"sponsors.anon.note": "Поддержали анонимно? Если хотите, чтобы здесь был указан ваш настоящий ник или профиль Steam — напишите разработчику на GitHub, с радостью добавим.",
+	"sponsors.anonymous": "Аноним",
 	"sponsors.cta.title": "Хотите помочь развитию проекта?",
 	"sponsors.cta.hint": "Любая сумма помогает и мотивирует развивать проект дальше — а поддержавших можно указать здесь.",
 	"health.checking": "Проверка…",
@@ -1061,6 +1064,7 @@ var ru = Bundle{
 
 	"nav.group.server":  "Сервер",
 	"nav.group.economy": "Экономика",
+	"nav.group.maps":    "Карты",
 	"nav.group.config":  "Конфиг",
 	"nav.group.live":    "В реальном времени",
 	"nav.group.system":  "Система",

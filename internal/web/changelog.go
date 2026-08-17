@@ -27,6 +27,21 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "0.31.0", Date: "2026-08-15",
+		EN: []string{
+			"More accurate, cleaner maps — the built-in schematics now match the real worlds far better, with towns placed by real coordinates and truer coastlines. Chernarus, Livonia and Sakhal (now correctly two islands) are calibrated to the game maps, Namalsk was redrawn with its central lake, and a brand-new Bitterroot schematic was added.",
+			"Maps read like real interactive maps — at the overview only the major places are labelled (cities, airfields, military bases); town and landmark labels appear as you zoom in, and every marker keeps a constant on-screen size instead of ballooning when zoomed.",
+			"Clearer sidebar — regrouped into Overview / Server / Economy / Maps / Live / Config / System, with all the map tools together in a new Maps group and the config Validator moved to System.",
+			"Sponsors — testimonials now show in your interface language (the original stays as a fallback), the \"Anonymous\" label is localized in every language, and a new supporter joined the wall. Thank you!",
+		},
+		RU: []string{
+			"Более точные и чистые карты — встроенные схемы теперь заметно ближе к реальным мирам: города по реальным координатам и более верные береговые линии. Chernarus, Livonia и Sakhal (теперь правильно — два острова) откалиброваны по игровым картам, Namalsk перерисован с центральным озером, добавлена новая схема Bitterroot.",
+			"Карты читаются как настоящие интерактивные — на обзоре подписаны только крупные объекты (города, аэродромы, военные базы), а подписи посёлков и ориентиров проявляются при приближении; маркеры держат постоянный размер на экране, а не раздуваются при зуме.",
+			"Понятнее боковая панель — перегруппирована в Обзор / Сервер / Экономика / Карты / Live / Конфиг / Система: все карты собраны в новую группу «Карты», а Validator переехал в «Система».",
+			"Спонсоры — отзывы теперь показываются на языке интерфейса (оригинал остаётся как запасной), метка «Аноним» локализована на всех языках, и на стену добавлен новый спонсор. Спасибо!",
+		},
+	},
+	{
 		Version: "0.30.1", Date: "2026-08-15",
 		EN: []string{
 			"Fixed the live map and heatmap not showing players and deaths. The .ADM log parser didn't recognise the real vanilla format — the \"[HP: nn]\" health annotation before \"hit by\", and the \"is connected\" wording — so hit positions and connects were dropped. Player positions (from combat) and deaths now register.",

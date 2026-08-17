@@ -31,6 +31,7 @@ var pt = Bundle{
 	"sponsors.none": "Ainda sem patrocinadores — você pode ser o primeiro.",
 	"sponsors.reply.label": "Resposta do desenvolvedor:",
 	"sponsors.anon.note": "Patrocinou anonimamente? Se quiser que seu nome real ou perfil Steam apareça aqui, fale com o desenvolvedor no GitHub — adicionaremos com prazer.",
+	"sponsors.anonymous": "Anónimo",
 	"sponsors.cta.title": "Quer ajudar o projeto a crescer?",
 	"sponsors.cta.hint": "Qualquer valor ajuda e motiva o desenvolvimento — e os apoiadores podem aparecer aqui.",
 	"health.checking": "Verificando…",
@@ -69,6 +70,7 @@ var pt = Bundle{
 
 	"nav.group.server":  "Servidor",
 	"nav.group.economy": "Economia",
+	"nav.group.maps":    "Mapas",
 	"nav.group.config":  "Configuração",
 	"nav.group.live":    "Ao vivo",
 	"nav.group.system":  "Sistema",
