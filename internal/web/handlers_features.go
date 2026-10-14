@@ -49,6 +49,7 @@ func (h *handlers) weatherGet(w http.ResponseWriter, r *http.Request) {
 		"matched": weather.MatchPreset(params),
 		"exists":  perr == nil,
 		"mission": mission,
+		"map":     h.currentMap(), // world → latitude for the day/night planner
 	}
 
 	if cfg, err := config.LoadServerCfg(filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)); err == nil {
@@ -288,6 +289,7 @@ func (h *handlers) wipeApply(w http.ResponseWriter, r *http.Request) {
 		moved = append(moved, name)
 	}
 	h.app.Log.Printf("server wipe: moved %d storage folder(s) to %s", len(moved), backupDir)
+	h.app.Notify("wipe", strings.Join(moved, ", "))
 	writeJSON(w, map[string]interface{}{
 		"wiped":     len(moved),
 		"folders":   moved,

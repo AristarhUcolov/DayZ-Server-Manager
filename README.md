@@ -10,10 +10,17 @@
 
 # RU
 
-**DayZ Server Manager** — один exe-файл, который кидается в папку DayZ Server
-и превращает обычный сервер в удобную панель управления в браузере. Никаких
-`Notepad`, никаких `.bat` — всё через приятный веб-интерфейс. Вдохновлён
-панелями хостингов GTA SA:MP.
+**DayZ Server Manager** — один исполняемый файл, который кидается в папку
+DayZ Server и превращает обычный сервер в удобную панель управления. Никаких
+`Notepad`, никаких `.bat` — всё через приятный интерфейс. Вдохновлён панелями
+хостингов GTA SA:MP.
+
+Есть две сборки с общими настройками — выбирайте любую:
+
+| файл | как выглядит |
+|------|--------------|
+| `dayz-manager-panel.exe` / `dayz-manager-panel-linux` | **Приложение** — панель в собственном окне, значок в трее; при закрытии окна сервер DayZ можно оставить работать |
+| `dayz-manager-web.exe` / `dayz-manager-web-linux` | **Браузерная** — консоль + панель во вкладке браузера (бывший `dayz-manager.exe`); подходит и для VPS без рабочего стола |
 
 <p align="center">
   <img src="docs/img/ru/dashboard.webp" alt="Панель управления DayZ Server Manager" width="900">
@@ -21,8 +28,14 @@
 
 <table>
   <tr>
+    <td width="50%"><img src="docs/img/ru/servers.webp" alt="Серверы"><br>
+      <b>Серверы</b> — несколько серверов DayZ в одной панели: своя папка, настройки и порты у каждого</td>
+    <td width="50%"><img src="docs/img/ru/players.webp" alt="Игроки"><br>
+      <b>Игроки</b> — все игроки, кто сейчас онлайн, баны с причиной и сроком, килфид</td>
+  </tr>
+  <tr>
     <td width="50%"><img src="docs/img/ru/guide.webp" alt="Инструкция для новичков"><br>
-      <b>Инструкция</b> — десять глав с пошаговыми объяснениями, скриншотом раздела и переходом прямо в нужную страницу</td>
+      <b>Инструкция</b> — пятнадцать глав с пошаговыми объяснениями, скриншотом раздела и переходом прямо в нужную страницу</td>
     <td width="50%"><img src="docs/img/ru/attachments.webp" alt="Редактор обвесов"><br>
       <b>Обвесы</b> — cfgspawnabletypes.xml с реальными процентами спавна вместо сырых весов</td>
   </tr>
@@ -41,6 +54,85 @@
 </table>
 
 ## Что умеет
+
+### Новое в 1.0 — «Октябрьское обновление»
+
+- **Мульти-сервер**: несколько серверов DayZ в одной панели. Страница
+  **Серверы** добавляет существующую папку сервера или создаёт новый сервер
+  копией существующего (со свободными портами и чистым миром), показывает
+  состояние, игроков, порты и конфликты портов («Назначить свободные порты»).
+  Меню сервера в верхней строке переключает панель; у каждого сервера свои
+  настройки, моды, игроки, баны, чат, бэкапы, расписание и Discord, а вход,
+  удалённый доступ и язык — общие.
+- **Игроки**: вкладки «Все игроки» (поиск, сортировка), «Сейчас онлайн» (пинг,
+  IP, GUID; сообщение, кик, бан), «Баны» (список с историей, бан по Steam64 /
+  ID / GUID / IP) и килфид; профиль с ID, текущим баном и историей модерации.
+- **Баны, которые работают**: срок от 1 часа до 30 дней, навсегда или свой,
+  с причиной; бан пишется в собственный `ban.txt` сервера по ID игрока
+  (действует сразу) и в BattlEye по GUID, временные снимаются автоматически.
+- **Discord**: embed-сообщения с именем сервера, выбор событий (онлайн,
+  рестарты с причиной, падения, моды, бэкапы, вайпы, входы/выходы, PvP,
+  чат, баны и кики), пинг роли при падениях, отдельный канал для игроков,
+  имя/картинка/язык бота и живое сообщение статуса.
+- **Две сборки** — приложение в своём окне (`dayz-manager-panel`) и браузерная
+  (`dayz-manager-web`), обе для Windows и Linux.
+- **Linux**: автоматическое приведение имён модов к нижнему регистру, поиск
+  Steam / SteamCMD / Flatpak / Snap, корректная остановка всей группы процессов.
+- **Источник модов на выбор**: клиент игры, любая папка с `@модами` или
+  `workshop/content/221100` от SteamCMD, либо «только сервер» (хостинг без игры).
+- **Рестарты**: отсчёт берётся с сервера (игроки и панель видят одно время),
+  кик всех за N секунд до рестарта с закрытием сервера, свой текст
+  предупреждений, корректный `#shutdown` с сохранением мира; повторный запуск
+  менеджера подхватывает уже работающий сервер. Привязка к ядрам CPU и приоритет.
+- **Настоящие карты из вашей миссии**: рельеф (`areaflags.map`), тиры лута,
+  постройки, заражённые зоны, территории; размер мира определяется сам.
+- **Редактор точек спавна событий** с точными X / Y / Z (включая высоту) и
+  вставкой списка координат; страницы **Транспорт** и **Миссии**. Миссия карты,
+  лежащая внутри мода (папкой или .zip), сама копируется в `mpmissions` при
+  установке/обновлении мода; импорт миссии из .zip или папки.
+- **Вход в панель по логину и паролю** (по желанию — выбирается при первой
+  настройке или в «Настройки → Доступ и безопасность»): пароли хранятся как солёные
+  хеши PBKDF2, вход запоминается на устройстве, перебор паролей блокируется,
+  список устройств со входом и выход с любого из них. Забыли пароль —
+  запустите менеджер с `-reset-login`.
+- **Удалённый доступ** («Настройки → Доступ и безопасность»): объясняет, почему
+  телефон «уходит в оффлайн» вне дома, и проверяет каждый шаг — режим
+  «Интернет» (только со входом), автоматический проброс портов на роутере
+  (UPnP), правило брандмауэра Windows, HTTPS на том же порту, проверка белого
+  IP / CGNAT с точным адресом для входа снаружи. Может пробросить и игровые порты.
+- **Чат**: сообщения из менеджера (свои, личные, объявления, предупреждения о
+  рестарте) видны в ленте, а каждый день сохраняется в архив с поиском и
+  выгрузкой в .txt.
+- **Страница «Сервер»**: миссии из `mpmissions` карточками карт (активная —
+  в один клик), `serverDZ.cfg` по группам с переключателями, параметры запуска
+  с ограничением FPS сервера (`-limitFPS`) и полем для любых дополнительных
+  параметров DayZServer.
+- **Настройки по вкладкам**: Общие, Доступ и безопасность, Рестарты и
+  расписание, Бэкапы, Discord.
+- **Модовый транспорт в «Транспорте»**: события из всех файлов, подключённых в
+  `cfgeconomycore.xml`, распознавание машин по запчастям, сохранение в «свой»
+  файл; транспорт, для которого мод приносит серверные файлы, добавляется в один
+  клик (копируется в папку миссии `dzm_vehicles`).
+- **Linux**: окно панели или браузер открываются и при запуске от root/sudo, со
+  snap/flatpak-браузерами; в терминале — адрес панели, а на сервере без рабочего
+  стола — инструкция (SSH-туннель) и флаги `-set-login`/`-exposure`.
+- **FPS сервера на панели** — из строки «Average server FPS» в логе `.RPT`
+  (интервал `logAverageFps` задаётся в группе «Лог сервера» на странице «Сервер»,
+  нужен флаг `-dologs`).
+- **Validator 2.0** — группировка по проблемам и исправление в один клик.
+- **RCon без «authentication failed»**: панель входит с паролем, который BattlEye
+  загрузил при старте (`beserver_x64_active_*.cfg`), и честно говорит, если
+  новый пароль ждёт рестарта.
+- **Переделаны страницы** «События», «Геймплей» (понятные названия, описания и
+  значения DayZ по умолчанию), «Транспорт», «Погода и время», «Экономика лута»,
+  «Types», «Логи», «Админ-лог», «Игроки», «Чат», настройки Discord (иконки и
+  предпросмотр сообщений) и другие — по итогам аудита со скриншотами, с
+  раскладкой для телефона.
+- **Множественное число на всех языках**: «1 точка / 4 точки / 5 точек».
+- **Приложение как программа**: в Windows — ярлыки в «Пуск» и на рабочем столе,
+  окно запоминает размер и место; в Linux — собственное окно (WebKitGTK).
+- Чек-лист «Первые шаги», статус «в списке серверов» через Steam-запрос,
+  фильтр Types по типу предметов, кнопки «Открыть папку» и «Обновить».
 
 - **Заменяет стандартный .bat.** Запускает `DayZServer_x64.exe` с теми же
   параметрами (port, cpuCount, BEpath, profiles, -mod, -serverMod,
@@ -289,22 +381,24 @@
   (~30 минут мелкими шагами, как в ванильном DayZ), «Обычно» (~10 минут)
   и «Быстро» (~2 минуты). Раньше менеджер всегда писал двухминутный переход
   с полным диапазоном изменения — отсюда и ощущение выключателя.
-- **11 языков интерфейса** с переключением на лету: English, Русский,
-  Español, Français, Deutsch, Italiano, Português, Moldovenească, 中文,
-  日本語, 한국어. Мастер первого запуска с выбором языка.
-- **Локально, LAN или наружу.** По умолчанию слушает `127.0.0.1`. Режим
-  доступа выбирается в настройках; для доступа с телефона/других устройств
-  показываются готовые адреса. Встроенного логина нет — LAN-режим только в
-  доверенной сети или за reverse-proxy с авторизацией.
+- **23 языка интерфейса** с переключением на лету: English, Русский,
+  Deutsch, Français, Español, Italiano, Português, Polski, Čeština, Magyar,
+  Nederlands, Svenska, Moldovenească, Türkçe, العربية (с зеркальной вёрсткой
+  справа налево), हिन्दी, ไทย, Tiếng Việt, Bahasa Indonesia, 中文, 繁體中文,
+  日本語, 한국어. Новая установка открывается на языке браузера.
+- **Локально, LAN или из интернета.** По умолчанию слушает `127.0.0.1`.
+  «Локальная сеть» пускает только устройства из вашей сети, «Интернет» —
+  откуда угодно, но только при включённом входе по паролю. Запросы с чужих
+  сайтов и чужие доменные имена (DNS rebinding) отклоняются.
 
 ## Установка и запуск
 
-Требуется Go 1.22+ для сборки. (Готовый бинарник скачивается из
-GitHub Releases — см. ниже.)
+Готовые файлы — в GitHub Releases. Для сборки из исходников нужен Go 1.22+.
 
 ```bash
 # из корня проекта — сборка для разработки
-go build -o dayz-manager.exe ./cmd/manager
+go build -o dayz-manager-web.exe ./cmd/manager
+go build -o dayz-manager-panel.exe ./cmd/panel
 ```
 
 Сборка релиза. Флаги `-s -w` убирают таблицу символов и отладочные данные
@@ -312,73 +406,150 @@ DWARF — это ~3,4 МБ, которые не нужны при запуске
 трассировку паники они не влияют (Go берёт имена функций и номера строк из
 `pclntab`, а его эти флаги не трогают), поэтому отчёт о падении от
 пользователя остаётся таким же подробным. **Файлы в GitHub Releases собраны
-именно так** — собирайте релизы этой командой, иначе exe вырастет на треть:
+именно так.** `-H windowsgui` у приложения убирает окно консоли:
 
 ```bash
-go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
+python tools/build_release.py           # все четыре файла + dayz-manager-linux.tar.gz
+python tools/build_release.py linux     # только Linux
+python tools/build_release.py windows   # только Windows
 ```
 
-Кросс-сборка под Windows из Linux/macOS:
+Скрипт передаёт целевую систему каждой сборке напрямую (без синтаксиса
+оболочки) и проверяет, что каждый файл — программа именно для своей системы:
+`-linux` должен начинаться с `ELF`, `.exe` — с `MZ`. Запись вида
+`GOOS=linux go build …` работает только в bash; в cmd и PowerShell она молча
+собирает **Windows**-файл с именем `-linux`, и на Linux он не запускается
+(«Exec format error») — архив `make_linux_tarball.py` такой файл теперь не
+примет. Вручную то же самое:
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
+go build -ldflags="-s -w" -o dayz-manager-web.exe ./cmd/manager
+go build -ldflags="-s -w -H windowsgui" -o dayz-manager-panel.exe ./cmd/panel
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager-web-linux ./cmd/manager   # только в bash
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager-panel-linux ./cmd/panel   # только в bash
 ```
 
-**Linux.** Начиная с v0.23.0 менеджер работает и на Linux — в GitHub Releases
-рядом с `dayz-manager.exe` лежит бинарник `dayz-manager-linux` (ELF, у
-исполняемых файлов в Linux нет расширения). Собрать самому:
+Всё собирается без cgo, поэтому кросс-сборка из любой ОС работает теми же
+командами (для Windows — `GOOS=windows GOARCH=amd64`).
+
+**Окно приложения.** На Windows `dayz-manager-panel` показывает панель во
+встроенном окне Microsoft Edge WebView2 (в Windows 10/11 он уже установлен),
+со значком в трее, запоминает размер и положение окна и при первом запуске
+предлагает добавить себя в меню «Пуск» и на рабочий стол (`-install` /
+`-uninstall` делают то же из командной строки). Если WebView2 нет, панель
+предложит скачать его у Microsoft, а пока откроется в Edge/Chrome в режиме
+приложения или в обычном браузере. На Linux панель открывается в собственном
+окне приложения на движке WebKitGTK — он есть почти в любом рабочем столе
+(пакет `libwebkit2gtk-4.1-0` в Debian / Ubuntu / Mint); без него — в Chrome /
+Chromium / Edge / Brave в режиме `--app` или в браузере. Без рабочего стола
+(VPS по SSH) приложение просто печатает адрес панели.
+
+**Linux.** Проще всего скачать `dayz-manager-linux.tar.gz` — в архиве оба
+файла уже исполняемые. Распакуйте его в папку сервера рядом с бинарником
+`DayZServer` (Linux-версия сервера, без `.exe`).
+
+*С рабочим столом.* Браузер сохраняет скачанный файл без права на запуск, а
+GNOME Files и многие другие файловые менеджеры вообще не запускают программы
+двойным щелчком — поэтому «файл не открывается». Один раз выполните в
+терминале в папке сервера:
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager-linux ./cmd/manager
+chmod +x dayz-manager-panel-linux
+./dayz-manager-panel-linux -install
 ```
 
-Положите его в папку сервера рядом с бинарником `DayZServer` (Linux-версия
-сервера, без `.exe`), сделайте исполняемым `chmod +x dayz-manager-linux` и
-запустите `./dayz-manager-linux`. Диск, метрики процесса и разбор RPT работают
-на Linux нативно (через `/proc` и `statfs`).
+Менеджер появится в меню приложений (и ярлыком на рабочем столе) — дальше
+запускайте его оттуда как обычное приложение. `-uninstall` убирает ярлыки.
+Если при запуске без терминала что-то пойдёт не так, ошибка и адрес панели
+покажутся в окне (zenity / kdialog), а не потеряются.
 
-**Иконка и свойства файла.** `cmd/manager/resource_windows_amd64.syso` лежит в
-репозитории и подхватывается `go build` автоматически — никаких инструментов
-ставить не нужно. Пересобирать его надо только если меняется иконка или версия:
+*Без рабочего стола (VPS по SSH):*
+
+```bash
+chmod +x dayz-manager-web-linux
+./dayz-manager-web-linux -no-browser -bind 0.0.0.0
+```
+
+Linux-сервер DayZ требует, чтобы имена папок и файлов модов были в нижнем
+регистре — менеджер делает это сам при установке и обновлении, а на странице
+**Моды** подсвечивает проблемы. Чтобы менеджер стартовал вместе с системой,
+пример юнита systemd (`/etc/systemd/system/dayz-manager.service`):
+
+```ini
+[Unit]
+Description=DayZ Server Manager
+After=network-online.target
+
+[Service]
+User=dayz
+WorkingDirectory=/home/dayz/server
+ExecStart=/home/dayz/server/dayz-manager-web-linux -no-browser -bind 0.0.0.0
+# SIGTERM получает только менеджер: он сам корректно останавливает DayZ (#shutdown)
+KillMode=mixed
+TimeoutStopSec=90
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl enable --now dayz-manager
+```
+
+**Иконка и свойства файла.** `cmd/manager/resource_windows_amd64.syso` и
+`cmd/panel/resource_windows_amd64.syso` лежат в репозитории и подхватываются
+`go build` автоматически. Пересобирать их надо только если меняется иконка или
+версия:
 
 ```bash
 go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
-# после правки версии в cmd/manager/versioninfo.json:
-goversioninfo -icon=cmd/manager/icon.ico -o cmd/manager/resource_windows_amd64.syso cmd/manager/versioninfo.json
+# после правки версии в cmd/<manager|panel>/versioninfo.json:
+cd cmd/manager && goversioninfo -64 -icon=icon.ico -o resource_windows_amd64.syso versioninfo.json
+cd ../panel   && goversioninfo -64 -icon=icon.ico -o resource_windows_amd64.syso versioninfo.json
 ```
 
-Версия в `versioninfo.json` не связана с `appVersion` в `main.go` — при выпуске
-меняйте обе, иначе «Свойства → Подробно» будут показывать старый номер.
+Номер версии программы — `internal/launcher/version.go`; при выпуске меняйте
+его и оба `versioninfo.json`, иначе «Свойства → Подробно» покажут старый номер.
 
-Готовый exe полностью самодостаточен — весь веб-интерфейс встроен в бинарь
+Готовый файл полностью самодостаточен — весь веб-интерфейс встроен в бинарь
 через `//go:embed`. Никакого Node.js, никаких зависимостей.
 
 ### Как использовать
 
-1. Скопируй `dayz-manager.exe` в папку DayZ Server (рядом с
-   `DayZServer_x64.exe` и `serverDZ.cfg`).
-2. Запусти двойным кликом — появится консоль, браузер откроет
-   `http://127.0.0.1:8787/`.
-3. На первом запуске укажи путь к своему клиентскому DayZ (где папка
-   `!Workshop`), выбери язык и режим доступа (`Local` / `LAN/Internet`).
-4. Пользуйся панелью. Перед редактированием файлов **останавливай сервер**.
+1. Скопируй `dayz-manager-panel.exe` (или `dayz-manager-web.exe`) в папку
+   DayZ Server — рядом с `DayZServer_x64.exe` и `serverDZ.cfg`.
+2. Запусти двойным кликом — откроется окно панели (браузерная сборка открывает
+   `http://127.0.0.1:8787/`).
+3. На первом запуске выбери язык, откуда брать моды (клиент игры, папка модов
+   или «только сервер») и режим доступа (`Local` / `LAN/Internet`).
+4. Пройди чек-лист «Первые шаги» на главной. Перед редактированием файлов
+   **останавливай сервер**.
 
 ### Флаги командной строки
 
 | флаг           | по умолчанию | назначение                                          |
 |----------------|--------------|-----------------------------------------------------|
-| `-port`        | `8787`       | Порт веб-панели.                                    |
+| `-port`        | `8787`       | Порт панели. Если занят другой программой, берётся следующий свободный. |
 | `-bind`        | *(из настроек)* | Адрес привязки. Пусто = следует режиму доступа: `127.0.0.1` для Local, `0.0.0.0` для LAN. |
-| `-no-browser`  | `false`      | Не открывать браузер при запуске.                   |
+| `-no-browser`  | `false`      | Только `dayz-manager-web`: не открывать браузер при запуске. |
+| `-reset-login` | `false`      | Выключить вход в панель (забыли пароль) и запуститься как обычно. |
+| `-set-login ИМЯ` | —          | Включить вход в панель для этого имени (пароль спросит в терминале) и запуститься — для сервера без рабочего стола. |
+| `-exposure РЕЖИМ` | —         | Сохранить режим доступа к панели до старта: `local`, `lan` или `internet` (для `internet` нужен вход). |
+| `-install`    | —            | Linux: добавить менеджер в меню приложений и на рабочий стол и выйти (`-uninstall` убирает). |
 | `-version`     | —            | Напечатать версию и выйти.                          |
+
+Повторный запуск не создаёт второй менеджер: он просто показывает уже
+открытую панель.
 
 ### Запуск как Windows Service (NSSM)
 
 Чтобы панель стартовала с системой и автоматически перезапускалась при
-падениях, удобнее всего использовать [NSSM](https://nssm.cc/):
+падениях, удобнее всего использовать [NSSM](https://nssm.cc/) с браузерной
+сборкой:
 
 ```bat
-nssm install DayZManager "C:\DayZServer\dayz-manager.exe"
+nssm install DayZManager "C:\DayZServer\dayz-manager-web.exe"
 nssm set DayZManager AppDirectory "C:\DayZServer"
 nssm set DayZManager AppParameters "-bind 0.0.0.0 -no-browser"
 nssm set DayZManager Start SERVICE_AUTO_START
@@ -386,28 +557,33 @@ nssm start DayZManager
 ```
 
 После этого панель будет доступна по `http://<сервер>:8787/` сразу после
-загрузки Windows. У панели нет встроенного логина — если открываешь её
-наружу, ставь впереди reverse-proxy (Caddy / nginx) с HTTP Basic auth.
+загрузки Windows. Перед тем как открывать её наружу, включите вход по паролю
+и проверьте удалённый доступ — оба на вкладке «Настройки → Доступ и безопасность».
 
 ## Структура проекта
 
 ```
-cmd/manager/             main.go — точка входа, CLI-флаги, авто-браузер
-internal/app/            общий контекст приложения (конфиг, логгер, сервер, RCon)
+cmd/manager/             браузерная сборка (dayz-manager-web): CLI-флаги, авто-браузер
+cmd/panel/               приложение (dayz-manager-panel): окно + трей
+internal/launcher/       общий запуск обеих сборок, версия, повторный запуск
+internal/desktop/        окно WebView2 и трей (Windows), окно-приложение браузера (Linux)
+internal/app/            общий контекст приложения (конфиг, логгер, сервер, RCon, Steam-запрос)
+internal/a2s/            Steam A2S_INFO — «виден ли сервер в списке», игроки без RCon
 internal/config/         manager.json, парсер server.cfg (round-trip), beserver_x64.cfg
-internal/server/         контроллер процесса DayZServer_x64 + расписания/авто-рестарт
-internal/mods/           скан Workshop, install/update/uninstall, sync-keys
+internal/server/         процесс DayZServer, расписание рестартов, кик/лок, приоритеты
+internal/mods/           источники модов, install/update/uninstall, ключи, регистр для Linux
 internal/types/          types.xml + cfgeconomycore.xml, events, spawn presets
-internal/validator/      XML/CFG + cross-file проверки + авто-исправление лимитов
+internal/validator/      проверки XML/CFG/JSON и связей между файлами + авто-исправления
 internal/weather/        cfgweather.xml — пресеты и ручная погода
-internal/rcon/           BattlEye RCon-клиент (UDP) + менеджер соединения
+internal/rcon/           BattlEye RCon-клиент (UDP) + менеджер соединения, чат
+internal/upnp/           проброс портов на роутере (UPnP IGD) для удалённого доступа
 internal/logs/           обнаружение и хвостовой стрим .RPT/.ADM
-internal/admlog/          разбор событий админ-лога (.ADM)
-internal/updater/        проверка обновлений манагера
-internal/util/           бэкапы, диск, вспомогательное
-internal/i18n/           строковые бандлы (11 языков), по файлу на локаль
-internal/web/            HTTP-сервер, REST API, встроенные статические файлы
-internal/web/static/     index.html, app.css, app.js (встраиваются при сборке)
+internal/admlog/         разбор событий админ-лога (.ADM)
+internal/updater/        проверка обновлений менеджера
+internal/util/           бэкапы, диск, процессы, Steam, «открыть папку»
+internal/i18n/           строки интерфейса (11 языков в Go + lang/*.json — ещё 12)
+internal/web/            HTTP-сервер, REST API, вход в панель, HTTPS, архив чата, карты
+internal/web/static/     index.html, app.css, app.js, features.js, access.js (встраиваются при сборке)
 ```
 
 ## Спонсоры
@@ -424,11 +600,17 @@ internal/web/static/     index.html, app.css, app.js (встраиваются �
 
 # ENG
 
-**DayZ Server Manager** is a single-exe web panel for managing a DayZ
-dedicated server. Drop it into your DayZ Server folder and a browser-based
-admin panel opens. No more Notepad, no more fiddling with `.bat` files —
-everything through a clean web UI. Inspired by classic GTA SA:MP hosting
-panels.
+**DayZ Server Manager** is a single-file control panel for a DayZ dedicated
+server. Drop it into your DayZ Server folder and the admin panel opens. No more
+Notepad, no more fiddling with `.bat` files — everything through a clean UI.
+Inspired by classic GTA SA:MP hosting panels.
+
+It comes in two builds that share the same settings — pick either:
+
+| file | what you get |
+|------|--------------|
+| `dayz-manager-panel.exe` / `dayz-manager-panel-linux` | **Desktop app** — the panel in its own window with a tray icon; closing the window can leave the DayZ server running |
+| `dayz-manager-web.exe` / `dayz-manager-web-linux` | **Browser build** — a console plus the panel in a browser tab (formerly `dayz-manager.exe`); also fits a headless VPS |
 
 <p align="center">
   <img src="docs/img/en/dashboard.webp" alt="DayZ Server Manager dashboard" width="900">
@@ -436,8 +618,14 @@ panels.
 
 <table>
   <tr>
+    <td width="50%"><img src="docs/img/en/servers.webp" alt="Servers"><br>
+      <b>Servers</b> — several DayZ servers in one panel, each with its own folder, settings and ports</td>
+    <td width="50%"><img src="docs/img/en/players.webp" alt="Players"><br>
+      <b>Players</b> — every player, who is online now, bans with a reason and an end date, the kill feed</td>
+  </tr>
+  <tr>
     <td width="50%"><img src="docs/img/en/guide.webp" alt="Beginner's guide"><br>
-      <b>Guide</b> — eight chapters of step-by-step explanations, each with a screenshot and a jump to the section it describes</td>
+      <b>Guide</b> — fifteen chapters of step-by-step explanations, each with a screenshot and a jump to the section it describes</td>
     <td width="50%"><img src="docs/img/en/attachments.webp" alt="Attachments editor"><br>
       <b>Attachments</b> — cfgspawnabletypes.xml showing real spawn percentages instead of raw weights</td>
   </tr>
@@ -456,6 +644,57 @@ panels.
 </table>
 
 ## What it does
+
+### New in 1.0 — the "October Update"
+
+- **Multi-server**: several DayZ servers in one panel. The **Servers** page
+  adds a server folder you have, or creates a new server as a copy of an
+  existing one (free ports, a fresh world), and shows state, players, ports and
+  port conflicts ("Assign free ports"). The server menu in the top bar switches
+  the panel; each server keeps its own settings, mods, players, bans, chat,
+  backups, schedule and Discord, while the login, remote access and language
+  are shared.
+- **Players**: tabs for all players (search, sorting), online now (ping, IP,
+  GUID; message, kick, ban), bans (list with history, ban by Steam64 / ID /
+  GUID / IP) and the kill feed; a profile with IDs, the current ban and the
+  moderation history.
+- **Bans that work**: from 1 hour to 30 days, permanent or custom, with a
+  reason; the ban goes into the server's own `ban.txt` by player ID (takes
+  effect at once) and into BattlEye by GUID; timed bans end automatically.
+- **Discord**: embeds with the server's name, a choice of events (online,
+  restarts with the reason, crashes, mods, backups, wipes, joins/leaves, PvP,
+  chat, bans and kicks), a role ping on crashes, a separate player-activity
+  channel, the bot's name/picture/language and a live status message.
+- **Two builds** — a desktop app in its own window (`dayz-manager-panel`) and a
+  browser build (`dayz-manager-web`), both for Windows and Linux.
+- **Linux**: mod names lowercased automatically, Steam / SteamCMD / Flatpak /
+  Snap libraries detected, the whole process group stopped cleanly.
+- **Mod source of your choice**: the game client, any folder of `@mods` or
+  SteamCMD's `workshop/content/221100`, or server-only (hosting without the game).
+- **Restarts**: the countdown comes from the server (players and the panel see
+  the same time), kick everyone N seconds before a restart and lock the server,
+  your own warning text, a clean `#shutdown` that saves the world; restarting
+  the manager picks the running server up again. CPU affinity and priority.
+- **Real maps from your own mission**: terrain (`areaflags.map`), loot tiers,
+  buildings, contaminated areas, territories; world size detected automatically.
+- **Event spawn editor** with exact X / Y / Z (height included) and pasting a
+  list of coordinates; new **Vehicles** and **Missions** pages. A map mission
+  carried inside a mod (a folder or a .zip) is copied into `mpmissions`
+  automatically when the mod is installed or updated; missions can also be
+  imported from a .zip or a folder.
+- **Validator 2.0** — grouped by problem, with a one-click fix for each.
+- **RCon without "authentication failed"**: the panel logs in with the password
+  BattlEye loaded at start (`beserver_x64_active_*.cfg`) and says plainly when
+  a new password is waiting for a restart.
+- **Pages rebuilt** — Events, Gameplay (readable names, descriptions and DayZ's
+  default values), Vehicles, Weather & time, Loot economy, Types, Logs, Admin
+  log, Players, Chat, the Discord settings (icons and a message preview) and
+  more — after an audit from screenshots, with phone layouts.
+- **Plurals in every language**: "1 point / 4 points", "1 точка / 4 точки / 5 точек".
+- **The app feels installed**: on Windows, Start menu and desktop shortcuts and a
+  window that remembers its size and place; on Linux, its own window (WebKitGTK).
+- A getting-started checklist, "listed in the server browser" status via the
+  Steam query, Types filtered by item kind, "Open folder" and Refresh buttons.
 
 - **Replaces the stock .bat launcher.** Same launch parameters (port,
   cpuCount, BEpath, profiles, -mod, -serverMod, dologs/adminlog/netlog/
@@ -707,96 +946,201 @@ panels.
   (~30 minutes in small steps, like vanilla DayZ), Normal (~10 minutes) and
   Fast (~2 minutes). Earlier builds always wrote a two-minute ramp with
   full-range steps, which is what made weather feel like a light switch.
-- **11-language UI** with an on-the-fly switcher: English, Русский, Español,
-  Français, Deutsch, Italiano, Português, Moldovenească, 中文, 日本語, 한국어.
-  A language picker in the first-run wizard.
-- **Local, LAN or Internet exposure.** Default bind is `127.0.0.1`.
-  Exposure is chosen in Settings; reachable URLs for phones/other devices
-  are shown for you. There is no built-in login — use LAN mode only on a
-  trusted network, or front it with an authenticating reverse proxy.
+- **23-language UI** with an on-the-fly switcher: English, Русский,
+  Deutsch, Français, Español, Italiano, Português, Polski, Čeština, Magyar,
+  Nederlands, Svenska, Moldovenească, Türkçe, العربية (right-to-left layout),
+  हिन्दी, ไทย, Tiếng Việt, Bahasa Indonesia, 中文, 繁體中文, 日本語, 한국어.
+  A new install opens in the browser's language.
+- **Local, LAN or Internet exposure.** Default bind is `127.0.0.1`. Local
+  network only lets devices from your network in; Internet lets anyone reach
+  the panel, so it requires the panel login. Requests from other websites and
+  foreign host names (DNS rebinding) are refused.
+- **Panel login** (optional — chosen in the first-run setup or Settings →
+  Access & security): salted PBKDF2 password hashes, remember-me per device,
+  lockout after repeated wrong attempts, a list of signed-in devices with
+  sign-out. Forgot the password? Start the manager with `-reset-login`.
+- **Remote access** (Settings → Access & security): explains why a phone "goes
+  offline" outside the home network and checks every step — Internet
+  exposure, automatic router port forwarding (UPnP), a Windows Firewall rule,
+  HTTPS on the same port, and a public-IP / CGNAT check that shows the exact
+  address to open from outside. It can forward the game ports too.
+- **Chat archive**: messages sent from the manager show up in the chat feed,
+  and every day is archived with search and a .txt download.
+- **Server page**: missions from `mpmissions` as map cards (make one active in
+  a click), `serverDZ.cfg` grouped into sections with switches, and launch
+  parameters with a server FPS limit (`-limitFPS`) and free-form extra
+  DayZServer parameters.
+- **Settings in tabs**: General, Access & security, Restarts & schedule,
+  Backups, Discord.
+- **Modded vehicles on the Vehicles page**: events from every file registered
+  in `cfgeconomycore.xml`, cars recognised by their parts, edits saved into the
+  file the car lives in; vehicles a mod ships server files for are added in one
+  click (copied into the mission's `dzm_vehicles` folder).
+- **Linux**: the app window or browser opens also when started as root/sudo and
+  with snap/flatpak browsers; the terminal shows the panel address, and a server
+  without a desktop gets instructions (SSH tunnel) and `-set-login`/`-exposure`.
+- **Server FPS on the dashboard**, read from the "Average server FPS" line of
+  the `.RPT` log (set `logAverageFps` in the Server log group on the Server
+  page; needs `-dologs`).
 
 ## Build
 
-Requires Go 1.22+. (Pre-built binaries are on the GitHub Releases page.)
+Pre-built binaries are on the GitHub Releases page. Building from source needs
+Go 1.22+.
 
 ```bash
-# from the project root — development build
-go build -o dayz-manager.exe ./cmd/manager
+# from the project root — development builds
+go build -o dayz-manager-web.exe ./cmd/manager
+go build -o dayz-manager-panel.exe ./cmd/panel
 ```
 
-Release build. `-s -w` drop the symbol table and DWARF debug info — about
+Release builds. `-s -w` drop the symbol table and DWARF debug info — about
 3.4 MB that is never read at runtime. They do not affect behaviour or panic
 tracebacks (Go takes function names and line numbers from `pclntab`, which
 these flags leave alone), so a crash report from a user is just as detailed.
-**The binaries on GitHub Releases are built this way** — use this command for
-releases or the exe grows by a third:
+**The binaries on GitHub Releases are built this way.** `-H windowsgui` keeps
+the desktop app from opening a console window:
 
 ```bash
-go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
+python tools/build_release.py           # all four + dayz-manager-linux.tar.gz
+python tools/build_release.py linux     # Linux only
+python tools/build_release.py windows   # Windows only
 ```
 
-Cross-compiling to Windows from Linux/macOS:
+The script hands each build its target system directly (no shell syntax) and
+checks that every file really is a program for that system: a `-linux` file
+must start with `ELF`, an `.exe` with `MZ`. `GOOS=linux go build …` only works
+in bash — in cmd and PowerShell it silently builds a **Windows** file under the
+`-linux` name, which Linux refuses ("Exec format error"); `make_linux_tarball.py`
+no longer packs such a file. By hand:
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager.exe ./cmd/manager
+go build -ldflags="-s -w" -o dayz-manager-web.exe ./cmd/manager
+go build -ldflags="-s -w -H windowsgui" -o dayz-manager-panel.exe ./cmd/panel
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager-web-linux ./cmd/manager   # bash only
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager-panel-linux ./cmd/panel   # bash only
 ```
 
-**Linux.** From v0.23.0 the manager also runs on Linux — GitHub Releases carry a
-`dayz-manager-linux` binary (ELF; Linux executables have no extension) alongside
-`dayz-manager.exe`. Build it yourself with:
+Nothing needs cgo, so cross-compiling from any OS works with the same commands
+(`GOOS=windows GOARCH=amd64` for Windows).
+
+**The app window.** On Windows `dayz-manager-panel` shows the panel in an
+embedded Microsoft Edge WebView2 window (already present on Windows 10/11) with
+a tray icon, remembers the window's size and place, and on the first start
+offers to add itself to the Start menu and the desktop (`-install` /
+`-uninstall` do the same from the command line). Without WebView2 it offers
+Microsoft's download and meanwhile opens in Edge/Chrome in app mode or in the
+regular browser. On Linux the panel opens in its own app window built on
+WebKitGTK — present on nearly every desktop (`libwebkit2gtk-4.1-0` on Debian /
+Ubuntu / Mint); without it, in Chrome / Chromium / Edge / Brave in `--app` mode
+or the browser. With no desktop (a VPS over SSH) the app just prints the panel
+address.
+
+**Linux.** The easiest download is `dayz-manager-linux.tar.gz` — both files
+in it are already executable. Unpack it into the server folder next to the
+`DayZServer` binary (the Linux server, no `.exe`).
+
+*With a desktop.* Browsers save a download without the permission to run it,
+and GNOME Files and many other file managers do not start programs on a double
+click at all — that is why "the file does not open". Run this once in a
+terminal in the server folder:
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dayz-manager-linux ./cmd/manager
+chmod +x dayz-manager-panel-linux
+./dayz-manager-panel-linux -install
 ```
 
-Drop it into the server folder next to the `DayZServer` binary (the Linux server,
-no `.exe`), make it executable with `chmod +x dayz-manager-linux`, and run
-`./dayz-manager-linux`. Disk space, process metrics and RPT diagnosis all work
-natively on Linux (via `/proc` and `statfs`).
+The manager appears in the applications menu (and as a desktop shortcut) —
+start it from there like any app. `-uninstall` removes the shortcuts. Started
+without a terminal, errors and the panel address are shown in a window (zenity
+/ kdialog) instead of being lost.
 
-**Icon and file properties.** `cmd/manager/resource_windows_amd64.syso` is
-committed and `go build` links it automatically — no tooling to install.
-Regenerate it only when the icon or the version changes:
+*Without a desktop (a VPS over SSH):*
+
+```bash
+chmod +x dayz-manager-web-linux
+./dayz-manager-web-linux -no-browser -bind 0.0.0.0
+```
+
+The Linux DayZ server needs mod folder and file names in lowercase — the manager
+does that itself on install and update, and flags problems on the **Mods** page.
+To start the manager with the system, a sample systemd unit
+(`/etc/systemd/system/dayz-manager.service`):
+
+```ini
+[Unit]
+Description=DayZ Server Manager
+After=network-online.target
+
+[Service]
+User=dayz
+WorkingDirectory=/home/dayz/server
+ExecStart=/home/dayz/server/dayz-manager-web-linux -no-browser -bind 0.0.0.0
+# Only the manager gets SIGTERM: it shuts DayZ down cleanly itself (#shutdown)
+KillMode=mixed
+TimeoutStopSec=90
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl enable --now dayz-manager
+```
+
+**Icon and file properties.** `cmd/manager/resource_windows_amd64.syso` and
+`cmd/panel/resource_windows_amd64.syso` are committed and `go build` links them
+automatically. Regenerate them only when the icon or the version changes:
 
 ```bash
 go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
-# after editing the version in cmd/manager/versioninfo.json:
-goversioninfo -icon=cmd/manager/icon.ico -o cmd/manager/resource_windows_amd64.syso cmd/manager/versioninfo.json
+# after editing the version in cmd/<manager|panel>/versioninfo.json:
+cd cmd/manager && goversioninfo -64 -icon=icon.ico -o resource_windows_amd64.syso versioninfo.json
+cd ../panel   && goversioninfo -64 -icon=icon.ico -o resource_windows_amd64.syso versioninfo.json
 ```
 
-The version in `versioninfo.json` is not tied to `appVersion` in `main.go` —
-bump both on release, or Properties → Details will show the old number.
+The program version lives in `internal/launcher/version.go`; bump it and both
+`versioninfo.json` files on release, or Properties → Details will show the old
+number.
 
 The resulting binary is fully self-contained — the web UI is embedded via
 `//go:embed`. No Node.js, no runtime deps.
 
 ### Usage
 
-1. Copy `dayz-manager.exe` into your DayZ Server folder
-   (next to `DayZServer_x64.exe` and `serverDZ.cfg`).
-2. Double-click it. A console window opens and your browser launches
-   `http://127.0.0.1:8787/`.
-3. On first run, enter the path to your *client* DayZ install (the one
-   with the `!Workshop/` folder), pick a language, and choose `Local` or
-   `LAN/Internet` exposure.
-4. Use the panel. **Stop the server** before editing files.
+1. Copy `dayz-manager-panel.exe` (or `dayz-manager-web.exe`) into your DayZ
+   Server folder, next to `DayZServer_x64.exe` and `serverDZ.cfg`.
+2. Double-click it. The panel window opens (the browser build opens
+   `http://127.0.0.1:8787/`).
+3. On first run pick a language, where mods come from (the game client, a mods
+   folder, or server-only) and `Local` or `LAN/Internet` exposure.
+4. Work through the "Getting started" checklist on the dashboard. **Stop the
+   server** before editing files.
 
 ### Command-line flags
 
 | flag           | default          | meaning                                             |
 |----------------|------------------|-----------------------------------------------------|
-| `-port`        | `8787`           | Web panel port.                                     |
+| `-port`        | `8787`           | Panel port. If another program holds it, the next free port is used. |
 | `-bind`        | *(from settings)* | Bind address. Blank = follows exposure: `127.0.0.1` for Local, `0.0.0.0` for LAN. |
-| `-no-browser`  | `false`          | Don't auto-open the browser on start.               |
+| `-no-browser`  | `false`          | `dayz-manager-web` only: don't auto-open the browser on start. |
+| `-reset-login` | `false`          | Turn the panel login off (forgotten password), then start as usual. |
+| `-set-login NAME` | —             | Turn the panel login on for this user (asks for the password in the terminal), then start — for a server without a desktop. |
+| `-exposure MODE` | —              | Save the panel exposure before starting: `local`, `lan` or `internet` (`internet` needs a login). |
+| `-install`     | —                | Linux: add the manager to the applications menu and the desktop, then exit (`-uninstall` removes it). |
 | `-version`     | —                | Print version and exit.                             |
+
+Launching it a second time doesn't start a second manager — it just brings up
+the panel that is already running.
 
 ### Running as a Windows Service (NSSM)
 
-For unattended hosting, run the panel as a service with
+For unattended hosting, run the browser build as a service with
 [NSSM](https://nssm.cc/):
 
 ```bat
-nssm install DayZManager "C:\DayZServer\dayz-manager.exe"
+nssm install DayZManager "C:\DayZServer\dayz-manager-web.exe"
 nssm set DayZManager AppDirectory "C:\DayZServer"
 nssm set DayZManager AppParameters "-bind 0.0.0.0 -no-browser"
 nssm set DayZManager Start SERVICE_AUTO_START
@@ -804,8 +1148,8 @@ nssm start DayZManager
 ```
 
 The panel will be reachable at `http://<server>:8787/` right after Windows
-boots. The panel has **no built-in login** — when exposing it to LAN /
-Internet, put Caddy / nginx with HTTP Basic auth in front.
+boots. Before exposing it beyond this machine, turn on the panel login
+and run the remote-access checks — both on Settings → Access & security.
 
 ## REST API (summary)
 
@@ -829,6 +1173,17 @@ Internet, put Caddy / nginx with HTTP Basic auth in front.
 - `GET  /api/logs/{list|read|stream}` · `GET /api/admlog/recent`
 - `GET  /api/backup/export` · `POST /api/backup/import`
 - `GET  /api/files/tree?path=...` · `GET /api/files/read?path=...` · `POST /api/files/write`
+- `GET  /api/setup/checklist` — the dashboard's getting-started list
+- `GET  /api/vehicles` · `POST /api/vehicles/parts`
+- `GET  /api/missions/{full|available|linked}` · `POST /api/missions/{install|import|activate|delete}`
+- `GET  /api/map/{layers|layer.png|buildings|zones}` — map layers drawn from the mission files
+- `GET  /api/server/tuning` · `POST /api/fs/reveal` · `GET /api/mods/source/inspect`
+- `GET  /api/auth/status` · `POST /api/auth/{login|logout|setup|change|disable|trust|revoke}` · `GET /api/auth/settings`
+- `GET  /api/remote/status` · `POST /api/remote/{upnp|check|firewall}`
+- `GET  /api/rcon/chat/recent` · `GET /api/chat/{days|archive|export}`
+
+With the panel login on, every `/api/` endpoint except `info`, `i18n` and
+`auth/{status,login,logout}` needs a session cookie.
 
 All write endpoints return `409 Conflict` if the DayZ server is currently
 running.

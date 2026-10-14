@@ -8,7 +8,7 @@ import "testing"
 // contains ".bak.".
 func TestBackupStampRe(t *testing.T) {
 	match := map[string]string{
-		"types.xml.bak.20260727-213520":       "types.xml",
+		"types.xml.bak.20260727-213520":        "types.xml",
 		"serverDZ.cfg.bak.20260101-000000":     "serverDZ.cfg",
 		"cfggameplay.json.bak.20260727-120000": "cfggameplay.json",
 	}

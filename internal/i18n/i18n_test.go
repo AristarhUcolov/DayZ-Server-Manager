@@ -1,7 +1,10 @@
 // Copyright (c) 2026 Aristarh Ucolov.
 package i18n
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestLocaleParity ensures every locale defines exactly the same key set as the
 // English base — no missing keys (which would fall back to English) and no
@@ -66,5 +69,75 @@ func TestNoEnglishFallbackLeftover(t *testing.T) {
 				t.Errorf("locale %q key %q still equals English (untranslated)", code, k)
 			}
 		}
+	}
+}
+
+// TestMergedKeysComplete ensures every side-by-side key (merge.go) carries a
+// non-empty translation for every supported language — a missing one would
+// otherwise only surface as a parity failure far from the key's definition.
+func TestMergedKeysComplete(t *testing.T) {
+	for _, set := range mergedSets {
+		for key, byLang := range set {
+			// The languages written in Go must all be present; JSON languages
+			// (lang/*.json) carry the key themselves and may be overridden here.
+			for _, l := range localeOrder {
+				if _, fromJSON := jsonLangCodes()[l.Code]; fromJSON {
+					continue
+				}
+				if byLang[l.Code] == "" {
+					t.Errorf("merged key %q has no %q translation", key, l.Code)
+				}
+			}
+			for code := range byLang {
+				if _, ok := locales[code]; !ok {
+					t.Errorf("merged key %q has unknown language %q", key, code)
+				}
+			}
+		}
+	}
+}
+
+func jsonLangCodes() map[string]bool {
+	out := map[string]bool{}
+	entries, _ := langFS.ReadDir("lang")
+	for _, e := range entries {
+		out[normalize(strings.TrimSuffix(e.Name(), ".json"))] = true
+	}
+	return out
+}
+
+// Every JSON language file must load: a broken file is skipped at runtime
+// (the manager must still start), so this test is where it gets noticed.
+func TestJSONLanguagesLoad(t *testing.T) {
+	for _, e := range jsonLangErrors {
+		t.Errorf("language file failed to load: %s", e)
+	}
+	for code := range jsonLangCodes() {
+		if Name(code) == "" {
+			t.Errorf("JSON language %q is not in the picker", code)
+		}
+	}
+}
+
+func TestMatchBrowserLanguage(t *testing.T) {
+	cases := map[string]string{"en-US": "en", "ru": "ru", "RU-ru": "ru", "ro-RO": "md", "xx-YY": "", "": ""}
+	// Brazilian Portuguese uses the Portuguese bundle.
+	cases["pt-BR"] = "pt"
+	cases["pt-PT"] = "pt"
+	if _, ok := locales["zh-tw"]; ok {
+		cases["zh-TW"] = "zh-tw"
+		cases["zh-Hant-HK"] = "zh-tw"
+		cases["zh-CN"] = "zh"
+	}
+	for tag, want := range cases {
+		if got := Match(tag); got != want {
+			t.Errorf("Match(%q) = %q, want %q", tag, got, want)
+		}
+	}
+	if Dir("en") != "ltr" {
+		t.Error("English must be left-to-right")
+	}
+	if _, ok := locales["ar"]; ok && Dir("ar") != "rtl" {
+		t.Error("Arabic must be right-to-left")
 	}
 }

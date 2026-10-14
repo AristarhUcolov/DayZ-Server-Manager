@@ -2,11 +2,11 @@
 //
 // Validator for the DayZ server file set.
 //
-// * XML: .xml files are parsed with encoding/xml. Errors carry line numbers.
-// * CFG: server.cfg — we do a best-effort brace/semicolon check.
-// * Cross-file: cfgeconomycore.xml referenced files must exist on disk; types
-//   inside moded_types/*.xml must not duplicate a name already in types.xml
-//   (duplicates cause "type already defined" issues in-game).
+//   - XML: .xml files are parsed with encoding/xml. Errors carry line numbers.
+//   - CFG: server.cfg — we do a best-effort brace/semicolon check.
+//   - Cross-file: cfgeconomycore.xml referenced files must exist on disk; types
+//     inside moded_types/*.xml must not duplicate a name already in types.xml
+//     (duplicates cause "type already defined" issues in-game).
 package validator
 
 import (
@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	dztypes "dayzmanager/internal/types"
 	"dayzmanager/internal/util"
@@ -37,22 +38,57 @@ type Issue struct {
 	Line     int      `json:"line,omitempty"`
 	Severity Severity `json:"severity"`
 	Message  string   `json:"message"`
+	// Code names the kind of problem (stable, e.g. "cfg.semicolon") so the UI
+	// can group, translate and explain it; Fix is set when AutoFixWith can
+	// repair this kind — pass it back in `only` to fix just that kind.
+	Code string `json:"code,omitempty"`
+	Fix  string `json:"fix,omitempty"`
+	// Key and Args let the UI show the message in the panel's language: the
+	// text is i18n key "vmsg.<Key>" (Key defaults to Code) with Args filled
+	// into its {placeholders}. Message stays the English text for logs and for
+	// a message without a translation.
+	Key  string            `json:"key,omitempty"`
+	Args map[string]string `json:"args,omitempty"`
+	// Rel is File relative to the server directory (forward slashes), set by
+	// the web layer so the UI can open the file in its editor at Line.
+	Rel string `json:"rel,omitempty"`
+}
+
+// A is shorthand for an Issue's Args: alternating names and values.
+func A(kv ...interface{}) map[string]string {
+	m := make(map[string]string, len(kv)/2)
+	for i := 0; i+1 < len(kv); i += 2 {
+		m[fmt.Sprint(kv[i])] = fmt.Sprint(kv[i+1])
+	}
+	return m
 }
 
 // ValidateAll runs every check against the server directory and returns a flat
 // issue list. The caller is responsible for deciding what to surface in the UI.
 func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
+	return ValidateWith(Options{ServerDir: serverDir, Mission: missionTemplate})
+}
+
+// ValidateWith is ValidateAll with the server context the deeper checks need
+// (launch mods, ports, server.cfg name, profiles folder, world size).
+func ValidateWith(o Options) ([]Issue, error) {
+	serverDir, missionTemplate := o.ServerDir, o.Mission
 	var issues []Issue
 
-	// XML files under mpmissions.
+	// XML syntax: the active mission only (the others are not loaded, so their
+	// errors were noise), every mission when none is configured. Results are
+	// cached per file by size+mtime, so re-validating is near-instant.
 	missionDir := filepath.Join(serverDir, "mpmissions")
+	if missionTemplate != "" {
+		missionDir = dztypes.MissionDir(serverDir, missionTemplate)
+	}
 	err := filepath.Walk(missionDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info == nil || info.IsDir() {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(info.Name()))
-		if ext == ".xml" {
-			if is := validateXML(path); is != nil {
+		if ext == ".xml" && !strings.Contains(info.Name(), ".bak") {
+			if is := validateXMLCached(path, info); is != nil {
 				issues = append(issues, *is)
 			}
 		}
@@ -87,17 +123,28 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 					issues = append(issues, Issue{
 						File:     eco,
 						Severity: SevError,
-						Message:  fmt.Sprintf("referenced file missing: %s/%s", r.Folder, r.Name),
+						Code:     "ce.missing",
+						Fix:      "ce.missing",
+						Message:  fmt.Sprintf("referenced file missing: %s/%s — the economy fails to load it", r.Folder, r.Name),
+						Args:     A("file", r.Folder+"/"+r.Name),
 					})
 				}
 				// A typo in type= makes DayZ load the file as the wrong kind
 				// or ignore it, with no message anywhere.
 				if r.Type != "" && !ceFileTypes[strings.ToLower(r.Type)] {
-					issues = append(issues, Issue{
+					is := Issue{
 						File:     eco,
 						Severity: SevError,
+						Code:     "ce.type",
 						Message:  fmt.Sprintf("%s/%s declares type=%q, which DayZ does not recognise", r.Folder, r.Name, r.Type),
-					})
+						Args:     A("file", r.Folder+"/"+r.Name, "type", r.Type),
+					}
+					if fix := closestCEType(r.Type); fix != "" {
+						is.Fix = "ce.type"
+						is.Message += fmt.Sprintf(" (did you mean %q?)", fix)
+						is.Key, is.Args["fix"] = "ce.typeSuggest", fix
+					}
+					issues = append(issues, is)
 				}
 			}
 		}
@@ -117,7 +164,9 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 			issues = append(issues, Issue{
 				File:     limitsPath,
 				Severity: SevWarning,
+				Code:     "limits.unreadable",
 				Message:  fmt.Sprintf("cannot read cfglimitsdefinition.xml (%v) — category/usage/value/tag checks were skipped", limitsErr),
+				Args:     A("err", limitsErr),
 			})
 		}
 
@@ -130,8 +179,8 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 		typesPath := filepath.Join(missionDir, "db", "types.xml")
 		if doc, err := dztypes.Load(typesPath); err != nil {
 			if !os.IsNotExist(err) {
-				issues = append(issues, Issue{File: typesPath, Severity: SevError,
-					Message: fmt.Sprintf("cannot parse as a types file: %v", err)})
+				issues = append(issues, Issue{File: typesPath, Severity: SevError, Code: "types.parse",
+					Message: fmt.Sprintf("cannot parse as a types file: %v", err), Args: A("err", err)})
 			}
 		} else {
 			for i := range doc.Types {
@@ -140,8 +189,8 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 				// Duplicates inside one file were never checked: DayZ keeps
 				// only one of them, and which one is not defined.
 				if _, dup := seen[key]; dup {
-					issues = append(issues, Issue{File: typesPath, Severity: SevError,
-						Message: fmt.Sprintf("duplicate type %q in the same file — DayZ keeps only one of them", t.Name)})
+					issues = append(issues, Issue{File: typesPath, Severity: SevError, Code: "types.duplicate", Fix: "types.duplicate",
+						Message: fmt.Sprintf("duplicate type %q in the same file — DayZ keeps only one of them", t.Name), Args: A("name", t.Name)})
 				}
 				seen[key] = typesPath
 				unknown.collect(typesPath, t, limits)
@@ -159,26 +208,34 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 			// A moded types file DayZ never loads is the single most common
 			// cause of "my custom loot does not spawn".
 			if len(registered) > 0 && !registered[strings.ToLower(e.Name())] {
-				issues = append(issues, Issue{File: p, Severity: SevError,
-					Message: fmt.Sprintf("%s is not registered in cfgeconomycore.xml — DayZ will not load it", e.Name())})
+				issues = append(issues, Issue{File: p, Severity: SevError, Code: "moded.unregistered", Fix: "moded.unregistered",
+					Message: fmt.Sprintf("%s is not registered in cfgeconomycore.xml — DayZ will not load it", e.Name()), Args: A("file", e.Name())})
 			}
 			doc, err := dztypes.Load(p)
 			if err != nil {
 				// Swallowing this meant a moded file with the wrong root
 				// element produced no output at all.
-				issues = append(issues, Issue{File: p, Severity: SevError,
-					Message: fmt.Sprintf("cannot parse as a types file: %v", err)})
+				issues = append(issues, Issue{File: p, Severity: SevError, Code: "types.parse",
+					Message: fmt.Sprintf("cannot parse as a types file: %v", err), Args: A("err", err)})
 				continue
 			}
 			for i := range doc.Types {
 				t := &doc.Types[i]
 				key := strings.ToLower(t.Name)
 				if prev, dup := seen[key]; dup {
-					issues = append(issues, Issue{
+					is := Issue{
 						File:     p,
 						Severity: SevWarning,
+						Code:     "types.crossdup",
 						Message:  fmt.Sprintf("duplicate type %q (also in %s)", t.Name, filepath.Base(prev)),
-					})
+						Args:     A("name", t.Name, "other", filepath.Base(prev)),
+					}
+					// Only a moded copy of a BASE name is auto-removable; two
+					// moded files clashing needs a human decision.
+					if strings.EqualFold(filepath.Base(prev), "types.xml") {
+						is.Fix = "types.crossdup"
+					}
+					issues = append(issues, is)
 				} else {
 					seen[key] = p
 				}
@@ -189,13 +246,21 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 		issues = append(issues, unknown.issues()...)
 
 		// events.xml + the spawn positions that reference it.
-		issues = append(issues, checkEvents(filepath.Join(missionDir, "db", "events.xml"),
-			filepath.Join(missionDir, "cfgeventspawns.xml"))...)
+		issues = append(issues, checkEvents(missionDir)...)
 		// Spawn coordinates that fall off the map (typos).
-		issues = append(issues, checkEventSpawnBounds(filepath.Join(missionDir, "cfgeventspawns.xml"))...)
-		// cfgspawnabletypes.xml preset references.
+		issues = append(issues, checkEventSpawnBounds(filepath.Join(missionDir, "cfgeventspawns.xml"), o.WorldSize)...)
+		// cfgspawnabletypes.xml preset references and chance ranges.
 		issues = append(issues, checkSpawnable(missionDir)...)
+		issues = append(issues, checkSpawnableChances(missionDir)...)
+		issues = append(issues, checkGlobals(missionDir)...)
+		issues = append(issues, checkInitC(o)...)
 	}
+
+	// v1.0.0: human-factor checks across the whole server.
+	issues = append(issues, checkJSON(o)...)
+	issues = append(issues, checkEncoding(o)...)
+	issues = append(issues, checkServerCfg(o)...)
+	issues = append(issues, checkMods(o)...)
 
 	return issues, nil
 }
@@ -206,6 +271,39 @@ func ValidateAll(serverDir, missionTemplate string) ([]Issue, error) {
 // before handing bytes to Go's strict parser — otherwise every default mission
 // reports false errors on perfectly shipping files.
 var reXMLComment = regexp.MustCompile(`(?s)<!--.*?-->`)
+
+type xmlCacheEntry struct {
+	size  int64
+	mtime int64
+	issue *Issue
+}
+
+var (
+	xmlCacheMu sync.Mutex
+	xmlCache   = map[string]xmlCacheEntry{}
+)
+
+// validateXMLCached skips re-parsing a file that has not changed since the
+// last run (mapgroup files are tens of MB; parsing them every time was most of
+// the validator's run time).
+func validateXMLCached(path string, info os.FileInfo) *Issue {
+	size, mtime := info.Size(), info.ModTime().UnixNano()
+	xmlCacheMu.Lock()
+	e, ok := xmlCache[path]
+	xmlCacheMu.Unlock()
+	if ok && e.size == size && e.mtime == mtime {
+		if e.issue == nil {
+			return nil
+		}
+		cp := *e.issue
+		return &cp
+	}
+	is := validateXML(path)
+	xmlCacheMu.Lock()
+	xmlCache[path] = xmlCacheEntry{size: size, mtime: mtime, issue: is}
+	xmlCacheMu.Unlock()
+	return is
+}
 
 func validateXML(path string) *Issue {
 	raw, err := os.ReadFile(path)
@@ -228,9 +326,14 @@ func validateXML(path string) *Issue {
 			return nil
 		}
 		if se, ok := err.(*xml.SyntaxError); ok {
-			return &Issue{File: path, Line: se.Line, Severity: SevError, Message: se.Msg}
+			is := &Issue{File: path, Line: se.Line, Severity: SevError, Code: "xml.syntax", Message: se.Msg, Args: A("err", se.Msg)}
+			// A bare "&" is the one syntax error with a safe mechanical fix.
+			if strings.Contains(se.Msg, "character entity") {
+				is.Fix = "xml.amp"
+			}
+			return is
 		}
-		return &Issue{File: path, Severity: SevError, Message: err.Error()}
+		return &Issue{File: path, Severity: SevError, Code: "xml.syntax", Message: err.Error(), Args: A("err", err)}
 	}
 }
 
@@ -300,7 +403,6 @@ func loadLimits(path string) (*limits, error) {
 	return l, nil
 }
 
-
 // mergeUserLimits folds cfglimitsdefinitionuser.xml `<user name="X">` groups
 // into the limits sets. Those user names are legal usage/value references in
 // types.xml, so counting them avoids false "unknown usage/value" warnings.
@@ -327,8 +429,8 @@ func mergeUserLimits(l *limits, userPath string) {
 		User []named `xml:"user"`
 	}
 	type doc struct {
-		Usage group  `xml:"usageflags"`
-		Value group  `xml:"valueflags"`
+		Usage group   `xml:"usageflags"`
+		Value group   `xml:"valueflags"`
 		Root  []named `xml:"user"` // hand-written flat variant, still accepted
 	}
 	var d doc
@@ -365,9 +467,22 @@ func mergeUserLimits(l *limits, userPath string) {
 // A .bak is written before each file is touched. Server must be stopped (caller
 // enforces). A read failure on one file never blocks the other fix.
 func AutoFix(serverDir, missionTemplate string) ([]string, error) {
+	return AutoFixWith(Options{ServerDir: serverDir, Mission: missionTemplate}, nil)
+}
+
+// AutoFixWith runs the fixes for the given issue codes (all of them when only
+// is empty). Mod-list fixes (mods.missing / mods.duplicate) change the manager
+// config and are applied by the caller, which owns it.
+func AutoFixWith(o Options, only []string) ([]string, error) {
+	serverDir, missionTemplate := o.ServerDir, o.Mission
 	if missionTemplate == "" {
 		return nil, errors.New("no mission configured")
 	}
+	want := map[string]bool{}
+	for _, c := range only {
+		want[c] = true
+	}
+	do := func(code string) bool { return len(want) == 0 || want[code] }
 	missionDir := dztypes.MissionDir(serverDir, missionTemplate)
 	moded := dztypes.ModedDir(serverDir, missionTemplate)
 	var out []string
@@ -375,7 +490,7 @@ func AutoFix(serverDir, missionTemplate string) ([]string, error) {
 	// ---- 1. whitelist unknown category/usage/value/tag ----
 	limitsPath := filepath.Join(missionDir, "cfglimitsdefinition.xml")
 	limits, limitsErr := loadLimits(limitsPath)
-	if limitsErr == nil && limits.loaded {
+	if limitsErr == nil && limits.loaded && do("types.unknownFlag") {
 		mergeUserLimits(limits, filepath.Join(missionDir, "cfglimitsdefinitionuser.xml"))
 		miss := map[string]map[string]string{ // kind -> lower -> original
 			"category": {}, "usage": {}, "value": {}, "tag": {},
@@ -437,7 +552,7 @@ func AutoFix(serverDir, missionTemplate string) ([]string, error) {
 	// Only touch cfgeconomycore.xml when a moded_types block already exists (the
 	// same guard the validator uses): if the admin registers custom loot some
 	// other way, adding a block would be presumptuous.
-	if registered, err := dztypes.RegisteredInModed(eco); err == nil && len(registered) > 0 {
+	if registered, err := dztypes.RegisteredInModed(eco); err == nil && len(registered) > 0 && do("moded.unregistered") {
 		if entries, err := os.ReadDir(moded); err == nil {
 			backedUp := false
 			for _, e := range entries {
@@ -508,10 +623,12 @@ func AutoFix(serverDir, missionTemplate string) ([]string, error) {
 			len(removed), plural(len(removed), "entry", "entries"), filepath.Base(p), strings.Join(names, ", ")))
 		return nil
 	}
-	if err := dedupOne(filepath.Join(missionDir, "db", "types.xml")); err != nil {
-		return nil, err
+	if do("types.duplicate") {
+		if err := dedupOne(filepath.Join(missionDir, "db", "types.xml")); err != nil {
+			return nil, err
+		}
 	}
-	if entries, err := os.ReadDir(moded); err == nil {
+	if entries, err := os.ReadDir(moded); err == nil && do("types.duplicate") {
 		for _, e := range entries {
 			if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".xml") {
 				continue
@@ -533,7 +650,7 @@ func AutoFix(serverDir, missionTemplate string) ([]string, error) {
 			baseNames[strings.ToLower(doc.Types[i].Name)] = true
 		}
 	}
-	if len(baseNames) > 0 {
+	if len(baseNames) > 0 && do("types.crossdup") {
 		if entries, err := os.ReadDir(moded); err == nil {
 			for _, e := range entries {
 				if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".xml") {
@@ -573,11 +690,10 @@ func AutoFix(serverDir, missionTemplate string) ([]string, error) {
 	// Positions for an event that events.xml no longer defines are ignored by
 	// DayZ — the classic leftover from renaming an event. Remove the dead blocks
 	// so cfgeventspawns.xml matches reality.
-	if evDoc, err := dztypes.LoadEvents(filepath.Join(missionDir, "db", "events.xml")); err == nil {
-		known := map[string]bool{}
-		for i := range evDoc.Events {
-			known[strings.ToLower(evDoc.Events[i].Name)] = true
-		}
+	// Every registered events file counts: a mod's events (Expansion's, a car
+	// mod's) live outside db/events.xml, and judging only by it used to delete
+	// their spawn points.
+	if known, ok := missionEventNames(missionDir); ok && do("eventspawns.orphan") {
 		spawnsPath := filepath.Join(missionDir, "cfgeventspawns.xml")
 		if spDoc, err := dztypes.LoadEventSpawns(spawnsPath); err == nil {
 			kept := spDoc.Events[:0]
@@ -604,7 +720,68 @@ func AutoFix(serverDir, missionTemplate string) ([]string, error) {
 		}
 	}
 
+	// ---- v1.0.0 fixes ----
+	type step struct {
+		codes []string
+		run   func() ([]string, error)
+	}
+	steps := []step{
+		{[]string{"encoding.utf16"}, func() ([]string, error) { return fixEncoding(o) }},
+		{[]string{"json.syntax"}, func() ([]string, error) { return fixJSON(o) }},
+		{[]string{"cfg.semicolon"}, func() ([]string, error) { return fixServerCfgSemicolons(o) }},
+		{[]string{"xml.amp"}, func() ([]string, error) { return fixXMLAmps(xmlFilesWithEntityErrors(serverDir)) }},
+		{[]string{"ce.missing"}, func() ([]string, error) { return fixCEMissing(o) }},
+		{[]string{"ce.type"}, func() ([]string, error) { return fixCETypes(o) }},
+		{[]string{"types.minNominal", "types.restockNeg", "types.quantRange", "types.quantOrder"}, func() ([]string, error) {
+			sub := map[string]bool{}
+			for _, c := range []string{"types.minNominal", "types.restockNeg", "types.quantRange", "types.quantOrder"} {
+				if do(c) {
+					sub[c] = true
+				}
+			}
+			return fixTypeNumbers(o, sub)
+		}},
+		{[]string{"spawnable.chance", "spawnable.preset"}, func() ([]string, error) {
+			return fixSpawnable(o, do("spawnable.chance"), do("spawnable.preset"))
+		}},
+		{[]string{"globals.duplicate"}, func() ([]string, error) { return fixGlobals(o) }},
+		{[]string{"eventspawns.bounds"}, func() ([]string, error) { return fixSpawnBounds(o) }},
+		{[]string{"mods.keys"}, func() ([]string, error) { return fixModKeys(o) }},
+		{[]string{"mods.linuxcase"}, func() ([]string, error) { return fixLinuxCase(o) }},
+	}
+	for _, st := range steps {
+		run := false
+		for _, c := range st.codes {
+			if do(c) {
+				run = true
+			}
+		}
+		if !run {
+			continue
+		}
+		done, err := st.run()
+		out = append(out, done...)
+		if err != nil {
+			return out, err
+		}
+	}
 	return out, nil
+}
+
+// xmlFilesWithEntityErrors lists the mission XML files whose parse fails on a
+// bare "&" — the only XML syntax error with a safe mechanical fix.
+func xmlFilesWithEntityErrors(serverDir string) []string {
+	var out []string
+	_ = filepath.Walk(filepath.Join(serverDir, "mpmissions"), func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() || !strings.EqualFold(filepath.Ext(path), ".xml") {
+			return nil
+		}
+		if is := validateXML(path); is != nil && is.Fix == "xml.amp" {
+			out = append(out, path)
+		}
+		return nil
+	})
+	return out
 }
 
 // plural picks the singular or plural word for n.
@@ -701,8 +878,8 @@ func validateCFG(path string) *Issue {
 		}
 	}
 	if opened != closed {
-		return &Issue{File: path, Severity: SevError,
-			Message: fmt.Sprintf("unbalanced braces: %d '{' vs %d '}'", opened, closed)}
+		return &Issue{File: path, Severity: SevError, Code: "cfg.braces",
+			Message: fmt.Sprintf("unbalanced braces: %d '{' vs %d '}'", opened, closed), Args: A("open", opened, "close", closed)}
 	}
 	return nil
 }

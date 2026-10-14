@@ -36,7 +36,7 @@ type Step struct {
 // Chapter is one topic of the guide.
 type Chapter struct {
 	ID    string   `json:"id"`
-	Icon  string   `json:"icon"`  // id of an inline SVG sprite symbol
+	Icon  string   `json:"icon"` // id of an inline SVG sprite symbol
 	Title string   `json:"title"`
 	Intro string   `json:"intro"`
 	Image string   `json:"image,omitempty"` // screenshot under /img, per language
@@ -48,7 +48,7 @@ type Chapter struct {
 type chapterSpec struct {
 	ID   string
 	Icon string
-	Shot string   // screenshot base name; resolved per language at read time
+	Shot string // screenshot base name; resolved per language at read time
 	// Routes is parallel to the chapter's steps: the panel route each step
 	// links to, or "" for a step with no button.
 	Routes []string
@@ -62,11 +62,15 @@ var specs = []chapterSpec{
 	{ID: "presets", Icon: "i-economy", Shot: "economy", Routes: []string{"economy", "economy", "randompresets"}},
 	{ID: "attachments", Icon: "i-attach", Shot: "attachments", Routes: []string{"attachments", "", ""}},
 	{ID: "loadout", Icon: "i-loadout", Shot: "loadout", Routes: []string{"loadout", "", ""}},
-	{ID: "rcon", Icon: "i-rcon", Shot: "players", Routes: []string{"rcon", "", "settings"}},
+	{ID: "rcon", Icon: "i-rcon", Shot: "players", Routes: []string{"rcon", "", "settings/restarts"}},
+	{ID: "players", Icon: "i-players", Shot: "players", Routes: []string{"players", "players", "players"}},
+	{ID: "discord", Icon: "i-chat", Shot: "discord", Routes: []string{"settings/discord", "settings/discord", "settings/discord"}},
 	{ID: "weather", Icon: "i-weather", Shot: "weather", Routes: []string{"weather", "", ""}},
-	{ID: "maintenance", Icon: "i-validator", Shot: "validator", Routes: []string{"settings", "validator", "logs"}},
+	{ID: "maps", Icon: "i-eventmap", Shot: "eventmap", Routes: []string{"missions", "eventmap", "vehicles"}},
+	{ID: "maintenance", Icon: "i-validator", Shot: "validator", Routes: []string{"settings/backups", "validator", "logs"}},
 	{ID: "health", Icon: "i-health", Shot: "health", Routes: []string{"health", "history", ""}},
-	{ID: "remote", Icon: "i-server", Shot: "settings", Routes: []string{"settings", ""}},
+	{ID: "servers", Icon: "i-servers", Shot: "servers", Routes: []string{"servers/add", "servers", "servers"}},
+	{ID: "remote", Icon: "i-shield", Shot: "settings", Routes: []string{"settings/access", "settings/access", "settings/access", "settings/access"}},
 }
 
 // bundle mirrors one text/<lang>.json file.
@@ -82,6 +86,10 @@ type bundle struct {
 		Tips []string `json:"tips"`
 	} `json:"chapters"`
 	Help map[string]string `json:"help"`
+	// Per-field descriptions for the Gameplay and Globals editors. English and
+	// Russian live in gameplay.go / globals.go; other languages ship them here.
+	Gameplay map[string]string `json:"gameplay,omitempty"`
+	Globals  map[string]string `json:"globals,omitempty"`
 }
 
 var (

@@ -8,16 +8,17 @@
 // formatting and occasionally round-tripped incorrectly.)
 //
 // Structure recap:
-//   <economycore>
-//     <classes>...</classes>
-//     <defaults>...</defaults>
-//     <ce folder="db">
-//       <file name="events.xml" type="events" />
-//     </ce>
-//     <ce folder="moded_types">
-//       <file name="mymod_types.xml" type="types" />
-//     </ce>
-//   </economycore>
+//
+//	<economycore>
+//	  <classes>...</classes>
+//	  <defaults>...</defaults>
+//	  <ce folder="db">
+//	    <file name="events.xml" type="events" />
+//	  </ce>
+//	  <ce folder="moded_types">
+//	    <file name="mymod_types.xml" type="types" />
+//	  </ce>
+//	</economycore>
 package types
 
 import (

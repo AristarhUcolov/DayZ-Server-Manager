@@ -1,0 +1,595 @@
+{
+ "chapters": [
+  {
+   "id": "start",
+   "title": "Başlarken",
+   "intro": "Yönetici, DayZ sunucunuzun yanında çalışan tek bir programdır ve Not Defteri ile .bat dosyaları yerine size bir kontrol paneli verir. Aynı ayarları paylaşan iki sürümü vardır: dayz-manager-panel kendi penceresinde, dayz-manager-web tarayıcınızda açılır. Sisteme hiçbir şey kurmaz — dosyayı silin, her şey eskisi gibi olur.",
+   "steps": [
+    {
+     "title": "Sunucu klasörüne koyun",
+     "body": "dayz-manager-panel.exe (veya dayz-manager-web.exe) dosyasını DayZServer_x64.exe ve serverDZ.cfg'nin yanına kopyalayıp çalıştırın. Panel kendi penceresinde açılır; tarayıcı sürümü bunun yerine http://127.0.0.1:8787 adresini açar. Linux'ta DayZServer ikili dosyasının yanındaki -linux dosyalarını kullanın."
+    },
+    {
+     "title": "Modların nereden geleceğini seçin",
+     "body": "İlk çalıştırmada bir mod kaynağı seçersiniz: DayZ *istemcisi* (Steam'in modları indirdiği !Workshop klasörü), @mod içeren herhangi bir klasör veya SteamCMD'nin workshop/content/221100 klasörü ya da oyunu olmayan bir barındırma makinesi için Yalnızca sunucu — bu durumda modları kendiniz yüklersiniz ve otomatik güncelleme kapalıdır. Bunu daha sonra Ayarlar'dan değiştirebilirsiniz."
+    },
+    {
+     "title": "Sunucuyu başlatın",
+     "body": "Panodaki Başlat'a basın. DayZServer_x64.exe eksikse veya bir mod bozuksa sunucu kapanır ve bunu Günlükler bölümünde görürsünüz."
+    }
+   ],
+   "tips": [
+    "Paneli yalnızca bu PC'de kullanmak için parola gerekmez. Onu bir telefondan veya başka bir yerden açmak için önce bir panel girişi ayarlayın — ilk kurulumda veya Ayarlar → Panel girişi bölümünde.",
+    "Sunucu çalışırken neredeyse her dosya düzenleyici kaydetmeyi reddeder — DayZ kendi dosyalarını kilitli tutar. Önce sunucuyu durdurun; neden buysa panel size söyler."
+   ]
+  },
+  {
+   "id": "mods",
+   "title": "Modlar",
+   "intro": "Bir sunucunun her modun kendi kopyasına, modun .bikey dosyasının sunucunun keys klasöründe olmasına ve modun -mod başlatma parametresinde listelenmesine ihtiyacı vardır. Yönetici bu üçünü de yapar ve modları seçtiğiniz kaynaktan alır: oyun istemcisinin !Workshop'u, bir mod veya SteamCMD klasörü ya da — Yalnızca sunucu modunda — kendi yüklediğiniz modlar.",
+   "steps": [
+    {
+     "title": "Önce Steam'de abone olun",
+     "body": "Yönetici modları kopyalar, indirmez. Steam Workshop'ta abone olun ve DayZ başlatıcısının modu !Workshop'a indirmesine izin verin — ya da SteamCMD ile mod klasörünüze indirin."
+    },
+    {
+     "title": "Sunucuya yükleyin",
+     "body": "Modlar'ı açın — !Workshop'taki her şey listelenir. Yükle, modu sunucu klasörüne kopyalar ve .bikey'ini otomatik eşitler. “Modları yükle ve güncelle” tüm listeyi tek tıkla halleder."
+    },
+    {
+     "title": "Başlatma için etkinleştirin",
+     "body": "Yüklemek, yüklenmekle aynı şey değildir. Satırdaki Modlar anahtarını açarak modu -mod'a ekleyin. Sunucu tarafı anahtarını yalnızca istemcilerin SAHİP OLMAMASI gereken modlar (yönetici araçları) için kullanın."
+    },
+    {
+     "title": "Yükleme sırasına dikkat edin",
+     "body": "Yükleme sırasında satırları, framework'ler önce gelecek şekilde sürükleyin — @CF ona bağlı her şeyden önce, Expansion Core eklentilerinden önce. Yanlış sıra, sunucunun açılmamasının çok yaygın bir nedenidir."
+    }
+   ],
+   "tips": [
+    "Güncelle, mod kaynağındaki daha yeni dosyaları sunucuya kopyalar. Otomatik eşitlemek için Ayarlar'da “Her yeniden başlatmada modları güncelle”yi açın.",
+    "Bir modu kaldırmak, .bikey'ini yalnızca başka hiçbir yüklü mod aynı anahtarı kullanmıyorsa siler; böylece paylaşılan anahtarlar (Expansion) sağlam kalır.",
+    "Bir mod loot içeriyorsa satırındaki “Mod loot'unu ekle”yi kullanın — modun types.xml dosyasını bulup sizin için kaydeder.",
+    "Linux'ta sunucu yalnızca klasör ve dosya adları küçük harfli modları yükler. Yönetici yükleme ve güncelleme sırasında onları yeniden adlandırır; Modlar sayfası yanlış harf büyüklüğünde kalan her şeyi işaretler."
+   ]
+  },
+  {
+   "id": "economy",
+   "title": "Loot ve ekonomi",
+   "intro": "DayZ'nin merkezi ekonomisi dünyada neyin ve ne kadar bulunacağına karar verir. types.xml ana listedir: her eşya sınıfı için bir kayıt, kaç tane olması gerektiği ve nerede çıkabileceği. Bu sayıları yanlış ayarlamak, bir sunucunun boş ya da loot'a boğulmuş hissettirmesinin olağan nedenidir.",
+   "steps": [
+    {
+     "title": "Dört sayıyı anlayın",
+     "body": "nominal, sunucunun dünyada tutmaya çalıştığı hedef miktardır. min, yeniden çıkışı tetikleyen alt sınırdır. lifetime, dokunulmamış bir eşyanın kaç saniye yaşadığıdır. restock, sunucunun eşyayı tamamlamadan önce ne kadar beklediğidir. nominal'i 0 yaparsanız eşya hiç çıkmaz."
+    },
+    {
+     "title": "Tabloda düzenleyin",
+     "body": "nominal, min, lifetime ve kategori doğrudan tabloda düzenlenebilir — Değişiklikleri kaydet'e basana kadar düzenlenen satırlar vurgulanır. Eşyanın tamamı için (usage, value, etiketler, bayraklar) Düzenle'yi kullanın."
+    },
+    {
+     "title": "Usage ve value = nerede çıktığı",
+     "body": "usage bina türüdür (Military, Police, Farm…), value loot tier'ıdır (Tier1 kıyı, Tier4 iç kesimler / askerî). Usage'ı olmayan bir eşyanın çıkacak yeri yoktur. Her iki ad da cfglimitsdefinition.xml içinde bulunmalıdır."
+    },
+    {
+     "title": "Toplu işler için ön ayar kullanın",
+     "body": "Satırları seçin, sonra bir çıkış ön ayarına tıklayarak usage/value/etiketlerini hepsine birden ekleyin — yüzlerce kaydı elle düzenlemekten çok daha hızlı."
+    }
+   ],
+   "tips": [
+    "Kendi eşyalarınızı vanilla types.xml'i düzenlemek yerine ayrı bir özel types dosyasında tutun — yönetici onu sizin için cfgeconomycore.xml'e kaydeder ve bir oyun güncellemesi üzerine yazamaz.",
+    "Her toplu düzenlemeden sonra Doğrulayıcı'yı çalıştırın. Otomatik düzeltmesi bilinmeyen usage/value/tag adlarını cfglimitsdefinition.xml'e ekler — modlu loot'un çıkmaya başlamasını sağlayan tam olarak budur."
+   ]
+  },
+  {
+   "id": "attachments",
+   "title": "Silah eklentileri",
+   "intro": "cfgspawnabletypes.xml, bir silahın çıktığında üzerinde ne taşıdığına karar verir — şarjör, dürbün, dipçik. Yuvalardan oluşur ve içindeki sayılar iki farklı şey ifade eder; herkesin yanıldığı yer de burasıdır.",
+   "steps": [
+    {
+     "title": "Bir yuva, bir zar atışıdır",
+     "body": "Her eklenti yuvasının bir şansı vardır: 1.0 her zaman bir şey çıkması, 0.35 ise zamanın %35'inde çıkması demektir."
+    },
+    {
+     "title": "Yuvadaki eşyalar yarışır",
+     "body": "Her eşyanın yanındaki sayı yüzde değil, göreli bir ağırlıktır — DayZ yuvadan tam olarak TEK bir eşya seçer. 0.35'lik bir yuvadaki 60 ve 40 ağırlıkları gerçekte %21 ve %14 demektir. Panel bu gerçek sayıyı gösterir, siz hesaplamak zorunda kalmazsınız."
+    },
+    {
+     "title": "Bir şablonla başlayın",
+     "body": "Bir silah şablonu seçin (AKM, M4-A1, Mosin…), sonra ayarlayın. Sınıf adları kendi types.xml'inizden otomatik tamamlanır ve orada olmayan her şey işaretlenir — bir eklentinin oyunda hiç çıkmamasının olağan nedeni yazım hatasıdır."
+    }
+   ],
+   "tips": [
+    "Parça başına bir yuva: biri şarjörler, biri dürbünler, biri dipçik için. Şarjör ve dürbünü aynı yuvaya koymak, silahın ikisinden birini alacağı, asla ikisini birden almayacağı anlamına gelir.",
+    "Yalnızca düzenlediğiniz kayıt yeniden yazılır — dosyanın geri kalanındaki yorumlarınız ve biçimlendirmeniz korunur."
+   ]
+  },
+  {
+   "id": "loadout",
+   "title": "Oyuncu teçhizatı",
+   "intro": "Bir oyuncunun yeniden doğduğu anda ne giydiğine ve ne taşıdığına karar verin. Vanilla bunu misyonun init.c dosyasına sabit yazar; panel ise DayZ'nin veriye dayalı spawn-gear ön ayarlarını kullanır ve tüm sistemi sizin için açar.",
+   "steps": [
+    {
+     "title": "Sistemi etkinleştirin",
+     "body": "Oyuncu teçhizatı'nı açın. Misyon oyuncuları hâlâ init.c ile donatıyorsa sayfa bunu söyler ve tek bir düğme sunar: bir başlangıç ön ayarı oluşturur, onu cfggameplay.json'a kaydeder ve enableCfgGameplayFile anahtarını açar — hepsi bir arada."
+    },
+    {
+     "title": "Kıyafet ve teçhizatı düzenleyin",
+     "body": "Her ön ayar, her yuvada neyin giyildiğini (Gövde, Bacaklar, Ayaklar…) ve neyin serbestçe taşındığını listeler. Sınıf adıyla eşya ekleyin, bir yuvanın birkaçı arasından seçmesi gerektiğinde çıkış ağırlığı verin ve bir durum seçin — kusursuz, yıpranmış, hasarlı veya özel bir aralık."
+    },
+    {
+     "title": "Deneme zarı ve paylaşma",
+     "body": "Bir oyuncunun karakteri dâhil tam olarak ne alacağını görmek için Deneme zarı'na basın. Bir ön ayarı başka bir sunucuda kullanmak için dosyaya aktarın ve geri içe aktarın."
+    }
+   ],
+   "tips": [
+    "healthMin/healthMax sağlık oranlarıdır: 1.0 kusursuz, 0.0 harap demektir. Yeni doğanlar yıpranmış kıyafetle gelmesin diye her şeyi kusursuz tutun.",
+    "Teçhizat, her yapılandırma değişikliği gibi sunucu durdurulmuşken kaydedilir — sonrasında sunucuyu yeniden başlatın."
+   ]
+  },
+  {
+   "id": "rcon",
+   "title": "RCon, oyuncular ve duyurular",
+   "intro": "RCon, BattlEye'ın uzak konsoludur: canlı oyuncu listesi, atmalar, banlar ve sohbet duyuruları. Sunucu başlarken BattlEye'ın beserver_x64.cfg'den okuduğu bir parolaya ihtiyaç duyar.",
+   "steps": [
+    {
+     "title": "Parolayı belirleyin",
+     "body": "RCon bölümüne bir parola yazın. Yönetici onu sizin için battleye/beserver_x64.cfg dosyasına yazar, gerekirse dosyayı oluşturur."
+    },
+    {
+     "title": "Sunucuyu yeniden başlatın",
+     "body": "BattlEye bu dosyayı yalnızca başlatılırken okur, bu yüzden yepyeni bir parola bir sonraki yeniden başlatmaya kadar hiçbir şey yapmaz. Bu normaldir, hata değildir."
+    },
+    {
+     "title": "Duyurun ve zamanlayın",
+     "body": "Zamanlanmış duyurular günün belirli bir saatinde gönderilir; aralıklı duyurular her N dakikada bir tekrarlanır. İkisi de RCon üzerinden gider, bu yüzden parolanın etkin olması gerekir."
+    }
+   ],
+   "tips": [
+    "Yeniden başlatma uyarıları da RCon'u kullanır. Parola olmadan yeniden başlatma yine gerçekleşir — oyuncular sadece geri sayım görmez.",
+    "Oyuncular bölümü yönetici günlüğünden bir geçmiş oluşturur: adlar, oyuncu kimlikleri, oynama süresi, öldürmeler. Bunun için -adminlog başlatma parametresi gerekir (Sunucu sayfası → Başlatma parametreleri).",
+    "Ayarlar → Yeniden başlatma davranışı, yeniden başlatmadan belirli bir süre önce herkesi atıp sunucuyu kilitleyebilir, böylece son dakikada kimse tekrar giremez. Karakterler bağlantı kesilince kaydedilir, bu yüzden hiçbir şey kaybolmaz.",
+    "Sohbet sayfası her günün arşivini tutar — panelden gönderilen mesajlar ve zamanlanmış duyurular dâhil — arama ve .txt indirme seçeneğiyle birlikte. Ne kadar süre saklanacağı da orada ayarlanır."
+   ]
+  },
+  {
+   "id": "weather",
+   "title": "Hava ve zaman",
+   "intro": "Hava, misyonun cfgweather.xml dosyasında tanımlanır ve DayZ bu dosyayı misyon yüklenirken bir kez okur — bu yüzden hava değişiklikleri her zaman sunucunun yeniden başlatılmasını gerektirir ve vanilla'da mod olmadan “20:00'de yağmur” planlamanın yolu yoktur.",
+   "steps": [
+    {
+     "title": "Bir ön ayar seçin veya elle ayarlayın",
+     "body": "Statik bir ön ayar havayı sabitler, olduğu yerde kalır. Dinamik, havanın kendi kendine değişmesine izin verir."
+    },
+    {
+     "title": "Ne kadar yumuşak değişeceğini seçin",
+     "body": "Geçiş hızı, havanın ne kadar kademeli değiştiğini belirler: Yumuşak, vanilla'daki gibi küçük adımlarla yaklaşık yarım saatte değişir. Hızlı tüm aralığı iki dakikada geçer — havanın bir ışık düğmesi gibi hissettirmesinin nedeni budur."
+    },
+    {
+     "title": "Gün uzunluğunu ayarlayın",
+     "body": "Gündüz ve gece hızlandırma, oyun içi zamanın akışını çarpar — 12, tam bir günün iki gerçek saat sürmesi demektir. Gece hızlandırma ayrıdır, böylece geceleri kısa tutabilirsiniz."
+    }
+   ],
+   "tips": [
+    "Fırtına yoğunluğu yalnızca bir fırtınanın başlaması için yeterli yağmur ve bulut olduğunda önemlidir.",
+    "Kar yağışı yalnızca Sakhal gibi karlı haritalarda görünür."
+   ]
+  },
+  {
+   "id": "maps",
+   "title": "Haritalar, olaylar ve araçlar",
+   "intro": "Haritada olan her şey misyon klasöründe durur. Bu sayfalar onu doğrudan okur: arazi, loot tier'ları, binalar ve kirlenmiş bölgeler kendi misyon dosyalarınızdan çizilir, böylece harita sunucunuzla örtüşür — modlu haritalar dâhil.",
+   "steps": [
+    {
+     "title": "Bir haritanın misyonunu yükleyin",
+     "body": "Modlu haritalar misyonlarını genellikle modun içinde getirir (klasör veya .zip olarak) — harita modunu burada yüklemek veya güncellemek onu otomatik olarak mpmissions'a kopyalar. Misyonlar (haritalar) ayrıca .zip veya klasörden misyon içe aktarır ve serverDZ.cfg'deki etkin misyonu değiştirir."
+    },
+    {
+     "title": "Olay noktalarını yerleştirin",
+     "body": "Olay noktaları, bir olayın her çıkış noktasını haritada gösterir. Eklemek için tıklayın, taşımak için sürükleyin veya seçilen nokta için yükseklik dâhil kesin X / Y / Z yazın. Koordinatlardan oluşan bütün bir listeyi de yapıştırabilirsiniz."
+    },
+    {
+     "title": "Araçları ayarlayın",
+     "body": "Araçlar her araç olayını listeler: kaç tane olabileceği, kaç çıkış noktası olduğu ve parçalarının ne kadar eksiksiz olduğu — ve her parçanın araçta çıkma olasılığını ayarlar."
+    }
+   ],
+   "tips": [
+    "Harita görseli eklenmemiştir — katmanlar misyon dosyalarınızdan gelir. Fotoğraf gibi bir harita için harita ayarlarında kendi yukarıdan görüntünüzü yükleyin.",
+    "Diğer düzenleyiciler gibi bu sayfalar da yalnızca sunucu durdurulmuşken kaydeder."
+   ]
+  },
+  {
+   "id": "maintenance",
+   "title": "Sağlıklı tutmak",
+   "intro": "Sunucuları üç şey kurtarır: yedekler, doğrulayıcı ve bir şey bozulduğunda günlükleri gerçekten okumak.",
+   "steps": [
+    {
+     "title": "Otomatik yedeklemeyi açın",
+     "body": "Ayarlar, yapılandırmalarınızın ve misyon dosyalarınızın zip'ini zamanlanmış olarak yazıp en yeni N tanesini tutabilir. Panelin üzerine yazdığı her dosya ayrıca yanında zaman damgalı bir .bak alır."
+    },
+    {
+     "title": "Yeniden başlatmadan önce doğrulayın",
+     "body": "Doğrulayıcı her misyon XML ve JSON dosyasını, serverDZ.cfg'yi, dosyalar arası başvuruları, çıkış şanslarını, konumları ve mod anahtarlarını kontrol eder. Sorunlar gruplanır ve çoğunun yalnızca o sorunu onaran bir Düzelt düğmesi vardır — ya da güvenli olan her şeyi tek seferde düzeltin."
+    },
+    {
+     "title": "Doğru günlüğü okuyun",
+     "body": ".RPT dosyası sunucunun kendisinin ne yaptığını kaydeder — bir çökme veya yüklenmeyi reddeden bir mod orada görünür. .ADM dosyası oyuncuların ne yaptığını kaydeder."
+    }
+   ],
+   "tips": [
+    "Wipe, kaydedilmiş dünya durumunu siler — oyuncular, araçlar, üsler. Loot tablolarınız ve yapılandırmalarınız dokunulmadan kalır. Klasörler önce kenara taşınır, böylece yanlışlıkla yapılan bir wipe elle kurtarılabilir.",
+    "Çökme bekçisi, sunucu kendi kendine kapanırsa onu yeniden başlatır. Beş dakikada üç çökmeden sonra durur ve bunun yerine bir uyarı gösterir — bir çökme döngüsünün yeni bir yeniden başlatmaya değil, bir insana ihtiyacı vardır."
+   ]
+  },
+  {
+   "id": "health",
+   "title": "Sunucu durumu",
+   "intro": "Tek bakışta “bir sorun var mı?” sorusunu yanıtlayan bir sayfa ve sunucuyu düzenli tutmak için araçlar: kötü bir yapılandırma değişikliğini geri alın ve disk alanı açın.",
+   "steps": [
+    {
+     "title": "Durum kutucuklarını okuyun",
+     "body": "Sunucu durumu sayfası dört kutucuk gösterir — sunucu açık mı (veya çökme döngüsünde mi takıldı), diskte yer var mı, yapılandırma doğrulamadan geçiyor mu ve başlamıyorsa neden. Her kutucuk sorunu çözen sayfaya bağlanır."
+    },
+    {
+     "title": "Bir değişikliği geri alın",
+     "body": "Yönetici yazmadan önce her yapılandırma dosyasını yedekler. Geçmiş sayfası bu anlık görüntüleri dosya başına listeler; geri yüklemenin tam olarak neyi geri getireceğini gösteren bir karşılaştırma ve tek tıkla geri yükleme sunar — kötü bir düzenlemeden sonraki güvenlik ağınız."
+    },
+    {
+     "title": "Alan açın",
+     "body": "Durum sayfasında tek tık, sunucu günlüklerini ve çökme dökümlerini (en yeni RPT ve ADM korunur) veya eski yapılandırma yedeklerini siler; böylece uzun süre çalışan bir sunucu diski sessizce doldurmaz."
+    }
+   ],
+   "tips": [
+    "Yapılandırma geçerliliği kutucuğu tam doğrulayıcıyı çalıştırır; bu, büyük bir misyonda biraz zaman alır — diğer kutucuklardan bir iki saniye sonra dolar.",
+    "Bir yedeği geri yüklemek, diğer tüm yapılandırma değişiklikleri gibi sunucunun durdurulmuş olmasını gerektirir."
+   ]
+  },
+  {
+   "id": "remote",
+   "title": "Telefondan veya her yerden erişim",
+   "intro": "Evde bir telefon paneli bilgisayarın yerel adresi üzerinden açar; bu adres ağınızın dışında yoktur — panelin işte veya mobil veride çevrimdışı olmasının nedeni budur. Ayarlar → Uzaktan erişim, her yerden erişim için gereken her koşulu kontrol eder ve yapabildiğini düzeltir.",
+   "steps": [
+    {
+     "title": "Panel girişi ayarlayın",
+     "body": "Ayarlar → Panel girişi: bir kullanıcı adı ve en az 8 karakterlik bir parola seçin. Bundan sonra bu bilgisayarın açtığı pencere dışındaki her cihazın giriş yapması gerekir. Parolayı mı unuttunuz? Yöneticiyi -reset-login ile başlatın."
+    },
+    {
+     "title": "Paneli ağa açın",
+     "body": "Ayarlar → Panel erişimi: evdeki telefonlar için “Yerel ağ”, her yerden erişim için “İnternet” (yalnızca girişle mümkündür). Ardından yöneticiyi yeniden başlatın."
+    },
+    {
+     "title": "Bağlantılara izin verin",
+     "body": "Uzaktan erişim bölümünde, yönlendiricinin panel portunu yönlendirmesi için UPnP'yi açın ve Windows Güvenlik Duvarı'nda yöneticiye izin verin. UPnP olmadan portu yönlendirici ayarlarından elle yönlendirin. Parolanın şifreli iletilmesi için HTTPS'yi açın."
+    },
+    {
+     "title": "Dışarıdan kontrol edin",
+     "body": "“İnternetten erişimi kontrol et”e basın: genel adresinizi ve açılacak tam bağlantıyı gösterir. Wi-Fi kapalıyken telefonunuzda deneyin."
+    }
+   ],
+   "tips": [
+    "Kontrol CGNAT bildirirse, internet sağlayıcınız tek bir adresi birçok müşteri arasında paylaştırıyordur ve hiçbir port yönlendirme işe yaramaz: genel bir IP isteyin veya Tailscale, ZeroTier ya da Radmin VPN kullanın — o zaman “Yerel ağ” erişimi yeterlidir.",
+    "Aynı kart oyun portlarını da yönlendirebilir, böylece oyuncular sunucuyu DayZ sunucu listesinde bulur. RCon portu asla açılmaz."
+   ]
+  },
+  {
+   "id": "presets",
+   "title": "Loot ekonomisi ve ön ayarlar",
+   "intro": "Eşyaları tek tek düzenlemenin ötesinde, loot'u toplu olarak üç araç şekillendirir: haritanızın ne çıkardığını gösteren bir pano, tüm dosya için tek tıkla ölçekleme ve eşyalara adıyla bağladığınız yeniden kullanılabilir ön ayarlar.",
+   "steps": [
+    {
+     "title": "Loot'unuzun şeklini görün",
+     "body": "Her eşyanın nominal ve min değerlerini toplamak ve kategori, tier ve usage'a göre ayırmak için Loot ekonomisi'ni açın — bir haritanın bir şeye boğulup diğerinden yoksun kaldığını fark etmenin en hızlı yolu."
+    },
+    {
+     "title": "Tek tıkla ölçekleyin",
+     "body": "Ayar ön ayarları tüm nominal ve min değerlerini aynı anda çarpar — loot'u bol bir sunucu için ×2, hardcore için ×0.5. ×1, ilk ölçeklemenizden önceki miktarları geri getirir, yani her zaman geri alınabilir."
+    },
+    {
+     "title": "Grupları ön ayarlarla yeniden kullanın",
+     "body": "Ön ayar, çıkış şansı olan adlandırılmış bir eşya grubudur. Ön ayarlar sayfasında bir tane oluşturun, sonra aynı listeyi her yerde tekrarlamak yerine bir silahın eklenti yuvasından veya bir kabın içeriğinden adıyla ona başvurun."
+    }
+   ],
+   "tips": [
+    "Ölçekleme ve ön ayarlar misyon dosyalarını yazar, bu yüzden kaydetmek için sunucunun durdurulmuş olması gerekir."
+   ]
+  },
+  {
+   "id": "servers",
+   "title": "Birden fazla sunucu",
+   "intro": "Tek bir yönetici birden fazla DayZ sunucusu çalıştırabilir — örneğin Chernarus ve Livonia ya da bir vanilla ve bir modlu sunucu. Her sunucu kendi klasöründe yaşar ve kendi ayarlarına, modlarına, oyuncularına, sohbetine, banlarına, yedeklerine, zamanlamasına ve Discord bildirimlerine sahiptir; panel girişi, uzaktan erişim ve arayüz dili ortaktır.",
+   "steps": [
+    {
+     "title": "Sunucu ekleyin",
+     "body": "Sunucular → Sunucu ekle. Zaten bir DayZ sunucusu içeren bir klasörü gösterin (SteamCMD ile kurulmuş ya da kendi yaptığınız bir kopya) veya yöneticinin bir tane oluşturmasına izin verin: “Yeni sunucu — bir kopya”, var olan bir sunucunun oyun dosyalarını, misyonlarını, anahtarlarını ve BattlEye ayarlarını yeni bir klasöre kopyalar ve onu yepyeni bir dünyayla başlatır."
+    },
+    {
+     "title": "Kendi portlarını verin",
+     "body": "İki sunucu aynı portu paylaşamaz. Bir kopya boş portları kendiliğinden alır; eklediğiniz bir klasör için “Boş portları ata” tek tıkla onu boş bir oyun portuna, Steam sorgu portuna (steamQueryPort) ve RCon portuna taşır."
+    },
+    {
+     "title": "Aralarında geçiş yapın",
+     "body": "Üst çubuktaki sunucu menüsü tüm paneli başka bir sunucuya geçirir — ardından her sayfa o sunucuyu gösterir ve düzenler. İki tarayıcı sekmesi aynı anda iki sunucuyu yönetebilir."
+    }
+   ],
+   "tips": [
+    "Bir sunucuyu panelden kaldırmak hiçbir şeyi silmez: klasörü, ayarları ve günlükleri olduğu yerde kalır ve yeniden eklenebilir.",
+    "Birden fazla sunucu varken pano hepsini Başlat ve Durdur düğmeleriyle tek bakışta gösterir; yöneticiyi kapatmak hepsini birden durdurur — ya da çalışmaya devam ettirir."
+   ]
+  },
+  {
+   "id": "players",
+   "title": "Oyuncular ve banlar",
+   "intro": "Oyuncular sayfası yönetici günlüğünün gördüğü herkesi bilir — adlar, kimlikler, oynama süresi, öldürmeler —, şu anda kimin çevrimiçi olduğunu gösterir ve sunucunun banlarını tutar.",
+   "steps": [
+    {
+     "title": "Bir oyuncu bulun",
+     "body": "Tüm oyuncular: ada, oyuncu kimliğine, IP'ye veya nota göre arayın, oynama süresine veya öldürmelere göre sıralayın ve göz kulak olmak istediğiniz oyuncuları yıldızlayın. Bir ada tıklamak kimlikleri, notu, geçerli banı ve moderasyon geçmişini içeren profili açar."
+    },
+    {
+     "title": "Bir süreliğine — ya da kalıcı banlayın",
+     "body": "Profilde veya çevrimiçi listede “Banla…”: 1 saatten 30 güne, kalıcı ya da kendi belirlediğiniz bir süre ve oyuncunun göreceği bir sebep seçin. Ban sunucunun kendi ban.txt dosyasına yazılır — hemen geçerli olur — ve oyuncunun GUID'i biliniyorsa BattlEye'a da eklenir. Süreli ban, süresi dolunca otomatik olarak kalkar."
+    },
+    {
+     "title": "Çevrimiçi olanları yönetin",
+     "body": "Şimdi çevrimiçi, oyuncuları ping, IP ve GUID ile listeler — onlara mesaj gönderin, sebep belirterek atın veya hemen orada banlayın. Bunun için RCon parolası gerekir."
+    }
+   ],
+   "tips": [
+    "Yönetici günlüğü yoksa oyuncu da yok: geçmiş için -adminlog başlatma parametresi gerekir (Sunucu sayfası → Başlatma parametreleri).",
+    "Banlar → “Kimlikle banla” sunucuda olmayan birini banlar: Steam profil bağlantısındaki Steam64 ID'yi, yönetici günlüğündeki oyuncu kimliğini, bir BattlEye GUID'ini veya bir IP adresini yapıştırın."
+   ]
+  },
+  {
+   "id": "discord",
+   "title": "Discord bildirimleri",
+   "intro": "Yönetici, bir sunucuda olanları Discord kanalınıza paylaşabilir: ne zaman çevrimiçi olduğunu, sebebiyle yeniden başlatmaları, çökmeleri, mod güncellemelerini, katılmaları, öldürmeleri, sohbeti, banları ve daha fazlasını.",
+   "steps": [
+    {
+     "title": "Bir webhook oluşturun",
+     "body": "Discord'da: kanal ayarları → Entegrasyonlar → Webhook'lar → Yeni Webhook → Webhook URL'sini Kopyala. Bunu Ayarlar → Discord bölümüne yapıştırın, bildirimleri açın ve “Test mesajı gönder” düğmesine basın."
+    },
+    {
+     "title": "Ne paylaşılacağını seçin",
+     "body": "Olayları açıp kapatın. Oyuncu etkinliği (katılmalar, öldürmeler, sohbet) duyurularınızı boğmaması için ikinci bir kanala gidebilir ve sunucu çöktüğünde bir role ping atılabilir."
+    },
+    {
+     "title": "Canlı durum tutun",
+     "body": "Canlı durum mesajı, sunucunun çevrimiçi olup olmadığını, oyuncuları, haritayı, çalışma süresini ve sonraki yeniden başlatmayı her zaman gösteren tek bir mesajdır. Kanalda sabitleyin."
+    }
+   ],
+   "tips": [
+    "Panelin her sunucusunun kendi Discord ayarları vardır. Birden fazla sunucu tek bir kanala paylaşım yapabilir — her mesaj sunucunun adını taşır.",
+    "Katılmalar ve ayrılmalar RCon'dan gerçek zamanlı gelir (RCon olmadan yönetici günlüğünden yaklaşık bir dakika sonra); öldürmeler her zaman yönetici günlüğünden gelir."
+   ]
+  }
+ ],
+ "help": {
+  "attach.cargo": "İçerik, eşyanın İÇİNDE çıkar: sırt çantasının içindekiler, bir sandığın loot'u, arabanın bagajı. Eklentiler ise onun ÜZERİNE takılır. Vanilla dosyanın yarısı eklenti değil içeriktir.",
+  "attach.class": "Bu kaydın yapılandırdığı sınıf. Silah olması gerekmez — cfgspawnabletypes.xml kıyafetleri, çantaları, sandıkları, varilleri ve araçları da kapsar.",
+  "attach.damage": "Eşyanın çıktığı durum: 0.0 (kusursuz) ile 1.0 (harap) arası. DayZ varsayılanını korumak için ikisini de boş bırakın.",
+  "attach.hoarder": "Kaydı kalıcı depo olarak işaretler — variller, çadırlar, zulalar. DayZ oyuncuların içine koyduklarını dünya loot'una değil hoarder sınırına sayar.",
+  "attach.itemWeight": "Yüzde değil, göreli bir ağırlık — DayZ yuvadan tam olarak TEK bir eşya seçer. 60 ve 40 ağırlıkları, yuvanın kendi şansının %60'ı ve %40'ı demektir.",
+  "attach.slotChance": "Bu yuvada herhangi bir şeyin çıkma olasılığı. 1.0 = her zaman, 0.35 = zamanın %35'i.",
+  "attach.tags": "Kaydın nerede geçerli olduğunu sınırlar, ör. floor veya shelves. Virgülle ayrılmış. Çoğu kaydın buna ihtiyacı yoktur.",
+  "backup.restore": "Yapılandırmaları ve misyon dosyalarını bir zip'ten geri yükler. Sunucunun durdurulmuş olması gerekir — çalışırken bu dosyaları kilitli tutar.",
+  "battleye.bans": "Satır başına bir ban: GUID veya IP, ne zaman biteceği (-1 = kalıcı, aksi hâlde Unix zamanı olarak saklanan bitiş tarihi), sebep. Çalışan bir sunucuda kaydetmek banları RCon üzerinden yeniden yükler, bu yüzden yeniden başlatma gerekmez.",
+  "diag": "En yeni RPT ve yöneticinin stdout günlüğünden kalıplarla eşleştirildi. Bir DayZ sunucusunu gerçekten durduran birkaç arızayı tanır; tanımadığı her şey için yine ham günlük gerekir, bu yüzden boş bir sonuç her şeyin yolunda olduğu anlamına gelmez.",
+  "diag.bad_signature.detail": "{subject} BattlEye'ın imza kontrolünden geçemedi. Modun .bikey'ini Modlar sayfasında yeniden eşitleyin — verifySignatures'ı DÜŞÜRMEYİN, bu değiştirilmiş istemcileri de içeri alır.",
+  "diag.bad_signature.title": "Bir mod dosyası imzasız veya anahtarı eşleşmiyor",
+  "diag.config_parse.detail": "Yapılandırma ayrıştırıcısı erken durdu. Olağan neden eksik bir noktalı virgül veya dengesiz bir paranteztir — Doğrulayıcı parantez dengesini kontrol eder.",
+  "diag.config_parse.title": "serverDZ.cfg bozuk",
+  "diag.missing_key.detail": "Bu modu kullanan istemciler kötü imza nedeniyle atılır. Modlar sayfasında Anahtarları eşitle'yi kullanın.",
+  "diag.missing_key.title": "keys/ içinde bir mod anahtarı eksik",
+  "diag.mission_missing.detail": "serverDZ.cfg'de belirtilen template'in mpmissions/ altında eşleşen bir klasörü yok. Sunucu sayfasında mevcut bir misyon seçin.",
+  "diag.mission_missing.title": "server.cfg'deki misyon mevcut değil",
+  "diag.mod_missing.detail": "DayZ {subject} dosyasını açamadı. Mod başlatma parametrelerinde var ama klasörü eksik veya tamamlanmamış — Modlar sayfasında yükleyin veya yeniden eşitleyin, sonra tekrar başlatın.",
+  "diag.mod_missing.title": "-mod içinde listelenen bir mod klasörü sunucuda yok",
+  "diag.mod_missing_generic.detail": "DayZ {subject} dosyasını açamadı. Yolun var olduğunu ve bir antivirüsün onu karantinaya almadığını kontrol edin.",
+  "diag.mod_missing_generic.title": "Sunucunun ihtiyaç duyduğu bir dosya eksik",
+  "diag.no_economy.detail": "Sunucu çalışabilir ama loot çıkarmayabilir. Doğrulayıcı'yı çalıştırın: olağan neden, cfgeconomycore.xml'den başvurulan eksik bir dosya veya bilinmeyen bir usage/value adıdır.",
+  "diag.no_economy.title": "Merkezi ekonomi yüklenemedi",
+  "diag.port_busy.detail": "Portu başka bir işlem tutuyor — çoğu zaman tamamen kapanmamış önceki bir DayZ sunucusu. Birkaç saniye bekleyin veya Sunucu sayfasında portu değiştirin.",
+  "diag.port_busy.title": "Sunucu portu zaten kullanımda",
+  "diag.script_error.detail": "Sunucu betikleri derlerken durdu. RPT'de bu satırdan hemen sonraki satırlar dosyayı ve satır numarasını verir — genellikle mevcut DayZ sürümüyle uyuşmayan bir moddur.",
+  "diag.script_error.title": "Bir betik derlenemedi",
+  "economy.categories": "Bu dosyada kaç loot kategorisi (silahlar, yiyecek, aletler…) bulunduğu.",
+  "economy.items": "Bu dosyanın kaç farklı eşya türü tanımladığı.",
+  "economy.min": "Tüm eşyaların min toplamı — merkezi ekonominin her eşyayı tamamladığı alt sınır.",
+  "economy.nominal": "Tüm eşyaların nominal toplamı — haritanın her eşyadan çıkmış tutmaya çalıştığı hedef sayı.",
+  "economy.tune": "Bu dosyadaki tüm nominal/min değerlerini tek tıkla ölçekler. ×2 = iki kat loot; ×1 orijinalleri geri getirir.",
+  "events.active": "0, olayı yapılandırmasını koruyarak kapatır. Mevsimlik olaylar (Noel, Cadılar Bayramı) vanilla'da böyle gelir.",
+  "events.children": "Bu olayın çıkardığı nesne sınıfları, kendi loot aralıklarıyla. Elle düzenlemek için Mission DB düzenleyicisi vardır.",
+  "events.lifetime": "Dokunulmamış bir çıkış grubunun kaybolmadan önce dünyada kaç saniye kaldığı.",
+  "events.minmax": "min ve max, çıkış başına grup boyutunu sınırlar. max=0 sınırsız demektir — vanilla ortam olaylarının min=100 max=0 olmasının nedeni budur.",
+  "events.nominal": "Sunucunun bu olaydan aynı anda kaç tane çalıştırdığı. Araçlar, helikopter kazaları, hayvan sürüleri ve enfekte grupları — hepsi olaydır.",
+  "events.restock": "Temizlenmiş veya tükenmiş bir olayın yeniden çıkmasından önceki saniye. 0 = mümkün olan en kısa sürede yenile.",
+  "events.saveable": "1 = çıkış grubu kalıcılığa yazılır ve yeniden başlatmadan sağ çıkar; 0 = her başlatmada yeniden rastgele belirlenir.",
+  "gameplay.file": "cfggameplay.json oynanış kurallarını geçersiz kılar — dayanıklılık, inşa, harita davranışı. Tek bir sözdizimi hatasında DayZ tüm dosyayı yok sayar, bu yüzden kaydetmeden önce doğrulanır.",
+  "leaderboard.metrics": "Neye göre sıralanacağını seçin: toplam oynama süresi, öldürmeler, öldürme/ölüm oranı veya oturum sayısı.",
+  "loadout": "Bir oyuncunun yeniden doğduğunda ne giydiği ve ne taşıdığı. Bunlar cfggameplay.json'da kayıtlı DayZ spawn-gear ön ayarlarıdır — değişiklikler sunucu yeniden başlatıldıktan sonra geçerli olur. Vanilla'da teçhizat bunun yerine init.c içindedir; bu yüzden yeni bir misyon sistemi açana kadar burada hiçbir şey göstermez.",
+  "loadout.carried": "Giyilen bir yuva yerine doğrudan yeni oyuncunun envanterine konan serbest eşyalar — bez parçaları, yiyecek, bir başlangıç aleti.",
+  "loadout.characters": "Bu ön ayarın hangi hayatta kalan modellerine uygulandığı (SurvivorM_Mirek, SurvivorF_Eva, …). Tümüne uygulamak için boş bırakın; her doğuşta biri rastgele seçilir.",
+  "loadout.condition": "Bir eşyanın çıktığı durum. DayZ'de 1.0 = kusursuz ve 0.0 = harap, yani yüksek olan daha iyidir. Kusursuz, yeni doğan teçhizatını yeni tutar; kesin bir min–max sağlık aralığı için Özel…'i seçin, eşya bu aralıkta bir yerde çıkar.",
+  "loadout.weight": "Bu ön ayarın diğerlerine karşı ağırlığı. DayZ doğuş başına TEK bir ön ayar seçer, bu yüzden 3 ağırlıklı bir ön ayar 1 ağırlıklı olandan üç kat daha olasıdır.",
+  "loadout.worn": "Vücuda, her seferinde bir vücut yuvasına giydirilen eşyalar. Bir yuvada DayZ ağırlığa göre TEK bir eşya seçer, bu yüzden birkaç varyant listelemek doğuştan doğuşa çeşitlilik sağlar.",
+  "logs.adm": "Oyuncuların ne yaptığı: bağlanmalar, sohbet, öldürmeler, konumlar. -adminlog bayrağını gerektirir; Oyuncular sayfası bundan oluşturulur.",
+  "logs.rpt": "Sunucunun kendisinin ne yaptığı: başlatma, mod yükleme, betik hataları, çökmeler. Sunucu başlamadığında okunacak dosya budur.",
+  "moddrift.help.active": "Bu türlerden kaçının ekonominizde (types.xml + moded_types) gerçekten bulunduğu.",
+  "moddrift.help.missing": "Modun içerdiği ama ekonominizde olmayan türler — birleştirilene kadar bu eşyalar çıkmaz.",
+  "moddrift.help.ships": "Bu modun kendi types dosyasının kaç loot türü tanımladığı.",
+  "mods.order": "DayZ modları soldan sağa yükler. Framework'ler önce gelmelidir: @CF ona bağlı her şeyden önce, Expansion Core eklentilerinden önce. Yanlış sıra, bir sunucunun açılmayı reddetmesinin yaygın nedenidir.",
+  "mods.profiles": "Etkin modların mevcut setini bir ad altında kaydeder, böylece her şeyi yeniden açıp kapatmadan modlu ve vanilla dizilimler arasında geçiş yapabilirsiniz.",
+  "mods.scan": "Modun içinde bir types.xml arar ve onu cfgeconomycore.xml'e kaydeder, böylece modun loot'u gerçekten çıkar.",
+  "mods.serverSide": "Modu -mod yerine -serverMod ile yükler: sunucuda çalışır ve istemcilerin ne ihtiyacı olur ne de alırlar. Yalnızca yönetici araçları için — sunucu tarafına ayarlanmış bir loot veya içerik modu çalışmaz.",
+  "mods.uninstall": "Mod klasörünü sunucudan kaldırır. .bikey'i yalnızca başka hiçbir yüklü mod aynı anahtarı kullanmıyorsa silinir, böylece Expansion'ınki gibi paylaşılan anahtarlar kalır.",
+  "mods.update": "İstemcinin !Workshop'undaki daha yeni dosyaları sunucuya kopyalar. Yönetici mod indiremez — önce Steam'de abone olun.",
+  "rcon.password": "battleye/beserver_x64.cfg'ye yazılır. BattlEye bu dosyayı yalnızca başlatılırken okur, bu yüzden yeni bir parola bir sonraki yeniden başlatmaya kadar hiçbir şey yapmaz.",
+  "server.forceSameBuild": "İstemcilerin tam olarak aynı oyun sürümünü çalıştırmasını zorunlu kıl (1). Sürüm uyuşmazlığı çökmelerini önler.",
+  "server.hostname": "DayZ sunucu listesinde görünen sunucu adı. Kısa ve aranabilir tutun.",
+  "server.instanceId": "Sunucunun hangi kaydı kullandığı. Değiştirin, sunucu tamamen yeni bir dünyada başlar — eski kayıt kendi id'si altında diskte kalır.",
+  "server.loginQueue": "Aynı anda kaç oyuncunun bağlanıp giriş kuyruğunda bekleyebileceği — büyük giriş akınlarını yumuşatır.",
+  "server.maxPlayers": "Oyuncu yuvaları. Artırmak donanımınızı artırmaz: her yuva RAM ve CPU'ya mal olur ve DayZ çoğu makinenin kaynakları tükenmeden çok önce kararsızlaşır.",
+  "server.mission": "Sunucunun mpmissions/ altındaki hangi misyon klasörünü yüklediği. Harita böyle değiştirilir — chernarusplus, enoch (Livonia), sakhal.",
+  "server.nightTimeAccel": "Gündüz hızının üzerine eklenen gece hızı çarpanı; böylece geceler gündüzlerden hızlı geçebilir.",
+  "server.password": "Katılma parolası. Herkese açık sunucu için boş bırakın; sunucuyu özel yapmak için ayarlayın.",
+  "server.passwordAdmin": "Oyun içi yönetici parolası (#login). RCon parolasından ayrıdır — gizli tutun.",
+  "server.respawnTime": "Bir oyuncunun ölümden sonra yeniden doğmadan önce beklemesi gereken saniye. Uzun değerler, doğuş noktası değiştirmek için intihar etmeyi caydırır.",
+  "server.steamQueryPort": "Steam'in sunucunuzu listelemek için kullandığı port. Boş ve yönlendirilmiş olmalıdır, yoksa sunucu düzgün çalışır ama listede hiç görünmez.",
+  "server.storageAutoFix": "DayZ'nin yükleme sırasında bozuk kalıcılık deposunu onarmasına izin verin (1), başlatılamamak yerine.",
+  "server.thirdPerson": "1 yalnızca birinci şahıs görünümünü zorunlu kılar. Oyunu başka herhangi bir ayardan daha çok değiştirir, bu yüzden oyuncu kitlesi oluşturmadan önce karar verin.",
+  "server.timeAccel": "Gündüz zaman hızı çarpanı (1 = gerçek zaman, 24 = bir saatte tam bir gün). Aralık ~0.1–64.",
+  "server.timePersistent": "Dünya saatini yeniden başlatmalar arasında koru (1), her açılışta serverTime'a sıfırlamak yerine (0).",
+  "server.verifySignatures": "2, her mod dosyasının keys/ içindeki bir anahtarla imzalanmış olması gerektiği demektir. 0'a düşürmek imzasız modların yüklenmesine — ve değiştirilmiş istemcilerin girmesine — izin verir. 2'de bırakın.",
+  "server.von": "Sesli iletişim. Kapatmak, telsiz dâhil oyun içi sesli sohbeti tamamen kaldırır.",
+  "server.whitelist": "Yalnızca listelediğiniz oyuncular katılabilir. Bir beyaz liste dosyası tutmuyorsanız kapalı bırakın.",
+  "settings.adminlog": ".ADM dosyasını yazan -adminlog'u etkinleştirir. Oyuncular sayfası ve öldürme akışı bundan oluşturulur ve onsuz boş kalır.",
+  "settings.backup": "Yapılandırmalarınızı ve misyon dosyalarınızı zamanlanmış olarak zip'ler ve en yeni N tanesini tutar. Ayrıca, panelin üzerine yazdığı her dosya yanında zaman damgalı bir .bak alır.",
+  "settings.exposure": "“Yalnızca bu bilgisayar”, paneli yalnızca bu PC'nin açabileceği anlamına gelir. “Yerel ağ”, telefonunuzun ve evdeki diğer cihazların onu açmasını sağlar. “İnternet” onu her yerden erişilebilir kılar — panel girişi gerektirir; gerisini (yönlendirici, güvenlik duvarı, genel IP) Ayarlar → Uzaktan erişim kontrol eder.",
+  "settings.modSource": "Yöneticinin modları nereden kopyaladığı. İstemci klasörü: !Workshop içeren DayZ oyun kurulumu (Steam'de abone olursunuz, yönetici kopyalar ve günceller). Mod klasörü: @mod içeren herhangi bir klasör veya SteamCMD'nin workshop/content/221100 klasörü — oyunun yüklü olmadığı bir sunucuda Workshop modlarını almanın yolu. Yalnızca sunucu: kaynak yok; elle yüklenen modlar yine yönetilir ama otomatik güncelleme kapalıdır.",
+  "settings.perf": "CPU benzeşimi DayZServer'ı işaretlediğiniz çekirdeklere sabitler (işaretlenmeyen çekirdekler işletim sistemi, ikinci bir sunucu veya diğer programlar için boş kalır). Öncelik, işletim sistemine onu ne kadar istekle zamanlayacağını söyler — Normalin üstü güvenli bir artıştır; Yüksek makinenin geri kalanını yavaşlatabilir. İkisi de her başlatmada uygulanır. Linux'ta önceliği yükseltmek root gerektirir.",
+  "settings.restart": "Sunucuyu bir zamanlamaya göre yeniden başlatır. Oyuncular önceden RCon uyarıları alır; bunun için bir RCon parolası ayarlanmış olmalıdır.",
+  "settings.restartBehaviour": "Oyuncuların her otomatik yeniden başlatma etrafında yaşadıkları: gördükleri geri sayım metni (onların dilinde yazın), karakterleri düzgün kaydedilsin diye sunucunun kilitlendiği ve herkesin atıldığı yeniden başlatma öncesi isteğe bağlı bir pencere ve işlem durdurulmadan önce dünyayı kaydeden düzgün bir #shutdown. Aşağıdaki zaman çizelgesi tam sırayı gösterir.",
+  "settings.watchdog": "Sunucu kendi kendine kapanırsa onu yeniden başlatır. Beş dakikada üç çökmeden sonra durur ve bir uyarı gösterir — bir çökme döngüsünün yeni bir yeniden başlatmaya değil, bir insana ihtiyacı vardır.",
+  "sync.import": "Başka bir yönetici kurulumundan ayarları kopyalar. Mevcut değerlerin üzerine yazılır, bu yüzden emin değilseniz önce yedek alın.",
+  "types.bulk": "Bu değerleri seçili tüm satırlara aynı anda uygular. Yalnızca doldurduğunuz alanlar değişir.",
+  "types.category": "Eşyayı loot sistemi için gruplar (silahlar, yiyecek, kıyafet…). Ad cfglimitsdefinition.xml içinde bulunmalıdır, yoksa DayZ kaydı atar.",
+  "types.cost": "Sunucuda yuvadan çok aday olduğunda çıkış önceliği. Yüksek olan kazanır. Para değildir ve oyuncular onu asla görmez.",
+  "types.flags": "count_in_cargo / count_in_hoarder / count_in_map / count_in_player, bir çadırda, arabada veya sırt çantasında zaten saklanan eşyaların nominal'e sayılıp sayılmayacağına karar verir. Kapatırsanız sunucu, oyuncuların biriktirdiği bir eşyadan daha fazla çıkarmaya devam eder.",
+  "types.lifetime": "Dokunulmamış bir eşyanın kaybolmadan önce yaşadığı saniye. 3888000, 45 gündür.",
+  "types.min": "Sayı bu değere düştüğünde sunucu bir yeniden çıkışı sıraya koyar. Nominal'i aşmamalıdır — DayZ onu kırpar ve bir uyarı kaydeder.",
+  "types.nominal": "Sunucunun bu eşyadan aynı anda dünyada kaç tane tutmaya çalıştığı. 0, hiç çıkmayacağı demektir.",
+  "types.quant": "Miktarlı eşyalar (içecekler, yakıt) için yüzde olarak doluluk. Kapatmak için -1, aksi hâlde 0–100.",
+  "types.restock": "Sunucunun bu eşyayı tamamlamadan önce beklediği saniye. 0 hemen demektir.",
+  "types.tag": "Eşyanın bina içinde nereye düşeceğini daraltır: floor, shelves, ground. Etiketsiz bir eşya usage'ın izin verdiği her yüzeyi kullanabilir.",
+  "types.usage": "Eşyanın hangi bina türlerinde çıkabileceği (Military, Police, Farm…). Usage yoksa çıkacak yer de yoktur.",
+  "types.value": "Loot tier'ı: Tier1 kıyı, Tier4 iç kesimler ve askerî bölgelerdir. Eşyanın doğuş noktasından ne kadar uzakta çıkacağını belirler.",
+  "validator.autofix": "Bilinmeyen usage/value/tag/category adlarını cfglimitsdefinition.xml'e ekler. Modlu loot'un çıkmaya başlamasını genellikle sağlayan budur — adlar orada bulunmalıdır, yoksa DayZ kaydı yok sayar.",
+  "validator.severity": "Hatalar şu anda bir şeyi bozar. Uyarılar, DayZ'nin tolere ettiği ama genellikle yapılandırmanın istediğiniz şeyi yapmadığı anlamına gelen şeylerdir.",
+  "vehicles.lifetime": "Merkezi Ekonominin bu olay için kullandığı ömür (vanilla araçlar: 300). Sağlam arabaların kaybolmasına neden olmaz — vanilla araçlar yok edilene veya dünya wipe'lanana kadar kalır. Bir modun kılavuzu aksini söylemedikçe vanilla değeri koruyun.",
+  "vehicles.loot": "events.xml'deki varyantın lootmin / lootmax değerleri, olduğu gibi korunur (vanilla araçlar 0 kullanır). Aracın parçaları — tekerlekler, kapılar, akü, bujiler — cfgspawnabletypes'tan gelir: aşağıdaki “Çıkışta parçalar” düğmelerini veya parça başına şanslar için Eklentiler sayfasını kullanın.",
+  "vehicles.max": "Bu araç türü için mutlak sınır; oyuncuların sakladıkları veya park ettikleri de sayılır. Genellikle nominal'e eşittir.",
+  "vehicles.min": "Bundan az sayıda olduğunda ekonomi, nominal'e kadar yenilerini (yenileme gecikmesinden sonra) çıkarır.",
+  "vehicles.nominal": "Ekonominin bu araçtan haritada aynı anda kaç tane tutmaya çalıştığı (tüm renk varyantları birlikte).",
+  "vehicles.restock": "Ekonominin yok olan veya kaybolan bir aracı değiştirmeden önce beklediği saniye. 0 = mümkün olan en kısa sürede değiştir.",
+  "weather.accel": "Oyun içi zamanın akışını çarpar. 12, tam bir günün iki gerçek saat sürmesi demektir. Gece ayrıdır, böylece geceleri kısa tutabilirsiniz.",
+  "weather.dynamic": "Kapalı, havayı ayarladığınız yerde sabitler. Açık, sunucunun onu sınırlar içinde kendiliğinden değiştirmesine izin verir.",
+  "weather.fog": "Sis yoğunluğu, %0–100. Yoğun sis görüş hattını ciddi şekilde keser — loot turları için gerilimli, keskin nişancılar için zorlu.",
+  "weather.overcast": "Bulut örtüsü, %0–100. Yüksek olan daha gri ve karanlıktır; ayrıca yağmuru da belirler — yağmur için bulutluluğun yaklaşık %70'in üstünde olması gerekir.",
+  "weather.rain": "Yağmur yoğunluğu, %0–100. Yalnızca bulutluluk yeterince yüksekken gerçekten yağar; oyuncuyu ıslatır ve sesleri bastırır.",
+  "weather.snowfall": "Kar yağışı yoğunluğu, %0–100 (esas olarak Sakhal gibi karlı haritalarda görünür).",
+  "weather.storm": "Yalnızca bir fırtınanın başlaması için yeterli yağmur ve bulut olduğunda etkilidir.",
+  "weather.timePreset": "Sunucu başlarken oyun saatini ayarlar. SystemTime PC'nizin saatini izler; sabit bir değer haritayı hep aynı saatte başlatır.",
+  "weather.transition": "Havanın ne kadar kademeli değiştiği. Yumuşak, vanilla DayZ'deki gibi küçük adımlarla yaklaşık yarım saatte değişir. Hızlı tüm aralığı iki dakikada geçebilir — havanın bir ışık düğmesi gibi hissettirmesinin nedeni budur.",
+  "weather.wind": "Rüzgâr hızı m/sn cinsinden. Bulutları hareket ettirir ve dinamik anahtarla birlikte havanın ne kadar hızlı değiştiğini belirler.",
+  "wipe": "Kaydedilmiş dünya durumunu siler: oyuncular, araçlar, üsler. Loot tabloları ve yapılandırmalara dokunulmaz. Klasörler silinmek yerine kenara taşınır, böylece bir hata elle geri alınabilir.",
+  "wipe.undo": "Bir wipe, dünya klasörlerini silmek yerine .dayz-manager/wipes/<zaman damgası>/ içine taşır, böylece geri alınabilir kalır — ta ki sunucu o durumu yeniden oluşturana kadar; o noktada eski dünyayı geri koymak yenisini gömer."
+ },
+ "gameplay": {
+  "version": "Dosyanın biçim sürümü. DayZ yazar — olduğu gibi bırakın.",
+  "GeneralData": "Sunucu genelindeki anahtarlar: üslere ve depolara hasar, yeniden doğma ekranı.",
+  "PlayerData": "Oyuncu kuralları: kişisel ışık, dayanıklılık, şok, hareket, boğulma ve başlangıç teçhizatları.",
+  "StaminaData": "Dayanıklılığın ne kadar hızlı tükendiği ve oyuncuların cezasız ne kadar ağırlık taşıdığı.",
+  "ShockHandlingData": "Şokun (oyuncuları bayıltan hasarın) ne kadar hızlı geçtiği.",
+  "MovementData": "Karakterin ataleti: ne kadar hızlı ivmelendiği ve döndüğü.",
+  "DrowningData": "Oyuncuların boğulurken saniyede kaybettikleri.",
+  "WeaponObstructionData": "Uzun bir silahın duvarlara ve nesnelere girecekken yana itilip itilmediği.",
+  "WorldsData": "Dünya ayarları: gece karanlığı, aylık sıcaklıklar, ek nesneler, ıslak giysilerin ağırlığı.",
+  "BaseBuildingData": "Üs inşası kuralları: yerleştirme kontrolleri ve inşa kontrolleri.",
+  "HologramData": "Yeşil/kırmızı yerleştirme önizlemesinin kontrolleri. Birini kapatmak, oyuncuların oyunun normalde reddettiği şeyleri yerleştirmesine izin verir.",
+  "ConstructionData": "Bir üs parçası inşa edilirken yapılan kontroller.",
+  "UIData": "Arayüz: 3D harita ve isabet göstergesi.",
+  "HitIndicationData": "Bir isabetin nereden geldiğini gösteren ekran işareti. Yalnızca “Bu ayarları kullan” açıkken kullanılır.",
+  "MapData": "Oyun içi harita: oyuncuların harita, pusula veya GPS'e ihtiyacı olup olmadığı ve haritanın ne gösterdiği.",
+  "VehicleData": "Araç ayarları.",
+  "disableBaseDamage": "Duvarlar, kapılar, çitler ve gözetleme kuleleri hiç hasar almaz — baskın imkânsız hâle gelir.",
+  "disableContainerDamage": "Çadırlar, variller, sandıklar ve zulalar hasar almaz.",
+  "disableRespawnDialog": "Ölümden sonra yeniden doğma ekranı yok: oyuncu hemen rastgele bir doğma noktasında geri gelir.",
+  "disableRespawnInUnconsciousness": "Bilinçsiz bir oyuncu Yeniden doğ'a basamaz — önce uyanır ya da ölür.",
+  "disablePersonalLight": "Geceleri her oyuncunun etrafındaki hafif ışıltıyı kaldırır — daha karanlık geceler. serverDZ.cfg'deki aynı ayarı geçersiz kılar.",
+  "spawnGearPresetFiles": "Başlangıç teçhizatı dosyaları. Oyuncu teçhizatı sayfasında yönetilir.",
+  "sprintStaminaModifierErc": "Dik depar atarken dayanıklılık tüketimi. 1 = oyundaki gibi; daha yüksek daha çabuk yorar, 0 = tüketim yok.",
+  "sprintStaminaModifierCro": "Çömelerek koşarken dayanıklılık tüketimi. 1 = oyundaki gibi.",
+  "staminaWeightLimitThreshold": "Oyuncuların maksimum dayanıklılığı düşmeye başlamadan önce taşıdığı ağırlık (gram). 6000 = 6 kg.",
+  "staminaMax": "Dayanıklılık havuzunun boyutu. Daha yüksek = daha uzun deparlar.",
+  "staminaKgToStaminaPercentPenalty": "Eşiğin üzerindeki her kilogramın maksimum dayanıklılığı ne kadar düşürdüğü.",
+  "staminaMinCap": "Ağır yük altında maksimum dayanıklılığın düşebileceği en alt değer.",
+  "sprintSwimmingStaminaModifier": "Hızlı yüzerken dayanıklılık tüketimi. 1 = oyundaki gibi.",
+  "sprintLadderStaminaModifier": "Merdiveni hızlı tırmanırken dayanıklılık tüketimi. 1 = oyundaki gibi.",
+  "meleeStaminaModifier": "Ağır yakın dövüş saldırılarının ve blok yapmanın dayanıklılık maliyeti. 1 = oyundaki gibi.",
+  "obstacleTraversalStaminaModifier": "Engellerin üzerinden tırmanmanın ve atlamanın dayanıklılık maliyeti. 1 = oyundaki gibi.",
+  "holdBreathStaminaModifier": "Nişan almak için nefes tutarken dayanıklılık tüketimi. 1 = oyundaki gibi.",
+  "shockRefillSpeedConscious": "Oyuncu bilinçliyken şokun ne kadar hızlı geçtiği. Daha yüksek = daha hızlı toparlanma.",
+  "shockRefillSpeedUnconscious": "Oyuncu bilinçsizken şokun ne kadar hızlı geçtiği — ne kadar çabuk uyandığı.",
+  "allowRefillSpeedModifier": "Oyuncunun durumu (kan, sağlık) şoktan toparlanmayı hızlandırır veya yavaşlatır.",
+  "timeToStrafeJog": "Yana koşarken tam hıza ulaşma süresi (saniye). Daha düşük = daha çevik hareket.",
+  "rotationSpeedJog": "Karakterin koşarken ne kadar hızlı döndüğü.",
+  "timeToSprint": "Koşudan depara geçerken ivmelenme süresi (saniye).",
+  "timeToStrafeSprint": "Yana depar atarken tam hıza ulaşma süresi (saniye).",
+  "rotationSpeedSprint": "Karakterin depar atarken ne kadar hızlı döndüğü.",
+  "allowStaminaAffectInertia": "Dayanıklılık azaldığında karakter daha yavaş ivmelenir ve döner.",
+  "staminaDepletionSpeed": "Su altında saniyede kaybedilen dayanıklılık.",
+  "healthDepletionSpeed": "Boğulurken saniyede kaybedilen sağlık.",
+  "shockDepletionSpeed": "Boğulurken saniyede eklenen şok.",
+  "staticMode": "Duvarlara ve statik nesnelere karşı: 0 = kapalı, 1 = açık (oyundaki gibi), 2 = her zaman.",
+  "dynamicMode": "Oyunculara, araçlara ve diğer hareketli nesnelere karşı: 0 = kapalı, 1 = açık (oyundaki gibi), 2 = her zaman.",
+  "lightingConfig": "Gece karanlığı: 0 = daha aydınlık geceler (oyundaki gibi), 1 = karanlık geceler. serverDZ.cfg'deki aynı ayarı geçersiz kılar.",
+  "objectSpawnersArr": "Dünyaya ek statik nesneler yerleştiren JSON dosyaları (misyon içindeki yollar).",
+  "environmentMinTemps": "Ocaktan aralığa her ayın en düşük hava sıcaklığı, °C. Haritanın kendi değerlerini kullanmak için boş bırakın.",
+  "environmentMaxTemps": "Ocaktan aralığa her ayın en yüksek hava sıcaklığı, °C. Haritanın kendi değerlerini kullanmak için boş bırakın.",
+  "wetnessWeightModifiers": "Kuru hâlden sırılsıklam hâle beş ıslaklık seviyesi için giysilerin ağırlık çarpanları.",
+  "disableIsCollidingBBoxCheck": "Parçalar yerleştirilirken diğer nesnelerle çakışabilir — daha sıkı, iç içe yapılar.",
+  "disableIsCollidingPlayerCheck": "Parçalar bir oyuncunun durduğu yere yerleştirilebilir.",
+  "disableIsClippingRoofCheck": "Parçalar çatılardan ve tavanlardan geçirilerek yerleştirilebilir.",
+  "disableIsBaseViableCheck": "Nesneler altlarında sağlam zemin olmadan yerleştirilebilir.",
+  "disableIsCollidingGPlotCheck": "Bahçe tarhları diğer nesnelerle çarpışacakları yerlere yerleştirilebilir.",
+  "disableIsCollidingAngleCheck": "Nesneler normalde fazla dik olan eğimlere yerleştirilebilir.",
+  "disableIsPlacementPermittedCheck": "Nesneler haritanın normalde yasakladığı yerlere yerleştirilebilir.",
+  "disableHeightPlacementCheck": "Nesneler oyuncunun ayaklarının normalde izin verilenden daha yukarısına yerleştirilebilir.",
+  "disableIsUnderwaterCheck": "Nesneler su altına yerleştirilebilir.",
+  "disableIsInTerrainCheck": "Nesneler araziye gömülebilir.",
+  "disableColdAreaBuildingCheck": "Oyunun normalde yasakladığı soğuk bölgelerde (Sakhal) inşaata izin verilir.",
+  "disallowedTypesInUnderground": "Yeraltı alanlarına (sığınaklar, mağaralar) yerleştirilemeyen kitler.",
+  "disablePerformRoofCheck": "Üs parçaları çatı altında ve kapalı alanlarda inşa edilebilir.",
+  "disableIsCollidingCheck": "Üs parçaları önünde bir şey olsa bile inşa edilebilir.",
+  "disableDistanceCheck": "Üs parçaları her mesafeden inşa edilebilir.",
+  "use3DMap": "Harita tam ekran yerine elde tutulan bir eşya olarak açılır.",
+  "hitDirectionOverrideEnabled": "Aşağıdaki ayarları her oyuncuya kendi ayarları yerine uygula.",
+  "hitDirectionBehaviour": "0 = gösterge yok, 1 = sabit, 2 = saldırganı izler.",
+  "hitDirectionStyle": "0 = sıçrama, 1 = diken, 2 = ok.",
+  "hitDirectionIndicatorColorStr": "Gösterge rengi, 0xAARRGGBB biçiminde (alfa, kırmızı, yeşil, mavi).",
+  "hitDirectionMaxDuration": "Göstergenin ekranda kaç saniye kaldığı.",
+  "hitDirectionBreakPointRelative": "Göstergenin solmaya başladığı, sürenin oranı (0–1).",
+  "hitDirectionScatter": "Yöne eklenen rastgele sapma, derece cinsinden.",
+  "hitIndicationPostProcessEnabled": "Oyuncu vurulduğunda ekran kırmızı yanıp söner.",
+  "ignoreMapOwnership": "Oyuncular yanlarında harita olmadan haritayı açabilir.",
+  "ignoreNavItemsOwnership": "Harita, yanınızda pusula veya GPS olmadan pusula ve GPS bilgisini gösterir.",
+  "displayPlayerPosition": "Oyuncunun kendi konumu haritada işaretlenir.",
+  "displayNavInfo": "Harita navigasyon bilgisini (ızgara ve pusula) gösterir.",
+  "boatDecayMultiplier": "Teknelerin ne kadar hızlı çürüdüğü. 1 = oyundaki gibi, daha düşük = daha yavaş."
+ },
+ "globals": {
+  "AnimalMaxCount": "Haritada aynı anda yaşayan en fazla hayvan sayısı.",
+  "CleanupAvoidance": "Yeni çıkmış loot'un çok erken temizlenmesini önleyen katsayı.",
+  "CleanupLifetimeDeadAnimal": "Ölü bir hayvan leşinin kaldırılmadan önce kaldığı saniye.",
+  "CleanupLifetimeDeadInfected": "Ölü bir enfektenin bedeninin kaldırılmadan önce kaldığı saniye.",
+  "CleanupLifetimeDeadPlayer": "Ölü bir oyuncunun bedeninin ve teçhizatının kaldırılmadan önce kaldığı saniye.",
+  "CleanupLifetimeDefault": "Türü bir lifetime belirlemediğinde, bırakılan bir eşyanın temizlenmeden önce kaldığı varsayılan saniye.",
+  "CleanupLifetimeLimit": "Temizleyicinin çok kısa eşya ömürleri için kullandığı alt sınır (sn).",
+  "CleanupLifetimeRuined": "Harap bir eşyanın temizlenmeden önce yerde kaldığı saniye.",
+  "FlagRefreshFrequency": "Kaldırılmış bir bölge bayrağının yakındaki kurulu eşyaların ömrünü ne sıklıkla (sn) yenilediği.",
+  "FlagRefreshMaxDuration": "Bir bayrağın eşyaları yenileyebileceği en uzun ömür (sn) — üs çürüme sınırı (vanilla ≈ 45 gün).",
+  "IdleModeCountdown": "Bağlı oyuncu olmadan geçen saniye; sonrasında ekonomi boşta moduna geçer ve loot yenilemeyi durdurur.",
+  "IdleModeStartup": "İlk oyuncu katılana kadar ekonomiyi boşta modunda başlat (1 = evet).",
+  "InitialSpawn": "Ekonomi ilk başladığında çıkarılan başlangıç loot'u miktarı.",
+  "LoginTimeMax": "Girişin iptal edilmeden önce sürebileceği en uzun süre (sn).",
+  "LogoutTimeMax": "En uzun çıkış bekleme süresi (sn).",
+  "RespawnAttempt": "Motorun döngü başına başarısız bir loot yeniden çıkışını kaç kez yeniden denediği.",
+  "RespawnTypes": "Her döngüde yeniden çıkış için kaç loot türünün işlendiği.",
+  "SpawnInitial": "Ekonomi ilk başladığında çıkarılan başlangıç loot'u miktarı.",
+  "TimeHopping": "Sunucu değiştiren oyunculara, bunu caydırmak için uygulanan ek giriş gecikmesi (sn).",
+  "TimeLogin": "Bir oyuncunun giriş yaparken yükleme ekranında beklediği saniye.",
+  "TimeLogout": "Bir oyuncunun çıkışı seçtikten sonra dünyada kalması gereken saniye (çatışmadan kaçma önlemi).",
+  "TimePenalty": "Yakın zamanda çatışmaya girmişken çıkış yapmak için ek bekleme (sn).",
+  "WorldWetTempUpdate": "Dünya eşyalarının ıslaklık ve sıcaklığının ne sıklıkla (sn) güncellendiği.",
+  "ZombieMaxCount": "Haritada aynı anda yaşayan en fazla enfekte sayısı.",
+  "ZoneSpawnDist": "Dinamik enfekte/hayvan bölgelerinin çıktığı, oyuncuya olan mesafe (m)."
+ }
+}

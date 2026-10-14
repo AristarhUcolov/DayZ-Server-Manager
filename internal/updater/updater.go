@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -41,7 +42,9 @@ type CheckResult struct {
 	Error           string `json:"error,omitempty"`
 }
 
-func Check(ctx context.Context, currentVersion string) CheckResult {
+// Check asks GitHub for the latest release. mode is the running build ("web"
+// or "panel") so the download link points at the same kind of executable.
+func Check(ctx context.Context, currentVersion, mode string) CheckResult {
 	res := CheckResult{Current: currentVersion}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubAPI, nil)
@@ -70,14 +73,46 @@ func Check(ctx context.Context, currentVersion string) CheckResult {
 	}
 	res.Latest = strings.TrimPrefix(rel.TagName, "v")
 	res.ReleaseURL = rel.HTMLURL
-	for _, a := range rel.Assets {
-		if strings.HasSuffix(strings.ToLower(a.Name), ".exe") {
-			res.DownloadURL = a.DownloadURL
-			break
-		}
+	names := make([]string, len(rel.Assets))
+	for i, a := range rel.Assets {
+		names[i] = a.Name
+	}
+	if i := pickAsset(names, mode, runtime.GOOS); i >= 0 {
+		res.DownloadURL = rel.Assets[i].DownloadURL
 	}
 	res.UpdateAvailable = compareVersions(res.Latest, strings.TrimPrefix(currentVersion, "v")) > 0
 	return res
+}
+
+// pickAsset chooses the release file matching this build: since v1.0 the
+// assets are dayz-manager-{web,panel}.exe and dayz-manager-{web,panel}-linux;
+// older releases shipped dayz-manager.exe / dayz-manager-linux. Returns -1
+// when nothing fits this OS.
+func pickAsset(names []string, mode, goos string) int {
+	if mode == "" {
+		mode = "web"
+	}
+	want := "dayz-manager-" + mode + "-linux"
+	if goos == "windows" {
+		want = "dayz-manager-" + mode + ".exe"
+	}
+	forOS := func(n string) bool {
+		if goos == "windows" {
+			return strings.HasSuffix(n, ".exe")
+		}
+		return strings.Contains(n, goos)
+	}
+	fallback := -1
+	for i, n := range names {
+		n = strings.ToLower(n)
+		if n == want {
+			return i
+		}
+		if fallback < 0 && forOS(n) && (strings.Contains(n, mode) || !strings.Contains(n, "panel") && !strings.Contains(n, "web")) {
+			fallback = i
+		}
+	}
+	return fallback
 }
 
 // compareVersions returns 1 if a > b, -1 if a < b, 0 if equal. Only compares

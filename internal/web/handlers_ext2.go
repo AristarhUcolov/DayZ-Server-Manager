@@ -18,16 +18,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	dztypes "dayzmanager/internal/types"
 
 	"dayzmanager/internal/admlog"
-	"dayzmanager/internal/i18n"
 	dzlogs "dayzmanager/internal/logs"
 	"dayzmanager/internal/mods"
-	"dayzmanager/internal/notify"
 	"dayzmanager/internal/util"
 )
 
@@ -40,6 +37,13 @@ func (h *handlers) admlogRecent(w http.ResponseWriter, r *http.Request) {
 		profilesDir = filepath.Join(h.app.ServerDir, profilesDir)
 	}
 	path := r.URL.Query().Get("path")
+	if f := r.URL.Query().Get("file"); f != "" && path == "" {
+		// An earlier run's .ADM by its bare name, as the log list gives it.
+		if path = dzlogs.Resolve(h.app.ServerDir, h.app.Cfg().ProfilesDir, "adm:"+f); path == "" {
+			http.Error(w, "unknown admin log file", http.StatusNotFound)
+			return
+		}
+	}
 	if path == "" {
 		path = admlog.Latest(profilesDir)
 	} else {
@@ -83,37 +87,26 @@ func (h *handlers) admlogRecent(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 // Dashboard metrics.
 
-// dashMods caches the dashboard's mod counts so the heavy mods.List walk runs
+// h.dashMods caches the dashboard's mod counts so the heavy mods.List walk runs
 // at most once per window instead of on every 5s poll. The stored map is
 // replaced wholesale (never mutated), so sharing it across requests is safe.
-var dashMods struct {
-	mu         sync.Mutex
-	at         time.Time
-	val        map[string]interface{}
-	refreshing bool
-}
 
 func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
-	out := map[string]interface{}{
-		"running": h.app.ServerIsRunning(),
-		"pid":     h.app.Server.PID(),
-		"uptime":  h.app.Server.Uptime().Round(time.Second).String(),
-		"port":    h.app.Cfg().ServerPort,
-	}
+	out := h.serverState()
 
 	// Mods count. mods.List walks the whole mod tree (and !Workshop), which is
 	// too heavy to run on every 5s poll — especially while installing mods. We
 	// cache the counts for a short window; the dashboard only shows totals, not
 	// sizes, so slightly stale numbers are fine.
-	if h.app.Cfg().VanillaDayZPath != "" {
-		dashMods.mu.Lock()
-		stale := dashMods.val == nil || time.Since(dashMods.at) > 15*time.Second
-		start := stale && !dashMods.refreshing
+	{
+		h.dashMods.mu.Lock()
+		stale := h.dashMods.val == nil || time.Since(h.dashMods.at) > 15*time.Second
+		start := stale && !h.dashMods.refreshing
 		if start {
-			dashMods.refreshing = true
+			h.dashMods.refreshing = true
 		}
-		cur := dashMods.val
-		dashMods.mu.Unlock()
+		cur := h.dashMods.val
+		h.dashMods.mu.Unlock()
 
 		if start {
 			// Refresh in the background: mods.List walks the whole mod tree and
@@ -123,7 +116,7 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 			// One snapshot for the whole pass: this runs on a 5s poll, and
 			// re-taking it per loop would copy every slice each time.
 			cfg := h.app.Cfg()
-			serverDir, vanilla := h.app.ServerDir, cfg.VanillaDayZPath
+			serverDir, vanilla := h.app.ServerDir, cfg.ModSourceDir()
 			active := map[string]bool{}
 			for _, name := range cfg.Mods {
 				active[name] = true
@@ -145,13 +138,13 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 					}
 					v = map[string]interface{}{"total": len(list), "installed": installed, "active": enabled}
 				}
-				dashMods.mu.Lock()
+				h.dashMods.mu.Lock()
 				if v != nil {
-					dashMods.val = v
+					h.dashMods.val = v
 				}
-				dashMods.at = time.Now() // throttle retries to the window even on error
-				dashMods.refreshing = false
-				dashMods.mu.Unlock()
+				h.dashMods.at = time.Now() // throttle retries to the window even on error
+				h.dashMods.refreshing = false
+				h.dashMods.mu.Unlock()
 			}()
 		}
 		if cur != nil {
@@ -199,7 +192,25 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log sources with sizes.
-	out["logs"] = dzlogs.Discover(h.app.ServerDir, h.app.Cfg().ProfilesDir)
+	logSources := dzlogs.Discover(h.app.ServerDir, h.app.Cfg().ProfilesDir)
+	out["logs"] = logSources
+
+	// Server FPS, from the newest "Average server FPS" line of the RPT log
+	// (written only with logAverageFps in serverDZ.cfg and -doLogs). A log that
+	// has not been written for a while belongs to a hung or previous run.
+	if h.app.ServerIsRunning() {
+		started := time.Now().Add(-h.app.Server.Uptime())
+		for _, s := range logSources {
+			if s.ID != "rpt" || !s.Exists {
+				continue
+			}
+			// The newest RPT may still be the previous run's for the first
+			// seconds after a start — only a log written since then counts.
+			if fps, written, ok := dzlogs.LastServerFPS(s.Path); ok && written.After(started) && time.Since(written) < 15*time.Minute {
+				out["serverFps"] = float64(int(fps*10+0.5)) / 10
+			}
+		}
+	}
 
 	// Recent ADM events (last 20) for the activity strip.
 	profilesDir := h.app.Cfg().ProfilesDir
@@ -383,24 +394,6 @@ func (h *handlers) runBackupToDisk(keep int) (string, error) {
 	return path, nil
 }
 
-// discordTest sends a test message to the webhook from the request body (NOT
-// the saved config) so the user can verify a URL before enabling it.
-func (h *handlers) discordTest(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		URL string `json:"url"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	b := i18n.Get(h.app.Cfg().Language)
-	if err := notify.Discord(req.URL, b["discord.test"]); err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	writeJSON(w, map[string]string{"status": "sent"})
-}
-
 // backupRun creates an on-demand disk backup (same zip as the download).
 func (h *handlers) backupRun(w http.ResponseWriter, r *http.Request) {
 	path, err := h.runBackupToDisk(h.app.Cfg().BackupKeep)
@@ -446,7 +439,7 @@ func (h *handlers) autoBackupLoop(ctx context.Context) {
 			h.app.Log.Printf("auto-backup: %v", err)
 		} else {
 			h.app.Log.Printf("auto-backup written: %s", path)
-			go h.app.NotifyDiscord("backup")
+			h.app.Notify("backup", filepath.Base(path))
 		}
 	}
 }

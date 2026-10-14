@@ -1,372 +1,568 @@
 {
-  "chapters": [
+ "chapters": [
+  {
+   "id": "start",
+   "title": "Primii pași",
+   "intro": "Managerul este un singur program care rulează lângă serverul DayZ și vă oferă un panou de control în loc de Notepad și fișiere .bat. Există două versiuni cu aceleași setări: dayz-manager-panel se deschide în propria fereastră, dayz-manager-web în browser. Nu instalează nimic în sistem — ștergeți fișierul și totul rămâne ca înainte.",
+   "steps": [
     {
-      "id": "start",
-      "title": "Primii pași",
-      "intro": "Managerul este un singur .exe care rulează lângă serverul tău DayZ și îți oferă un panou web în loc de Notepad și fișiere .bat. Nu instalează nimic în sistem: ștergi .exe-ul și totul rămâne cum a fost.",
-      "steps": [
-        {
-          "title": "Pune exe-ul în folderul serverului",
-          "body": "Copiază dayz-manager.exe lângă DayZServer_x64.exe și serverDZ.cfg, apoi rulează-l. Se deschide o consolă, iar browserul ajunge la http://127.0.0.1:8787."
-        },
-        {
-          "title": "Indică-i clientul tău DayZ",
-          "body": "La prima pornire ți se cere folderul *clientului* DayZ — instalarea jocului care conține folderul !Workshop. Acolo descarcă Steam modurile și este singura cale prin care managerul le poate copia pe server."
-        },
-        {
-          "title": "Pornește serverul",
-          "body": "Apasă Pornește în panou. Dacă lipsește DayZServer_x64.exe sau un mod este stricat, serverul se închide, iar motivul îl vezi în secțiunea Jurnale."
-        }
-      ],
-      "tips": [
-        "Panoul nu are autentificare. Lasă-l pe Local dacă nu ai încredere în rețeaua ta; pentru acces de la distanță pune în față un reverse proxy cu parolă.",
-        "Aproape toate editoarele refuză să salveze cât timp serverul rulează — DayZ își blochează propriile fișiere. Oprește serverul; panoul îți spune când acesta este motivul."
-      ]
+     "title": "Puneți-l în folderul serverului",
+     "body": "Copiați dayz-manager-panel.exe (sau dayz-manager-web.exe) lângă DayZServer_x64.exe și serverDZ.cfg și porniți-l. Panoul se deschide în propria fereastră; versiunea de browser deschide în schimb http://127.0.0.1:8787. Pe Linux folosiți fișierele -linux de lângă binarul DayZServer."
     },
     {
-      "id": "mods",
-      "title": "Moduri",
-      "intro": "Modurile DayZ ajung în folderul !Workshop al clientului tău imediat ce te abonezi pe Steam. Un server are nevoie de propria copie a fiecărui mod, de fișierul .bikey în folderul keys și de mod în parametrul -mod. Managerul face toate trei.",
-      "steps": [
-        {
-          "title": "Abonează-te mai întâi pe Steam",
-          "body": "Managerul copiază moduri, nu le descarcă. Abonează-te la mod în Steam Workshop și lasă launcherul DayZ să îl aducă în !Workshop."
-        },
-        {
-          "title": "Instalează-l pe server",
-          "body": "Deschide Moduri: acolo apare tot ce se află în !Workshop. Instalează copiază modul în folderul serverului și sincronizează automat .bikey-ul. Sincronizează tot rezolvă întreaga listă dintr-o dată."
-        },
-        {
-          "title": "Activează-l pentru pornire",
-          "body": "A instala nu înseamnă a încărca. Comutatorul Moduri de pe un rând adaugă modul la -mod. Folosește comutatorul Partea serverului doar pentru moduri pe care clienții NU trebuie să le aibă (unelte de administrare)."
-        },
-        {
-          "title": "Atenție la ordinea de încărcare",
-          "body": "Trage rândurile astfel încât framework-urile să fie primele: @CF înaintea a tot ce depinde de el, Expansion Core înaintea addon-urilor sale. O ordine greșită este o cauză foarte frecventă a serverului care nu pornește."
-        }
-      ],
-      "tips": [
-        "Actualizează copiază fișierele mai noi din !Workshop pe server. Activează Actualizează modurile la fiecare repornire în Setări ca să se întâmple singur.",
-        "La dezinstalare, .bikey-ul se șterge doar dacă niciun alt mod instalat nu folosește aceeași cheie: cheile comune (Expansion) rămân la locul lor.",
-        "Dacă un mod aduce pradă, apasă Caută tipuri de pradă pe rândul lui: managerul găsește types.xml-ul modului și îl înregistrează pentru tine."
-      ]
+     "title": "Alegeți sursa modurilor",
+     "body": "La prima pornire alegeți sursa modurilor: *clientul* DayZ (folderul lui !Workshop, unde Steam descarcă modurile), orice folder cu @moduri sau workshop/content/221100 de la SteamCMD, ori Doar server pentru un hosting fără joc — atunci încărcați modurile singur și actualizarea automată este oprită. Se poate schimba ulterior în Setări."
     },
     {
-      "id": "economy",
-      "title": "Prada și economia",
-      "intro": "Economia centrală a DayZ decide ce există în lume și în ce cantitate. types.xml este lista principală: o intrare per clasă de obiect, cu câte trebuie să existe și unde pot apărea. Greșirea acestor numere este motivul obișnuit pentru care un server pare gol sau se îneacă în pradă.",
-      "steps": [
-        {
-          "title": "Înțelege cele patru numere",
-          "body": "nominal este cantitatea țintă pe care serverul încearcă să o mențină în lume. min este pragul care declanșează reapariția. lifetime este câte secunde supraviețuiește un obiect neatins. restock este cât așteaptă serverul înainte de a-l completa. nominal = 0 înseamnă că obiectul nu apare niciodată."
-        },
-        {
-          "title": "Editează direct în tabel",
-          "body": "nominal, min, lifetime și categoria se editează chiar în rând; rândurile modificate rămân evidențiate până apeși Salvează modificările. Editează deschide obiectul complet: usages, values, tags și flags."
-        },
-        {
-          "title": "usage și value = unde apare",
-          "body": "usage este tipul clădirii (Military, Police, Farm…), value este nivelul prăzii (Tier1 este coasta, Tier4 interiorul adânc și militarul). Un obiect fără usage nu are unde să apară. Ambele nume trebuie să existe în cfglimitsdefinition.xml."
-        },
-        {
-          "title": "Folosește șabloane pentru lucrul în masă",
-          "body": "Selectează rânduri, apoi apasă un șablon de apariție: usage/value/tags ale lui se aplică tuturor deodată. Mult mai rapid decât editarea a sute de intrări manual."
-        }
-      ],
-      "tips": [
-        "Ține-ți obiectele proprii într-un fișier de types separat, în loc să modifici types.xml original: managerul îl înregistrează în cfgeconomycore.xml, iar o actualizare a jocului nu îl poate suprascrie.",
-        "Rulează validatorul după orice editare în masă. Corectarea lui automată adaugă numele usage/value/tag necunoscute în cfglimitsdefinition.xml, exact ceea ce face prada modată să înceapă să apară."
-      ]
-    },
-    {
-      "id": "attachments",
-      "title": "Accesorii pentru arme",
-      "intro": "cfgspawnabletypes.xml decide cu ce apare o armă: încărcător, lunetă, pat. Este construit din sloturi, iar numerele înseamnă două lucruri diferite — aici greșesc toți.",
-      "steps": [
-        {
-          "title": "Un slot este o aruncare de zar",
-          "body": "Fiecare slot are o șansă: 1.0 înseamnă că apare mereu ceva, 0.35 înseamnă în 35 % din cazuri."
-        },
-        {
-          "title": "Obiectele dintr-un slot concurează",
-          "body": "Numărul de pe fiecare obiect este o greutate relativă, nu un procent: DayZ alege EXACT UN obiect din slot. Greutățile 60 și 40 într-un slot de 0.35 înseamnă de fapt 21 % și 14 %. Panoul îți arată acel număr real ca să nu fie nevoie să-l calculezi."
-        },
-        {
-          "title": "Pornește de la un șablon",
-          "body": "Alege un șablon de armă (AKM, M4-A1, Mosin…) și ajustează-l. Numele de clasă se completează din types.xml-ul tău, iar tot ce lipsește de acolo este semnalat: o greșeală de tastare este motivul obișnuit pentru care un accesoriu nu apare niciodată."
-        }
-      ],
-      "tips": [
-        "Un slot pentru fiecare piesă: unul pentru încărcătoare, unul pentru lunete, unul pentru pat. Un încărcător și o lunetă în același slot înseamnă că arma primește una sau alta, niciodată ambele.",
-        "Se rescrie doar intrarea pe care o editezi: comentariile și formatarea din restul fișierului se păstrează."
-      ]
-    },
-    {
-      "id": "loadout",
-      "title": "Echipamentul jucătorului",
-      "intro": "Stabilește ce poartă și ce are asupra sa un jucător în momentul reapariției. Vanilla fixează asta în init.c-ul misiunii; panoul folosește în schimb preseturile de echipament de spawn ale DayZ și pornește tot sistemul pentru tine.",
-      "steps": [
-        {
-          "title": "Activează sistemul",
-          "body": "Deschide Echipamentul jucătorului. Dacă misiunea încă generează jucători din init.c, pagina o spune și oferă un buton care creează un preset inițial, îl înregistrează în cfggameplay.json și pornește comutatorul enableCfgGameplayFile — totul odată."
-        },
-        {
-          "title": "Editează hainele și echipamentul",
-          "body": "Fiecare preset arată ce se poartă pe sloturi (Corp, Picioare, Tălpi…) și ce se cară liber. Adaugă obiecte după numele clasei, setează o pondere de spawn când un slot trebuie să aleagă între mai multe și alege o stare — impecabil, uzat, deteriorat sau un interval propriu."
-        },
-        {
-          "title": "Testare aleatorie și partajare",
-          "body": "Apasă Testare aleatorie pentru a extrage un spawn și a vedea exact ce primește un jucător, inclusiv personajul. Exportă un preset într-un fișier pentru alt server și importă-l înapoi."
-        }
-      ],
-      "tips": [
-        "healthMin/healthMax sunt fracțiuni de sănătate: 1.0 e impecabil, 0.0 e distrus. Ține totul impecabil ca spawnurile noi să nu apară în haine uzate.",
-        "Echipamentul se salvează cu serverul oprit, ca orice modificare de config — pornește serverul din nou după aceea."
-      ]
-    },
-    {
-      "id": "rcon",
-      "title": "RCon, jucători și anunțuri",
-      "intro": "RCon este consola la distanță a BattlEye: lista jucătorilor în timp real, excluderi, interdicții și mesaje în chat. Are nevoie de o parolă pe care BattlEye o citește din beserver_x64.cfg la pornirea serverului.",
-      "steps": [
-        {
-          "title": "Setează parola",
-          "body": "Scrie-o în secțiunea RCon. Managerul o scrie în battleye/beserver_x64.cfg, creând fișierul dacă e nevoie."
-        },
-        {
-          "title": "Repornește serverul",
-          "body": "BattlEye citește acel fișier doar la lansare, așa că o parolă nouă nu face nimic până la următoarea repornire. Este normal, nu este o eroare."
-        },
-        {
-          "title": "Anunțuri și programare",
-          "body": "Anunțurile programate pornesc la o oră din zi; cele pe interval se repetă la fiecare N minute. Ambele trec prin RCon, deci parola trebuie să funcționeze."
-        }
-      ],
-      "tips": [
-        "Avertismentele de repornire folosesc tot RCon. Fără parolă repornirea are loc oricum — jucătorii pur și simplu nu văd numărătoarea inversă.",
-        "Secțiunea Jucători construiește un istoric din jurnalul de administrare: nume, GUID, timp jucat, eliminări. Necesită parametrul -adminlog activat în Setări."
-      ]
-    },
-    {
-      "id": "weather",
-      "title": "Vremea și ora",
-      "intro": "Vremea este definită în cfgweather.xml al misiunii, pe care DayZ îl citește o singură dată la încărcare: schimbările de vreme cer mereu o repornire, iar fără mod nu există cale de a programa „ploaie la 20:00”.",
-      "steps": [
-        {
-          "title": "Alege un preset sau reglează manual",
-          "body": "Un preset fix fixează vremea ca să rămână pe loc. Dinamic o lasă să varieze singură."
-        },
-        {
-          "title": "Alege cât de lin se schimbă",
-          "body": "Viteza tranziției controlează cât de treptat se schimbă vremea: Lin durează aproximativ o jumătate de oră în pași mici, ca în jocul original. Rapid parcurge tot intervalul în două minute, exact ceea ce face vremea să pară un întrerupător."
-        },
-        {
-          "title": "Setează lungimea zilei",
-          "body": "Accelerarea zilei și a nopții multiplică trecerea timpului din joc: 12 înseamnă că o zi completă durează două ore reale. Noaptea este separată, ca să o poți ține scurtă."
-        }
-      ],
-      "tips": [
-        "Densitatea furtunii contează doar când ploaia și înnorarea sunt suficiente pentru ca o furtună să se declanșeze.",
-        "Ninsoarea apare doar pe hărțile care o suportă, precum Sakhal."
-      ]
-    },
-    {
-      "id": "maintenance",
-      "title": "Menținerea în stare bună",
-      "intro": "Trei lucruri salvează serverele: copiile de rezervă, validatorul și obiceiul de a citi cu adevărat jurnalele când ceva se strică.",
-      "steps": [
-        {
-          "title": "Activează copiile automate",
-          "body": "Setările pot scrie un zip cu configurațiile și fișierele misiunii după un program și pot păstra cele mai recente N. În plus, fiecare fișier pe care panoul îl suprascrie primește alături un .bak cu marcaj de timp."
-        },
-        {
-          "title": "Validează înainte de repornire",
-          "body": "Validatorul parcurge toate XML-urile misiunii, verifică acoladele din .cfg, confirmă că fișierele listate în cfgeconomycore.xml există și semnalează numele de tip duplicate."
-        },
-        {
-          "title": "Citește jurnalul potrivit",
-          "body": "Fișierul .RPT înregistrează ce a făcut serverul însuși: o cădere sau un mod care nu se încarcă apar acolo. Fișierul .ADM înregistrează ce au făcut jucătorii."
-        }
-      ],
-      "tips": [
-        "Ștergerea elimină starea salvată a lumii: jucători, vehicule, baze. Tabelele de pradă și configurațiile rămân neatinse. Folderele sunt mai întâi mutate deoparte, așa că o ștergere din greșeală poate fi recuperată manual.",
-        "Watchdogul repornește serverul dacă acesta se închide singur. După trei căderi în cinci minute se oprește și afișează un banner: o buclă de căderi are nevoie de un om, nu de încă o repornire."
-      ]
-    },
-    {
-      "id": "health",
-      "title": "Starea serverului",
-      "intro": "O pagină care răspunde dintr-o privire dacă e ceva în neregulă, plus uneltele să ții serverul ordonat: anulează o modificare proastă de config și eliberează spațiu pe disc.",
-      "steps": [
-        {
-          "title": "Citește plăcile de stare",
-          "body": "Pagina Starea serverului arată patru plăci — serverul e pornit (sau blocat într-o buclă de blocări), există spațiu pe disc, configul e valid și, dacă nu pornește, de ce. Fiecare placă duce la pagina care rezolvă."
-        },
-        {
-          "title": "Anulează o modificare",
-          "body": "Managerul salvează fiecare fișier de config înainte de scriere. Pagina Istoric listează acele instantanee pe fișier, cu o comparație a ceea ce ar readuce o restaurare și restaurare dintr-un clic — plasa ta de siguranță după o editare proastă."
-        },
-        {
-          "title": "Eliberează spațiu",
-          "body": "Pe pagina de stare un clic șterge jurnalele serverului și dump-urile de blocare (cele mai noi RPT și ADM se păstrează) sau backup-urile vechi de config, ca un server de lungă durată să nu umple discul în tăcere."
-        }
-      ],
-      "tips": [
-        "Placa de validitate rulează validatorul complet, care pe o misiune mare durează o clipă — se completează la o secundă-două după celelalte.",
-        "Restaurarea unui backup necesită serverul oprit, ca orice modificare de config."
-      ]
-    },
-    {
-      "id": "remote",
-      "title": "Acces de pe telefon sau alt PC",
-      "intro": "În mod implicit panoul răspunde doar pe această mașină. Trecerea expunerii pe Rețea locală îl face accesibil de pe orice se află în aceeași rețea Wi-Fi.",
-      "steps": [
-        {
-          "title": "Schimbă expunerea",
-          "body": "Setări → Expunerea panoului → Rețea locală, apoi repornește managerul. Cardul Acces în rețea afișează atunci adresele exacte."
-        },
-        {
-          "title": "Permite-l în firewall",
-          "body": "Windows întreabă o dată. Dacă un telefon nu se poate conecta, permite managerul pentru rețele private în Firewallul Windows."
-        }
-      ],
-      "tips": [
-        "Autentificare tot nu există. Nu expune niciodată panoul direct pe internet: pune în față Caddy sau nginx cu parolă."
-      ]
-    },
-    {
-      "id": "presets",
-      "title": "Economia prăzii și preseturi",
-      "intro": "Pe lângă editarea articolelor unul câte unul, trei instrumente modelează prada în masă: un panou care arată ce generează harta, scalarea întregului fișier dintr-un clic și preseturi reutilizabile pe care le legi de articole după nume.",
-      "steps": [
-        {
-          "title": "Vezi forma prăzii tale",
-          "body": "Deschide Economia prăzii pentru a totaliza nominal și min ale fiecărui articol și a le împărți pe categorie, nivel și utilizare — cel mai rapid mod de a observa o hartă înecată într-un lucru și lipsită de altul."
-        },
-        {
-          "title": "Scalează dintr-un clic",
-          "body": "Preseturile de reglare înmulțesc toate valorile nominal și min deodată — ×2 pentru un server bogat în pradă, ×0.5 pentru hardcore. ×1 restaurează valorile de dinainte de prima scalare, deci mereu reversibil."
-        },
-        {
-          "title": "Reutilizează grupuri cu preseturi",
-          "body": "Un preset este un grup de articole cu nume și o șansă de apariție. Creează unul pe pagina Preseturi, apoi referențiază-l după nume din slotul de accesoriu al unei arme sau din cargo-ul unui recipient în loc să repeți aceeași listă."
-        }
-      ],
-      "tips": [
-        "Scalarea și preseturile scriu fișiere ale misiunii, deci serverul trebuie oprit pentru a le salva."
-      ]
+     "title": "Pornește serverul",
+     "body": "Apasă Pornește în panou. Dacă lipsește DayZServer_x64.exe sau un mod este stricat, serverul se închide, iar motivul îl vezi în secțiunea Jurnale."
     }
-  ],
-  "help": {
-    "weather.overcast": "Înnorare, 0–100%. Mai mare = mai gri și mai întunecat; activează și ploaia — ploaia are nevoie de înnorare peste ~70%.",
-    "weather.fog": "Densitatea ceții, 0–100%. Ceața deasă reduce mult vizibilitatea — tensionat pentru loot, greu pentru lunetiști.",
-    "weather.rain": "Intensitatea ploii, 0–100%. Cade cu adevărat doar la înnorare suficientă; udă jucătorul și maschează sunetul.",
-    "weather.snowfall": "Intensitatea ninsorii, 0–100% (vizibilă mai ales pe hărți cu zăpadă precum Sakhal).",
-    "weather.wind": "Viteza vântului în m/s. Mișcă norii și, cu opțiunea dinamică, cât de repede se schimbă vremea.",
-    "events.lifetime": "Secunde cât un grup apărut rămâne în lume înainte să dispară dacă nu e atins.",
-    "events.restock": "Secunde până când un eveniment curățat sau epuizat apare din nou. 0 = reaprovizionează imediat ce poate.",
-    "events.saveable": "1 = grupul apărut este scris în persistență și supraviețuiește unei reporniri; 0 = regenerat la fiecare pornire.",
-    "moddrift.help.ships": "Câte tipuri de pradă definește fișierul types propriu al acestui mod.",
-    "moddrift.help.active": "Câte dintre acele tipuri sunt de fapt în economia ta (types.xml + moded_types).",
-    "moddrift.help.missing": "Tipuri pe care modul le aduce dar economia ta nu le are — nu vor apărea până nu sunt îmbinate.",
-    "leaderboard.metrics": "Alege după ce se face clasamentul: timp total de joc, ucideri, raport ucideri/morți sau număr de sesiuni.",
-    "server.hostname": "Numele serverului afișat în browserul DayZ. Ține-l scurt și ușor de căutat.",
-    "server.password": "Parola de intrare. Goală = server public; seteaz-o pentru a-l face privat.",
-    "server.passwordAdmin": "Parola de admin în joc (#login). Diferită de cea RCon — ține-o secretă.",
-    "server.timeAccel": "Multiplicator viteză zi (1 = timp real, 24 = o zi într-o oră). Interval ~0.1–64.",
-    "server.nightTimeAccel": "Multiplicator suplimentar de viteză noaptea peste cel de zi, ca nopțile să treacă mai repede.",
-    "server.timePersistent": "Păstrează ora lumii între reporniri (1) în loc să o reseteze la serverTime (0).",
-    "server.whitelist": "Doar jucătorii din listă pot intra. Lasă oprit dacă nu ții un fișier whitelist.",
-    "server.forceSameBuild": "Cere clienților exact aceeași versiune de joc (1). Previne crash-urile din nepotrivire de versiune.",
-    "server.storageAutoFix": "Lasă DayZ să repare un storage de persistență corupt la încărcare (1) în loc să eșueze.",
-    "server.loginQueue": "Câți jucători se conectează simultan și așteaptă la coadă — atenuează valurile de intrare.",
-    "economy.items": "Câte tipuri distincte de articole definește acest fișier.",
-    "economy.nominal": "Suma nominal a fiecărui articol — cantitatea-țintă pe care harta încearcă să o mențină generată.",
-    "economy.categories": "Câte categorii de pradă (arme, mâncare, unelte…) apar în acest fișier.",
-    "economy.min": "Suma min a fiecărui articol — pragul până la care economia reface fiecare articol.",
-    "economy.tune": "Scalare într-un clic a tuturor nominal/min din fișier. ×2 = de două ori mai multă pradă; ×1 restaurează originalele.",
-    "types.nominal": "Câte exemplare din acest obiect încearcă serverul să mențină simultan în lume. 0 înseamnă că nu apare niciodată.",
-    "types.min": "Când cantitatea scade la această valoare, serverul programează o reapariție. Nu trebuie să depășească nominal: DayZ o reduce și notează un avertisment.",
-    "types.lifetime": "Secunde cât supraviețuiește un obiect neatins înainte să dispară. 3888000 înseamnă 45 de zile.",
-    "types.restock": "Secunde pe care serverul le așteaptă înainte să completeze acest obiect. 0 înseamnă imediat.",
-    "types.usage": "În ce tipuri de clădiri poate apărea obiectul (Military, Police, Farm…). Fără usage nu are unde să apară.",
-    "types.value": "Nivelul prăzii: Tier1 este coasta, Tier4 interiorul adânc și militarul. Determină cât de departe de punctul de pornire apare obiectul.",
-    "types.quant": "Nivelul de umplere în procente pentru obiecte cu cantitate (băuturi, combustibil). -1 dezactivează, altfel 0–100.",
-    "types.bulk": "Aplică aceste valori tuturor rândurilor selectate deodată. Se schimbă doar câmpurile pe care le completezi.",
-    "types.category": "Grupează obiectul pentru sistemul de pradă (weapons, food, clothes…). Numele trebuie să existe în cfglimitsdefinition.xml, altfel DayZ renunță la intrare.",
-    "types.tag": "Precizează unde anume în clădire ajunge obiectul: podea, rafturi, pământ. Fără etichetă poate folosi orice suprafață permisă de usage.",
-    "types.cost": "Prioritatea apariției când sunt mai mulți candidați decât locuri. Câștigă cel mai mare. Nu sunt bani și jucătorii nu îl văd niciodată.",
-    "types.flags": "count_in_cargo / count_in_hoarder / count_in_map / count_in_player decid dacă obiectele păstrate într-un cort, o mașină sau un rucsac se numără la nominal. Dezactivate, serverul continuă să genereze altele deși jucătorii le-au adunat deja.",
-    "mods.serverSide": "Încarcă modul cu -serverMod în loc de -mod: rulează pe server, iar clienții nici nu au nevoie de el, nici nu îl primesc. Doar pentru unelte de administrare — un mod de pradă sau conținut nu funcționează așa.",
-    "mods.order": "DayZ încarcă modurile de la stânga la dreapta. Framework-urile merg primele: @CF înaintea a tot ce depinde de el, Expansion Core înaintea addon-urilor sale. Ordinea greșită este o cauză frecventă a serverului care nu pornește.",
-    "mods.update": "Copiază fișiere mai noi din !Workshop-ul clientului pe server. Managerul nu poate descărca moduri: abonează-te mai întâi pe Steam.",
-    "mods.scan": "Caută în mod un types.xml și îl înregistrează în cfgeconomycore.xml, ca prada modului să apară cu adevărat.",
-    "mods.uninstall": "Elimină folderul modului de pe server. Fișierul .bikey se șterge doar dacă niciun alt mod instalat nu folosește aceeași cheie: cheile comune, precum cele Expansion, supraviețuiesc.",
-    "mods.profiles": "Salvează sub un nume setul curent de moduri active, ca să comuți între o configurație cu moduri și una originală fără să reactivezi tot.",
-    "weather.transition": "Cât de treptat se schimbă vremea. Lin durează aproximativ o jumătate de oră în pași mici, ca DayZ original. Rapid poate parcurge tot intervalul în două minute, exact ceea ce face vremea să pară un întrerupător.",
-    "weather.dynamic": "Oprit fixează vremea acolo unde o setezi. Pornit lasă serverul să o modifice singur în limitele date.",
-    "weather.accel": "Multiplică trecerea timpului din joc. 12 înseamnă că o zi completă durează două ore reale. Noaptea este separată ca să o poți ține scurtă.",
-    "weather.storm": "Are efect doar când ploaia și înnorarea sunt suficient de mari pentru ca o furtună să se declanșeze.",
-    "weather.timePreset": "Fixează ora din joc la pornirea serverului. SystemTime urmează ceasul PC-ului tău; o valoare fixă pornește harta mereu la aceeași oră.",
-    "rcon.password": "Se scrie în battleye/beserver_x64.cfg. BattlEye citește acel fișier doar la lansare, deci o parolă nouă are efect abia după o repornire.",
-    "attach.slotChance": "Probabilitatea ca în acest slot să apară ceva. 1.0 = întotdeauna, 0.35 = în 35 % din cazuri.",
-    "attach.itemWeight": "Este o greutate relativă, nu un procent: DayZ alege EXACT UN obiect din slot. Greutățile 60 și 40 înseamnă 60 % și 40 % din șansa slotului.",
-    "settings.restart": "Repornește serverul după un program. Jucătorii primesc înainte avertismente prin RCon, ceea ce cere o parolă RCon setată.",
-    "settings.watchdog": "Repornește serverul dacă acesta se închide singur. După trei căderi în cinci minute se oprește și afișează un banner: o buclă de căderi are nevoie de un om, nu de încă o repornire.",
-    "settings.backup": "Arhivează configurațiile și fișierele misiunii după un program și păstrează cele mai recente N. Separat, fiecare fișier suprascris de panou primește alături un .bak cu marcaj de timp.",
-    "settings.exposure": "Local înseamnă că doar acest PC poate deschide panoul. Rețea locală îl face accesibil de pe telefon. Panoul nu are autentificare: nu îl expune niciodată direct pe internet.",
-    "settings.adminlog": "Activează -adminlog, care scrie fișierul .ADM. Pagina Jucători și lista de eliminări se construiesc din el și rămân goale fără acesta.",
-    "validator.autofix": "Adaugă numele necunoscute de usage/value/tag/category în cfglimitsdefinition.xml. De obicei tocmai asta face prada modată să înceapă să apară: numele trebuie să existe acolo, altfel DayZ ignoră intrarea.",
-    "validator.severity": "Erorile strică ceva acum. Avertismentele sunt tolerate de DayZ, dar de obicei înseamnă că configurația nu face ce ai vrut.",
-    "wipe": "Șterge starea salvată a lumii: jucători, vehicule, baze. Tabelele de pradă și configurațiile rămân neatinse. Folderele sunt mutate deoparte, nu șterse, așa că o greșeală poate fi anulată manual.",
-    "events.nominal": "Câte evenimente de acest tip menține serverul simultan. Vehiculele, prăbușirile de elicopter, turmele de animale și grupurile de infectați sunt toate evenimente.",
-    "events.minmax": "min și max limitează mărimea grupului la o apariție. max=0 înseamnă nelimitat: de aceea evenimentele ambientale originale au min=100 max=0.",
-    "events.children": "Clasele de obiecte pe care le generează acest eveniment, cu propriile intervale de pradă. Editarea lor manuală este rostul editorului Mission DB.",
-    "events.active": "0 oprește evenimentul păstrându-i configurația. Așa vin evenimentele sezoniere (Crăciun, Halloween) în jocul original.",
-    "server.maxPlayers": "Locuri de jucători. Creșterea numărului nu îți crește hardware-ul: fiecare loc costă RAM și procesor, iar DayZ devine instabil cu mult înainte ca majoritatea mașinilor să se epuizeze.",
-    "server.instanceId": "Ce salvare folosește serverul. Dacă o schimbi, serverul pornește într-o lume complet nouă; salvarea veche rămâne pe disc cu propriul id.",
-    "server.steamQueryPort": "Portul pe care Steam îl folosește pentru a-ți lista serverul. Trebuie să fie liber și redirecționat, altfel serverul merge, dar nu apare niciodată în listă.",
-    "server.verifySignatures": "2 înseamnă că fiecare fișier de mod trebuie semnat cu o cheie din keys/. Coborârea la 0 permite moduri nesemnate — și clienți modificați. Lasă-l pe 2.",
-    "server.thirdPerson": "1 impune doar persoana întâi. Schimbă modul de joc mai mult decât orice altă setare, așa că decide înainte de a-ți construi o comunitate.",
-    "server.von": "Chatul vocal din joc. Dezactivarea îl elimină complet, inclusiv radioul.",
-    "server.respawnTime": "Secunde pe care un jucător trebuie să le aștepte pentru a renaște după moarte. Valorile mari descurajează sinuciderea pentru a re-extrage punctul de apariție.",
-    "server.mission": "Ce folder de misiune din mpmissions/ încarcă serverul. Așa se schimbă harta: chernarusplus, enoch (Livonia), sakhal.",
-    "gameplay.file": "cfggameplay.json suprascrie reguli de joc: rezistență, construire, comportamentul hărții. DayZ ignoră întregul fișier la o singură eroare de sintaxă, de aceea este validat înainte de salvare.",
-    "battleye.bans": "O interdicție pe linie: GUID sau IP, minute (-1 = permanent), motiv. Salvarea pe un server pornit reîncarcă interdicțiile prin RCon, fără repornire.",
-    "logs.rpt": "Ce a făcut serverul însuși: pornire, încărcarea modurilor, erori de script, căderi. Acesta este fișierul de citit când serverul nu pornește.",
-    "logs.adm": "Ce au făcut jucătorii: conectări, chat, eliminări, poziții. Necesită parametrul -adminlog; pagina Jucători se construiește din el.",
-    "backup.restore": "Restaurează configurațiile și fișierele misiunii dintr-un zip. Serverul trebuie oprit: în funcțiune blochează aceste fișiere.",
-    "sync.import": "Copiază setări de la o altă instalare a managerului. Valorile existente sunt suprascrise, așa că fă o copie mai întâi dacă nu ești sigur.",
-    "attach.class": "Clasa pe care o configurează această intrare. Nu trebuie să fie neapărat o armă: cfgspawnabletypes.xml acoperă și îmbrăcămintea, rucsacurile, lăzile, butoaiele și vehiculele.",
-    "attach.cargo": "Cargo apare ÎN interiorul obiectului: conținutul unui rucsac, prada dintr-o ladă, portbagajul unei mașini. Accesoriile se montează PE el. Jumătate din fișierul original este cargo, nu accesorii.",
-    "attach.hoarder": "Marchează intrarea drept depozitare permanentă — butoaie, corturi, ascunzători. DayZ numără ce pun jucătorii înăuntru la limita depozitelor, nu la prada din lume.",
-    "attach.damage": "Starea în care apare obiectul, de la 0.0 (impecabil) la 1.0 (distrus). Lasă ambele goale pentru a păstra valoarea implicită DayZ.",
-    "attach.tags": "Restrânge unde se aplică intrarea, de ex. floor sau shelves. Separate prin virgulă. Majoritatea nu au nevoie de niciuna.",
-    "diag": "Potrivire de tipare în cel mai recent RPT și în jurnalul managerului. Recunoaște puținele defecțiuni care chiar opresc un server DayZ; restul cere în continuare jurnalul brut, deci un rezultat gol nu este un certificat de sănătate.",
-    "wipe.undo": "O ștergere mută folderele lumii în .dayz-manager/wipes/<marcaj de timp>/ în loc să le elimine, rămânând reversibilă — până când serverul reconstruiește starea, pentru că atunci readucerea lumii vechi ar îngropa-o pe cea nouă.",
-    "diag.mod_missing.title": "Un mod din -mod lipsește de pe server",
-    "diag.mod_missing.detail": "DayZ nu a putut deschide {subject}. Modul este în parametrii de pornire, dar folderul lui lipsește sau este incomplet — instalează-l sau resincronizează-l în pagina Moduri și pornește din nou.",
-    "diag.mod_missing_generic.title": "Lipsește un fișier de care serverul are nevoie",
-    "diag.mod_missing_generic.detail": "DayZ nu a putut deschide {subject}. Verifică dacă există calea și dacă vreun antivirus nu l-a pus în carantină.",
-    "diag.bad_signature.title": "Un fișier al modului nu este semnat sau cheia nu se potrivește",
-    "diag.bad_signature.detail": "{subject} nu a trecut verificarea de semnătură BattlEye. Resincronizează .bikey în pagina Moduri — NU coborî verifySignatures, ar lăsa să intre și clienți modificați.",
-    "diag.script_error.title": "Un script nu s-a compilat",
-    "diag.script_error.detail": "Serverul s-a oprit la compilarea scripturilor. Liniile imediat următoare din RPT indică fișierul și numărul liniei — de obicei un mod care nu corespunde versiunii curente DayZ.",
-    "diag.mission_missing.title": "Misiunea din server.cfg nu există",
-    "diag.mission_missing.detail": "Șablonul numit în serverDZ.cfg nu are folder în mpmissions/. Alege o misiune existentă în pagina Server.",
-    "diag.port_busy.title": "Portul serverului este deja ocupat",
-    "diag.port_busy.detail": "Alt proces ține portul — cel mai adesea un server DayZ anterior care nu s-a închis complet. Așteaptă câteva secunde sau schimbă portul în pagina Server.",
-    "diag.config_parse.title": "serverDZ.cfg este deteriorat",
-    "diag.config_parse.detail": "Analizatorul s-a oprit prea devreme. Cauza uzuală este un punct și virgulă lipsă sau o acoladă neînchisă; validatorul verifică echilibrul acoladelor.",
-    "diag.no_economy.title": "Economia centrală nu s-a încărcat",
-    "diag.no_economy.detail": "Serverul poate rula, dar nu va genera pradă. Rulează validatorul: de regulă lipsește un fișier referit în cfgeconomycore.xml sau un nume usage/value este necunoscut.",
-    "diag.missing_key.title": "Lipsește o cheie de mod din keys/",
-    "diag.missing_key.detail": "Jucătorii cu acel mod vor fi dați afară pentru semnătură invalidă. Folosește „Sincronizează cheile” în pagina Moduri.",
-    "loadout": "Ce poartă și ce duce cu el un jucător la reapariție. Sunt preseturile spawn-gear DayZ, înregistrate în cfggameplay.json — modificările au efect după repornirea serverului. În vanilla echipamentul este în init.c, de aceea o misiune nouă nu arată nimic aici până nu activezi sistemul.",
-    "loadout.weight": "Greutatea acestui preset față de celelalte. DayZ alege UN preset per apariție, deci unul cu greutate 3 e de trei ori mai probabil decât unul cu greutate 1.",
-    "loadout.characters": "Cărui model de personaj i se aplică presetul (SurvivorM_Mirek, SurvivorF_Eva, …). Gol = tuturor; se alege unul la întâmplare per apariție.",
-    "loadout.worn": "Obiecte puse pe corp, slot cu slot. Într-un slot DayZ alege UN obiect după greutate, deci mai multe variante dau varietate de la o apariție la alta.",
-    "loadout.carried": "Obiecte libere puse direct în inventarul noului jucător, nu într-un slot de îmbrăcăminte — cârpe, mâncare, o unealtă de început.",
-    "loadout.condition": "Starea în care apare un obiect. În DayZ 1.0 = impecabil și 0.0 = distrus, deci mai mare e mai bine. „Impecabil” păstrează echipamentul inițial nou; alege „Personalizat” ca să fixezi un interval de sănătate min–max exact, iar obiectul apare undeva în el."
+   ],
+   "tips": [
+    "Dacă folosiți panoul doar pe acest PC, nu aveți nevoie de parolă. Ca să-l deschideți de pe telefon sau din alt loc, setați mai întâi autentificarea în panou — la configurarea inițială sau în Setări → Autentificare în panou.",
+    "Aproape toate editoarele refuză să salveze cât timp serverul rulează — DayZ își blochează propriile fișiere. Oprește serverul; panoul îți spune când acesta este motivul."
+   ]
+  },
+  {
+   "id": "mods",
+   "title": "Moduri",
+   "intro": "Un server are nevoie de propria copie a fiecărui mod, de .bikey-ul modului în folderul keys al serverului și de mod în parametrul de pornire -mod. Managerul face toate trei, luând modurile din sursa aleasă: !Workshop-ul clientului, un folder de moduri sau de SteamCMD ori — în modul Doar server — modurile încărcate de dvs.",
+   "steps": [
+    {
+     "title": "Abonează-te mai întâi pe Steam",
+     "body": "Managerul copiază modurile, nu le descarcă. Abonați-vă la mod în Steam Workshop și lăsați launcherul DayZ să-l descarce în !Workshop — sau descărcați-l cu SteamCMD în folderul de moduri."
+    },
+    {
+     "title": "Instalează-l pe server",
+     "body": "Deschide Moduri: acolo apare tot ce se află în !Workshop. Instalează copiază modul în folderul serverului și sincronizează automat .bikey-ul. Instalează și actualizează modurile rezolvă întreaga listă dintr-o dată."
+    },
+    {
+     "title": "Activează-l pentru pornire",
+     "body": "A instala nu înseamnă a încărca. Comutatorul Moduri de pe un rând adaugă modul la -mod. Folosește comutatorul Partea serverului doar pentru moduri pe care clienții NU trebuie să le aibă (unelte de administrare)."
+    },
+    {
+     "title": "Atenție la ordinea de încărcare",
+     "body": "Trage rândurile astfel încât framework-urile să fie primele: @CF înaintea a tot ce depinde de el, Expansion Core înaintea addon-urilor sale. O ordine greșită este o cauză foarte frecventă a serverului care nu pornește."
+    }
+   ],
+   "tips": [
+    "Actualizarea copiază fișierele mai noi din sursa modurilor pe server. Activați Actualizează modurile la fiecare repornire în Setări ca să rămână sincronizate automat.",
+    "La dezinstalare, .bikey-ul se șterge doar dacă niciun alt mod instalat nu folosește aceeași cheie: cheile comune (Expansion) rămân la locul lor.",
+    "Dacă un mod aduce pradă, apasă Adaugă loot din mod pe rândul lui: managerul găsește types.xml-ul modului și îl înregistrează pentru tine.",
+    "Pe Linux serverul încarcă doar modurile ale căror foldere și fișiere sunt cu litere mici. Managerul le redenumește la instalare și actualizare, iar pagina Moduri semnalează ce a rămas cu litere mari."
+   ]
+  },
+  {
+   "id": "economy",
+   "title": "Prada și economia",
+   "intro": "Economia centrală a DayZ decide ce există în lume și în ce cantitate. types.xml este lista principală: o intrare per clasă de obiect, cu câte trebuie să existe și unde pot apărea. Greșirea acestor numere este motivul obișnuit pentru care un server pare gol sau se îneacă în pradă.",
+   "steps": [
+    {
+     "title": "Înțelege cele patru numere",
+     "body": "nominal este cantitatea țintă pe care serverul încearcă să o mențină în lume. min este pragul care declanșează reapariția. lifetime este câte secunde supraviețuiește un obiect neatins. restock este cât așteaptă serverul înainte de a-l completa. nominal = 0 înseamnă că obiectul nu apare niciodată."
+    },
+    {
+     "title": "Editează direct în tabel",
+     "body": "nominal, min, lifetime și categoria se editează chiar în rând; rândurile modificate rămân evidențiate până apeși Salvează modificările. Editează deschide obiectul complet: usages, values, tags și flags."
+    },
+    {
+     "title": "usage și value = unde apare",
+     "body": "usage este tipul clădirii (Military, Police, Farm…), value este nivelul prăzii (Tier1 este coasta, Tier4 interiorul adânc și militarul). Un obiect fără usage nu are unde să apară. Ambele nume trebuie să existe în cfglimitsdefinition.xml."
+    },
+    {
+     "title": "Folosește șabloane pentru lucrul în masă",
+     "body": "Selectează rânduri, apoi apasă un șablon de apariție: usage/value/tags ale lui se aplică tuturor deodată. Mult mai rapid decât editarea a sute de intrări manual."
+    }
+   ],
+   "tips": [
+    "Ține-ți obiectele proprii într-un fișier de types separat, în loc să modifici types.xml original: managerul îl înregistrează în cfgeconomycore.xml, iar o actualizare a jocului nu îl poate suprascrie.",
+    "Rulează validatorul după orice editare în masă. Corectarea lui automată adaugă numele usage/value/tag necunoscute în cfglimitsdefinition.xml, exact ceea ce face prada modată să înceapă să apară."
+   ]
+  },
+  {
+   "id": "attachments",
+   "title": "Accesorii pentru arme",
+   "intro": "cfgspawnabletypes.xml decide cu ce apare o armă: încărcător, lunetă, pat. Este construit din sloturi, iar numerele înseamnă două lucruri diferite — aici greșesc toți.",
+   "steps": [
+    {
+     "title": "Un slot este o aruncare de zar",
+     "body": "Fiecare slot are o șansă: 1.0 înseamnă că apare mereu ceva, 0.35 înseamnă în 35 % din cazuri."
+    },
+    {
+     "title": "Obiectele dintr-un slot concurează",
+     "body": "Numărul de pe fiecare obiect este o greutate relativă, nu un procent: DayZ alege EXACT UN obiect din slot. Greutățile 60 și 40 într-un slot de 0.35 înseamnă de fapt 21 % și 14 %. Panoul îți arată acel număr real ca să nu fie nevoie să-l calculezi."
+    },
+    {
+     "title": "Pornește de la un șablon",
+     "body": "Alege un șablon de armă (AKM, M4-A1, Mosin…) și ajustează-l. Numele de clasă se completează din types.xml-ul tău, iar tot ce lipsește de acolo este semnalat: o greșeală de tastare este motivul obișnuit pentru care un accesoriu nu apare niciodată."
+    }
+   ],
+   "tips": [
+    "Un slot pentru fiecare piesă: unul pentru încărcătoare, unul pentru lunete, unul pentru pat. Un încărcător și o lunetă în același slot înseamnă că arma primește una sau alta, niciodată ambele.",
+    "Se rescrie doar intrarea pe care o editezi: comentariile și formatarea din restul fișierului se păstrează."
+   ]
+  },
+  {
+   "id": "loadout",
+   "title": "Echipamentul jucătorului",
+   "intro": "Stabilește ce poartă și ce are asupra sa un jucător în momentul reapariției. Vanilla fixează asta în init.c-ul misiunii; panoul folosește în schimb preseturile de echipament de spawn ale DayZ și pornește tot sistemul pentru tine.",
+   "steps": [
+    {
+     "title": "Activează sistemul",
+     "body": "Deschide Echipamentul jucătorului. Dacă misiunea încă generează jucători din init.c, pagina o spune și oferă un buton care creează un preset inițial, îl înregistrează în cfggameplay.json și pornește comutatorul enableCfgGameplayFile — totul odată."
+    },
+    {
+     "title": "Editează hainele și echipamentul",
+     "body": "Fiecare preset arată ce se poartă pe sloturi (Corp, Picioare, Tălpi…) și ce se cară liber. Adaugă obiecte după numele clasei, setează o pondere de spawn când un slot trebuie să aleagă între mai multe și alege o stare — impecabil, uzat, deteriorat sau un interval propriu."
+    },
+    {
+     "title": "Testare aleatorie și partajare",
+     "body": "Apasă Testare aleatorie pentru a extrage un spawn și a vedea exact ce primește un jucător, inclusiv personajul. Exportă un preset într-un fișier pentru alt server și importă-l înapoi."
+    }
+   ],
+   "tips": [
+    "healthMin/healthMax sunt fracțiuni de sănătate: 1.0 e impecabil, 0.0 e distrus. Ține totul impecabil ca spawnurile noi să nu apară în haine uzate.",
+    "Echipamentul se salvează cu serverul oprit, ca orice modificare de config — pornește serverul din nou după aceea."
+   ]
+  },
+  {
+   "id": "rcon",
+   "title": "RCon, jucători și anunțuri",
+   "intro": "RCon este consola la distanță a BattlEye: lista jucătorilor în timp real, excluderi, interdicții și mesaje în chat. Are nevoie de o parolă pe care BattlEye o citește din beserver_x64.cfg la pornirea serverului.",
+   "steps": [
+    {
+     "title": "Setează parola",
+     "body": "Scrie-o în secțiunea RCon. Managerul o scrie în battleye/beserver_x64.cfg, creând fișierul dacă e nevoie."
+    },
+    {
+     "title": "Repornește serverul",
+     "body": "BattlEye citește acel fișier doar la lansare, așa că o parolă nouă nu face nimic până la următoarea repornire. Este normal, nu este o eroare."
+    },
+    {
+     "title": "Anunțuri și programare",
+     "body": "Anunțurile programate pornesc la o oră din zi; cele pe interval se repetă la fiecare N minute. Ambele trec prin RCon, deci parola trebuie să funcționeze."
+    }
+   ],
+   "tips": [
+    "Avertismentele de repornire folosesc tot RCon. Fără parolă repornirea are loc oricum — jucătorii pur și simplu nu văd numărătoarea inversă.",
+    "Secțiunea Jucători construiește un istoric din jurnalul admin: nume, ID-uri de jucători, timp de joc, ucideri. Are nevoie de parametrul de pornire -adminlog (pagina Server → Parametri de pornire).",
+    "Setări → Comportament la repornire poate da kick tuturor cu un anumit timp înainte de repornire și poate bloca serverul ca nimeni să nu reintre în ultimul minut. Personajele se salvează la deconectare, deci nu se pierde nimic.",
+    "Pagina Chat păstrează o arhivă pentru fiecare zi — inclusiv mesajele trimise din panou și anunțurile programate — cu căutare și descărcare în .txt. Durata de păstrare se setează tot acolo."
+   ]
+  },
+  {
+   "id": "weather",
+   "title": "Vremea și ora",
+   "intro": "Vremea este definită în cfgweather.xml al misiunii, pe care DayZ îl citește o singură dată la încărcare: schimbările de vreme cer mereu o repornire, iar fără mod nu există cale de a programa „ploaie la 20:00”.",
+   "steps": [
+    {
+     "title": "Alege un preset sau reglează manual",
+     "body": "Un preset fix fixează vremea ca să rămână pe loc. Dinamic o lasă să varieze singură."
+    },
+    {
+     "title": "Alege cât de lin se schimbă",
+     "body": "Viteza tranziției controlează cât de treptat se schimbă vremea: Lin durează aproximativ o jumătate de oră în pași mici, ca în jocul original. Rapid parcurge tot intervalul în două minute, exact ceea ce face vremea să pară un întrerupător."
+    },
+    {
+     "title": "Setează lungimea zilei",
+     "body": "Accelerarea zilei și a nopții multiplică trecerea timpului din joc: 12 înseamnă că o zi completă durează două ore reale. Noaptea este separată, ca să o poți ține scurtă."
+    }
+   ],
+   "tips": [
+    "Densitatea furtunii contează doar când ploaia și înnorarea sunt suficiente pentru ca o furtună să se declanșeze.",
+    "Ninsoarea apare doar pe hărțile care o suportă, precum Sakhal."
+   ]
+  },
+  {
+   "id": "maps",
+   "title": "Hărți, evenimente și vehicule",
+   "intro": "Tot ce se întâmplă pe hartă stă în folderul misiunii. Aceste pagini îl citesc direct: relieful, nivelurile de loot, clădirile și zonele contaminate sunt desenate din propriile fișiere ale misiunii, deci harta se potrivește cu serverul — inclusiv hărțile modate.",
+   "steps": [
+    {
+     "title": "Instalați misiunea unei hărți",
+     "body": "Hărțile modate își aduc adesea misiunea în mod (ca folder sau .zip) — la instalarea sau actualizarea aici a modului de hartă, ea se copiază automat în mpmissions. Misiuni (hărți) importă și o misiune dintr-un .zip sau folder și schimbă misiunea activă în serverDZ.cfg."
+    },
+    {
+     "title": "Așezați punctele de evenimente",
+     "body": "Puncte de evenimente arată pe hartă fiecare punct de spawn al unui eveniment. Clic pentru a adăuga, tragere pentru a muta sau introduceți X / Y / Z exacte pentru punctul ales — inclusiv înălțimea. Puteți lipi și o listă întreagă de coordonate."
+    },
+    {
+     "title": "Reglați vehiculele",
+     "body": "Vehicule listează fiecare eveniment de vehicule: câte pot exista, câte puncte de spawn are și cât de complete sunt piesele — și stabilește cât de probabil apare fiecare piesă pe vehicul."
+    }
+   ],
+   "tips": [
+    "Nu este inclusă nicio imagine de hartă — straturile vin din fișierele misiunii. Pentru o hartă ca o fotografie, încărcați propria imagine văzută de sus în setările hărții.",
+    "Ca celelalte editoare, aceste pagini salvează doar cu serverul oprit."
+   ]
+  },
+  {
+   "id": "maintenance",
+   "title": "Menținerea în stare bună",
+   "intro": "Trei lucruri salvează serverele: copiile de rezervă, validatorul și obiceiul de a citi cu adevărat jurnalele când ceva se strică.",
+   "steps": [
+    {
+     "title": "Activează copiile automate",
+     "body": "Setările pot scrie un zip cu configurațiile și fișierele misiunii după un program și pot păstra cele mai recente N. În plus, fiecare fișier pe care panoul îl suprascrie primește alături un .bak cu marcaj de timp."
+    },
+    {
+     "title": "Validează înainte de repornire",
+     "body": "Validatorul verifică fiecare fișier XML și JSON al misiunii, serverDZ.cfg, referințele dintre fișiere, șansele de spawn, pozițiile și cheile modurilor. Problemele sunt grupate și cele mai multe au un buton Reparați doar pentru ea — sau reparați dintr-o dată tot ce e sigur."
+    },
+    {
+     "title": "Citește jurnalul potrivit",
+     "body": "Fișierul .RPT înregistrează ce a făcut serverul însuși: o cădere sau un mod care nu se încarcă apar acolo. Fișierul .ADM înregistrează ce au făcut jucătorii."
+    }
+   ],
+   "tips": [
+    "Ștergerea elimină starea salvată a lumii: jucători, vehicule, baze. Tabelele de pradă și configurațiile rămân neatinse. Folderele sunt mai întâi mutate deoparte, așa că o ștergere din greșeală poate fi recuperată manual.",
+    "Watchdogul repornește serverul dacă acesta se închide singur. După trei căderi în cinci minute se oprește și afișează un banner: o buclă de căderi are nevoie de un om, nu de încă o repornire."
+   ]
+  },
+  {
+   "id": "health",
+   "title": "Starea serverului",
+   "intro": "O pagină care răspunde dintr-o privire dacă e ceva în neregulă, plus uneltele să ții serverul ordonat: anulează o modificare proastă de config și eliberează spațiu pe disc.",
+   "steps": [
+    {
+     "title": "Citește plăcile de stare",
+     "body": "Pagina Starea serverului arată patru plăci — serverul e pornit (sau blocat într-o buclă de blocări), există spațiu pe disc, configul e valid și, dacă nu pornește, de ce. Fiecare placă duce la pagina care rezolvă."
+    },
+    {
+     "title": "Anulează o modificare",
+     "body": "Managerul salvează fiecare fișier de config înainte de scriere. Pagina Istoric listează acele instantanee pe fișier, cu o comparație a ceea ce ar readuce o restaurare și restaurare dintr-un clic — plasa ta de siguranță după o editare proastă."
+    },
+    {
+     "title": "Eliberează spațiu",
+     "body": "Pe pagina de stare un clic șterge jurnalele serverului și dump-urile de blocare (cele mai noi RPT și ADM se păstrează) sau backup-urile vechi de config, ca un server de lungă durată să nu umple discul în tăcere."
+    }
+   ],
+   "tips": [
+    "Placa de validitate rulează validatorul complet, care pe o misiune mare durează o clipă — se completează la o secundă-două după celelalte.",
+    "Restaurarea unui backup necesită serverul oprit, ca orice modificare de config."
+   ]
+  },
+  {
+   "id": "remote",
+   "title": "Acces de pe telefon sau de oriunde",
+   "intro": "Acasă, telefonul deschide panoul prin adresa locală a computerului, care nu există în afara rețelei dumneavoastră — de aceea, la serviciu sau pe date mobile, panoul apare offline. Cardul Setări → Acces de la distanță verifică toate condițiile pentru accesul de oriunde și repară ce poate.",
+   "steps": [
+    {
+     "title": "Setați autentificarea în panou",
+     "body": "Setări → Autentificare în panou: alegeți un nume de utilizator și o parolă de cel puțin 8 caractere. După aceea, orice dispozitiv trebuie să se conecteze, în afară de fereastra deschisă de acest computer. Ați uitat parola? Porniți managerul cu -reset-login."
+    },
+    {
+     "title": "Deschideți panoul către rețea",
+     "body": "Setări → Expunerea panoului: Rețea locală pentru telefoanele de acasă, Internet pentru acces de oriunde (posibil doar cu autentificare). Apoi reporniți managerul."
+    },
+    {
+     "title": "Permiteți conexiunile",
+     "body": "În cardul Acces de la distanță, activați UPnP ca routerul să redirecționeze portul panoului și permiteți managerul în Paravanul de protecție Windows. Fără UPnP, redirecționați portul manual în setările routerului. Activați HTTPS pentru ca parola să fie transmisă criptat."
+    },
+    {
+     "title": "Verificați din exterior",
+     "body": "Apăsați „Verificați accesul din internet”: veți vedea adresa publică și linkul exact de deschis. Testați-l pe telefon cu Wi-Fi-ul oprit."
+    }
+   ],
+   "tips": [
+    "Dacă verificarea raportează CGNAT, furnizorul împarte o singură adresă între mai mulți clienți și nicio redirecționare de port nu poate funcționa: cereți un IP public sau folosiți Tailscale, ZeroTier ori Radmin VPN — atunci este suficientă expunerea Rețea locală.",
+    "Același card poate redirecționa și porturile jocului, ca jucătorii să găsească serverul în lista de servere DayZ. Portul RCon nu se deschide niciodată."
+   ]
+  },
+  {
+   "id": "presets",
+   "title": "Economia prăzii și preseturi",
+   "intro": "Pe lângă editarea articolelor unul câte unul, trei instrumente modelează prada în masă: un panou care arată ce generează harta, scalarea întregului fișier dintr-un clic și preseturi reutilizabile pe care le legi de articole după nume.",
+   "steps": [
+    {
+     "title": "Vezi forma prăzii tale",
+     "body": "Deschide Economia prăzii pentru a totaliza nominal și min ale fiecărui articol și a le împărți pe categorie, nivel și utilizare — cel mai rapid mod de a observa o hartă înecată într-un lucru și lipsită de altul."
+    },
+    {
+     "title": "Scalează dintr-un clic",
+     "body": "Preseturile de reglare înmulțesc toate valorile nominal și min deodată — ×2 pentru un server bogat în pradă, ×0.5 pentru hardcore. ×1 restaurează valorile de dinainte de prima scalare, deci mereu reversibil."
+    },
+    {
+     "title": "Reutilizează grupuri cu preseturi",
+     "body": "Un preset este un grup de articole cu nume și o șansă de apariție. Creează unul pe pagina Preseturi, apoi referențiază-l după nume din slotul de accesoriu al unei arme sau din cargo-ul unui recipient în loc să repeți aceeași listă."
+    }
+   ],
+   "tips": [
+    "Scalarea și preseturile scriu fișiere ale misiunii, deci serverul trebuie oprit pentru a le salva."
+   ]
+  },
+  {
+   "id": "servers",
+   "title": "Mai multe servere",
+   "intro": "Un singur manager poate rula mai multe servere DayZ — de exemplu Chernarus și Livonia sau un server vanilla și unul cu moduri. Fiecare server se află în propriul dosar și are propriile setări, moduri, jucători, chat, banuri, backupuri, programare și notificări Discord; autentificarea în panou, accesul la distanță și limba interfeței sunt comune.",
+   "steps": [
+    {
+     "title": "Adăugați un server",
+     "body": "Servere → Adăugați un server. Indicați un dosar care conține deja un server DayZ (instalat cu SteamCMD sau o copie făcută de dumneavoastră) sau lăsați managerul să creeze unul: „Server nou — o copie” copiază fișierele jocului, misiunile, cheile și setările BattlEye ale unui server existent într-un dosar nou și îl pornește cu o lume nouă."
+    },
+    {
+     "title": "Dați-i porturi proprii",
+     "body": "Două servere nu pot folosi același port. O copie primește singură porturi libere; pentru un dosar adăugat, „Atribuiți porturi libere” îl mută dintr-un clic pe un port de joc, un port de interogare Steam (steamQueryPort) și un port RCon libere."
+    },
+    {
+     "title": "Comutați între ele",
+     "body": "Meniul de servere din bara de sus comută tot panoul la alt server — fiecare pagină afișează și editează apoi acel server. Două file de browser pot gestiona două servere în același timp."
+    }
+   ],
+   "tips": [
+    "Eliminarea unui server din panou nu șterge nimic: dosarul, setările și jurnalele lui rămân unde sunt, iar serverul poate fi adăugat din nou.",
+    "Cu mai multe servere, panoul principal le arată pe toate dintr-o privire, cu Pornire și Oprire, iar la închiderea managerului toate sunt oprite deodată — sau rămân pornite."
+   ]
+  },
+  {
+   "id": "players",
+   "title": "Jucători și banuri",
+   "intro": "Pagina Jucători îi cunoaște pe toți cei văzuți de jurnalul admin — nume, ID-uri, timp de joc, ucideri —, arată cine este online acum și păstrează banurile serverului.",
+   "steps": [
+    {
+     "title": "Găsiți un jucător",
+     "body": "Toți jucătorii: căutați după nume, ID de jucător, IP sau notă, sortați după timpul de joc sau ucideri și marcați jucătorii cu o stea ca să-i urmăriți. Un clic pe un nume deschide profilul cu ID-urile, nota, banul curent și istoricul moderării."
+    },
+    {
+     "title": "Banați pentru o vreme — sau definitiv",
+     "body": "„Banați…” în profil sau în lista online: alegeți de la 1 oră la 30 de zile, permanent sau o durată proprie, și un motiv pe care jucătorul îl vede. Banul intră în ban.txt al serverului — are efect imediat — și în BattlEye când GUID-ul jucătorului este cunoscut. Un ban temporar este ridicat automat la expirare."
+    },
+    {
+     "title": "Gestionați cine este online",
+     "body": "Online acum listează jucătorii cu ping, IP și GUID — scrieți-le, dați-i afară cu un motiv sau banați-i chiar acolo. Pentru asta este nevoie de parola RCon."
+    }
+   ],
+   "tips": [
+    "Fără jurnal admin nu există jucători: istoricul are nevoie de parametrul de pornire -adminlog (pagina Server → Parametri de pornire).",
+    "Banuri → „Banați după ID” banează pe cineva care nu este pe server: lipiți Steam64 ID din linkul profilului său Steam, ID-ul jucătorului din jurnalul admin, un GUID BattlEye sau o adresă IP."
+   ]
+  },
+  {
+   "id": "discord",
+   "title": "Notificări Discord",
+   "intro": "Managerul poate publica în canalul dumneavoastră Discord ce se întâmplă pe un server: când este online, repornirile cu motivul, căderile, actualizările modurilor, intrările, uciderile, chatul, banurile și altele.",
+   "steps": [
+    {
+     "title": "Creați un webhook",
+     "body": "În Discord: setările canalului → Integrări → Webhookuri → Webhook nou → Copiază URL-ul webhookului. Lipiți-l în Setări → Discord, activați notificările și apăsați „Trimiteți mesaj de test”."
+    },
+    {
+     "title": "Alegeți ce se publică",
+     "body": "Activați și dezactivați evenimentele. Activitatea jucătorilor (intrări, ucideri, chat) poate merge într-un al doilea canal, ca să nu vă acopere anunțurile, iar un rol poate primi ping când serverul cade."
+    },
+    {
+     "title": "Păstrați o stare live",
+     "body": "Mesajul de stare live este un singur mesaj care arată mereu dacă serverul este online, jucătorii, harta, timpul activ și următoarea repornire. Fixați-l în canal."
+    }
+   ],
+   "tips": [
+    "Fiecare server din panou are propriile setări Discord. Mai multe servere pot publica în același canal — fiecare mesaj poartă numele serverului.",
+    "Intrările și ieșirile vin din RCon în timp real (fără RCon, din jurnalul admin cu aproximativ un minut mai târziu); uciderile vin mereu din jurnalul admin."
+   ]
   }
+ ],
+ "help": {
+  "weather.overcast": "Înnorare, 0–100%. Mai mare = mai gri și mai întunecat; activează și ploaia — ploaia are nevoie de înnorare peste ~70%.",
+  "weather.fog": "Densitatea ceții, 0–100%. Ceața deasă reduce mult vizibilitatea — tensionat pentru loot, greu pentru lunetiști.",
+  "weather.rain": "Intensitatea ploii, 0–100%. Cade cu adevărat doar la înnorare suficientă; udă jucătorul și maschează sunetul.",
+  "weather.snowfall": "Intensitatea ninsorii, 0–100% (vizibilă mai ales pe hărți cu zăpadă precum Sakhal).",
+  "weather.wind": "Viteza vântului în m/s. Mișcă norii și, cu opțiunea dinamică, cât de repede se schimbă vremea.",
+  "events.lifetime": "Secunde cât un grup apărut rămâne în lume înainte să dispară dacă nu e atins.",
+  "events.restock": "Secunde până când un eveniment curățat sau epuizat apare din nou. 0 = reaprovizionează imediat ce poate.",
+  "events.saveable": "1 = grupul apărut este scris în persistență și supraviețuiește unei reporniri; 0 = regenerat la fiecare pornire.",
+  "moddrift.help.ships": "Câte tipuri de pradă definește fișierul types propriu al acestui mod.",
+  "moddrift.help.active": "Câte dintre acele tipuri sunt de fapt în economia ta (types.xml + moded_types).",
+  "moddrift.help.missing": "Tipuri pe care modul le aduce dar economia ta nu le are — nu vor apărea până nu sunt îmbinate.",
+  "leaderboard.metrics": "Alege după ce se face clasamentul: timp total de joc, ucideri, raport ucideri/morți sau număr de sesiuni.",
+  "server.hostname": "Numele serverului afișat în browserul DayZ. Ține-l scurt și ușor de căutat.",
+  "server.password": "Parola de intrare. Goală = server public; seteaz-o pentru a-l face privat.",
+  "server.passwordAdmin": "Parola de admin în joc (#login). Diferită de cea RCon — ține-o secretă.",
+  "server.timeAccel": "Multiplicator viteză zi (1 = timp real, 24 = o zi într-o oră). Interval ~0.1–64.",
+  "server.nightTimeAccel": "Multiplicator suplimentar de viteză noaptea peste cel de zi, ca nopțile să treacă mai repede.",
+  "server.timePersistent": "Păstrează ora lumii între reporniri (1) în loc să o reseteze la serverTime (0).",
+  "server.whitelist": "Doar jucătorii din listă pot intra. Lasă oprit dacă nu ții un fișier whitelist.",
+  "server.forceSameBuild": "Cere clienților exact aceeași versiune de joc (1). Previne crash-urile din nepotrivire de versiune.",
+  "server.storageAutoFix": "Lasă DayZ să repare un storage de persistență corupt la încărcare (1) în loc să eșueze.",
+  "server.loginQueue": "Câți jucători se conectează simultan și așteaptă la coadă — atenuează valurile de intrare.",
+  "economy.items": "Câte tipuri distincte de articole definește acest fișier.",
+  "economy.nominal": "Suma nominal a fiecărui articol — cantitatea-țintă pe care harta încearcă să o mențină generată.",
+  "economy.categories": "Câte categorii de pradă (arme, mâncare, unelte…) apar în acest fișier.",
+  "economy.min": "Suma min a fiecărui articol — pragul până la care economia reface fiecare articol.",
+  "economy.tune": "Scalare într-un clic a tuturor nominal/min din fișier. ×2 = de două ori mai multă pradă; ×1 restaurează originalele.",
+  "types.nominal": "Câte exemplare din acest obiect încearcă serverul să mențină simultan în lume. 0 înseamnă că nu apare niciodată.",
+  "types.min": "Când cantitatea scade la această valoare, serverul programează o reapariție. Nu trebuie să depășească nominal: DayZ o reduce și notează un avertisment.",
+  "types.lifetime": "Secunde cât supraviețuiește un obiect neatins înainte să dispară. 3888000 înseamnă 45 de zile.",
+  "types.restock": "Secunde pe care serverul le așteaptă înainte să completeze acest obiect. 0 înseamnă imediat.",
+  "types.usage": "În ce tipuri de clădiri poate apărea obiectul (Military, Police, Farm…). Fără usage nu are unde să apară.",
+  "types.value": "Nivelul prăzii: Tier1 este coasta, Tier4 interiorul adânc și militarul. Determină cât de departe de punctul de pornire apare obiectul.",
+  "types.quant": "Nivelul de umplere în procente pentru obiecte cu cantitate (băuturi, combustibil). -1 dezactivează, altfel 0–100.",
+  "types.bulk": "Aplică aceste valori tuturor rândurilor selectate deodată. Se schimbă doar câmpurile pe care le completezi.",
+  "types.category": "Grupează obiectul pentru sistemul de pradă (weapons, food, clothes…). Numele trebuie să existe în cfglimitsdefinition.xml, altfel DayZ renunță la intrare.",
+  "types.tag": "Precizează unde anume în clădire ajunge obiectul: podea, rafturi, pământ. Fără etichetă poate folosi orice suprafață permisă de usage.",
+  "types.cost": "Prioritatea apariției când sunt mai mulți candidați decât locuri. Câștigă cel mai mare. Nu sunt bani și jucătorii nu îl văd niciodată.",
+  "types.flags": "count_in_cargo / count_in_hoarder / count_in_map / count_in_player decid dacă obiectele păstrate într-un cort, o mașină sau un rucsac se numără la nominal. Dezactivate, serverul continuă să genereze altele deși jucătorii le-au adunat deja.",
+  "mods.serverSide": "Încarcă modul cu -serverMod în loc de -mod: rulează pe server, iar clienții nici nu au nevoie de el, nici nu îl primesc. Doar pentru unelte de administrare — un mod de pradă sau conținut nu funcționează așa.",
+  "mods.order": "DayZ încarcă modurile de la stânga la dreapta. Framework-urile merg primele: @CF înaintea a tot ce depinde de el, Expansion Core înaintea addon-urilor sale. Ordinea greșită este o cauză frecventă a serverului care nu pornește.",
+  "mods.update": "Copiază fișiere mai noi din !Workshop-ul clientului pe server. Managerul nu poate descărca moduri: abonează-te mai întâi pe Steam.",
+  "mods.scan": "Caută în mod un types.xml și îl înregistrează în cfgeconomycore.xml, ca prada modului să apară cu adevărat.",
+  "mods.uninstall": "Elimină folderul modului de pe server. Fișierul .bikey se șterge doar dacă niciun alt mod instalat nu folosește aceeași cheie: cheile comune, precum cele Expansion, supraviețuiesc.",
+  "mods.profiles": "Salvează sub un nume setul curent de moduri active, ca să comuți între o configurație cu moduri și una originală fără să reactivezi tot.",
+  "weather.transition": "Cât de treptat se schimbă vremea. Lin durează aproximativ o jumătate de oră în pași mici, ca DayZ original. Rapid poate parcurge tot intervalul în două minute, exact ceea ce face vremea să pară un întrerupător.",
+  "weather.dynamic": "Oprit fixează vremea acolo unde o setezi. Pornit lasă serverul să o modifice singur în limitele date.",
+  "weather.accel": "Multiplică trecerea timpului din joc. 12 înseamnă că o zi completă durează două ore reale. Noaptea este separată ca să o poți ține scurtă.",
+  "weather.storm": "Are efect doar când ploaia și înnorarea sunt suficient de mari pentru ca o furtună să se declanșeze.",
+  "weather.timePreset": "Fixează ora din joc la pornirea serverului. SystemTime urmează ceasul PC-ului tău; o valoare fixă pornește harta mereu la aceeași oră.",
+  "rcon.password": "Se scrie în battleye/beserver_x64.cfg. BattlEye citește acel fișier doar la lansare, deci o parolă nouă are efect abia după o repornire.",
+  "attach.slotChance": "Probabilitatea ca în acest slot să apară ceva. 1.0 = întotdeauna, 0.35 = în 35 % din cazuri.",
+  "attach.itemWeight": "Este o greutate relativă, nu un procent: DayZ alege EXACT UN obiect din slot. Greutățile 60 și 40 înseamnă 60 % și 40 % din șansa slotului.",
+  "settings.restart": "Repornește serverul după un program. Jucătorii primesc înainte avertismente prin RCon, ceea ce cere o parolă RCon setată.",
+  "settings.watchdog": "Repornește serverul dacă acesta se închide singur. După trei căderi în cinci minute se oprește și afișează un banner: o buclă de căderi are nevoie de un om, nu de încă o repornire.",
+  "settings.backup": "Arhivează configurațiile și fișierele misiunii după un program și păstrează cele mai recente N. Separat, fiecare fișier suprascris de panou primește alături un .bak cu marcaj de timp.",
+  "settings.exposure": "„Doar local” înseamnă că panoul poate fi deschis doar pe acest PC. „Rețea locală” permite telefonului și altor dispozitive de acasă să-l deschidă. „Internet” îl face accesibil de oriunde — necesită autentificare în panou, iar restul (router, firewall, IP public) este verificat în Setări → Acces de la distanță.",
+  "settings.adminlog": "Activează -adminlog, care scrie fișierul .ADM. Pagina Jucători și lista de eliminări se construiesc din el și rămân goale fără acesta.",
+  "validator.autofix": "Adaugă numele necunoscute de usage/value/tag/category în cfglimitsdefinition.xml. De obicei tocmai asta face prada modată să înceapă să apară: numele trebuie să existe acolo, altfel DayZ ignoră intrarea.",
+  "validator.severity": "Erorile strică ceva acum. Avertismentele sunt tolerate de DayZ, dar de obicei înseamnă că configurația nu face ce ai vrut.",
+  "wipe": "Șterge starea salvată a lumii: jucători, vehicule, baze. Tabelele de pradă și configurațiile rămân neatinse. Folderele sunt mutate deoparte, nu șterse, așa că o greșeală poate fi anulată manual.",
+  "events.nominal": "Câte evenimente de acest tip menține serverul simultan. Vehiculele, prăbușirile de elicopter, turmele de animale și grupurile de infectați sunt toate evenimente.",
+  "events.minmax": "min și max limitează mărimea grupului la o apariție. max=0 înseamnă nelimitat: de aceea evenimentele ambientale originale au min=100 max=0.",
+  "events.children": "Clasele de obiecte pe care le generează acest eveniment, cu propriile intervale de pradă. Editarea lor manuală este rostul editorului Mission DB.",
+  "events.active": "0 oprește evenimentul păstrându-i configurația. Așa vin evenimentele sezoniere (Crăciun, Halloween) în jocul original.",
+  "server.maxPlayers": "Locuri de jucători. Creșterea numărului nu îți crește hardware-ul: fiecare loc costă RAM și procesor, iar DayZ devine instabil cu mult înainte ca majoritatea mașinilor să se epuizeze.",
+  "server.instanceId": "Ce salvare folosește serverul. Dacă o schimbi, serverul pornește într-o lume complet nouă; salvarea veche rămâne pe disc cu propriul id.",
+  "server.steamQueryPort": "Portul pe care Steam îl folosește pentru a-ți lista serverul. Trebuie să fie liber și redirecționat, altfel serverul merge, dar nu apare niciodată în listă.",
+  "server.verifySignatures": "2 înseamnă că fiecare fișier de mod trebuie semnat cu o cheie din keys/. Coborârea la 0 permite moduri nesemnate — și clienți modificați. Lasă-l pe 2.",
+  "server.thirdPerson": "1 impune doar persoana întâi. Schimbă modul de joc mai mult decât orice altă setare, așa că decide înainte de a-ți construi o comunitate.",
+  "server.von": "Chatul vocal din joc. Dezactivarea îl elimină complet, inclusiv radioul.",
+  "server.respawnTime": "Secunde pe care un jucător trebuie să le aștepte pentru a renaște după moarte. Valorile mari descurajează sinuciderea pentru a re-extrage punctul de apariție.",
+  "server.mission": "Ce folder de misiune din mpmissions/ încarcă serverul. Așa se schimbă harta: chernarusplus, enoch (Livonia), sakhal.",
+  "gameplay.file": "cfggameplay.json suprascrie reguli de joc: rezistență, construire, comportamentul hărții. DayZ ignoră întregul fișier la o singură eroare de sintaxă, de aceea este validat înainte de salvare.",
+  "battleye.bans": "Un ban pe rând: GUID sau IP, când expiră (-1 = permanent, altfel data de încheiere stocată ca timp Unix), motiv. Salvarea pe un server pornit reîncarcă banurile prin RCon, deci nu este nevoie de repornire.",
+  "logs.rpt": "Ce a făcut serverul însuși: pornire, încărcarea modurilor, erori de script, căderi. Acesta este fișierul de citit când serverul nu pornește.",
+  "logs.adm": "Ce au făcut jucătorii: conectări, chat, eliminări, poziții. Necesită parametrul -adminlog; pagina Jucători se construiește din el.",
+  "backup.restore": "Restaurează configurațiile și fișierele misiunii dintr-un zip. Serverul trebuie oprit: în funcțiune blochează aceste fișiere.",
+  "sync.import": "Copiază setări de la o altă instalare a managerului. Valorile existente sunt suprascrise, așa că fă o copie mai întâi dacă nu ești sigur.",
+  "attach.class": "Clasa pe care o configurează această intrare. Nu trebuie să fie neapărat o armă: cfgspawnabletypes.xml acoperă și îmbrăcămintea, rucsacurile, lăzile, butoaiele și vehiculele.",
+  "attach.cargo": "Cargo apare ÎN interiorul obiectului: conținutul unui rucsac, prada dintr-o ladă, portbagajul unei mașini. Accesoriile se montează PE el. Jumătate din fișierul original este cargo, nu accesorii.",
+  "attach.hoarder": "Marchează intrarea drept depozitare permanentă — butoaie, corturi, ascunzători. DayZ numără ce pun jucătorii înăuntru la limita depozitelor, nu la prada din lume.",
+  "attach.damage": "Starea în care apare obiectul, de la 0.0 (impecabil) la 1.0 (distrus). Lasă ambele goale pentru a păstra valoarea implicită DayZ.",
+  "attach.tags": "Restrânge unde se aplică intrarea, de ex. floor sau shelves. Separate prin virgulă. Majoritatea nu au nevoie de niciuna.",
+  "diag": "Potrivire de tipare în cel mai recent RPT și în jurnalul managerului. Recunoaște puținele defecțiuni care chiar opresc un server DayZ; restul cere în continuare jurnalul brut, deci un rezultat gol nu este un certificat de sănătate.",
+  "wipe.undo": "O ștergere mută folderele lumii în .dayz-manager/wipes/<marcaj de timp>/ în loc să le elimine, rămânând reversibilă — până când serverul reconstruiește starea, pentru că atunci readucerea lumii vechi ar îngropa-o pe cea nouă.",
+  "diag.mod_missing.title": "Un mod din -mod lipsește de pe server",
+  "diag.mod_missing.detail": "DayZ nu a putut deschide {subject}. Modul este în parametrii de pornire, dar folderul lui lipsește sau este incomplet — instalează-l sau resincronizează-l în pagina Moduri și pornește din nou.",
+  "diag.mod_missing_generic.title": "Lipsește un fișier de care serverul are nevoie",
+  "diag.mod_missing_generic.detail": "DayZ nu a putut deschide {subject}. Verifică dacă există calea și dacă vreun antivirus nu l-a pus în carantină.",
+  "diag.bad_signature.title": "Un fișier al modului nu este semnat sau cheia nu se potrivește",
+  "diag.bad_signature.detail": "{subject} nu a trecut verificarea de semnătură BattlEye. Resincronizează .bikey în pagina Moduri — NU coborî verifySignatures, ar lăsa să intre și clienți modificați.",
+  "diag.script_error.title": "Un script nu s-a compilat",
+  "diag.script_error.detail": "Serverul s-a oprit la compilarea scripturilor. Liniile imediat următoare din RPT indică fișierul și numărul liniei — de obicei un mod care nu corespunde versiunii curente DayZ.",
+  "diag.mission_missing.title": "Misiunea din server.cfg nu există",
+  "diag.mission_missing.detail": "Șablonul numit în serverDZ.cfg nu are folder în mpmissions/. Alege o misiune existentă în pagina Server.",
+  "diag.port_busy.title": "Portul serverului este deja ocupat",
+  "diag.port_busy.detail": "Alt proces ține portul — cel mai adesea un server DayZ anterior care nu s-a închis complet. Așteaptă câteva secunde sau schimbă portul în pagina Server.",
+  "diag.config_parse.title": "serverDZ.cfg este deteriorat",
+  "diag.config_parse.detail": "Analizatorul s-a oprit prea devreme. Cauza uzuală este un punct și virgulă lipsă sau o acoladă neînchisă; validatorul verifică echilibrul acoladelor.",
+  "diag.no_economy.title": "Economia centrală nu s-a încărcat",
+  "diag.no_economy.detail": "Serverul poate rula, dar nu va genera pradă. Rulează validatorul: de regulă lipsește un fișier referit în cfgeconomycore.xml sau un nume usage/value este necunoscut.",
+  "diag.missing_key.title": "Lipsește o cheie de mod din keys/",
+  "diag.missing_key.detail": "Jucătorii cu acel mod vor fi dați afară pentru semnătură invalidă. Folosește „Sincronizează cheile” în pagina Moduri.",
+  "loadout": "Ce poartă și ce duce cu el un jucător la reapariție. Sunt preseturile spawn-gear DayZ, înregistrate în cfggameplay.json — modificările au efect după repornirea serverului. În vanilla echipamentul este în init.c, de aceea o misiune nouă nu arată nimic aici până nu activezi sistemul.",
+  "loadout.weight": "Greutatea acestui preset față de celelalte. DayZ alege UN preset per apariție, deci unul cu greutate 3 e de trei ori mai probabil decât unul cu greutate 1.",
+  "loadout.characters": "Cărui model de personaj i se aplică presetul (SurvivorM_Mirek, SurvivorF_Eva, …). Gol = tuturor; se alege unul la întâmplare per apariție.",
+  "loadout.worn": "Obiecte puse pe corp, slot cu slot. Într-un slot DayZ alege UN obiect după greutate, deci mai multe variante dau varietate de la o apariție la alta.",
+  "loadout.carried": "Obiecte libere puse direct în inventarul noului jucător, nu într-un slot de îmbrăcăminte — cârpe, mâncare, o unealtă de început.",
+  "loadout.condition": "Starea în care apare un obiect. În DayZ 1.0 = impecabil și 0.0 = distrus, deci mai mare e mai bine. „Impecabil” păstrează echipamentul inițial nou; alege „Personalizat” ca să fixezi un interval de sănătate min–max exact, iar obiectul apare undeva în el.",
+  "settings.modSource": "De unde copiază managerul modurile. Folderul clientului: instalarea DayZ cu !Workshop (vă abonați în Steam, managerul copiază și actualizează). Folder de moduri: orice folder cu @moduri sau workshop/content/221100 de la SteamCMD — metoda de a avea moduri Workshop pe o găzduire fără joc. Doar server: fără sursă; modurile încărcate manual sunt gestionate în continuare, dar fără actualizare automată.",
+  "settings.restartBehaviour": "Ce trăiesc jucătorii la fiecare repornire automată: textul numărătorii inverse (scrieți-l în limba lor), o fereastră opțională chiar înainte de repornire, când serverul e blocat și toți sunt dați afară ca personajele să se salveze corect, și un #shutdown corect care salvează lumea înainte de oprirea procesului. Cronologia de mai jos arată ordinea exactă.",
+  "settings.perf": "Afinitatea CPU leagă DayZServer de nucleele bifate (celelalte rămân libere pentru sistem, un al doilea server sau alte programe). Prioritatea îi spune sistemului cât de prioritar să-l planifice: „Peste normal” este o creștere sigură; „Ridicată” poate încetini restul mașinii. Ambele se aplică la fiecare pornire. Pe Linux, creșterea priorității necesită root.",
+  "vehicles.nominal": "Câte astfel de vehicule încearcă economia să țină pe hartă simultan (toate variantele de culoare împreună).",
+  "vehicles.min": "Când există mai puține decât acest număr, economia creează altele noi (după întârziere) până la nominal.",
+  "vehicles.max": "Limită absolută pentru acest tip, inclusiv vehiculele ascunse sau parcate de jucători. De obicei egală cu nominal.",
+  "vehicles.lifetime": "Lifetime-ul folosit de economia centrală pentru acest eveniment (vehicule vanilla: 300). Nu face să dispară mașinile intacte — vehiculele vanilla rămân până sunt distruse sau până la wipe. Păstrați valoarea vanilla dacă ghidul unui mod nu spune altfel.",
+  "vehicles.restock": "Secunde cât așteaptă economia înainte să înlocuiască un vehicul distrus sau dispărut. 0 = cât mai curând.",
+  "vehicles.loot": "lootmin / lootmax ale variantei din events.xml, păstrate neschimbate (vehiculele vanilla folosesc 0). Piesele vehiculului — roți, uși, baterie, bujii — vin din cfgspawnabletypes: folosiți butoanele „Piese la apariție” de mai jos sau pagina Accesorii pentru fiecare piesă."
+ },
+ "gameplay": {
+  "version": "Versiunea formatului fișierului. O scrie DayZ — lăsați-o așa cum este.",
+  "GeneralData": "Comutatoare pentru tot serverul: daune la baze și depozite, ecranul de respawn.",
+  "PlayerData": "Regulile jucătorilor: lumina personală, rezistența, șocul, mișcarea, înecul și echipamentele de start.",
+  "StaminaData": "Cât de repede scade rezistența și câtă greutate duc jucătorii fără penalizare.",
+  "ShockHandlingData": "Cât de repede trece șocul (dauna care îi lasă pe jucători inconștienți).",
+  "MovementData": "Inerția personajului: cât de repede accelerează și se rotește.",
+  "DrowningData": "Ce pierd jucătorii pe secundă când se îneacă.",
+  "WeaponObstructionData": "Dacă o armă lungă este împinsă lateral când ar intra în pereți și obiecte.",
+  "WorldsData": "Setările lumii: întunericul nopții, temperaturile lunare, obiecte suplimentare, greutatea hainelor ude.",
+  "BaseBuildingData": "Regulile construcției bazelor: verificările de amplasare și cele de construcție.",
+  "HologramData": "Verificările previzualizării verzi/roșii a amplasării. Dezactivarea uneia permite jucătorilor să plaseze lucruri pe care jocul le refuză în mod normal.",
+  "ConstructionData": "Verificările făcute în timpul construirii unei părți de bază.",
+  "UIData": "Interfața: harta 3D și indicatorul de lovituri.",
+  "HitIndicationData": "Semnul de pe ecran care arată de unde a venit o lovitură. Folosit doar cu „Folosiți aceste setări” activat.",
+  "MapData": "Harta din joc: dacă jucătorii au nevoie de hartă, busolă sau GPS și ce arată harta.",
+  "VehicleData": "Setările vehiculelor.",
+  "disableBaseDamage": "Pereții, porțile, gardurile și turnurile de pază nu primesc deloc daune — raidurile devin imposibile.",
+  "disableContainerDamage": "Corturile, butoaiele, lăzile și ascunzătorile nu primesc daune.",
+  "disableRespawnDialog": "Fără ecran de respawn după moarte: jucătorul revine imediat într-un loc de apariție aleatoriu.",
+  "disableRespawnInUnconsciousness": "Un jucător inconștient nu poate apăsa Respawn — mai întâi se trezește sau moare.",
+  "disablePersonalLight": "Elimină strălucirea slabă din jurul fiecărui jucător noaptea — nopți mai întunecate. Înlocuiește aceeași setare din serverDZ.cfg.",
+  "spawnGearPresetFiles": "Fișierele echipamentelor de start. Se gestionează pe pagina Echipament jucător.",
+  "sprintStaminaModifierErc": "Consumul de rezistență la sprint în picioare. 1 = ca în joc; mai mare obosește mai repede, 0 = fără consum.",
+  "sprintStaminaModifierCro": "Consumul de rezistență la alergarea ghemuit. 1 = ca în joc.",
+  "staminaWeightLimitThreshold": "Greutatea în grame pe care jucătorii o duc înainte să le scadă rezistența maximă. 6000 = 6 kg.",
+  "staminaMax": "Mărimea rezervei de rezistență. Mai mare = sprinturi mai lungi.",
+  "staminaKgToStaminaPercentPenalty": "Cât scade rezistența maximă pentru fiecare kilogram peste prag.",
+  "staminaMinCap": "Cea mai mică valoare până la care poate scădea rezistența maximă sub o încărcătură grea.",
+  "sprintSwimmingStaminaModifier": "Consumul de rezistență la înotul rapid. 1 = ca în joc.",
+  "sprintLadderStaminaModifier": "Consumul de rezistență la urcatul rapid pe scară. 1 = ca în joc.",
+  "meleeStaminaModifier": "Costul în rezistență al atacurilor grele corp la corp și al parării. 1 = ca în joc.",
+  "obstacleTraversalStaminaModifier": "Costul în rezistență al escaladării și sărirea peste obstacole. 1 = ca în joc.",
+  "holdBreathStaminaModifier": "Consumul de rezistență la ținerea respirației pentru ochire. 1 = ca în joc.",
+  "shockRefillSpeedConscious": "Cât de repede trece șocul cât timp jucătorul este conștient. Mai mare = refacere mai rapidă.",
+  "shockRefillSpeedUnconscious": "Cât de repede trece șocul cât timp jucătorul este inconștient — cât de curând se trezește.",
+  "allowRefillSpeedModifier": "Starea jucătorului (sânge, sănătate) accelerează sau încetinește refacerea după șoc.",
+  "timeToStrafeJog": "Secunde până la viteza maximă la alergarea laterală. Mai puțin = mișcare mai vioaie.",
+  "rotationSpeedJog": "Cât de repede se rotește personajul la alergare.",
+  "timeToSprint": "Secunde pentru a accelera de la alergare la sprint.",
+  "timeToStrafeSprint": "Secunde până la viteza maximă la sprintul lateral.",
+  "rotationSpeedSprint": "Cât de repede se rotește personajul la sprint.",
+  "allowStaminaAffectInertia": "Cu puțină rezistență rămasă, personajul accelerează și se rotește mai încet.",
+  "staminaDepletionSpeed": "Rezistența pierdută pe secundă sub apă.",
+  "healthDepletionSpeed": "Sănătatea pierdută pe secundă la înec.",
+  "shockDepletionSpeed": "Șocul adăugat pe secundă la înec.",
+  "staticMode": "Față de pereți și obiecte statice: 0 = dezactivat, 1 = activat (ca în joc), 2 = mereu.",
+  "dynamicMode": "Față de jucători, vehicule și alte obiecte în mișcare: 0 = dezactivat, 1 = activat (ca în joc), 2 = mereu.",
+  "lightingConfig": "Întunericul nopții: 0 = nopți mai luminoase (ca în joc), 1 = nopți întunecate. Înlocuiește aceeași setare din serverDZ.cfg.",
+  "objectSpawnersArr": "Fișiere JSON (căi în interiorul misiunii) care plasează obiecte statice suplimentare în lume.",
+  "environmentMinTemps": "Cea mai scăzută temperatură a aerului din fiecare lună, din ianuarie până în decembrie, °C. Omiteți pentru a folosi temperaturile hărții.",
+  "environmentMaxTemps": "Cea mai ridicată temperatură a aerului din fiecare lună, din ianuarie până în decembrie, °C. Omiteți pentru a folosi temperaturile hărții.",
+  "wetnessWeightModifiers": "Multiplicatorii de greutate ai hainelor pentru cele cinci niveluri de umezeală, de la uscat la ud leoarcă.",
+  "disableIsCollidingBBoxCheck": "Părțile se pot suprapune peste alte obiecte la plasare — construcții mai strânse, suprapuse.",
+  "disableIsCollidingPlayerCheck": "Părțile pot fi plasate acolo unde stă un jucător.",
+  "disableIsClippingRoofCheck": "Părțile pot fi plasate prin acoperișuri și tavane.",
+  "disableIsBaseViableCheck": "Obiectele pot fi plasate fără teren ferm dedesubt.",
+  "disableIsCollidingGPlotCheck": "Straturile de grădină pot fi plasate acolo unde s-ar ciocni cu alte obiecte.",
+  "disableIsCollidingAngleCheck": "Obiectele pot fi plasate pe pante care în mod normal sunt prea abrupte.",
+  "disableIsPlacementPermittedCheck": "Obiectele pot fi plasate acolo unde harta în mod normal interzice.",
+  "disableHeightPlacementCheck": "Obiectele pot fi plasate mai sus față de picioarele jucătorului decât este permis în mod normal.",
+  "disableIsUnderwaterCheck": "Obiectele pot fi plasate sub apă.",
+  "disableIsInTerrainCheck": "Obiectele pot fi îngropate în teren.",
+  "disableColdAreaBuildingCheck": "Construcția este permisă în zonele reci unde jocul o interzice în mod normal (Sakhal).",
+  "disallowedTypesInUnderground": "Kituri care nu pot fi plasate în zonele subterane (buncăre, peșteri).",
+  "disablePerformRoofCheck": "Părțile de bază pot fi construite sub acoperișuri și în interior.",
+  "disableIsCollidingCheck": "Părțile de bază pot fi construite chiar dacă ceva stă în cale.",
+  "disableDistanceCheck": "Părțile de bază pot fi construite de la orice distanță.",
+  "use3DMap": "Harta se deschide ca obiect în mâini în loc de ecran complet.",
+  "hitDirectionOverrideEnabled": "Aplicați setările de mai jos fiecărui jucător în locul celor proprii.",
+  "hitDirectionBehaviour": "0 = fără indicator, 1 = static, 2 = urmărește atacatorul.",
+  "hitDirectionStyle": "0 = pată, 1 = țeapă, 2 = săgeată.",
+  "hitDirectionIndicatorColorStr": "Culoarea indicatorului ca 0xAARRGGBB (alfa, roșu, verde, albastru).",
+  "hitDirectionMaxDuration": "Câte secunde rămâne indicatorul pe ecran.",
+  "hitDirectionBreakPointRelative": "Partea din durată (0–1) după care indicatorul începe să se estompeze.",
+  "hitDirectionScatter": "Dispersie aleatorie adăugată direcției, în grade.",
+  "hitIndicationPostProcessEnabled": "Ecranul clipește roșu când jucătorul este lovit.",
+  "ignoreMapOwnership": "Jucătorii pot deschide harta fără să aibă o hartă la ei.",
+  "ignoreNavItemsOwnership": "Harta arată informațiile de busolă și GPS fără ca jucătorul să aibă busolă sau GPS.",
+  "displayPlayerPosition": "Poziția proprie a jucătorului este marcată pe hartă.",
+  "displayNavInfo": "Harta arată informațiile de navigare (grila și busola).",
+  "boatDecayMultiplier": "Cât de repede se degradează bărcile. 1 = ca în joc, mai mic = mai încet."
+ }
 }

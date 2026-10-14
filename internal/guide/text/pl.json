@@ -1,0 +1,595 @@
+{
+ "chapters": [
+  {
+   "id": "start",
+   "title": "Pierwsze kroki",
+   "intro": "Menedżer to jeden program, który działa obok serwera DayZ i daje panel sterowania zamiast Notatnika i plików .bat. Ma dwie wersje ze wspólnymi ustawieniami: dayz-manager-panel otwiera się we własnym oknie, dayz-manager-web w przeglądarce. Niczego nie instaluje w systemie — usuń plik i wszystko jest jak było.",
+   "steps": [
+    {
+     "title": "Umieść go w folderze serwera",
+     "body": "Skopiuj dayz-manager-panel.exe (lub dayz-manager-web.exe) obok DayZServer_x64.exe i serverDZ.cfg i uruchom. Panel otworzy się we własnym oknie; wersja przeglądarkowa otworzy zamiast tego http://127.0.0.1:8787. Na Linuksie użyj plików -linux obok pliku DayZServer."
+    },
+    {
+     "title": "Wybierz źródło modów",
+     "body": "Przy pierwszym uruchomieniu wybierasz źródło modów: *klienta* DayZ (jego folder !Workshop, do którego Steam pobiera mody), dowolny folder z @modami lub workshop/content/221100 z SteamCMD, albo „Tylko serwer” dla hostingu bez gry — wtedy mody wgrywasz sam, a automatyczne aktualizacje są wyłączone. Możesz to później zmienić w Ustawieniach."
+    },
+    {
+     "title": "Uruchom serwer",
+     "body": "Kliknij Uruchom na pulpicie. Jeśli brakuje DayZServer_x64.exe albo mod jest uszkodzony, serwer się zamknie, a zobaczysz to w sekcji Logi."
+    }
+   ],
+   "tips": [
+    "Do korzystania z panelu tylko na tym komputerze hasło nie jest potrzebne. Aby otwierać go z telefonu lub z innego miejsca, najpierw ustaw logowanie do panelu — w pierwszej konfiguracji albo w Ustawieniach → Logowanie do panelu.",
+    "Prawie każdy edytor plików odmawia zapisu, gdy serwer działa — DayZ blokuje własne pliki. Najpierw zatrzymaj serwer; panel powie ci, gdy to jest przyczyną."
+   ]
+  },
+  {
+   "id": "mods",
+   "title": "Mody",
+   "intro": "Serwer potrzebuje własnej kopii każdego moda, pliku .bikey moda w folderze keys serwera oraz moda w parametrze startowym -mod. Menedżer robi wszystkie trzy rzeczy, biorąc mody z wybranego źródła: !Workshop klienta gry, folderu modów lub SteamCMD albo — w trybie „Tylko serwer” — modów wgranych przez ciebie.",
+   "steps": [
+    {
+     "title": "Najpierw zasubskrybuj w Steam",
+     "body": "Menedżer kopiuje mody, nie pobiera ich. Zasubskrybuj mod w Steam Workshop i pozwól launcherowi DayZ pobrać go do !Workshop — albo pobierz go przez SteamCMD do swojego folderu modów."
+    },
+    {
+     "title": "Zainstaluj na serwerze",
+     "body": "Otwórz Mody — widać tam wszystko z !Workshop. Zainstaluj kopiuje mod do folderu serwera i automatycznie synchronizuje jego .bikey. „Zainstaluj i zaktualizuj mody” obsługuje całą listę jednym kliknięciem."
+    },
+    {
+     "title": "Włącz go przy starcie",
+     "body": "Instalacja to nie to samo co wczytanie. Przełącz „Mody” w wierszu, aby dodać mod do -mod. Przełącznika „Serwerowy” używaj tylko dla modów, których klienci NIE mogą mieć (narzędzia admina)."
+    },
+    {
+     "title": "Pilnuj kolejności ładowania",
+     "body": "Przeciągaj wiersze w Kolejności ładowania tak, by frameworki były pierwsze — @CF przed wszystkim, co od niego zależy, Expansion Core przed jego dodatkami. Zła kolejność to bardzo częsty powód, dla którego serwer się nie uruchamia."
+    }
+   ],
+   "tips": [
+    "Aktualizacja kopiuje nowsze pliki ze źródła modów na serwer. Włącz „Aktualizuj mody przy każdym restarcie” w Ustawieniach, by były automatycznie zsynchronizowane.",
+    "Odinstalowanie moda usuwa jego .bikey tylko wtedy, gdy żaden inny zainstalowany mod nie używa tego klucza, więc wspólne klucze (Expansion) zostają.",
+    "Jeśli mod zawiera loot, kliknij „Dodaj loot moda” w jego wierszu — menedżer znajdzie types.xml moda i zarejestruje go za ciebie.",
+    "Na Linuksie serwer wczytuje tylko mody, których foldery i pliki są małymi literami. Menedżer zmienia ich nazwy przy instalacji i aktualizacji, a strona Mody oznacza wszystko, co zostało z nieprawidłową wielkością liter."
+   ]
+  },
+  {
+   "id": "economy",
+   "title": "Loot i ekonomia",
+   "intro": "Centralna ekonomia DayZ decyduje, co istnieje w świecie i w jakiej ilości. types.xml to główna lista: jeden wpis na klasę przedmiotu, ile ma go być i gdzie może się pojawić. Złe liczby to zwykły powód, dla którego serwer wydaje się pusty albo tonie w loocie.",
+   "steps": [
+    {
+     "title": "Zrozum cztery liczby",
+     "body": "nominal to docelowa liczba, którą serwer stara się utrzymać w świecie. min to próg, który uruchamia ponowny spawn. lifetime to czas w sekundach, przez jaki nieruszony przedmiot przetrwa. restock to czas, jaki serwer czeka przed uzupełnieniem przedmiotu. Ustaw nominal na 0, a przedmiot nigdy się nie pojawi."
+    },
+    {
+     "title": "Edytuj w tabeli",
+     "body": "nominal, min, lifetime i kategorię można edytować bezpośrednio w tabeli — zmienione wiersze są podświetlone, dopóki nie klikniesz „Zapisz zmiany”. Pełną edycję przedmiotu (usage, value, tagi, flagi) daje Edytuj."
+    },
+    {
+     "title": "Usage i value = gdzie się pojawia",
+     "body": "usage to typ budynku (Military, Police, Farm…), value to tier lootu (Tier1 to wybrzeże, Tier4 głąb lądu / wojsko). Przedmiot bez usage nie ma gdzie się pojawić. Obie nazwy muszą istnieć w cfglimitsdefinition.xml."
+    },
+    {
+     "title": "Presety do pracy zbiorczej",
+     "body": "Zaznacz wiersze, potem kliknij preset spawnu, aby dołączyć jego usage/value/tagi do wszystkich naraz — dużo szybciej niż ręczna edycja setek wpisów."
+    }
+   ],
+   "tips": [
+    "Trzymaj swoje przedmioty w osobnym pliku własnych types zamiast edytować vanillowy types.xml — menedżer zarejestruje go za ciebie w cfgeconomycore.xml, a aktualizacja gry go nie nadpisze.",
+    "Uruchom Walidator po każdej zbiorczej edycji. Jego auto-naprawa dopisuje nieznane nazwy usage/value/tag do cfglimitsdefinition.xml — to właśnie sprawia, że loot z modów zaczyna się pojawiać."
+   ]
+  },
+  {
+   "id": "attachments",
+   "title": "Dodatki do broni",
+   "intro": "cfgspawnabletypes.xml decyduje, co broń ma przy sobie, gdy się pojawia — magazynek, celownik, kolbę. Składa się ze slotów, a liczby w nim oznaczają dwie różne rzeczy — i właśnie tu wszyscy się mylą.",
+   "steps": [
+    {
+     "title": "Slot to jeden rzut kością",
+     "body": "Każdy slot dodatków ma szansę: 1.0 oznacza, że zawsze coś się pojawi, 0.35 — w 35% przypadków."
+    },
+    {
+     "title": "Przedmioty w slocie konkurują",
+     "body": "Liczba przy każdym przedmiocie to waga względna, nie procent — DayZ wybiera ze slotu dokładnie JEDEN przedmiot. Wagi 60 i 40 w slocie 0.35 oznaczają w praktyce 21% i 14%. Panel pokazuje tę rzeczywistą liczbę, więc nie musisz jej liczyć."
+    },
+    {
+     "title": "Zacznij od szablonu",
+     "body": "Wybierz szablon broni (AKM, M4-A1, Mosin…), potem dostosuj. Nazwy klas podpowiadają się z twojego types.xml, a wszystko, czego tam nie ma, jest oznaczone — literówka to zwykły powód, dla którego dodatek nigdy nie pojawia się w grze."
+    }
+   ],
+   "tips": [
+    "Jeden slot na część: jeden na magazynki, jeden na celowniki, jeden na kolbę. Magazynek i celownik w tym samym slocie oznaczają, że broń dostanie jedno albo drugie, nigdy oba.",
+    "Przepisywany jest tylko edytowany wpis — twoje komentarze i formatowanie w reszcie pliku są zachowane."
+   ]
+  },
+  {
+   "id": "loadout",
+   "title": "Zestaw gracza",
+   "intro": "Zdecyduj, w co gracz jest ubrany i co ma przy sobie w chwili respawnu. Vanilla zapisuje to na sztywno w init.c misji; panel używa zamiast tego presetów spawn-gear DayZ i włącza cały system za ciebie.",
+   "steps": [
+    {
+     "title": "Włącz system",
+     "body": "Otwórz Zestaw gracza. Jeśli misja nadal wyposaża graczy przez init.c, strona to powie i zaproponuje jeden przycisk, który tworzy preset startowy, rejestruje go w cfggameplay.json i włącza enableCfgGameplayFile — wszystko naraz."
+    },
+    {
+     "title": "Edytuj ubrania i sprzęt",
+     "body": "Każdy preset zawiera, co jest założone w każdym slocie (Ciało, Nogi, Stopy…) i co leży luzem w ekwipunku. Dodawaj przedmioty po klasie, ustaw wagę, gdy slot ma wybierać spośród kilku, i wybierz stan — nienaruszony, zużyty, uszkodzony albo własny zakres."
+    },
+    {
+     "title": "Losowanie próbne i udostępnianie",
+     "body": "Kliknij Losowanie próbne, by zobaczyć, co dokładnie dostanie gracz, razem z postacią. Wyeksportuj preset do pliku, by użyć go na innym serwerze, i zaimportuj z powrotem."
+    }
+   ],
+   "tips": [
+    "healthMin/healthMax to ułamki zdrowia: 1.0 to stan nienaruszony, 0.0 — zniszczony. Trzymaj wszystko nienaruszone, by świeże spawny nie dostawały zużytych ubrań.",
+    "Zestaw zapisuje się przy zatrzymanym serwerze, jak każda zmiana konfiguracji — potem uruchom serwer ponownie."
+   ]
+  },
+  {
+   "id": "rcon",
+   "title": "RCon, gracze i ogłoszenia",
+   "intro": "RCon to zdalna konsola BattlEye: lista graczy na żywo, wyrzucanie, bany i ogłoszenia na czacie. Wymaga hasła, które BattlEye odczytuje z beserver_x64.cfg przy starcie serwera.",
+   "steps": [
+    {
+     "title": "Ustaw hasło",
+     "body": "Wpisz je w sekcji RCon. Menedżer sam zapisze je w battleye/beserver_x64.cfg, w razie potrzeby tworząc plik."
+    },
+    {
+     "title": "Zrestartuj serwer",
+     "body": "BattlEye odczytuje ten plik tylko przy starcie, więc nowe hasło nic nie robi do następnego restartu. To normalne, a nie błąd."
+    },
+    {
+     "title": "Ogłoszenia i harmonogram",
+     "body": "Ogłoszenia według harmonogramu wysyłane są o określonej porze dnia; ogłoszenia cykliczne powtarzają się co N minut. Oba idą przez RCon, więc hasło musi działać."
+    }
+   ],
+   "tips": [
+    "Ostrzeżenia o restarcie też idą przez RCon. Bez hasła restart i tak nastąpi — gracze po prostu nie zobaczą odliczania.",
+    "Sekcja Gracze buduje historię z dziennika admina: nazwy, ID graczy, czas gry, zabójstwa. Wymaga parametru uruchomienia -adminlog (strona Serwer → Parametry uruchomienia).",
+    "Ustawienia → Zachowanie przy restarcie pozwala wyrzucić wszystkich na określony czas przed restartem i zablokować serwer, by nikt nie wszedł w ostatniej minucie. Postacie zapisują się przy rozłączeniu, więc nic nie przepada.",
+    "Strona Czat przechowuje archiwum z każdego dnia — łącznie z wiadomościami wysłanymi z panelu i ogłoszeniami według harmonogramu — z wyszukiwaniem i pobieraniem jako .txt. Czas przechowywania ustawisz w tym samym miejscu."
+   ]
+  },
+  {
+   "id": "weather",
+   "title": "Pogoda i czas",
+   "intro": "Pogoda jest definiowana w cfgweather.xml misji, który DayZ czyta raz przy wczytywaniu misji — dlatego zmiany pogody zawsze wymagają restartu serwera, a w vanilli bez moda nie da się zaplanować „deszczu o 20:00”.",
+   "steps": [
+    {
+     "title": "Wybierz preset lub ustaw ręcznie",
+     "body": "Statyczny preset utrwala pogodę, by się nie zmieniała. Dynamiczna pozwala jej zmieniać się samodzielnie."
+    },
+    {
+     "title": "Wybierz, jak płynnie się zmienia",
+     "body": "Szybkość zmian określa, jak stopniowo zmienia się pogoda: Płynnie narasta przez około pół godziny małymi krokami, jak w vanilli. Szybko przechodzi cały zakres w dwie minuty — przez to pogoda przypomina włącznik światła."
+    },
+    {
+     "title": "Ustaw długość doby",
+     "body": "Przyspieszenie dnia i nocy mnoży upływ czasu w grze — 12 oznacza, że pełna doba trwa dwie realne godziny. Przyspieszenie nocy jest osobne, więc noce mogą być krótkie."
+    }
+   ],
+   "tips": [
+    "Gęstość burzy ma znaczenie tylko wtedy, gdy deszczu i zachmurzenia jest dość, by burza w ogóle się zaczęła.",
+    "Opady śniegu widać tylko na mapach ze śniegiem, takich jak Sakhal."
+   ]
+  },
+  {
+   "id": "maps",
+   "title": "Mapy, zdarzenia i pojazdy",
+   "intro": "Wszystko, co dzieje się na mapie, znajduje się w folderze misji. Te strony czytają go bezpośrednio: teren, tiery lootu, budynki i strefy skażone są rysowane z twoich własnych plików misji, więc mapa zgadza się z serwerem — także przy mapach modowych.",
+   "steps": [
+    {
+     "title": "Zainstaluj misję mapy",
+     "body": "Mapy modowe często zawierają misję w samym modzie (jako folder lub .zip) — instalacja lub aktualizacja moda mapy tutaj automatycznie kopiuje ją do mpmissions. Misje (mapy) importuje też misję z .zip lub folderu i przełącza aktywną misję w serverDZ.cfg."
+    },
+    {
+     "title": "Rozmieść punkty zdarzeń",
+     "body": "Punkty zdarzeń pokazują na mapie każdy punkt spawnu zdarzenia. Kliknij, by dodać, przeciągnij, by przesunąć, albo wpisz dokładne X / Y / Z zaznaczonego punktu — łącznie z wysokością. Możesz też wkleić całą listę współrzędnych."
+    },
+    {
+     "title": "Dostrój pojazdy",
+     "body": "Pojazdy pokazują każde zdarzenie pojazdów: ile może ich istnieć, ile ma punktów spawnu i jak kompletne są części — i ustawiają, z jakim prawdopodobieństwem każda część pojawi się na pojeździe."
+    }
+   ],
+   "tips": [
+    "Nie dołączono żadnego obrazu mapy — warstwy pochodzą z twoich plików misji. Aby mieć mapę jak na zdjęciu, wczytaj własny obraz z góry w ustawieniach mapy.",
+    "Jak pozostałe edytory, te strony zapisują tylko przy zatrzymanym serwerze."
+   ]
+  },
+  {
+   "id": "maintenance",
+   "title": "Utrzymanie w dobrej formie",
+   "intro": "Serwery ratują trzy rzeczy: kopie zapasowe, walidator i faktyczne czytanie logów, gdy coś się psuje.",
+   "steps": [
+    {
+     "title": "Włącz automatyczne kopie",
+     "body": "Ustawienia mogą według harmonogramu zapisywać zip twoich konfiguracji i plików misji, zachowując N najnowszych. Każdy plik nadpisywany przez panel dostaje też obok siebie .bak ze znacznikiem czasu."
+    },
+    {
+     "title": "Waliduj przed restartem",
+     "body": "Walidator sprawdza każdy plik XML i JSON misji, serverDZ.cfg, odwołania między plikami, szanse spawnu, pozycje i klucze modów. Problemy są pogrupowane, a większość ma przycisk Napraw właśnie dla nich — albo napraw wszystko bezpieczne za jednym razem."
+    },
+    {
+     "title": "Czytaj właściwy log",
+     "body": "Plik .RPT zapisuje, co robił sam serwer — awaria czy mod, który się nie wczytał, są widoczne właśnie tam. Plik .ADM zapisuje, co robili gracze."
+    }
+   ],
+   "tips": [
+    "Wipe usuwa zapisany stan świata — graczy, pojazdy, bazy. Twoje tabele lootu i konfiguracje zostają nietknięte. Foldery są najpierw odkładane na bok, więc błędny wipe można odwrócić ręcznie.",
+    "Strażnik awarii restartuje serwer, jeśli ten sam się zamknie. Po trzech awariach w pięć minut zatrzymuje się i pokazuje baner — pętla awarii potrzebuje człowieka, a nie kolejnego restartu."
+   ]
+  },
+  {
+   "id": "health",
+   "title": "Stan serwera",
+   "intro": "Jedna strona, która jednym spojrzeniem odpowiada „czy coś jest nie tak?”, plus narzędzia do porządku: cofnięcie złej zmiany konfiguracji i zwolnienie miejsca na dysku.",
+   "steps": [
+    {
+     "title": "Czytaj kafelki stanu",
+     "body": "Strona Stan serwera pokazuje cztery kafelki — czy serwer działa (albo utknął w pętli awarii), czy jest miejsce na dysku, czy konfiguracja przechodzi walidację i — jeśli serwer nie startuje — dlaczego. Każdy kafelek prowadzi do strony, na której to naprawisz."
+    },
+    {
+     "title": "Cofnij zmianę",
+     "body": "Menedżer robi kopię każdego pliku konfiguracyjnego przed zapisem. Strona Historia pokazuje te migawki dla każdego pliku, z porównaniem tego, co dokładnie przywróci odtworzenie, i przywracaniem jednym kliknięciem — twoja siatka bezpieczeństwa po złej edycji."
+    },
+    {
+     "title": "Zwolnij miejsce",
+     "body": "Na stronie stanu jedno kliknięcie usuwa logi serwera i zrzuty awarii (najnowsze RPT i ADM zostają) albo stare kopie konfiguracji, by długo działający serwer nie zapchał po cichu dysku."
+    }
+   ],
+   "tips": [
+    "Kafelek poprawności konfiguracji uruchamia pełny walidator, co przy dużej misji chwilę trwa — wypełnia się sekundę lub dwie po pozostałych.",
+    "Przywrócenie kopii wymaga zatrzymanego serwera, jak każda inna zmiana konfiguracji."
+   ]
+  },
+  {
+   "id": "remote",
+   "title": "Dostęp z telefonu lub z dowolnego miejsca",
+   "intro": "W domu telefon otwiera panel przez lokalny adres komputera, który poza twoją siecią nie istnieje — dlatego w pracy lub przez internet mobilny panel jest niedostępny. Karta Ustawienia → Dostęp zdalny sprawdza wszystkie warunki dostępu z dowolnego miejsca i naprawia, co się da.",
+   "steps": [
+    {
+     "title": "Ustaw logowanie do panelu",
+     "body": "Ustawienia → Logowanie do panelu: wybierz nazwę użytkownika i hasło o długości co najmniej 8 znaków. Od tej pory każde urządzenie musi się logować — oprócz okna otwieranego przez ten komputer. Nie pamiętasz hasła? Uruchom menedżer z parametrem -reset-login."
+    },
+    {
+     "title": "Udostępnij panel w sieci",
+     "body": "Ustawienia → Dostęp do panelu: „Sieć lokalna” dla telefonów w domu, „Internet” dla dostępu z dowolnego miejsca (możliwy tylko z logowaniem). Potem zrestartuj menedżer."
+    },
+    {
+     "title": "Wpuść połączenia",
+     "body": "Na karcie Dostęp zdalny włącz UPnP, aby router przekierował port panelu, i zezwól menedżerowi w Zaporze Windows. Bez UPnP przekieruj port ręcznie w ustawieniach routera. Włącz HTTPS, aby hasło było przesyłane w postaci zaszyfrowanej."
+    },
+    {
+     "title": "Sprawdź z zewnątrz",
+     "body": "Kliknij „Sprawdź dostęp z internetu”: zobaczysz swój publiczny adres i dokładny link do otwarcia. Przetestuj go na telefonie z wyłączonym Wi-Fi."
+    }
+   ],
+   "tips": [
+    "Jeśli sprawdzenie wykaże CGNAT, dostawca dzieli jeden adres między wielu klientów i żadne przekierowanie portów nie zadziała: poproś o publiczny adres IP albo użyj Tailscale, ZeroTier lub Radmin VPN — wtedy wystarczy dostęp „Sieć lokalna”.",
+    "Ta sama karta potrafi też przekierować porty gry, by gracze znaleźli serwer na liście serwerów DayZ. Port RCon nigdy nie jest otwierany."
+   ]
+  },
+  {
+   "id": "presets",
+   "title": "Ekonomia lootu i presety",
+   "intro": "Poza edycją pojedynczych przedmiotów loot zbiorczo kształtują trzy narzędzia: pulpit pokazujący, co spawnuje twoja mapa, skalowanie całego pliku jednym kliknięciem i presety wielokrotnego użytku przypinane do przedmiotów po nazwie.",
+   "steps": [
+    {
+     "title": "Zobacz kształt lootu",
+     "body": "Otwórz Ekonomię lootu, by zsumować nominal i min wszystkich przedmiotów i rozbić je według kategorii, tierów i usage — najszybszy sposób, by zauważyć, że mapa tonie w jednym, a brakuje jej drugiego."
+    },
+    {
+     "title": "Skaluj jednym kliknięciem",
+     "body": "Presety dostrajania mnożą wszystkie nominal i min naraz — ×2 dla serwera bogatego w loot, ×0.5 dla hardcore. ×1 przywraca ilości sprzed pierwszego skalowania, więc zawsze można to cofnąć."
+    },
+    {
+     "title": "Używaj grup przez presety",
+     "body": "Preset to nazwana grupa przedmiotów z szansą spawnu. Utwórz go na stronie Presety, potem odwołuj się do niego po nazwie ze slotu dodatków broni lub zawartości pojemnika, zamiast powtarzać tę samą listę wszędzie."
+    }
+   ],
+   "tips": [
+    "Skalowanie i presety zapisują pliki misji, więc do zapisu serwer musi być zatrzymany."
+   ]
+  },
+  {
+   "id": "servers",
+   "title": "Kilka serwerów",
+   "intro": "Jeden menedżer może prowadzić kilka serwerów DayZ — na przykład Chernarus i Livonię albo serwer vanilla i serwer z modami. Każdy serwer ma własny folder i własne ustawienia, mody, graczy, czat, bany, kopie zapasowe, harmonogram i powiadomienia Discord; logowanie do panelu, dostęp zdalny i język interfejsu są wspólne.",
+   "steps": [
+    {
+     "title": "Dodaj serwer",
+     "body": "Serwery → Dodaj serwer. Wskaż folder, w którym jest już serwer DayZ (zainstalowany przez SteamCMD lub twoja własna kopia), albo pozwól menedżerowi go utworzyć: „Nowy serwer — kopia” kopiuje pliki gry, misje, klucze i ustawienia BattlEye istniejącego serwera do nowego folderu i uruchamia go z nowym światem."
+    },
+    {
+     "title": "Daj mu własne porty",
+     "body": "Dwa serwery nie mogą dzielić portu. Kopia sama dostaje wolne porty; dla dodanego folderu „Przydziel wolne porty” jednym kliknięciem przenosi go na wolny port gry, port zapytań Steam (steamQueryPort) i port RCon."
+    },
+    {
+     "title": "Przełączaj się między nimi",
+     "body": "Menu serwerów na górnym pasku przełącza cały panel na inny serwer — każda strona pokazuje i edytuje wtedy ten serwer. Dwie karty przeglądarki mogą jednocześnie zarządzać dwoma serwerami."
+    }
+   ],
+   "tips": [
+    "Usunięcie serwera z panelu niczego nie kasuje: jego folder, ustawienia i logi zostają na miejscu, a serwer można dodać ponownie.",
+    "Przy kilku serwerach pulpit pokazuje je wszystkie naraz z przyciskami Uruchom i Zatrzymaj, a zamknięcie menedżera zatrzymuje — lub zostawia uruchomione — wszystkie jednocześnie."
+   ]
+  },
+  {
+   "id": "players",
+   "title": "Gracze i bany",
+   "intro": "Strona Gracze zna każdego, kogo widział dziennik admina — nazwy, ID, czas gry, zabójstwa — pokazuje, kto jest teraz online, i przechowuje bany serwera.",
+   "steps": [
+    {
+     "title": "Znajdź gracza",
+     "body": "Wszyscy gracze: szukaj po nazwie, ID gracza, IP lub notatce, sortuj według czasu gry lub zabójstw i oznaczaj graczy gwiazdką, aby mieć ich na oku. Kliknięcie nazwy otwiera profil z ID, notatką, bieżącym banem i historią moderacji."
+    },
+    {
+     "title": "Zbanuj na jakiś czas — albo na zawsze",
+     "body": "„Zbanuj…” w profilu lub na liście online: wybierz od 1 godziny do 30 dni, na stałe albo własny czas, oraz powód, który zobaczy gracz. Ban trafia do własnego ban.txt serwera — działa od razu — oraz do BattlEye, gdy znany jest GUID gracza. Ban czasowy jest zdejmowany automatycznie po upływie terminu."
+    },
+    {
+     "title": "Zarządzaj graczami online",
+     "body": "Teraz online wyświetla graczy z pingiem, IP i GUID — napisz do nich, wyrzuć z powodem albo zbanuj od razu na miejscu. Wymaga to hasła RCon."
+    }
+   ],
+   "tips": [
+    "Bez dziennika admina nie ma graczy: historia wymaga parametru uruchomienia -adminlog (strona Serwer → Parametry uruchomienia).",
+    "Bany → „Zbanuj po ID” banuje kogoś, kogo nie ma na serwerze: wklej Steam64 ID z linku do jego profilu Steam, ID gracza z dziennika admina, BattlEye GUID lub adres IP."
+   ]
+  },
+  {
+   "id": "discord",
+   "title": "Powiadomienia Discord",
+   "intro": "Menedżer może publikować na twoim kanale Discorda to, co dzieje się na serwerze: kiedy jest online, restarty z powodem, awarie, aktualizacje modów, dołączenia, zabójstwa, czat, bany i więcej.",
+   "steps": [
+    {
+     "title": "Utwórz webhook",
+     "body": "W Discordzie: ustawienia kanału → Integracje → Webhooki → Nowy webhook → Kopiuj URL webhooka. Wklej go w Ustawienia → Discord, włącz powiadomienia i naciśnij „Wyślij wiadomość testową”."
+    },
+    {
+     "title": "Wybierz, co publikować",
+     "body": "Włączaj i wyłączaj zdarzenia. Aktywność graczy (dołączenia, zabójstwa, czat) może trafiać na drugi kanał, aby nie zagłuszała ogłoszeń, a przy awarii serwera można pingować rolę."
+    },
+    {
+     "title": "Utrzymuj status na żywo",
+     "body": "Wiadomość ze statusem na żywo to jedna wiadomość, która zawsze pokazuje, czy serwer jest online, graczy, mapę, czas działania i następny restart. Przypnij ją na kanale."
+    }
+   ],
+   "tips": [
+    "Każdy serwer panelu ma własne ustawienia Discorda. Kilka serwerów może publikować na jednym kanale — każda wiadomość zawiera nazwę serwera.",
+    "Dołączenia i wyjścia przychodzą z RCon w czasie rzeczywistym (bez RCon — z dziennika admina około minuty później); zabójstwa zawsze pochodzą z dziennika admina."
+   ]
+  }
+ ],
+ "help": {
+  "attach.cargo": "Zawartość pojawia się WEWNĄTRZ przedmiotu: zawartość plecaka, loot w skrzyni, bagażnik auta. Dodatki montuje się NA nim. Połowa vanillowego pliku to zawartość, a nie dodatki.",
+  "attach.class": "Klasa konfigurowana przez ten wpis. Nie musi to być broń — cfgspawnabletypes.xml obejmuje też ubrania, plecaki, skrzynie, beczki i pojazdy.",
+  "attach.damage": "Stan, w jakim przedmiot się pojawia: od 0.0 (nienaruszony) do 1.0 (zniszczony). Zostaw oba pola puste, by zachować domyślne ustawienie DayZ.",
+  "attach.hoarder": "Oznacza wpis jako trwały magazyn — beczki, namioty, skrytki. DayZ wlicza to, co gracze w nich przechowują, do limitu hoarder, a nie do lootu świata.",
+  "attach.itemWeight": "Waga względna, nie procent — DayZ wybiera ze slotu dokładnie JEDEN przedmiot. Wagi 60 i 40 oznaczają 60% i 40% własnej szansy slotu.",
+  "attach.slotChance": "Prawdopodobieństwo, że w tym slocie w ogóle coś się pojawi. 1.0 = zawsze, 0.35 = w 35% przypadków.",
+  "attach.tags": "Ogranicza, gdzie wpis obowiązuje, np. floor lub shelves. Po przecinku. Większość wpisów ich nie potrzebuje.",
+  "backup.restore": "Przywraca konfiguracje i pliki misji z pliku zip. Serwer musi być zatrzymany — podczas działania blokuje te pliki.",
+  "battleye.bans": "Jeden ban na linię: GUID lub IP, kiedy się kończy (-1 = na stałe, w przeciwnym razie data końca zapisana jako czas Unix), powód. Zapis na działającym serwerze przeładowuje bany przez RCon, więc restart nie jest potrzebny.",
+  "diag": "Dopasowane wzorcami z najnowszego RPT i logu stdout menedżera. Rozpoznaje kilka awarii, które faktycznie zatrzymują serwer DayZ; wszystko, czego nie rozpozna, i tak wymaga surowego logu, więc pusty wynik nie oznacza, że wszystko jest w porządku.",
+  "diag.bad_signature.detail": "{subject} nie przeszedł kontroli podpisu BattlEye. Zsynchronizuj ponownie .bikey moda na stronie Mody — NIE obniżaj verifySignatures, bo wpuściłoby to też zmodyfikowanych klientów.",
+  "diag.bad_signature.title": "Plik moda nie jest podpisany lub jego klucz się nie zgadza",
+  "diag.config_parse.detail": "Parser konfiguracji zatrzymał się przedwcześnie. Zwykle przyczyną jest brakujący średnik lub niezbalansowany nawias — Walidator sprawdza bilans nawiasów.",
+  "diag.config_parse.title": "serverDZ.cfg jest uszkodzony",
+  "diag.missing_key.detail": "Klienci z tym modem będą wyrzucani za zły podpis. Użyj „Synchronizuj klucze” na stronie Mody.",
+  "diag.missing_key.title": "Brak klucza moda w keys/",
+  "diag.mission_missing.detail": "Szablon wskazany w serverDZ.cfg nie ma odpowiadającego folderu w mpmissions/. Wybierz istniejącą misję na stronie Serwer.",
+  "diag.mission_missing.title": "Misja z server.cfg nie istnieje",
+  "diag.mod_missing.detail": "DayZ nie mogło otworzyć {subject}. Mod jest w parametrach startowych, ale jego folderu brakuje lub jest niekompletny — zainstaluj go lub zsynchronizuj ponownie na stronie Mody i uruchom znowu.",
+  "diag.mod_missing.title": "Folderu moda z -mod nie ma na serwerze",
+  "diag.mod_missing_generic.detail": "DayZ nie mogło otworzyć {subject}. Sprawdź, czy ścieżka istnieje i czy antywirus nie przeniósł pliku do kwarantanny.",
+  "diag.mod_missing_generic.title": "Brakuje pliku potrzebnego serwerowi",
+  "diag.no_economy.detail": "Serwer może działać, ale nie spawnować lootu. Uruchom Walidator: zwykle przyczyną jest brakujący plik wskazany w cfgeconomycore.xml albo nieznana nazwa usage/value.",
+  "diag.no_economy.title": "Centralna ekonomia się nie wczytała",
+  "diag.port_busy.detail": "Port zajmuje inny proces — bardzo często poprzedni serwer DayZ, który jeszcze się całkiem nie zamknął. Poczekaj kilka sekund albo zmień port na stronie Serwer.",
+  "diag.port_busy.title": "Port serwera jest już zajęty",
+  "diag.script_error.detail": "Serwer zatrzymał się podczas kompilacji skryptów. Linie tuż po tej w RPT podają plik i numer linii — zwykle to mod niepasujący do bieżącej wersji DayZ.",
+  "diag.script_error.title": "Skrypt się nie skompilował",
+  "economy.categories": "Ile kategorii lootu (broń, jedzenie, narzędzia…) występuje w tym pliku.",
+  "economy.items": "Ile różnych typów przedmiotów definiuje ten plik.",
+  "economy.min": "Suma min wszystkich przedmiotów — próg, do którego centralna ekonomia uzupełnia każdy przedmiot.",
+  "economy.nominal": "Suma nominal wszystkich przedmiotów — docelowa liczba każdego przedmiotu, którą mapa stara się utrzymać.",
+  "economy.tune": "Skalowanie wszystkich nominal/min w tym pliku jednym kliknięciem. ×2 = dwa razy więcej lootu; ×1 przywraca oryginał.",
+  "events.active": "0 wyłącza zdarzenie, zachowując jego konfigurację. Tak w vanilli dostarczane są zdarzenia sezonowe (Boże Narodzenie, Halloween).",
+  "events.children": "Klasy obiektów, które spawnuje to zdarzenie, z własnymi zakresami lootu. Do ręcznej edycji służy edytor Mission DB.",
+  "events.lifetime": "Ile sekund zespawnowana grupa zostaje w świecie, zanim zniknie, jeśli nikt jej nie ruszał.",
+  "events.minmax": "min i max ograniczają wielkość grupy na jeden spawn. max=0 oznacza brak limitu — dlatego vanillowe zdarzenia tła mają min=100 max=0.",
+  "events.nominal": "Ile takich zdarzeń serwer utrzymuje naraz. Pojazdy, rozbite helikoptery, stada zwierząt i grupy zarażonych — to wszystko zdarzenia.",
+  "events.restock": "Ile sekund przed ponownym pojawieniem się wyczyszczonego lub zużytego zdarzenia. 0 = uzupełniaj, gdy tylko można.",
+  "events.saveable": "1 = zespawnowana grupa jest zapisywana w stanie świata i przetrwa restart; 0 = przy każdym starcie losowana od nowa.",
+  "gameplay.file": "cfggameplay.json nadpisuje zasady rozgrywki — wytrzymałość, budowanie, zachowanie mapy. Przy jednym błędzie składni DayZ ignoruje cały plik, więc jest sprawdzany przed zapisem.",
+  "leaderboard.metrics": "Wybierz, według czego tworzyć ranking: łączny czas gry, zabójstwa, stosunek zabójstw do zgonów lub liczba sesji.",
+  "loadout": "W co gracz jest ubrany i co ma przy sobie po respawnie. To presety spawn-gear DayZ zarejestrowane w cfggameplay.json — zmiany działają po restarcie serwera. W vanilli zestaw jest zamiast tego w init.c, dlatego nowa misja nic tu nie pokazuje, dopóki nie włączysz systemu.",
+  "loadout.carried": "Luźne przedmioty wkładane prosto do ekwipunku nowego gracza zamiast do slotu ubrania — szmaty, jedzenie, narzędzie startowe.",
+  "loadout.characters": "Których modeli ocalałych dotyczy ten preset (SurvivorM_Mirek, SurvivorF_Eva, …). Zostaw puste dla wszystkich; przy każdym spawnie losowany jest jeden.",
+  "loadout.condition": "Stan, w jakim przedmiot się pojawia. W DayZ 1.0 = nienaruszony, a 0.0 = zniszczony, więc więcej znaczy lepiej. Nienaruszony utrzymuje startowy sprzęt jako nowy; wybierz Własny…, by ustawić dokładny zakres zdrowia min–max, a przedmiot pojawi się gdzieś w nim.",
+  "loadout.weight": "Waga tego presetu względem innych. DayZ wybiera JEDEN preset na spawn, więc preset z wagą 3 jest trzy razy bardziej prawdopodobny niż z wagą 1.",
+  "loadout.worn": "Przedmioty zakładane na ciało, po jednym slocie ciała. W obrębie slotu DayZ wybiera JEDEN przedmiot według wagi, więc kilka wariantów daje różnorodność między spawnami.",
+  "logs.adm": "Co robili gracze: połączenia, czat, zabójstwa, pozycje. Wymaga flagi -adminlog; na nim zbudowana jest strona Gracze.",
+  "logs.rpt": "Co robił sam serwer: start, wczytywanie modów, błędy skryptów, awarie. To plik do czytania, gdy serwer się nie uruchamia.",
+  "moddrift.help.active": "Ile z tych typów faktycznie jest w twojej ekonomii (types.xml + moded_types).",
+  "moddrift.help.missing": "Typy, które zawiera mod, ale nie ma ich w twojej ekonomii — te przedmioty nie będą się pojawiać, dopóki nie zostaną podłączone.",
+  "moddrift.help.ships": "Ile typów lootu definiuje własny plik types tego moda.",
+  "mods.order": "DayZ wczytuje mody od lewej do prawej. Frameworki muszą być pierwsze: @CF przed wszystkim, co od niego zależy, Expansion Core przed jego dodatkami. Zła kolejność to częsty powód, dla którego serwer nie startuje.",
+  "mods.profiles": "Zapisuje obecny zestaw włączonych modów pod nazwą, byś mógł przełączać się między składem z modami a vanillowym bez ponownego klikania wszystkiego.",
+  "mods.scan": "Szuka w modzie types.xml i rejestruje go w cfgeconomycore.xml, aby loot moda faktycznie się pojawiał.",
+  "mods.serverSide": "Wczytuje mod przez -serverMod zamiast -mod: działa na serwerze, a klienci go nie potrzebują i nie dostają. Tylko dla narzędzi admina — mod z lootem lub treścią ustawiony jako serwerowy nie zadziała.",
+  "mods.uninstall": "Usuwa folder moda z serwera. Jego .bikey jest usuwany tylko wtedy, gdy żaden inny zainstalowany mod nie używa tego klucza, więc wspólne klucze, jak Expansion, zostają.",
+  "mods.update": "Kopiuje nowsze pliki z !Workshop klienta na serwer. Menedżer nie potrafi pobierać modów — najpierw zasubskrybuj w Steam.",
+  "rcon.password": "Zapisywane w battleye/beserver_x64.cfg. BattlEye czyta ten plik tylko przy starcie, więc nowe hasło nic nie robi do następnego restartu.",
+  "server.forceSameBuild": "Wymagaj od klientów dokładnie tej samej wersji gry (1). Zapobiega awariom z powodu niezgodności wersji.",
+  "server.hostname": "Nazwa serwera widoczna na liście serwerów DayZ. Niech będzie krótka i łatwa do wyszukania.",
+  "server.instanceId": "Którego zapisu używa serwer. Zmień go, a serwer zacznie na zupełnie nowym świecie — stary zapis zostaje na dysku pod swoim id.",
+  "server.loginQueue": "Ilu graczy może łączyć się naraz i czekać w kolejce — łagodzi duże fale wejść.",
+  "server.maxPlayers": "Liczba slotów. Zwiększenie nie daje lepszego sprzętu: każdy slot kosztuje RAM i CPU, a DayZ staje się niestabilne na długo przed tym, jak większości maszyn zabraknie zasobów.",
+  "server.mission": "Który folder misji z mpmissions/ wczytuje serwer. Tak zmienia się mapę — chernarusplus, enoch (Livonia), sakhal.",
+  "server.nightTimeAccel": "Dodatkowy mnożnik tempa nocy ponad tempo dnia, by noce mijały szybciej niż dni.",
+  "server.password": "Hasło dołączenia. Zostaw puste dla serwera publicznego; ustaw, by serwer był prywatny.",
+  "server.passwordAdmin": "Hasło admina w grze (#login). Oddzielne od hasła RCon — trzymaj je w tajemnicy.",
+  "server.respawnTime": "Ile sekund gracz musi czekać na respawn po śmierci. Długie wartości zniechęcają do samobójstw w celu zmiany punktu spawnu.",
+  "server.steamQueryPort": "Port, przez który Steam pokazuje twój serwer na liście. Musi być wolny i przekierowany, inaczej serwer działa, ale nigdy nie pojawia się na liście.",
+  "server.storageAutoFix": "Pozwól DayZ naprawić uszkodzony zapis stanu przy wczytywaniu (1), zamiast nie uruchomić się.",
+  "server.thirdPerson": "1 wymusza tylko widok z pierwszej osoby. Zmienia rozgrywkę bardziej niż jakiekolwiek inne ustawienie, więc zdecyduj, zanim zbudujesz społeczność.",
+  "server.timeAccel": "Mnożnik tempa czasu w dzień (1 = czas rzeczywisty, 24 = pełna doba w godzinę). Zakres ~0.1–64.",
+  "server.timePersistent": "Zachowuj zegar świata między restartami (1) zamiast resetować do serverTime przy każdym starcie (0).",
+  "server.verifySignatures": "2 oznacza, że każdy plik moda musi być podpisany kluczem z keys/. Obniżenie do 0 pozwala na niepodpisane mody — i wpuszcza zmodyfikowanych klientów. Zostaw 2.",
+  "server.von": "Czat głosowy. Wyłączenie całkowicie usuwa głos w grze, łącznie z radiem.",
+  "server.whitelist": "Dołączyć mogą tylko gracze z twojej listy. Nie włączaj, jeśli nie prowadzisz pliku whitelisty.",
+  "settings.adminlog": "Włącza -adminlog, który zapisuje plik .ADM. Na nim zbudowana jest strona Gracze i killfeed — bez niego są puste.",
+  "settings.backup": "Archiwizuje twoje konfiguracje i pliki misji według harmonogramu i zachowuje N najnowszych. Osobno każdy plik nadpisywany przez panel dostaje obok siebie .bak ze znacznikiem czasu.",
+  "settings.exposure": "„Tylko ten komputer” — panel otwiera się tylko na tym komputerze. „Sieć lokalna” — mogą go otworzyć telefon i inne urządzenia w domu. „Internet” — dostęp z dowolnego miejsca; wymaga logowania do panelu, a resztę (router, zapora, publiczny IP) sprawdza karta Ustawienia → Dostęp zdalny.",
+  "settings.modSource": "Skąd menedżer kopiuje mody. Folder klienta: instalacja gry DayZ z !Workshop (subskrybujesz w Steam, menedżer kopiuje i aktualizuje). Folder modów: dowolny folder z @modami lub workshop/content/221100 z SteamCMD — sposób na mody z Workshop na hostingu bez zainstalowanej gry. Tylko serwer: brak źródła; mody wgrane ręcznie są nadal zarządzane, ale automatyczna aktualizacja jest wyłączona.",
+  "settings.perf": "Powinowactwo CPU przypina DayZServer do zaznaczonych rdzeni (niezaznaczone zostają wolne dla systemu, drugiego serwera lub innych programów). Priorytet mówi systemowi, jak chętnie go planować — Powyżej normalnego to bezpieczne przyspieszenie; Wysoki może spowolnić resztę maszyny. Oba stosowane są przy każdym starcie. Na Linuksie podniesienie priorytetu wymaga roota.",
+  "settings.restart": "Restartuje serwer według harmonogramu. Gracze wcześniej dostają ostrzeżenia przez RCon, co wymaga ustawionego hasła RCon.",
+  "settings.restartBehaviour": "Co gracze przeżywają przy każdym automatycznym restarcie: tekst odliczania (napisz go w ich języku), opcjonalne okno tuż przed restartem, w którym serwer jest zablokowany, a wszyscy wyrzuceni, by postacie zapisały się czysto, oraz łagodny #shutdown zapisujący świat przed zatrzymaniem procesu. Oś czasu poniżej pokazuje dokładną kolejność.",
+  "settings.watchdog": "Restartuje serwer, jeśli ten sam się zamknie. Po trzech awariach w pięć minut zatrzymuje się i pokazuje baner — pętla awarii potrzebuje człowieka, a nie kolejnego restartu.",
+  "sync.import": "Kopiuje ustawienia z innej instalacji menedżera. Istniejące wartości zostaną nadpisane, więc w razie wątpliwości najpierw zrób kopię.",
+  "types.bulk": "Stosuje te wartości do wszystkich zaznaczonych wierszy naraz. Zmieniane są tylko wypełnione pola.",
+  "types.category": "Grupuje przedmiot dla systemu lootu (broń, jedzenie, ubrania…). Nazwa musi istnieć w cfglimitsdefinition.xml, inaczej DayZ pominie wpis.",
+  "types.cost": "Priorytet spawnu, gdy kandydatów jest więcej niż miejsc. Wyższy wygrywa. To nie pieniądze i gracze nigdy tego nie widzą.",
+  "types.flags": "count_in_cargo / count_in_hoarder / count_in_map / count_in_player decydują, czy przedmioty już leżące w namiocie, aucie czy plecaku liczą się do nominal. Wyłącz je, a serwer będzie spawnował coraz więcej przedmiotu, który gracze już zgromadzili.",
+  "types.lifetime": "Ile sekund nieruszony przedmiot przetrwa, zanim zniknie. 3888000 to 45 dni.",
+  "types.min": "Gdy liczba spadnie do tej wartości, serwer kolejkuje ponowny spawn. Nie może przekraczać nominal — DayZ ją przytnie i zapisze ostrzeżenie w logu.",
+  "types.nominal": "Ile takich przedmiotów serwer stara się utrzymać w świecie naraz. 0 oznacza, że nigdy się nie pojawia.",
+  "types.quant": "Poziom napełnienia w procentach dla przedmiotów z ilością (napoje, paliwo). -1 wyłącza, w przeciwnym razie 0–100.",
+  "types.restock": "Ile sekund serwer czeka przed uzupełnieniem tego przedmiotu. 0 oznacza natychmiast.",
+  "types.tag": "Zawęża, gdzie w budynku ląduje przedmiot: floor, shelves, ground. Przedmiot bez tagu może użyć każdej powierzchni dozwolonej przez usage.",
+  "types.usage": "W jakich typach budynków przedmiot może się pojawić (Military, Police, Farm…). Brak usage oznacza brak miejsca na spawn.",
+  "types.value": "Tier lootu: Tier1 to wybrzeże, Tier4 to głąb lądu i wojsko. Decyduje, jak daleko od spawnu pojawia się przedmiot.",
+  "validator.autofix": "Dopisuje nieznane nazwy usage/value/tag/category do cfglimitsdefinition.xml. Zwykle właśnie to sprawia, że loot z modów zaczyna się pojawiać — nazwy muszą tam istnieć, inaczej DayZ ignoruje wpis.",
+  "validator.severity": "Błędy psują coś już teraz. Ostrzeżenia to rzeczy, które DayZ toleruje, ale zwykle oznaczają, że konfiguracja nie robi tego, co zamierzałeś.",
+  "vehicles.lifetime": "Czas życia, którego centralna ekonomia używa dla tego zdarzenia (pojazdy vanilla: 300). Nie sprawia, że sprawne auta znikają — pojazdy vanilla zostają, dopóki nie zostaną zniszczone albo świat nie zostanie wyczyszczony. Zostaw wartość vanilla, chyba że poradnik moda mówi inaczej.",
+  "vehicles.loot": "lootmin / lootmax wariantu z events.xml, pozostawione bez zmian (pojazdy vanilla używają 0). Części pojazdu — koła, drzwi, akumulator, świece — pochodzą z cfgspawnabletypes: użyj przycisków „Części przy spawnie” poniżej lub strony Dodatki dla szans poszczególnych części.",
+  "vehicles.max": "Bezwzględny limit dla tego typu pojazdu, wliczając te schowane lub zaparkowane przez graczy. Zwykle równy nominal.",
+  "vehicles.min": "Gdy jest ich mniej niż ta liczba, ekonomia spawnuje nowe (po opóźnieniu uzupełnienia) aż do nominal.",
+  "vehicles.nominal": "Ile takich pojazdów ekonomia stara się utrzymać na mapie naraz (wszystkie warianty kolorystyczne razem).",
+  "vehicles.restock": "Ile sekund ekonomia czeka przed zastąpieniem zniszczonego lub zniknięciem pojazdu. 0 = zastąp jak najszybciej.",
+  "weather.accel": "Mnoży upływ czasu w grze. 12 oznacza, że pełna doba trwa dwie realne godziny. Noc jest osobno, więc noce mogą być krótkie.",
+  "weather.dynamic": "Wyłączone utrwala pogodę tam, gdzie ją ustawisz. Włączone pozwala serwerowi samodzielnie ją zmieniać w granicach limitów.",
+  "weather.fog": "Gęstość mgły, 0–100%. Gęsta mgła mocno ogranicza widoczność — napięcie przy wyprawach po loot, utrudnienie dla snajperów.",
+  "weather.overcast": "Zachmurzenie, 0–100%. Wyżej = szarzej i ciemniej; decyduje też o deszczu — deszcz wymaga zachmurzenia powyżej ok. 70%.",
+  "weather.rain": "Natężenie deszczu, 0–100%. Pada tylko przy wystarczającym zachmurzeniu; moczy gracza i tłumi dźwięki.",
+  "weather.snowfall": "Natężenie opadów śniegu, 0–100% (widoczne głównie na śnieżnych mapach, jak Sakhal).",
+  "weather.storm": "Działa tylko wtedy, gdy deszczu i zachmurzenia jest dość, by burza w ogóle się zaczęła.",
+  "weather.timePreset": "Ustawia zegar gry przy starcie serwera. SystemTime podąża za zegarem twojego PC; stała wartość zawsze zaczyna mapę o tej samej godzinie.",
+  "weather.transition": "Jak stopniowo zmienia się pogoda. Płynnie narasta przez około pół godziny małymi krokami, jak w vanilla DayZ. Szybko może przejść cały zakres w dwie minuty — przez to pogoda przypomina włącznik światła.",
+  "weather.wind": "Prędkość wiatru w m/s. Porusza chmurami i razem z trybem dynamicznym decyduje, jak szybko zmienia się pogoda.",
+  "wipe": "Usuwa zapisany stan świata: graczy, pojazdy, bazy. Tabele lootu i konfiguracje zostają nietknięte. Foldery są odkładane na bok, a nie kasowane, więc błąd można ręcznie odwrócić.",
+  "wipe.undo": "Wipe przenosi foldery świata do .dayz-manager/wipes/<znacznik czasu>/ zamiast je usuwać, więc da się go cofnąć — dopóki serwer nie odbuduje tego stanu; wtedy przywrócenie starego świata pogrzebałoby nowy."
+ },
+ "gameplay": {
+  "version": "Wersja formatu pliku. Zapisuje ją DayZ — zostaw ją bez zmian.",
+  "GeneralData": "Przełączniki dla całego serwera: obrażenia baz i schowków, ekran odrodzenia.",
+  "PlayerData": "Zasady dla graczy: światło osobiste, wytrzymałość, szok, ruch, tonięcie i zestawy startowe.",
+  "StaminaData": "Jak szybko spada wytrzymałość i ile gracze mogą nosić bez kary.",
+  "ShockHandlingData": "Jak szybko mija szok (obrażenia, które pozbawiają graczy przytomności).",
+  "MovementData": "Bezwładność postaci: jak szybko przyspiesza i się obraca.",
+  "DrowningData": "Co gracze tracą na sekundę podczas tonięcia.",
+  "WeaponObstructionData": "Czy długa broń jest odsuwana na bok, gdy weszłaby w ściany i obiekty.",
+  "WorldsData": "Ustawienia świata: ciemność nocy, miesięczne temperatury, dodatkowe obiekty, waga mokrych ubrań.",
+  "BaseBuildingData": "Zasady budowania baz: kontrole umieszczania i kontrole budowy.",
+  "HologramData": "Kontrole zielono-czerwonego podglądu umieszczania. Wyłączenie którejś pozwala graczom stawiać rzeczy, których gra normalnie nie pozwala.",
+  "ConstructionData": "Kontrole wykonywane podczas budowania elementu bazy.",
+  "UIData": "Interfejs: mapa 3D i wskaźnik trafień.",
+  "HitIndicationData": "Znacznik na ekranie, który pokazuje, skąd przyszło trafienie. Używany tylko przy włączonym „Użyj tych ustawień”.",
+  "MapData": "Mapa w grze: czy gracze potrzebują mapy, kompasu lub GPS i co pokazuje mapa.",
+  "VehicleData": "Ustawienia pojazdów.",
+  "disableBaseDamage": "Ściany, bramy, płoty i wieże strażnicze nie otrzymują żadnych obrażeń — rajdy stają się niemożliwe.",
+  "disableContainerDamage": "Namioty, beczki, skrzynie i skrytki nie otrzymują obrażeń.",
+  "disableRespawnDialog": "Brak ekranu odrodzenia po śmierci: gracz od razu wraca w losowym punkcie spawnu.",
+  "disableRespawnInUnconsciousness": "Nieprzytomny gracz nie może nacisnąć Odrodzenia — najpierw się budzi albo umiera.",
+  "disablePersonalLight": "Usuwa słabą poświatę wokół każdego gracza w nocy — ciemniejsze noce. Nadpisuje to samo ustawienie w serverDZ.cfg.",
+  "spawnGearPresetFiles": "Pliki zestawów startowych. Zarządza się nimi na stronie Zestaw gracza.",
+  "sprintStaminaModifierErc": "Zużycie wytrzymałości przy sprincie w pozycji wyprostowanej. 1 = jak w grze; więcej męczy szybciej, 0 = bez zużycia.",
+  "sprintStaminaModifierCro": "Zużycie wytrzymałości przy biegu w kucki. 1 = jak w grze.",
+  "staminaWeightLimitThreshold": "Waga w gramach, jaką gracze noszą, zanim zacznie obniżać ich maksymalną wytrzymałość. 6000 = 6 kg.",
+  "staminaMax": "Wielkość puli wytrzymałości. Więcej = dłuższe sprinty.",
+  "staminaKgToStaminaPercentPenalty": "O ile każdy kilogram ponad próg obniża maksymalną wytrzymałość.",
+  "staminaMinCap": "Najniższy poziom, do jakiego może spaść maksymalna wytrzymałość pod dużym obciążeniem.",
+  "sprintSwimmingStaminaModifier": "Zużycie wytrzymałości przy szybkim pływaniu. 1 = jak w grze.",
+  "sprintLadderStaminaModifier": "Zużycie wytrzymałości przy szybkim wchodzeniu po drabinie. 1 = jak w grze.",
+  "meleeStaminaModifier": "Koszt wytrzymałości ciężkich ataków wręcz i blokowania. 1 = jak w grze.",
+  "obstacleTraversalStaminaModifier": "Koszt wytrzymałości przechodzenia i przeskakiwania przez przeszkody. 1 = jak w grze.",
+  "holdBreathStaminaModifier": "Zużycie wytrzymałości przy wstrzymywaniu oddechu podczas celowania. 1 = jak w grze.",
+  "shockRefillSpeedConscious": "Jak szybko mija szok, gdy gracz jest przytomny. Więcej = szybsza regeneracja.",
+  "shockRefillSpeedUnconscious": "Jak szybko mija szok, gdy gracz jest nieprzytomny — jak szybko się budzi.",
+  "allowRefillSpeedModifier": "Stan gracza (krew, zdrowie) przyspiesza lub spowalnia regenerację po szoku.",
+  "timeToStrafeJog": "Sekundy do osiągnięcia pełnej prędkości przy truchcie w bok. Mniej = żwawszy ruch.",
+  "rotationSpeedJog": "Jak szybko postać obraca się podczas truchtu.",
+  "timeToSprint": "Sekundy na przyspieszenie z truchtu do sprintu.",
+  "timeToStrafeSprint": "Sekundy do osiągnięcia pełnej prędkości przy sprincie w bok.",
+  "rotationSpeedSprint": "Jak szybko postać obraca się podczas sprintu.",
+  "allowStaminaAffectInertia": "Przy niskiej wytrzymałości postać wolniej przyspiesza i się obraca.",
+  "staminaDepletionSpeed": "Wytrzymałość tracona na sekundę pod wodą.",
+  "healthDepletionSpeed": "Zdrowie tracone na sekundę podczas tonięcia.",
+  "shockDepletionSpeed": "Szok dodawany na sekundę podczas tonięcia.",
+  "staticMode": "Wobec ścian i obiektów statycznych: 0 = wył., 1 = wł. (jak w grze), 2 = zawsze.",
+  "dynamicMode": "Wobec graczy, pojazdów i innych ruchomych obiektów: 0 = wył., 1 = wł. (jak w grze), 2 = zawsze.",
+  "lightingConfig": "Ciemność nocy: 0 = jaśniejsze noce (jak w grze), 1 = ciemne noce. Nadpisuje to samo ustawienie w serverDZ.cfg.",
+  "objectSpawnersArr": "Pliki JSON (ścieżki wewnątrz misji), które umieszczają w świecie dodatkowe obiekty statyczne.",
+  "environmentMinTemps": "Najniższa temperatura powietrza w każdym miesiącu, od stycznia do grudnia, °C. Pomiń, aby użyć wartości samej mapy.",
+  "environmentMaxTemps": "Najwyższa temperatura powietrza w każdym miesiącu, od stycznia do grudnia, °C. Pomiń, aby użyć wartości samej mapy.",
+  "wetnessWeightModifiers": "Mnożniki wagi ubrań dla pięciu poziomów zamoczenia, od suchego do przemoczonego.",
+  "disableIsCollidingBBoxCheck": "Elementy mogą nachodzić na inne obiekty przy umieszczaniu — ciaśniejsze, nakładające się konstrukcje.",
+  "disableIsCollidingPlayerCheck": "Elementy można stawiać tam, gdzie stoi gracz.",
+  "disableIsClippingRoofCheck": "Elementy można stawiać przez dachy i sufity.",
+  "disableIsBaseViableCheck": "Obiekty można stawiać bez twardego podłoża pod spodem.",
+  "disableIsCollidingGPlotCheck": "Grządki można stawiać tam, gdzie kolidowałyby z innymi obiektami.",
+  "disableIsCollidingAngleCheck": "Obiekty można stawiać na zboczach, które normalnie są zbyt strome.",
+  "disableIsPlacementPermittedCheck": "Obiekty można stawiać tam, gdzie mapa normalnie tego zabrania.",
+  "disableHeightPlacementCheck": "Obiekty można stawiać wyżej nad stopami gracza, niż normalnie wolno.",
+  "disableIsUnderwaterCheck": "Obiekty można stawiać pod wodą.",
+  "disableIsInTerrainCheck": "Obiekty można zagłębiać w teren.",
+  "disableColdAreaBuildingCheck": "Budowanie jest dozwolone w zimnych strefach, gdzie gra normalnie go zabrania (Sakhal).",
+  "disallowedTypesInUnderground": "Zestawy, których nie można stawiać w podziemiach (bunkry, jaskinie).",
+  "disablePerformRoofCheck": "Elementy bazy można budować pod dachami i w pomieszczeniach.",
+  "disableIsCollidingCheck": "Elementy bazy można budować, nawet gdy coś zawadza.",
+  "disableDistanceCheck": "Elementy bazy można budować z dowolnej odległości.",
+  "use3DMap": "Mapa otwiera się jako przedmiot w rękach zamiast na pełnym ekranie.",
+  "hitDirectionOverrideEnabled": "Stosuj poniższe ustawienia do każdego gracza zamiast jego własnych.",
+  "hitDirectionBehaviour": "0 = brak wskaźnika, 1 = statyczny, 2 = podąża za atakującym.",
+  "hitDirectionStyle": "0 = plama, 1 = kolec, 2 = strzałka.",
+  "hitDirectionIndicatorColorStr": "Kolor wskaźnika jako 0xAARRGGBB (alfa, czerwony, zielony, niebieski).",
+  "hitDirectionMaxDuration": "Ile sekund wskaźnik pozostaje na ekranie.",
+  "hitDirectionBreakPointRelative": "Część czasu trwania (0–1), po której wskaźnik zaczyna zanikać.",
+  "hitDirectionScatter": "Losowy rozrzut dodawany do kierunku, w stopniach.",
+  "hitIndicationPostProcessEnabled": "Ekran błyska na czerwono, gdy gracz zostaje trafiony.",
+  "ignoreMapOwnership": "Gracze mogą otworzyć mapę bez posiadania mapy.",
+  "ignoreNavItemsOwnership": "Mapa pokazuje informacje z kompasu i GPS bez posiadania kompasu lub GPS.",
+  "displayPlayerPosition": "Własna pozycja gracza jest zaznaczona na mapie.",
+  "displayNavInfo": "Mapa pokazuje informacje nawigacyjne (siatkę i kompas).",
+  "boatDecayMultiplier": "Jak szybko niszczą się łodzie. 1 = jak w grze, mniej = wolniej."
+ },
+ "globals": {
+  "AnimalMaxCount": "Maksymalna liczba zwierząt żyjących na mapie naraz.",
+  "CleanupAvoidance": "Współczynnik, który chroni świeżo zespawnowany loot przed zbyt wczesnym sprzątaniem.",
+  "CleanupLifetimeDeadAnimal": "Ile sekund zwłoki martwego zwierzęcia pozostają przed usunięciem.",
+  "CleanupLifetimeDeadInfected": "Ile sekund ciało martwego zarażonego pozostaje przed usunięciem.",
+  "CleanupLifetimeDeadPlayer": "Ile sekund ciało martwego gracza i jego sprzęt pozostają przed usunięciem.",
+  "CleanupLifetimeDefault": "Domyślny czas (s), przez jaki upuszczony przedmiot leży przed sprzątaniem, gdy jego typ nie ustawia lifetime.",
+  "CleanupLifetimeLimit": "Dolna granica (s) używana przez sprzątanie dla bardzo krótkich lifetime przedmiotów.",
+  "CleanupLifetimeRuined": "Ile sekund zniszczony przedmiot leży na ziemi przed sprzątaniem.",
+  "FlagRefreshFrequency": "Jak często (s) podniesiona flaga terytorium odświeża lifetime pobliskich rozstawionych przedmiotów.",
+  "FlagRefreshMaxDuration": "Maksymalny lifetime (s), do jakiego flaga może odświeżać przedmioty — limit niszczenia bazy (vanilla ≈ 45 dni).",
+  "IdleModeCountdown": "Ile sekund bez połączonych graczy, zanim ekonomia przejdzie w stan bezczynności i przestanie odnawiać loot.",
+  "IdleModeStartup": "Uruchamiaj ekonomię w trybie bezczynności, dopóki nie dołączy pierwszy gracz (1 = tak).",
+  "InitialSpawn": "Ilość początkowego lootu spawnowanego przy pierwszym uruchomieniu ekonomii.",
+  "LoginTimeMax": "Maksymalny czas (s) logowania, po którym próba jest przerywana.",
+  "LogoutTimeMax": "Maksymalne oczekiwanie na wylogowanie (s).",
+  "RespawnAttempt": "Ile razy na cykl silnik ponawia nieudany respawn lootu.",
+  "RespawnTypes": "Ile typów lootu jest przetwarzanych do respawnu w każdym cyklu.",
+  "SpawnInitial": "Ilość początkowego lootu spawnowanego przy pierwszym uruchomieniu ekonomii.",
+  "TimeHopping": "Dodatkowe opóźnienie logowania (s) dla graczy przeskakujących między serwerami, by to utrudnić.",
+  "TimeLogin": "Ile sekund gracz czeka na ekranie ładowania przy logowaniu.",
+  "TimeLogout": "Ile sekund gracz musi pozostać w świecie po wybraniu wylogowania (ochrona przed ucieczką z walki).",
+  "TimePenalty": "Dodatkowe oczekiwanie (s) przy wylogowaniu krótko po walce.",
+  "WorldWetTempUpdate": "Jak często (s) aktualizowana jest wilgotność i temperatura przedmiotów w świecie.",
+  "ZombieMaxCount": "Maksymalna liczba zarażonych żyjących na mapie naraz.",
+  "ZoneSpawnDist": "Odległość (m) od gracza, w jakiej spawnują się dynamiczne strefy zarażonych/zwierząt."
+ }
+}

@@ -4,14 +4,14 @@
 //
 // Protocol recap (from the public BE RCon spec):
 //
-//   header           = 'B' 'E' crc32(rest) 0xFF
-//   login request    = header 0x00 password
-//   login response   = header 0x00 0x01(ok)/0x00(fail)
-//   command request  = header 0x01 seq cmd
-//   command response = header 0x01 seq payload            (single-packet)
-//                    | header 0x01 seq 0x00 count idx payload   (multi-packet)
-//   server message   = header 0x02 seq payload            (keep-alive + logs)
-//   keep-alive       = header 0x01 seq                     (empty command)
+//	header           = 'B' 'E' crc32(rest) 0xFF
+//	login request    = header 0x00 password
+//	login response   = header 0x00 0x01(ok)/0x00(fail)
+//	command request  = header 0x01 seq cmd
+//	command response = header 0x01 seq payload            (single-packet)
+//	                 | header 0x01 seq 0x00 count idx payload   (multi-packet)
+//	server message   = header 0x02 seq payload            (keep-alive + logs)
+//	keep-alive       = header 0x01 seq                     (empty command)
 //
 // The CRC is little-endian CRC-32/IEEE of everything after the 4-byte CRC
 // slot (i.e., starting at 0xFF). The only non-obvious thing: BE expects a
@@ -56,8 +56,8 @@ type Conn struct {
 	seq      uint32
 	pending  map[byte]*pending
 	closed   atomic.Bool
-	readErr  atomic.Value  // error
-	lastRecv atomic.Int64  // unixnano of the last valid packet — liveness
+	readErr  atomic.Value // error
+	lastRecv atomic.Int64 // unixnano of the last valid packet — liveness
 
 	// Multipart response assembly (very rare: >1 response per seq).
 	parts map[byte]map[byte][]byte // seq → partIdx → payload
@@ -74,6 +74,13 @@ type pending struct {
 // Dial connects to addr (host:port), logs in, and starts the keep-alive
 // and reader goroutines.
 func Dial(addr, password string) (*Conn, error) {
+	return dial(addr, password, nil)
+}
+
+// dial is Dial with the server-message callback installed before the reader
+// goroutine starts, so setting it never races readLoop (and no message that
+// arrives right after login is missed).
+func dial(addr, password string, onMessage func(string)) (*Conn, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -98,6 +105,8 @@ func Dial(addr, password string) (*Conn, error) {
 		raddr:   udpAddr,
 		pending: map[byte]*pending{},
 		parts:   map[byte]map[byte][]byte{},
+
+		OnMessage: onMessage,
 	}
 	c.lastRecv.Store(time.Now().UnixNano())
 
@@ -158,7 +167,12 @@ func (c *Conn) Command(cmd string) (string, error) {
 	}
 
 	select {
-	case reply := <-p.done:
+	case reply, ok := <-p.done:
+		if !ok {
+			// Close() ran while we waited: the command may never have reached
+			// the server — not a success with an empty reply.
+			return "", ErrNotConnected
+		}
 		dbg("reply seq=%d len=%d", seq, len(reply))
 		return string(reply), nil
 	case <-time.After(readTimeout):

@@ -29,6 +29,11 @@ type mapInfo struct {
 	Official bool    `json:"official"`           // one of the three shipped worlds (size is known)
 	HasImage bool    `json:"hasImage"`           // an admin-supplied background image exists
 	ImageVer int64   `json:"imageVer,omitempty"` // its mtime, used to bust the browser cache
+	// SizeFromMission: Size was read from the mission's areaflags.map header.
+	SizeFromMission bool `json:"sizeFromMission,omitempty"`
+	// sizeKnown: Size is real (registry, areaflags.map or admin override), not
+	// the defaultWorldSize guess. The validator only trusts a known size.
+	sizeKnown bool
 }
 
 // sanitizeKey keeps a world key filesystem- and URL-safe (it names the uploaded
@@ -168,7 +173,7 @@ func worldFromTemplate(template string) mapInfo {
 				if size == 0 {
 					size = defaultWorldSize
 				}
-				return mapInfo{Key: wd.Key, Name: wd.Name, Size: size, Official: wd.Official}
+				return mapInfo{Key: wd.Key, Name: wd.Name, Size: size, Official: wd.Official, sizeKnown: wd.Size > 0}
 			}
 		}
 	}
@@ -189,9 +194,18 @@ func worldFromTemplate(template string) mapInfo {
 func (h *handlers) currentMap() mapInfo {
 	tpl, _ := h.missionTemplate()
 	mi := worldFromTemplate(tpl)
+	// The mission's areaflags.map records the real world size — authoritative
+	// for any map, modded ones included, so points line up with no typing.
+	if sz := h.areaFlagsWorldSize(); sz > 0 {
+		mi.Size = sz
+		mi.SizeFromMission = true
+		mi.sizeKnown = true
+	}
 	// Admin-set world-size override (for modded maps whose real size differs).
 	if sz := h.app.Cfg().MapSizes[mi.Key]; sz > 0 {
 		mi.Size = float64(sz)
+		mi.SizeFromMission = false
+		mi.sizeKnown = true
 	}
 	if p := h.mapImageFile(mi.Key); p != "" {
 		mi.HasImage = true
@@ -437,6 +451,13 @@ type heatPoint struct {
 	X    float64 `json:"x"`
 	Z    float64 `json:"z"`
 	Kind string  `json:"kind"` // pvp | env | suicide
+	// Who died where and how — the dot's tooltip, and At drives the period filter.
+	At       string `json:"at,omitempty"` // RFC3339
+	Victim   string `json:"victim,omitempty"`
+	Killer   string `json:"killer,omitempty"`
+	Source   string `json:"source,omitempty"` // non-player cause (zombie, animal, fall)
+	Weapon   string `json:"weapon,omitempty"`
+	Distance string `json:"distance,omitempty"`
 }
 
 // mapHeat returns the map metadata and every death/kill position the killfeed
@@ -471,15 +492,33 @@ func (h *handlers) mapHeat(w http.ResponseWriter, r *http.Request) {
 		default:
 			env++
 		}
-		points = append(points, heatPoint{X: k.Pos[0], Z: k.Pos[1], Kind: kind})
+		points = append(points, heatPoint{X: k.Pos[0], Z: k.Pos[1], Kind: kind, At: k.At, Victim: k.Victim,
+			Killer: k.Killer, Source: k.Source, Weapon: k.Weapon, Distance: k.Distance})
 	}
 
-	writeJSON(w, map[string]interface{}{
+	out := map[string]interface{}{
 		"map":    h.currentMap(),
 		"points": points,
 		"total":  len(points),
 		"counts": map[string]int{"pvp": pvp, "env": env, "suicide": suicide},
-	})
+	}
+	if at := h.lastWipeAt(); !at.IsZero() {
+		out["lastWipe"] = at.Format(time.RFC3339) // offers "since the last wipe"
+	}
+	writeJSON(w, out)
+}
+
+// lastWipeAt is when the newest wipe was made (its dated folder in the wipes
+// dir), or zero when there was none.
+func (h *handlers) lastWipeAt() time.Time {
+	var last time.Time
+	entries, _ := os.ReadDir(h.wipesDir())
+	for _, e := range entries {
+		if ts, err := time.ParseInLocation("20060102-150405", e.Name(), time.Local); err == nil && e.IsDir() && ts.After(last) {
+			last = ts
+		}
+	}
+	return last
 }
 
 // liveWindow bounds how old a last-known position may be to still be plotted

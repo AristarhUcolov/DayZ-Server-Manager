@@ -2,16 +2,20 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"dayzmanager/internal/app"
@@ -20,14 +24,43 @@ import (
 	"dayzmanager/internal/i18n"
 	dzlogs "dayzmanager/internal/logs"
 	"dayzmanager/internal/mods"
+	"dayzmanager/internal/notify"
+	"dayzmanager/internal/players"
+	"dayzmanager/internal/rcon"
 	dztypes "dayzmanager/internal/types"
 	"dayzmanager/internal/updater"
 	"dayzmanager/internal/util"
 	"dayzmanager/internal/validator"
 )
 
+// handlers serves the API for one DayZ server of the panel. Every server has
+// its own (see Server.attach); the panel-wide parts — login, remote access —
+// are shared pointers, and their routes always reach the primary's handlers.
 type handlers struct {
-	app *app.App
+	app  *app.App
+	auth *authManager // optional panel login (auth.go), shared by all servers
+	chat *chatArchive // persistent chat history (chatlog.go)
+
+	// Remote access (remote.go) — panel-wide.
+	server    *Server
+	panelPort int
+	upnp      *upnpState
+	upnpKick  chan struct{}
+
+	// Per-server state.
+	playersOnce sync.Once
+	players     *players.Store // player database + killfeed (handlers_v14.go)
+	metrics     struct {       // 24 h of 30 s CPU/RAM/players samples
+		mu      sync.Mutex
+		samples []histSample
+	}
+	bansMu   sync.Mutex // bans.json and the game's ban files (bans.go)
+	dashMods struct {   // dashboard mod counts, refreshed at most every 15 s
+		mu         sync.Mutex
+		at         time.Time
+		val        map[string]interface{}
+		refreshing bool
+	}
 }
 
 func (h *handlers) register(mux *http.ServeMux) {
@@ -38,6 +71,13 @@ func (h *handlers) register(mux *http.ServeMux) {
 	// Manager config (language, vanilla path, launch params).
 	mux.HandleFunc("/api/config", methods(h.config, http.MethodGet, http.MethodPost, http.MethodPut))
 	mux.HandleFunc("/api/config/finish-first-run", methods(h.finishFirstRun, http.MethodPost))
+
+	// Multi-server: the servers of the panel (servers.go).
+	h.registerServers(mux)
+	// Bans, kicks and the live player list (bans.go).
+	h.registerBans(mux)
+	// DayZ's whitelist.txt (whitelist.go).
+	h.registerWhitelist(mux)
 
 	// Server control.
 	mux.HandleFunc("/api/server/status", methods(h.serverStatus, http.MethodGet))
@@ -81,6 +121,8 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/types/apply-preset", methods(h.typesApplyPreset, http.MethodPost))
 	// Bulk-edit endpoint: apply a scalar field patch to many types at once.
 	mux.HandleFunc("/api/types/bulk-patch", methods(h.typesBulkPatch, http.MethodPost))
+	// Inline table edits: a different patch per row, one write.
+	mux.HandleFunc("/api/types/patch-many", methods(h.typesPatchMany, http.MethodPost))
 
 	// Loot economy dashboard + CE tuning presets.
 	mux.HandleFunc("/api/economy/stats", methods(h.economyStats, http.MethodGet))
@@ -103,6 +145,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/moded", methods(h.modedList, http.MethodGet))
 	mux.HandleFunc("/api/moded/create", methods(h.modedCreate, http.MethodPost))
 	mux.HandleFunc("/api/moded/delete", methods(h.modedDelete, http.MethodPost))
+	mux.HandleFunc("/api/moded/register", methods(h.modedRegister, http.MethodPost))
 
 	// Raw file browser/editor.
 	mux.HandleFunc("/api/files/tree", methods(h.filesTree, http.MethodGet))
@@ -132,6 +175,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config-profiles", methods(h.cfgProfilesList, http.MethodGet))
 	mux.HandleFunc("/api/config-profiles/save", methods(h.cfgProfileSave, http.MethodPost))
 	mux.HandleFunc("/api/config-profiles/apply", methods(h.cfgProfileApply, http.MethodPost))
+	mux.HandleFunc("/api/config-profiles/diff", methods(h.cfgProfileDiff, http.MethodGet))
 	mux.HandleFunc("/api/config-profiles/delete", methods(h.cfgProfileDelete, http.MethodPost))
 
 	// Global config search — grep across the config/economy files.
@@ -170,6 +214,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/logs/list", methods(h.logsList, http.MethodGet))
 	mux.HandleFunc("/api/logs/read", methods(h.logsRead, http.MethodGet))
 	mux.HandleFunc("/api/logs/stream", methods(h.logsStream, http.MethodGet))
+	mux.HandleFunc("/api/logs/download", methods(h.logsDownload, http.MethodGet))
 
 	// ADM log viewer.
 	mux.HandleFunc("/api/admlog/recent", methods(h.admlogRecent, http.MethodGet))
@@ -178,12 +223,11 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/backup/export", methods(h.backupExport, http.MethodGet))
 	mux.HandleFunc("/api/backup/import", methods(h.backupImport, http.MethodPost))
 	mux.HandleFunc("/api/backup/run", methods(h.backupRun, http.MethodPost))
-	mux.HandleFunc("/api/discord/test", methods(h.discordTest, http.MethodPost))
+	h.registerDiscord(mux)
 	mux.HandleFunc("/api/players", methods(h.playersList, http.MethodGet))
 	mux.HandleFunc("/api/players/note", methods(h.playerNote, http.MethodPost))
 	mux.HandleFunc("/api/players/profile", methods(h.playerProfile, http.MethodGet))
-	mux.HandleFunc("/api/players/ban", methods(h.playerBan, http.MethodPost))
-	mux.HandleFunc("/api/players/unban", methods(h.playerUnban, http.MethodPost))
+	// Bans: /api/bans/add and /api/bans/remove (bans.go).
 	mux.HandleFunc("/api/watchlist/activity", methods(h.watchlistActivity, http.MethodGet))
 	mux.HandleFunc("/api/map/heat", methods(h.mapHeat, http.MethodGet))
 	mux.HandleFunc("/api/map/live", methods(h.mapLive, http.MethodGet))
@@ -235,11 +279,18 @@ func (h *handlers) register(mux *http.ServeMux) {
 
 	// RCon.
 	mux.HandleFunc("/api/rcon/players", methods(h.rconPlayers, http.MethodGet))
+	mux.HandleFunc("/api/rcon/status", methods(h.rconStatus, http.MethodGet))
 	mux.HandleFunc("/api/rcon/chat/recent", methods(h.rconChatRecent, http.MethodGet))
 	mux.HandleFunc("/api/rcon/say", methods(h.rconSay, http.MethodPost))
 	mux.HandleFunc("/api/rcon/kick", methods(h.rconKick, http.MethodPost))
 	mux.HandleFunc("/api/rcon/ban", methods(h.rconBan, http.MethodPost))
 	mux.HandleFunc("/api/rcon/command", methods(h.rconCommand, http.MethodPost))
+
+	// v1.0.0 "October Update".
+	h.registerV100(mux)
+	h.registerAuth(mux)
+	h.registerChat(mux)
+	h.registerRemote(mux)
 }
 
 // methods rejects any verb not in allowed with 405 before calling handler.
@@ -258,13 +309,42 @@ func methods(h http.HandlerFunc, allowed ...string) http.HandlerFunc {
 
 // ---------------------------------------------------------------------------
 
+// info is public (the login page and the launcher's "already running?" probe
+// need it), so the server path is only shown to signed-in or local callers.
 func (h *handlers) info(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]interface{}{
-		"name":      h.app.Name,
-		"version":   h.app.Version,
-		"author":    h.app.Author,
-		"serverDir": h.app.ServerDir,
-	})
+	authCfg := h.auth.snapshot()
+	sess := h.auth.sessionFor(r)
+	authed := !authCfg.Enabled || sess != nil
+	out := map[string]interface{}{
+		"name":    h.app.Name,
+		"version": h.app.Version,
+		"author":  h.app.Author,
+		"mode":    h.app.Mode,
+		"os":      runtime.GOOS,
+		"auth":    map[string]interface{}{"enabled": authCfg.Enabled, "authenticated": authed},
+		"local":   isLoopback(r),
+	}
+	if authed || isLoopback(r) {
+		out["serverDir"] = h.app.ServerDir
+		out["serverId"] = serverKey(h.app.ID)
+		out["serverName"] = h.app.Label()
+		if f := h.fleet(); f != nil {
+			out["multi"] = f.Multi()
+			if isLoopback(r) {
+				// For another manager starting on this PC: which server
+				// folders this one already runs (app.OwnerOf).
+				var dirs []string
+				for _, m := range f.Members() {
+					dirs = append(dirs, m.Dir)
+				}
+				out["managedDirs"] = dirs
+			}
+		}
+	}
+	if sess != nil {
+		out["auth"].(map[string]interface{})["user"] = sess.User
+	}
+	writeJSON(w, out)
 }
 
 func (h *handlers) i18nBundle(w http.ResponseWriter, r *http.Request) {
@@ -274,6 +354,7 @@ func (h *handlers) i18nBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]interface{}{
 		"locale":    code,
+		"dir":       i18n.Dir(code),
 		"supported": i18n.Supported(),
 		"languages": i18n.Languages(),
 		"messages":  i18n.Get(code),
@@ -286,9 +367,10 @@ func (h *handlers) i18nBundle(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) config(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		writeJSON(w, h.app.Config)
+		writeJSON(w, h.app.Cfg())
 		return
 	}
+	before := h.app.Cfg()
 	// Merge into the current config rather than replacing it wholesale: decode
 	// over a copy so any field the client omits keeps its existing value. This
 	// makes partial / auto-saves safe — a stale or partial body can no longer
@@ -296,42 +378,216 @@ func (h *handlers) config(w http.ResponseWriter, r *http.Request) {
 	// MutateConfig does the read-modify-write under configMu so the replace can't
 	// tear against a concurrent save/reload.
 	if err := h.app.MutateConfig(func(c *config.Manager) error {
-		return json.NewDecoder(r.Body).Decode(c)
+		if err := json.NewDecoder(r.Body).Decode(c); err != nil {
+			return err
+		}
+		// Opening the panel to the internet without a login hands the server
+		// to anyone who finds the address. Checked only on a change, so an old
+		// config that already says "internet" can still save other fields.
+		if c.Exposure == "internet" && before.Exposure != "internet" && !h.auth.enabled() {
+			return errors.New("set a panel login (Settings → Panel login) before opening the panel to the internet")
+		}
+		// Checked only on a change, like the exposure: an old password must
+		// not block saving everything else.
+		if c.RConPassword != before.RConPassword {
+			c.RConPassword = strings.TrimSpace(c.RConPassword)
+			if !validRConPassword(c.RConPassword) {
+				return errors.New("cfg.err.rconPassword")
+			}
+		}
+		return normalizeConfig(c)
 	}); err != nil {
 		code := http.StatusBadRequest
 		if errors.Is(err, app.ErrConfigSave) {
 			code = http.StatusInternalServerError
+		}
+		if msg := err.Error(); strings.HasPrefix(msg, "cfg.err.") {
+			authError(w, code, msg, nil) // an i18n key the panel translates
+			return
 		}
 		http.Error(w, err.Error(), code)
 		return
 	}
 	// Refresh the scheduler's snapshot so changed restart times / announcements
 	// take effect immediately and the supervisor loops never read torn config.
-	h.app.Server.SetScheduleConfig(h.app.Config)
+	h.app.ScheduleSnapshotSync()
 	// Keep RCon real: push the password into BattlEye's beserver_x64.cfg (so
 	// RCon is actually enabled) and refresh the in-memory connection params.
 	h.app.SyncBEConfig()
 	h.app.ApplyRConConfig()
-	writeJSON(w, h.app.Config)
+	// Affinity / priority take effect on the running server right away.
+	after := h.app.Cfg()
+	if after.DiscordEnabled && after.DiscordStatus && (!before.DiscordStatus || !before.DiscordEnabled ||
+		before.DiscordWebhookURL != after.DiscordWebhookURL || before.DiscordLanguage != after.DiscordLanguage ||
+		before.DiscordUsername != after.DiscordUsername || before.DiscordAvatarURL != after.DiscordAvatarURL) {
+		h.app.UpdateDiscordStatus()
+	}
+	if after.ProcessPriority != before.ProcessPriority || !equalInts(after.CPUAffinity, before.CPUAffinity) {
+		if len(after.CPUAffinity) == 0 && len(before.CPUAffinity) > 0 {
+			// Cleared: give the server every core back.
+			if pid := h.app.Server.PID(); pid > 0 {
+				_ = util.SetAffinity(pid, nil)
+			}
+		}
+		_ = h.app.Server.ApplyTuning()
+	}
+	writeJSON(w, after)
 }
 
-// finishFirstRun records the language, vanilla DayZ path and exposure mode
-// chosen in the first-run wizard. Auth fields removed in v0.10.0 — the
-// panel is meant to be reachable from a trusted local network only.
+// normalizeConfig validates and tidies fields a POST may set, so a bad value
+// is rejected with a clear message instead of silently breaking a feature.
+func normalizeConfig(c *config.Manager) error {
+	switch c.ModSource {
+	case "", config.ModSourceClient, config.ModSourceFolder, config.ModSourceServer:
+	default:
+		return fmt.Errorf("unknown mod source %q", c.ModSource)
+	}
+	if c.ProcessPriority != "" {
+		ok := false
+		for _, p := range util.PriorityLevels {
+			if p == c.ProcessPriority {
+				ok = true
+			}
+		}
+		if !ok {
+			return fmt.Errorf("unknown process priority %q", c.ProcessPriority)
+		}
+	}
+	if c.RestartKickSeconds < 0 || c.RestartKickSeconds > 1800 {
+		return fmt.Errorf("kick-before-restart must be 0-1800 seconds")
+	}
+	if c.GracefulStopSeconds < 0 || c.GracefulStopSeconds > 600 {
+		return fmt.Errorf("graceful stop timeout must be 0-600 seconds")
+	}
+	switch c.Exposure {
+	case "", "local", "lan", "internet":
+	default:
+		return fmt.Errorf("unknown exposure %q", c.Exposure)
+	}
+	if c.RConPort < 0 || c.RConPort > 65535 {
+		return errors.New("cfg.err.rconPort")
+	}
+	if c.LimitFPS < 0 || c.LimitFPS > 1000 {
+		return fmt.Errorf("server FPS limit must be 0 (off) or 1-1000")
+	}
+	if c.ChatKeepDays < 0 || c.ChatKeepDays > 36500 {
+		return fmt.Errorf("chat retention must be 0 (forever) or a number of days")
+	}
+	c.DiscordWebhookURL = strings.TrimSpace(c.DiscordWebhookURL)
+	c.DiscordPlayersWebhookURL = strings.TrimSpace(c.DiscordPlayersWebhookURL)
+	for _, u := range []string{c.DiscordWebhookURL, c.DiscordPlayersWebhookURL} {
+		if u != "" {
+			if err := notify.ValidWebhook(u); err != nil {
+				return err
+			}
+		}
+	}
+	c.DiscordMention = strings.TrimSpace(c.DiscordMention)
+	if !app.ValidDiscordMention(c.DiscordMention) {
+		return fmt.Errorf("Discord mention: use here, everyone, or a role ID (digits)")
+	}
+	if c.DiscordLanguage != "" && !i18n.Has(c.DiscordLanguage) {
+		return fmt.Errorf("unknown Discord language %q", c.DiscordLanguage)
+	}
+	c.DiscordUsername = strings.TrimSpace(c.DiscordUsername)
+	if len([]rune(c.DiscordUsername)) > 80 {
+		return fmt.Errorf("the Discord name is too long (80 characters at most)")
+	}
+	c.DiscordAvatarURL = strings.TrimSpace(c.DiscordAvatarURL)
+	if c.DiscordAvatarURL != "" && !strings.HasPrefix(c.DiscordAvatarURL, "https://") {
+		return fmt.Errorf("the Discord avatar must be an https:// image address")
+	}
+	c.ExtraLaunchParams = strings.TrimSpace(c.ExtraLaunchParams)
+	if len(c.ExtraLaunchParams) > 2000 {
+		return fmt.Errorf("additional launch parameters are too long")
+	}
+	seen := map[int]bool{}
+	cores := make([]int, 0, len(c.CPUAffinity))
+	for _, n := range c.CPUAffinity {
+		if n >= 0 && n < runtime.NumCPU() && !seen[n] {
+			seen[n] = true
+			cores = append(cores, n)
+		}
+	}
+	sort.Ints(cores)
+	if len(cores) == runtime.NumCPU() {
+		cores = nil // every core selected = no pinning
+	}
+	c.CPUAffinity = cores
+	return nil
+}
+
+// validRConPassword: BattlEye reads beserver_x64.cfg as `Key Value` plain
+// text — a space splits the value and non-Latin letters never match what the
+// RCon client sends, so only printable ASCII without spaces logs in.
+func validRConPassword(p string) bool {
+	if len(p) > 128 {
+		return false
+	}
+	for i := 0; i < len(p); i++ {
+		if p[i] < 0x21 || p[i] > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+func equalInts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// finishFirstRun records the language, mod source, exposure mode and the
+// optional panel login chosen in the first-run wizard.
 func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Language        string `json:"language"`
 		VanillaDayZPath string `json:"vanillaDayZPath"`
+		ModSource       string `json:"modSource"`
+		ModsFolderPath  string `json:"modsFolderPath"`
 		Exposure        string `json:"exposure"`
+		Login           *struct {
+			User     string `json:"user"`
+			Password string `json:"password"`
+		} `json:"login"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	switch req.Exposure {
+	case "", "local", "lan", "internet":
+	default:
+		http.Error(w, "unknown exposure "+req.Exposure, http.StatusBadRequest)
+		return
+	}
+	if req.Login != nil {
+		if err := validateCredentials(req.Login.User, req.Login.Password); err != nil {
+			authError(w, http.StatusBadRequest, err.Error(), nil)
+			return
+		}
+	}
+	if req.Exposure == "internet" && req.Login == nil && !h.auth.enabled() {
+		authError(w, http.StatusBadRequest, "auth.err.internetNeedsLogin", nil)
+		return
+	}
 	// Validate the path outside the lock (os.Stat), then apply every field
 	// atomically — so a validation failure leaves the in-memory config untouched
 	// (it used to leave Language/VanillaDayZPath half-applied on error).
-	if req.VanillaDayZPath != "" {
+	if req.ModSource == config.ModSourceFolder {
+		if st, err := os.Stat(req.ModsFolderPath); err != nil || !st.IsDir() {
+			http.Error(w, "mods folder does not exist: "+req.ModsFolderPath, http.StatusBadRequest)
+			return
+		}
+	}
+	if req.VanillaDayZPath != "" && (req.ModSource == "" || req.ModSource == config.ModSourceClient) {
 		st, err := os.Stat(req.VanillaDayZPath)
 		if err != nil || !st.IsDir() {
 			http.Error(w, "vanilla DayZ path does not exist: "+req.VanillaDayZPath, http.StatusBadRequest)
@@ -348,6 +604,11 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 			c.Language = req.Language
 		}
 		c.VanillaDayZPath = req.VanillaDayZPath
+		switch req.ModSource {
+		case config.ModSourceClient, config.ModSourceFolder, config.ModSourceServer:
+			c.ModSource = req.ModSource
+		}
+		c.ModsFolderPath = req.ModsFolderPath
 		if req.Exposure != "" {
 			c.Exposure = req.Exposure
 		}
@@ -357,23 +618,59 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, h.app.Config)
+	if req.Login != nil && !h.auth.enabled() {
+		if err := h.enableLogin(w, r, req.Login.User, req.Login.Password, true); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	writeJSON(w, h.app.Cfg())
 }
 
 // ---------------------------------------------------------------------------
 // Server control.
 
-func (h *handlers) serverStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]interface{}{
-		"running": h.app.ServerIsRunning(),
-		"pid":     h.app.Server.PID(),
-		"uptime":  h.app.Server.Uptime().Round(time.Second).String(),
-		"port":    h.app.Cfg().ServerPort,
+// serverState is the shared server-status payload (status poll + dashboard).
+// nextRestart comes from the supervisor itself — the exact moment it will
+// restart, or the one a running countdown is heading to — and serverTime lets
+// the browser correct for its own clock/timezone, so the panel countdown can
+// never disagree with what players were told in-game.
+func (h *handlers) serverState() map[string]interface{} {
+	out := map[string]interface{}{
+		"running":   h.app.ServerIsRunning(),
+		"stopping":  h.app.Server.IsStopping(),
+		"pid":       h.app.Server.PID(),
+		"uptime":    h.app.Server.Uptime().Round(time.Second).String(),
+		"uptimeSec": int64(h.app.Server.Uptime().Seconds()),
+		"port":      h.app.Cfg().ServerPort,
+		"adopted":   h.app.Server.Adopted(),
 		// Crash-loop protection state: the loop pauses auto-restart after
 		// repeated fast exits; without surfacing it the server just looks
 		// mysteriously "down despite auto-restart". UI shows a resume banner.
 		"loopPaused": h.app.Server.LoopPaused(),
-	})
+		"serverTime": time.Now().UnixMilli(),
+	}
+	// Steam server-browser query: listed / still loading, and a player count
+	// that works without RCon.
+	if h.app.ServerIsRunning() {
+		q := h.app.Query()
+		out["query"] = q
+		out["loading"] = !q.OK && q.FirstOK.IsZero() && h.app.Server.Uptime() < 15*time.Minute
+	}
+	if plan := h.app.Server.NextRestart(); plan != nil {
+		out["nextRestart"] = map[string]interface{}{
+			"at":           plan.At.UnixMilli(),
+			"reason":       plan.Reason,
+			"active":       plan.Active,
+			"waitingEmpty": plan.WaitingEmpty,
+			"kicking":      plan.Kicking,
+		}
+	}
+	return out
+}
+
+func (h *handlers) serverStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, h.serverState())
 }
 
 func (h *handlers) serverStart(w http.ResponseWriter, r *http.Request) {
@@ -625,7 +922,8 @@ func copyDirTree(src, dst string) error {
 // Mods.
 
 func (h *handlers) modsList(w http.ResponseWriter, r *http.Request) {
-	list, err := mods.List(h.app.ServerDir, h.app.Cfg().VanillaDayZPath)
+	cfg := h.app.Cfg()
+	list, err := mods.List(h.app.ServerDir, cfg.ModSourceDir())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -634,7 +932,9 @@ func (h *handlers) modsList(w http.ResponseWriter, r *http.Request) {
 		"mods":        list,
 		"activeMods":  h.app.Cfg().Mods,
 		"serverMods":  h.app.Cfg().ServerMods,
-		"vanillaPath": h.app.Cfg().VanillaDayZPath,
+		"vanillaPath": cfg.VanillaDayZPath,
+		"modSource":   cfg.EffectiveModSource(),
+		"sourceDir":   cfg.ModSourceDir(),
 	})
 }
 
@@ -649,15 +949,17 @@ func (h *handlers) modsInstall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if h.app.Cfg().VanillaDayZPath == "" {
-		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
+	src := h.app.Cfg().ModSourceDir()
+	if src == "" {
+		http.Error(w, mods.ErrNoSource.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := mods.Install(h.app.ServerDir, h.app.Cfg().VanillaDayZPath, name); err != nil {
+	if err := mods.Install(h.app.ServerDir, src, name); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]string{"status": "installed", "mod": name})
+	writeJSON(w, map[string]interface{}{"status": "installed", "mod": name, "missions": h.autoInstallModMissions([]string{name}),
+		"vehicles": h.syncModVehicles([]string{name})})
 }
 
 func (h *handlers) modsUninstall(w http.ResponseWriter, r *http.Request) {
@@ -682,7 +984,8 @@ func (h *handlers) modsUninstall(w http.ResponseWriter, r *http.Request) {
 		c.ServerMods = removeOnce(c.ServerMods, name)
 		return nil
 	})
-	writeJSON(w, map[string]string{"status": "uninstalled", "mod": name})
+	// Its vehicles stop spawning (they stay in the mission, switched off).
+	writeJSON(w, map[string]interface{}{"status": "uninstalled", "mod": name, "vehicles": h.syncModVehicles([]string{name})})
 }
 
 func (h *handlers) modsUpdate(w http.ResponseWriter, r *http.Request) {
@@ -696,15 +999,17 @@ func (h *handlers) modsUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if h.app.Cfg().VanillaDayZPath == "" {
-		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
+	src := h.app.Cfg().ModSourceDir()
+	if src == "" {
+		http.Error(w, mods.ErrNoSource.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := mods.Update(h.app.ServerDir, h.app.Cfg().VanillaDayZPath, name); err != nil {
+	if err := mods.Update(h.app.ServerDir, src, name); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]string{"status": "updated", "mod": name})
+	writeJSON(w, map[string]interface{}{"status": "updated", "mod": name, "missions": h.autoInstallModMissions([]string{name}),
+		"vehicles": h.syncModVehicles([]string{name})})
 }
 
 func (h *handlers) modsUpdateAll(w http.ResponseWriter, r *http.Request) {
@@ -713,16 +1018,18 @@ func (h *handlers) modsUpdateAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer unlock()
-	if h.app.Cfg().VanillaDayZPath == "" {
-		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
+	src := h.app.Cfg().ModSourceDir()
+	if src == "" {
+		http.Error(w, mods.ErrNoSource.Error(), http.StatusBadRequest)
 		return
 	}
-	updated, err := mods.UpdateAll(h.app.ServerDir, h.app.Cfg().VanillaDayZPath)
+	updated, err := mods.UpdateAll(h.app.ServerDir, src)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]interface{}{"updated": updated, "count": len(updated)})
+	writeJSON(w, map[string]interface{}{"updated": updated, "count": len(updated), "missions": h.autoInstallModMissions(updated),
+		"vehicles": h.syncModVehicles(updated)})
 }
 
 func (h *handlers) modsSyncKeys(w http.ResponseWriter, r *http.Request) {
@@ -775,14 +1082,17 @@ func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
 	// MutateConfig: a settings auto-save racing this toggle used to write back
 	// its pre-toggle copy of the mod lists, silently reverting the change.
 	if err := h.app.MutateConfig(func(c *config.Manager) error {
-		target := &c.Mods
+		target, other := &c.Mods, &c.ServerMods
 		if req.ServerSide {
-			target = &c.ServerMods
+			target, other = &c.ServerMods, &c.Mods
 		}
 		if req.Enabled {
 			if !contains(*target, req.Mod) {
 				*target = append(append([]string(nil), *target...), req.Mod)
 			}
+			// A mod is loaded either for everyone (-mod) or by the server
+			// alone (-serverMod) — on both lists DayZ loads it twice.
+			*other = removeOnce(*other, req.Mod)
 		} else {
 			*target = removeOnce(*target, req.Mod)
 		}
@@ -791,7 +1101,10 @@ func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]interface{}{"active": h.app.Cfg().Mods, "server": h.app.Cfg().ServerMods})
+	// Vehicle mods: their cars appear on the Vehicles page with the mod, and
+	// stop spawning when it is switched off.
+	writeJSON(w, map[string]interface{}{"active": h.app.Cfg().Mods, "server": h.app.Cfg().ServerMods,
+		"vehicles": h.syncModVehicles([]string{req.Mod})})
 }
 
 // modsOrder replaces the active mod list with a caller-supplied ordering.
@@ -851,8 +1164,8 @@ func (h *handlers) modName(r *http.Request) (string, error) {
 	// JSON decoding (which returns io.EOF). POST callers hand us a JSON
 	// body — fall through to that.
 	if q := strings.TrimSpace(r.URL.Query().Get("mod")); q != "" {
-		if !strings.HasPrefix(q, "@") {
-			return "", fmt.Errorf("mod name (starting with '@') required")
+		if err := mods.ValidName(q); err != nil {
+			return "", err
 		}
 		return q, nil
 	}
@@ -864,6 +1177,9 @@ func (h *handlers) modName(r *http.Request) (string, error) {
 	}
 	if req.Mod == "" || !strings.HasPrefix(req.Mod, "@") {
 		return "", fmt.Errorf("mod name (starting with '@') required")
+	}
+	if err := mods.ValidName(req.Mod); err != nil {
+		return "", err
 	}
 	return req.Mod, nil
 }
@@ -879,15 +1195,31 @@ func (h *handlers) typesList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type row struct {
-		Name     string `json:"name"`
-		Nominal  *int   `json:"nominal,omitempty"`
-		Min      *int   `json:"min,omitempty"`
-		Lifetime *int   `json:"lifetime,omitempty"`
-		Category string `json:"category,omitempty"`
+		Name     string   `json:"name"`
+		Nominal  *int     `json:"nominal,omitempty"`
+		Min      *int     `json:"min,omitempty"`
+		Lifetime *int     `json:"lifetime,omitempty"`
+		Restock  *int     `json:"restock,omitempty"`
+		Category string   `json:"category,omitempty"`
+		Usages   []string `json:"usages,omitempty"` // for the usage filter
+		Values   []string `json:"values,omitempty"` // tiers, for the tier filter
+	}
+	names := func(refs []dztypes.NamedRef) []string {
+		if len(refs) == 0 {
+			return nil
+		}
+		out := make([]string, 0, len(refs))
+		for _, r := range refs {
+			if r.Name != "" {
+				out = append(out, r.Name)
+			}
+		}
+		return out
 	}
 	rows := make([]row, 0, len(doc.Types))
 	for _, t := range doc.Types {
-		r := row{Name: t.Name, Nominal: t.Nominal, Min: t.Min, Lifetime: t.Lifetime}
+		r := row{Name: t.Name, Nominal: t.Nominal, Min: t.Min, Lifetime: t.Lifetime, Restock: t.Restock,
+			Usages: names(t.Usages), Values: names(t.Values)}
 		if t.Category != nil {
 			r.Category = t.Category.Name
 		}
@@ -1067,6 +1399,8 @@ func (h *handlers) modedList(w http.ResponseWriter, r *http.Request) {
 		Size       int64  `json:"size"`
 		Modified   string `json:"modified"`
 		Registered bool   `json:"registered"`
+		Types      int    `json:"types"`            // <type> entries in it
+		Broken     bool   `json:"broken,omitempty"` // not parseable as a types file
 	}
 	out := []entry{}
 	for _, e := range entries {
@@ -1074,12 +1408,18 @@ func (h *handlers) modedList(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		info, _ := e.Info()
-		out = append(out, entry{
+		en := entry{
 			Name:       e.Name(),
 			Size:       info.Size(),
 			Modified:   info.ModTime().Format(time.RFC3339),
 			Registered: registered[strings.ToLower(e.Name())],
-		})
+		}
+		if doc, err := dztypes.Load(filepath.Join(dir, e.Name())); err == nil {
+			en.Types = len(doc.Types)
+		} else {
+			en.Broken = true
+		}
+		out = append(out, en)
 	}
 	writeJSON(w, map[string]interface{}{"folder": dir, "files": out})
 }
@@ -1153,13 +1493,71 @@ func (h *handlers) modedDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	clean := filepath.Base(req.FileName)
 	fp := filepath.Join(dztypes.ModedDir(h.app.ServerDir, mission), clean)
-	if err := os.Remove(fp); err != nil && !os.IsNotExist(err) {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	// A hand-made types file has no other copy: move it to the manager's trash
+	// (like a deleted mission) instead of removing it for good.
+	trashed := ""
+	if _, err := os.Stat(fp); err == nil {
+		dir := filepath.Join(h.app.ManagerDir, "trash", "moded", sanitizeKey(mission))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		trashed = filepath.Join(dir, time.Now().Format("20060102-150405")+"-"+clean)
+		if err := os.Rename(fp, trashed); err != nil {
+			// Another volume: copy, then remove.
+			data, rerr := os.ReadFile(fp)
+			if rerr == nil {
+				rerr = os.WriteFile(trashed, data, 0o644)
+			}
+			if rerr == nil {
+				rerr = os.Remove(fp)
+			}
+			if rerr != nil {
+				http.Error(w, rerr.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
 	}
 	ecoPath := filepath.Join(dztypes.MissionDir(h.app.ServerDir, mission), "cfgeconomycore.xml")
 	_, _ = dztypes.UnregisterModedFile(ecoPath, clean)
-	writeJSON(w, map[string]string{"status": "deleted"})
+	writeJSON(w, map[string]string{"status": "deleted", "trash": trashed})
+}
+
+// modedRegister lists an existing moded_types file in cfgeconomycore.xml —
+// DayZ ignores a types file nobody registered.
+func (h *handlers) modedRegister(w http.ResponseWriter, r *http.Request) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
+		return
+	}
+	defer unlock()
+	var req struct {
+		FileName string `json:"fileName"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	mission, err := h.missionTemplate()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	clean := filepath.Base(req.FileName)
+	if !strings.HasSuffix(strings.ToLower(clean), ".xml") {
+		http.Error(w, "file name must end with .xml", http.StatusBadRequest)
+		return
+	}
+	if st, err := os.Stat(filepath.Join(dztypes.ModedDir(h.app.ServerDir, mission), clean)); err != nil || st.IsDir() {
+		http.Error(w, "file not found in moded_types", http.StatusNotFound)
+		return
+	}
+	ecoPath := filepath.Join(dztypes.MissionDir(h.app.ServerDir, mission), "cfgeconomycore.xml")
+	if err := dztypes.RegisterModedFile(ecoPath, clean, "types"); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "registered", "file": clean})
 }
 
 // ---------------------------------------------------------------------------
@@ -1194,6 +1592,34 @@ func isBinaryFile(name string) bool {
 	return binaryExts[strings.ToLower(filepath.Ext(name))]
 }
 
+// serverBinaryNames are the DayZ server binary names on either platform. The
+// Linux ones have no extension, so binaryExts alone would not catch them, and
+// Start chmods +x and runs whatever file carries that name.
+var serverBinaryNames = map[string]bool{
+	"dayzserver": true, "dayzserver_x64": true, "dayzserver_x64.exe": true,
+}
+
+// writeRefusal says why the file editor must not overwrite full, or "" when it
+// may. Besides binary extensions it refuses the server binary by name and any
+// extension-less file with an exec bit (Linux ELF binaries such as the manager
+// itself). Files with an extension are not judged by exec bit: on NTFS/SMB
+// mounts every file reports 0777 and configs must stay editable.
+func writeRefusal(full string) string {
+	base := filepath.Base(full)
+	if isBinaryFile(base) {
+		return "binary file — not editable in the panel"
+	}
+	if serverBinaryNames[strings.ToLower(base)] {
+		return "server binary — not editable in the panel"
+	}
+	if filepath.Ext(base) == "" {
+		if st, err := os.Stat(full); err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
+			return "executable file — not editable in the panel"
+		}
+	}
+	return ""
+}
+
 func isHidden(name string) bool {
 	lower := strings.ToLower(name)
 	if hiddenNames[lower] {
@@ -1222,11 +1648,11 @@ func (h *handlers) filesTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type node struct {
-		Name     string `json:"name"`
-		Path     string `json:"path"`
-		IsDir    bool   `json:"isDir"`
-		Size     int64  `json:"size"`
-		Binary   bool   `json:"binary,omitempty"`
+		Name   string `json:"name"`
+		Path   string `json:"path"`
+		IsDir  bool   `json:"isDir"`
+		Size   int64  `json:"size"`
+		Binary bool   `json:"binary,omitempty"`
 	}
 	out := []node{}
 	for _, e := range entries {
@@ -1308,6 +1734,16 @@ func (h *handlers) filesWrite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	// The editor never opens binaries; refuse to overwrite one (a text body
+	// over DayZServer_x64.exe or a .pbo would break the server).
+	if reason := writeRefusal(full); reason != "" {
+		http.Error(w, reason, http.StatusUnsupportedMediaType)
+		return
+	}
+	if st, err := os.Stat(full); err == nil && st.IsDir() {
+		http.Error(w, "that path is a folder", http.StatusBadRequest)
+		return
+	}
 	_ = util.BackupBeforeWrite(full)
 	tmp := full + ".tmp"
 	if err := os.WriteFile(tmp, []byte(req.Content), 0o644); err != nil {
@@ -1328,7 +1764,7 @@ func (h *handlers) filesWrite(w http.ResponseWriter, r *http.Request) {
 // Logs.
 
 func (h *handlers) logsList(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, dzlogs.Discover(h.app.ServerDir, h.app.Cfg().ProfilesDir))
+	writeJSON(w, dzlogs.WithPrevious(h.app.ServerDir, h.app.Cfg().ProfilesDir))
 }
 
 // logsRead returns a tail snapshot of a log file. Cap is deliberately tight
@@ -1337,9 +1773,13 @@ func (h *handlers) logsList(w http.ResponseWriter, r *http.Request) {
 // via ?bytes= up to the cap.
 func (h *handlers) logsRead(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
-	path := dzlogs.Resolve(h.app.ServerDir, h.app.Cfg().ProfilesDir, id)
-	if path == "" {
+	if !h.knownLogID(id) {
 		http.Error(w, "unknown log id", http.StatusBadRequest)
+		return
+	}
+	path := dzlogs.Resolve(h.app.ServerDir, h.app.Cfg().ProfilesDir, id)
+	if path == "" { // e.g. no .RPT written yet — an empty log, not an error
+		writeJSON(w, map[string]interface{}{"path": "", "content": "", "size": 0, "end": 0, "truncated": false, "missing": true})
 		return
 	}
 	const (
@@ -1357,7 +1797,8 @@ func (h *handlers) logsRead(w http.ResponseWriter, r *http.Request) {
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		writeJSON(w, map[string]interface{}{"path": path, "content": "", "size": 0, "truncated": false})
+		// Not written yet: the viewer says it waits for the file.
+		writeJSON(w, map[string]interface{}{"path": path, "content": "", "size": 0, "end": 0, "truncated": false, "missing": true})
 		return
 	}
 	defer f.Close()
@@ -1374,6 +1815,9 @@ func (h *handlers) logsRead(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = f.Seek(offset, 0)
 	body, _ := io.ReadAll(f)
+	// Where this snapshot ends — the live stream continues from exactly here
+	// (the file may have grown since Stat).
+	end := offset + int64(len(body))
 	// If we seeked mid-line, drop the first (partial) line so the UI does
 	// not display a misleading fragment at the top.
 	if offset > 0 {
@@ -1386,21 +1830,60 @@ func (h *handlers) logsRead(w http.ResponseWriter, r *http.Request) {
 		"content":   string(body),
 		"size":      size,
 		"offset":    offset,
+		"end":       end,
 		"truncated": truncated,
 	})
+}
+
+// knownLogID reports whether id names one of the log sources (earlier runs'
+// RPT / ADM included).
+func (h *handlers) knownLogID(id string) bool {
+	for _, s := range dzlogs.WithPrevious(h.app.ServerDir, h.app.Cfg().ProfilesDir) {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// logsDownload sends a whole log file: the viewer shows only the tail, and
+// from a phone the folder button can only show a path.
+func (h *handlers) logsDownload(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if !h.knownLogID(id) {
+		http.Error(w, "unknown log id", http.StatusBadRequest)
+		return
+	}
+	path := dzlogs.Resolve(h.app.ServerDir, h.app.Cfg().ProfilesDir, id)
+	if path == "" {
+		http.Error(w, "the log file does not exist yet", http.StatusNotFound)
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		http.Error(w, "the log file does not exist yet", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	name := strings.NewReplacer(`"`, "", "\r", "", "\n", "").Replace(filepath.Base(path))
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	// The size at open: the server may still be appending to the file.
+	w.Header().Set("Content-Length", strconv.FormatInt(st.Size(), 10))
+	_, _ = io.CopyN(w, f, st.Size())
 }
 
 // logsStream is a Server-Sent Events endpoint. EventSource on the client
 // keeps the socket open; the server writes "data: <chunk>\n\n" as it reads.
 func (h *handlers) logsStream(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
-	path := dzlogs.Resolve(h.app.ServerDir, h.app.Cfg().ProfilesDir, id)
-	if path == "" {
+	if !h.knownLogID(id) {
 		http.Error(w, "unknown log id", http.StatusBadRequest)
-		return
-	}
-	if _, err := os.Stat(path); err != nil {
-		http.Error(w, "log file not found (yet)", http.StatusNotFound)
 		return
 	}
 	flusher, ok := w.(http.Flusher)
@@ -1408,28 +1891,131 @@ func (h *handlers) logsStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
 		return
 	}
+	resolve := func() string { return dzlogs.Resolve(h.app.ServerDir, h.app.Cfg().ProfilesDir, id) }
+	exists := func(p string) bool {
+		if p == "" {
+			return false
+		}
+		_, err := os.Stat(p)
+		return err == nil
+	}
+
+	// Where to start: the SSE id of the last event the browser saw (on an
+	// automatic reconnect) is "<file>|<offset>"; otherwise the end of the
+	// snapshot the page just loaded (?offset=); otherwise the last 64 KB.
+	path := resolve()
+	start := int64(-1)
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
+			start = n
+		}
+	}
+	if last := r.Header.Get("Last-Event-ID"); last != "" {
+		if i := strings.LastIndexByte(last, '|'); i > 0 {
+			if n, err := strconv.ParseInt(last[i+1:], 10, 64); err == nil && n >= 0 {
+				start = n
+				if last[:i] != filepath.Base(path) {
+					start = 0 // a newer file replaced the one the browser followed
+				}
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, ": stream open\n\n")
 	flusher.Flush()
 
-	stop := make(chan struct{})
-	go func() {
-		<-r.Context().Done()
-		close(stop)
-	}()
-	_ = dzlogs.Tail(stop, path, 64*1024, func(chunk []byte) error {
-		// SSE escapes newlines into separate "data:" lines so we just
-		// send each line; a terminal line is still a valid event.
-		for _, line := range strings.Split(string(chunk), "\n") {
-			if _, err := fmt.Fprintf(w, "data: %s\n\n", line); err != nil {
-				return err
+	ctx := r.Context()
+	for {
+		// A log that does not exist yet (server never started, no .RPT this
+		// run) is waited for instead of failing: a 404 made EventSource give
+		// up for good, so the log never appeared once the server started.
+		for !exists(path) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+			}
+			path, start = resolve(), 0
+		}
+		if start < 0 {
+			if st, err := os.Stat(path); err == nil {
+				start = st.Size() - 64*1024
+			}
+			if start < 0 {
+				start = 0
 			}
 		}
-		flusher.Flush()
-		return nil
-	})
+
+		// DayZ writes a new timestamped .RPT/.ADM on every start: follow the
+		// newest file instead of staying on the previous run's log.
+		stop := make(chan struct{})
+		switched := make(chan string, 1)
+		go func(cur string) {
+			t := time.NewTicker(3 * time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					close(stop)
+					return
+				case <-t.C:
+					if p := resolve(); p != "" && p != cur {
+						switched <- p
+						close(stop)
+						return
+					}
+				}
+			}
+		}(path)
+
+		base, pos := filepath.Base(path), start
+		var partial []byte // a line the writer has not finished yet
+		_ = dzlogs.TailFrom(stop, path, start, func(chunk []byte) error {
+			pos += int64(len(chunk))
+			data := append(partial, chunk...)
+			cut := bytes.LastIndexByte(data, '\n')
+			if cut < 0 && len(data) < 64*1024 {
+				partial = data
+				return nil
+			}
+			if cut < 0 { // an absurdly long line: send what we have
+				cut = len(data)
+			}
+			complete := strings.TrimSuffix(string(data[:cut]), "\r")
+			partial = append([]byte(nil), data[min(cut+1, len(data)):]...)
+			// One event per line — never split a line across two events or
+			// emit a blank event for the trailing newline. The last event
+			// carries the resume position (the start of the unfinished line).
+			lines := strings.Split(complete, "\n")
+			for i, line := range lines {
+				if i == len(lines)-1 {
+					if _, err := fmt.Fprintf(w, "id: %s|%d\n", base, pos-int64(len(partial))); err != nil {
+						return err
+					}
+				}
+				if _, err := fmt.Fprintf(w, "data: %s\n\n", strings.TrimSuffix(line, "\r")); err != nil {
+					return err
+				}
+			}
+			flusher.Flush()
+			return nil
+		})
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case p := <-switched:
+			path, start = p, 0
+			fmt.Fprintf(w, "data: \ndata: ===== %s =====\n\n", filepath.Base(p))
+			flusher.Flush()
+		default:
+			return
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1440,10 +2026,66 @@ func (h *handlers) rconPlayers(w http.ResponseWriter, r *http.Request) {
 	// connection instead of opening (and logging in) a fresh one each time.
 	players, err := h.app.RCon.PlayersCached(2 * time.Second)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		rconFail(w, err)
 		return
 	}
 	writeJSON(w, map[string]interface{}{"players": players, "count": len(players)})
+}
+
+// rconErrKey names the common RCon failures with the i18n key the panel shows
+// for them ("" for anything else).
+func rconErrKey(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, rcon.ErrNotConfigured):
+		return "rcon.err.notConfigured"
+	case errors.Is(err, rcon.ErrAuthFailed):
+		return "rcon.err.auth"
+	case errors.Is(err, rcon.ErrTimeout):
+		return "rcon.err.timeout"
+	}
+	return ""
+}
+
+// rconFail answers a failed RCon call: a known failure as {error: <i18n key>,
+// message} that the panel translates, anything else as plain text.
+func rconFail(w http.ResponseWriter, err error) {
+	if k := rconErrKey(err); k != "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": k, "message": err.Error()})
+		return
+	}
+	http.Error(w, err.Error(), http.StatusBadGateway)
+}
+
+// rconStatus tells the RCon page what the connection runs on: BattlEye loads
+// its password when the server starts (beserver_x64.cfg → *_active_*.cfg), so
+// one saved in the panel since then is pending until the next restart — the
+// panel keeps logging in with the live one meanwhile.
+func (h *handlers) rconStatus(w http.ResponseWriter, r *http.Request) {
+	running := h.app.ServerIsRunning()
+	rc := h.app.RCon
+	out := map[string]interface{}{
+		"running":    running,
+		"configured": rc.Configured(),
+		"connected":  rc.IsConnected(),
+	}
+	if running {
+		rc.TouchConnect()
+		if be := h.app.ActiveBEConfig(); be != nil {
+			saved := h.app.Cfg().RConPassword
+			out["activeFile"] = filepath.Base(be.Path)
+			out["activePort"] = be.RConPort
+			out["pending"] = saved != "" && be.RConPassword != "" && be.RConPassword != saved
+		}
+		if err := rc.LastConnectErr(); err != nil {
+			out["error"] = err.Error()
+			out["errorKey"] = rconErrKey(err)
+		}
+	}
+	writeJSON(w, out)
 }
 
 // rconChatRecent returns recent in-game chat captured from the BattlEye message
@@ -1460,11 +2102,17 @@ func (h *handlers) rconChatRecent(w http.ResponseWriter, r *http.Request) {
 	}
 	rc := h.app.RCon
 	rc.TouchConnect()
-	writeJSON(w, map[string]interface{}{
+	out := map[string]interface{}{
 		"messages":   rc.RecentChat(limit),
 		"connected":  rc.IsConnected(),
 		"configured": rc.Configured(),
-	})
+	}
+	if h.app.ServerIsRunning() {
+		if err := rc.LastConnectErr(); err != nil {
+			out["errorKey"] = rconErrKey(err)
+		}
+	}
+	writeJSON(w, out)
 }
 
 func (h *handlers) rconSay(w http.ResponseWriter, r *http.Request) {
@@ -1483,7 +2131,7 @@ func (h *handlers) rconSay(w http.ResponseWriter, r *http.Request) {
 		err = h.app.RCon.Say(req.Message)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		rconFail(w, err)
 		return
 	}
 	writeJSON(w, map[string]string{"status": "ok"})
@@ -1499,7 +2147,7 @@ func (h *handlers) rconKick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.app.RCon.Kick(req.PlayerID, req.Reason); err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		rconFail(w, err)
 		return
 	}
 	h.app.RCon.InvalidatePlayers() // reflect the kick on the next poll
@@ -1517,7 +2165,7 @@ func (h *handlers) rconBan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.app.RCon.Ban(req.PlayerID, req.Minutes, req.Reason); err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		rconFail(w, err)
 		return
 	}
 	h.app.RCon.InvalidatePlayers() // reflect the ban on the next poll
@@ -1534,7 +2182,7 @@ func (h *handlers) rconCommand(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := h.app.RCon.Command(req.Command)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		rconFail(w, err)
 		return
 	}
 	writeJSON(w, map[string]string{"output": out})
@@ -1543,36 +2191,73 @@ func (h *handlers) rconCommand(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 // events.xml editor.
 
+// eventsList lists the events of every events file the mission uses —
+// db/events.xml and each one registered in cfgeconomycore.xml (mods, the
+// panel's dzm_vehicles) — with how many spawn points cfgeventspawns.xml gives
+// each. An event defined again in a later file is flagged: the first wins.
 func (h *handlers) eventsList(w http.ResponseWriter, r *http.Request) {
 	doc, path, err := h.loadEventsFile()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	mission, _ := h.missionTemplate()
+	missionDir := dztypes.MissionDir(h.app.ServerDir, mission)
 	type row struct {
 		Name     string `json:"name"`
+		File     string `json:"file"` // relative to the mission
 		Nominal  *int   `json:"nominal,omitempty"`
 		Min      *int   `json:"min,omitempty"`
 		Max      *int   `json:"max,omitempty"`
 		Lifetime *int   `json:"lifetime,omitempty"`
 		Active   *int   `json:"active,omitempty"`
 		Children int    `json:"children"`
+		Points   int    `json:"points"`        // positions in cfgeventspawns.xml
+		Position string `json:"position"`      // fixed | player | uniform
+		Dup      bool   `json:"dup,omitempty"` // defined in an earlier file too
 	}
-	out := make([]row, 0, len(doc.Events))
-	for _, e := range doc.Events {
-		r := row{Name: e.Name, Nominal: e.Nominal, Min: e.Min, Max: e.Max, Lifetime: e.Lifetime, Active: e.Active}
-		if e.Children != nil {
-			r.Children = len(e.Children.Child)
+	points := map[string]int{}
+	if sp, err := dztypes.LoadEventSpawns(filepath.Join(missionDir, "cfgeventspawns.xml")); err == nil {
+		for _, e := range sp.Events {
+			points[strings.ToLower(e.Name)] += len(e.Pos)
 		}
-		out = append(out, r)
 	}
-	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
-	writeJSON(w, map[string]interface{}{"file": path, "events": out, "count": len(out)})
+	out := []row{}
+	seen := map[string]bool{}
+	files := []string{}
+	var problems []string
+	add := func(rel string, d *dztypes.EventsDoc) {
+		files = append(files, rel)
+		for _, e := range d.Events {
+			key := strings.ToLower(e.Name)
+			r := row{Name: e.Name, File: rel, Nominal: e.Nominal, Min: e.Min, Max: e.Max, Lifetime: e.Lifetime,
+				Active: e.Active, Points: points[key], Position: strings.ToLower(strings.TrimSpace(e.Position)), Dup: seen[key]}
+			if e.Children != nil {
+				r.Children = len(e.Children.Child)
+			}
+			seen[key] = true
+			out = append(out, r)
+		}
+	}
+	add("db/events.xml", doc)
+	for _, f := range missionEcoFiles(missionDir, "events") {
+		if strings.EqualFold(f.Rel, "db/events.xml") {
+			continue
+		}
+		d, err := dztypes.LoadEvents(f.Path)
+		if err != nil {
+			problems = append(problems, f.Rel+": "+err.Error())
+			continue
+		}
+		add(f.Rel, d)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	writeJSON(w, map[string]interface{}{"file": path, "files": files, "events": out, "count": len(out), "problems": problems})
 }
 
 func (h *handlers) eventsItem(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
-	doc, path, err := h.loadEventsFile()
+	doc, path, err := h.loadEventsFileRel(r.URL.Query().Get("file"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1650,6 +2335,26 @@ func (h *handlers) eventsItem(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// loadEventsFileRel opens one of the mission's events files by its path
+// relative to the mission ("" = db/events.xml). Only files the mission
+// registers in cfgeconomycore.xml are accepted.
+func (h *handlers) loadEventsFileRel(rel string) (*dztypes.EventsDoc, string, error) {
+	if rel == "" || strings.EqualFold(rel, "db/events.xml") {
+		return h.loadEventsFile()
+	}
+	mission, err := h.missionTemplate()
+	if err != nil {
+		return nil, "", err
+	}
+	for _, f := range missionEcoFiles(dztypes.MissionDir(h.app.ServerDir, mission), "events") {
+		if strings.EqualFold(f.Rel, rel) {
+			doc, err := dztypes.LoadEvents(f.Path)
+			return doc, f.Path, err
+		}
+	}
+	return nil, "", fmt.Errorf("%q is not an events file of the mission", rel)
+}
+
 func (h *handlers) loadEventsFile() (*dztypes.EventsDoc, string, error) {
 	mission, err := h.missionTemplate()
 	if err != nil {
@@ -1667,18 +2372,65 @@ func (h *handlers) loadEventsFile() (*dztypes.EventsDoc, string, error) {
 // Validator.
 
 func (h *handlers) updateCheck(w http.ResponseWriter, r *http.Request) {
-	res := updater.Check(r.Context(), h.app.Version)
+	res := updater.Check(r.Context(), h.app.Version, h.app.Mode)
 	writeJSON(w, res)
 }
 
-func (h *handlers) validate(w http.ResponseWriter, r *http.Request) {
+// validatorOptions gathers the server context the deeper validator checks
+// need: launch mods, ports, server.cfg, profiles and the world size.
+func (h *handlers) validatorOptions() validator.Options {
+	cfg := h.app.Cfg()
 	mission, _ := h.missionTemplate()
-	issues, err := validator.ValidateAll(h.app.ServerDir, mission)
+	rconPort := cfg.RConPort
+	if rconPort == 0 {
+		if be := config.FindBEConfig(h.beDir()); be != nil && be.RConPort != 0 {
+			rconPort = be.RConPort
+		}
+	}
+	o := validator.Options{
+		ServerDir:   h.app.ServerDir,
+		Mission:     mission,
+		ServerCfg:   cfg.ServerCfg,
+		ProfilesDir: h.profilesAbs(),
+		Mods:        cfg.Mods,
+		ServerMods:  cfg.ServerMods,
+		ServerPort:  cfg.ServerPort,
+		RConPort:    rconPort,
+	}
+	// Only a real size: the 15360 default guess would make the bounds check
+	// (and its auto-fix) drop valid positions on a larger unknown map. Left 0,
+	// the validator falls back to its generous ceiling.
+	if mission != "" {
+		if mi := h.currentMap(); mi.sizeKnown {
+			o.WorldSize = mi.Size
+		}
+	}
+	return o
+}
+
+// validate runs the validator, reusing the last result while nothing it reads
+// has changed (validate_cache.go). ?force=1 always runs; ?peek=1 never does —
+// it returns the last result, if any, with fresh saying whether it is current.
+func (h *handlers) validate(w http.ResponseWriter, r *http.Request) {
+	o := h.validatorOptions()
+	q := r.URL.Query()
+	if q.Get("peek") == "1" {
+		res, fresh := h.cachedValidation(o)
+		if res == nil {
+			writeJSON(w, map[string]interface{}{"none": true})
+			return
+		}
+		writeJSON(w, map[string]interface{}{"issues": res.issues, "count": len(res.issues),
+			"checkedAt": res.at.Unix(), "cached": true, "fresh": fresh})
+		return
+	}
+	res, cached, err := h.runValidation(o, q.Get("force") == "1")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]interface{}{"issues": issues, "count": len(issues)})
+	writeJSON(w, map[string]interface{}{"issues": res.issues, "count": len(res.issues),
+		"checkedAt": res.at.Unix(), "cached": cached, "fresh": true})
 }
 
 // validateFix applies the safe auto-fixes (whitelist unknown loot flags into
@@ -1690,15 +2442,63 @@ func (h *handlers) validateFix(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer unlock()
-	mission, err := h.missionTemplate()
-	if err != nil {
+	if _, err := h.missionTemplate(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fixed, err := validator.AutoFix(h.app.ServerDir, mission)
+	// Optional body {"codes": [...]}: fix only those kinds of problem.
+	var req struct {
+		Codes []string `json:"codes"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	want := map[string]bool{}
+	for _, c := range req.Codes {
+		want[c] = true
+	}
+	all := len(want) == 0
+	o := h.validatorOptions()
+	fixed, err := validator.AutoFixWith(o, req.Codes)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	// Launch-list fixes live in manager.json, which only this layer owns:
+	// drop enabled mods whose folder is gone, and duplicate entries.
+	if all || want["mods.missing"] || want["mods.duplicate"] {
+		var removed []string
+		_ = h.app.MutateConfig(func(c *config.Manager) error {
+			clean := func(list []string) []string {
+				seen := map[string]bool{}
+				out := make([]string, 0, len(list))
+				for _, m := range list {
+					k := strings.ToLower(m)
+					if seen[k] && (all || want["mods.duplicate"]) {
+						removed = append(removed, m+" (duplicate)")
+						continue
+					}
+					seen[k] = true
+					dir := m
+					if !filepath.IsAbs(dir) {
+						dir = filepath.Join(h.app.ServerDir, m)
+					}
+					if st, err := os.Stat(dir); (err != nil || !st.IsDir()) && (all || want["mods.missing"]) {
+						removed = append(removed, m+" (folder missing)")
+						continue
+					}
+					out = append(out, m)
+				}
+				return out
+			}
+			c.Mods = clean(c.Mods)
+			c.ServerMods = clean(c.ServerMods)
+			return nil
+		})
+		for _, m := range removed {
+			fixed = append(fixed, "removed "+m+" from the launch mod list")
+		}
+	}
+	if fixed == nil {
+		fixed = []string{}
 	}
 	writeJSON(w, map[string]interface{}{"fixed": fixed, "count": len(fixed)})
 }
@@ -1707,7 +2507,7 @@ func (h *handlers) validateFix(w http.ResponseWriter, r *http.Request) {
 // Steam detection.
 
 func (h *handlers) steamDetect(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]interface{}{"installs": util.FindDayZInstalls()})
+	writeJSON(w, map[string]interface{}{"installs": util.FindDayZInstalls(), "workshop": util.FindWorkshopContent()})
 }
 
 // ---------------------------------------------------------------------------
@@ -1735,8 +2535,7 @@ func (h *handlers) modsScanTypes(w http.ResponseWriter, r *http.Request) {
 	// XML under @Mod/dz/... that the server-side copy may not yet have.
 	dir := filepath.Join(h.app.ServerDir, name)
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-		if h.app.Cfg().VanillaDayZPath != "" {
-			alt := filepath.Join(h.app.Cfg().VanillaDayZPath, "!Workshop", name)
+		if alt, err := mods.SourcePath(h.app.Cfg().ModSourceDir(), name); err == nil {
 			if st, err := os.Stat(alt); err == nil && st.IsDir() {
 				dir = alt
 			}
@@ -1748,11 +2547,11 @@ func (h *handlers) modsScanTypes(w http.ResponseWriter, r *http.Request) {
 		dir = r
 	}
 	type hit struct {
-		Path  string `json:"path"`           // absolute path
-		Rel   string `json:"rel"`            // relative to mod folder
-		Types int    `json:"types"`          // how many <type> entries; 0 if not a types doc
+		Path  string `json:"path"`  // absolute path
+		Rel   string `json:"rel"`   // relative to mod folder
+		Types int    `json:"types"` // how many <type> entries; 0 if not a types doc
 		Size  int64  `json:"size"`
-		Kind  string `json:"kind"`           // "types" | "xml" | "json"
+		Kind  string `json:"kind"` // "types" | "xml" | "json"
 	}
 	var hits []hit
 	_ = filepath.Walk(dir, func(p string, info os.FileInfo, werr error) error {
@@ -1880,13 +2679,8 @@ func (h *handlers) importPreview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	src := strings.TrimSpace(req.SourceDir)
-	if src == "" {
-		http.Error(w, "sourceDir is required", http.StatusBadRequest)
-		return
-	}
-	if st, err := os.Stat(src); err != nil || !st.IsDir() {
-		http.Error(w, "source directory not found", http.StatusBadRequest)
+	src, ok := h.importSource(w, req.SourceDir)
+	if !ok {
 		return
 	}
 	cfgPath := filepath.Join(src, "serverDZ.cfg")
@@ -1908,16 +2702,72 @@ func (h *handlers) importPreview(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	preview["mods"] = foundMods
-	var missions []string
+	var missions, missing []string
 	if entries, err := os.ReadDir(filepath.Join(src, "mpmissions")); err == nil {
 		for _, e := range entries {
 			if e.IsDir() {
 				missions = append(missions, e.Name())
+				// Missions this server lacks get copied along on import.
+				if _, err := os.Stat(filepath.Join(h.app.ServerDir, "mpmissions", e.Name())); err != nil {
+					missing = append(missing, e.Name())
+				}
 			}
 		}
 	}
 	preview["missions"] = missions
+	preview["missingMissions"] = missing
 	writeJSON(w, preview)
+}
+
+// importSource validates the folder to import from. Its errors are i18n keys
+// the page shows in the panel's language.
+func (h *handlers) importSource(w http.ResponseWriter, dir string) (string, bool) {
+	src := strings.TrimSpace(dir)
+	if src == "" {
+		authError(w, http.StatusBadRequest, "sync.err.noSource", map[string]interface{}{"message": "sourceDir is required"})
+		return "", false
+	}
+	if st, err := os.Stat(src); err != nil || !st.IsDir() {
+		authError(w, http.StatusBadRequest, "sync.err.notFound", map[string]interface{}{"message": "source directory not found"})
+		return "", false
+	}
+	// Refuse to import from the very folder we're running in — it would loop
+	// and overwrite the manager's own files.
+	absSrc, _ := filepath.Abs(src)
+	absDst, _ := filepath.Abs(h.app.ServerDir)
+	if strings.EqualFold(absSrc, absDst) {
+		authError(w, http.StatusBadRequest, "sync.err.same", map[string]interface{}{"message": "source and destination are the same directory"})
+		return "", false
+	}
+	return src, true
+}
+
+// importMission makes sure mpmissions/<name> exists in this server, copying it
+// from the source server when it is missing (aside first, renamed on success,
+// like the mods). Returns whether the folder was copied.
+func (h *handlers) importMission(src, name string) (bool, error) {
+	if name == "" || name != filepath.Base(name) || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+		return false, fmt.Errorf("invalid mission name %q", name)
+	}
+	dst := filepath.Join(h.app.ServerDir, "mpmissions", name)
+	if st, err := os.Stat(dst); err == nil && st.IsDir() {
+		return false, nil
+	}
+	from := filepath.Join(src, "mpmissions", name)
+	if st, err := os.Stat(from); err != nil || !st.IsDir() {
+		return false, fmt.Errorf("mission %s is in neither server's mpmissions", name)
+	}
+	tmp := dst + ".importing"
+	_ = os.RemoveAll(tmp)
+	if err := copyDirTree(from, tmp); err != nil {
+		_ = os.RemoveAll(tmp)
+		return false, err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.RemoveAll(tmp)
+		return false, err
+	}
+	return true, nil
 }
 
 func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
@@ -1932,17 +2782,8 @@ func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	src := strings.TrimSpace(req.SourceDir)
-	if src == "" {
-		http.Error(w, "sourceDir is required", http.StatusBadRequest)
-		return
-	}
-	// Refuse to import from the very folder we're running in — it would loop
-	// and overwrite the manager's own files.
-	absSrc, _ := filepath.Abs(src)
-	absDst, _ := filepath.Abs(h.app.ServerDir)
-	if strings.EqualFold(absSrc, absDst) {
-		http.Error(w, "source and destination are the same directory", http.StatusBadRequest)
+	src, ok := h.importSource(w, req.SourceDir)
+	if !ok {
 		return
 	}
 
@@ -1994,10 +2835,30 @@ func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if req.Mission != "" {
-		cfgPath := filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)
+	// The mission: the one picked, or else the template of a serverDZ.cfg just
+	// copied over. Its folder comes along when this server lacks it — import
+	// used to switch the template to a mission that was never copied, and the
+	// server then failed to start.
+	cfgPath := filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)
+	mission := strings.TrimSpace(req.Mission)
+	if mission == "" && req.CopyCfg {
 		if cfg, err := config.LoadServerCfg(cfgPath); err == nil {
-			cfg.SetMissionTemplate(req.Mission)
+			mission = cfg.MissionTemplate()
+		}
+	}
+	copiedMission, missionErr := "", ""
+	if mission != "" {
+		if did, err := h.importMission(src, mission); err != nil {
+			missionErr = err.Error()
+			h.app.Log.Printf("import: mission %s: %v", mission, err)
+		} else if did {
+			copiedMission = mission
+		}
+	}
+	// Never point the server at a mission folder it does not have.
+	if req.Mission != "" && missionErr == "" {
+		if cfg, err := config.LoadServerCfg(cfgPath); err == nil {
+			cfg.SetMissionTemplate(mission)
 			_ = cfg.Save(cfgPath)
 		}
 	}
@@ -2013,7 +2874,8 @@ func (h *handlers) importApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]interface{}{"copiedMods": copied, "failedMods": failed})
+	writeJSON(w, map[string]interface{}{"copiedMods": copied, "failedMods": failed,
+		"mission": mission, "copiedMission": copiedMission, "missionError": missionErr})
 }
 
 // ---------------------------------------------------------------------------
@@ -2295,15 +3157,25 @@ func (h *handlers) acquireWrite(w http.ResponseWriter) (func(), bool) {
 	h.app.WriteMu.Lock()
 	if h.app.ServerIsRunning() {
 		h.app.WriteMu.Unlock()
-		http.Error(w, "server is running — stop it before editing files", http.StatusConflict)
+		// An i18n key, so the page says it in the panel's language.
+		authError(w, http.StatusConflict, "guard.serverRunning", map[string]interface{}{"message": "server is running — stop it before editing files"})
 		return nil, false
 	}
 	return h.app.WriteMu.Unlock, true
 }
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
+	// Encode fully before writing: a value that cannot be encoded (an
+	// out-of-range time, a NaN) used to produce a 200 with an EMPTY body, which
+	// the page could only report as "Unexpected end of JSON input".
+	data, err := json.Marshal(v)
+	if err != nil {
+		log.Printf("writeJSON: %v", err)
+		http.Error(w, "internal error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(v)
+	_, _ = w.Write(append(data, '\n'))
 }
 
 // writeFileAtomic writes data via a temp file + rename, so a crash or a full

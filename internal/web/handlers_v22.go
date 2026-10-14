@@ -50,6 +50,7 @@ func (h *handlers) health(w http.ResponseWriter, r *http.Request) {
 			"loopPaused": h.app.Server.LoopPaused(),
 			"pid":        h.app.Server.PID(),
 			"uptime":     h.app.Server.Uptime().Round(time.Second).String(),
+			"uptimeSec":  int64(h.app.Server.Uptime().Seconds()),
 		},
 		"disk":    map[string]interface{}{"free": diskFree},
 		"startup": map[string]interface{}{"fatal": dFatal, "warnings": dWarn},

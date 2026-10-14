@@ -46,17 +46,53 @@ func FindBEConfig(beDir string) *BEConfig {
 	return nil
 }
 
+// FindActiveBEConfig returns the config BattlEye is using right now. When the
+// server starts, BattlEye loads beserver_x64.cfg and renames it to
+// beserver_x64_active_<id>.cfg — and when no beserver_x64.cfg exists at start
+// it writes a new one with a RANDOM RCon password. So while the server runs,
+// the newest *_active_* file holds the only password that logs in. Returns
+// nil when there is none.
+func FindActiveBEConfig(beDir string) *BEConfig {
+	if beDir == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(beDir)
+	if err != nil {
+		return nil
+	}
+	var best string
+	var bestMod int64
+	for _, e := range entries {
+		name := strings.ToLower(e.Name())
+		if e.IsDir() || !strings.HasPrefix(name, "beserver") || !strings.Contains(name, "_active_") || !strings.HasSuffix(name, ".cfg") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if m := info.ModTime().UnixNano(); best == "" || m > bestMod {
+			best, bestMod = e.Name(), m
+		}
+	}
+	if best == "" {
+		return nil
+	}
+	return parseBEConfig(filepath.Join(beDir, best))
+}
+
 // EnsureBEConfig makes sure beserver_x64.cfg in beDir declares the RCon
-// password (and a port, if the file doesn't already have one). DayZ stores the
+// password (and a port, if the file doesn't already have one, or always when
+// forcePort is set — the admin chose that port explicitly). DayZ stores the
 // RCon credential HERE, not in server.cfg — and BattlEye only enables RCon when
 // this file exists with an RConPassword. On a fresh install the file is absent,
 // which is exactly why the panel reports "rcon: not configured" no matter what
 // password the user types: nothing was ever written where BattlEye looks.
 //
-// We create or update the file in place, preserving any other BE settings and
-// any pre-existing RConPort. Returns true if the file changed. The change takes
+// We create or update the file in place, preserving any other BE settings and,
+// unless forcePort, any pre-existing RConPort. Returns true if the file changed. The change takes
 // effect the next time the server starts (BattlEye reads it at launch).
-func EnsureBEConfig(beDir, password string, port int) (bool, error) {
+func EnsureBEConfig(beDir, password string, port int, forcePort bool) (bool, error) {
 	if beDir == "" {
 		return false, errors.New("BattlEye path is not set")
 	}
@@ -110,9 +146,10 @@ func EnsureBEConfig(beDir, password string, port int) (bool, error) {
 	}
 
 	setKey("RConPassword", password)
-	// Only introduce a port if the file doesn't already specify one — never
-	// clobber a working port the operator set themselves.
-	if port > 0 && !hasKey("RConPort") {
+	// Only introduce a derived port if the file doesn't already specify one —
+	// never clobber a working port the operator set by hand. An explicit panel
+	// port is forced: the panel connects to it, so BattlEye must listen there.
+	if port > 0 && (forcePort || !hasKey("RConPort")) {
 		setKey("RConPort", strconv.Itoa(port))
 	}
 

@@ -1,372 +1,568 @@
 {
-  "chapters": [
+ "chapters": [
+  {
+   "id": "start",
+   "title": "Per cominciare",
+   "intro": "Il manager è un unico programma che gira accanto al tuo server DayZ e ti dà un pannello di controllo al posto di Blocco note e file .bat. Ci sono due versioni con le stesse impostazioni: dayz-manager-panel si apre in una sua finestra, dayz-manager-web nel browser. Non installa nulla nel sistema: elimina il file e tutto torna com'era.",
+   "steps": [
     {
-      "id": "start",
-      "title": "Per cominciare",
-      "intro": "Il gestore è un singolo .exe che gira accanto al tuo server DayZ e ti dà un pannello web al posto del Blocco note e dei file .bat. Non installa nulla nel sistema: cancella l'.exe e tutto torna com'era.",
-      "steps": [
-        {
-          "title": "Metti l'exe nella cartella del server",
-          "body": "Copia dayz-manager.exe accanto a DayZServer_x64.exe e serverDZ.cfg, poi avvialo. Si apre una console e il browser arriva su http://127.0.0.1:8787."
-        },
-        {
-          "title": "Indicagli il tuo client DayZ",
-          "body": "Al primo avvio ti viene chiesta la cartella del *client* DayZ — l'installazione del gioco che contiene la cartella !Workshop. È lì che Steam scarica le mod, ed è l'unico modo in cui il gestore può copiarle sul server."
-        },
-        {
-          "title": "Avvia il server",
-          "body": "Premi Avvia nella dashboard. Se manca DayZServer_x64.exe o una mod è rotta, il server si chiude e ne vedrai il motivo nella sezione Log."
-        }
-      ],
-      "tips": [
-        "Il pannello non ha alcun login. Lascialo su Locale a meno che non ti fidi della tua rete; per l'accesso da remoto mettici davanti un reverse proxy con password.",
-        "Quasi tutti gli editor rifiutano di salvare mentre il server è in esecuzione: DayZ blocca i propri file. Ferma il server; il pannello ti dice quando è questo il motivo."
-      ]
+     "title": "Mettilo nella cartella del server",
+     "body": "Copia dayz-manager-panel.exe (o dayz-manager-web.exe) accanto a DayZServer_x64.exe e serverDZ.cfg e avvialo. Il pannello si apre nella sua finestra; la versione browser apre invece http://127.0.0.1:8787. Su Linux usa i file -linux accanto al binario DayZServer."
     },
     {
-      "id": "mods",
-      "title": "Mod",
-      "intro": "Le mod di DayZ finiscono nella cartella !Workshop del tuo client appena ti iscrivi su Steam. Un server ha bisogno di una copia propria di ogni mod, del suo .bikey nella cartella keys e della mod nel parametro -mod. Il gestore fa tutte e tre le cose.",
-      "steps": [
-        {
-          "title": "Iscriviti prima su Steam",
-          "body": "Il gestore copia le mod, non le scarica. Iscriviti alla mod nello Steam Workshop e lascia che il launcher di DayZ la porti in !Workshop."
-        },
-        {
-          "title": "Installala sul server",
-          "body": "Apri Mod: lì c'è tutto quello che si trova in !Workshop. Installa copia la mod nella cartella del server e sincronizza il suo .bikey automaticamente. Sincronizza tutto fa l'intero elenco in un colpo solo."
-        },
-        {
-          "title": "Attivala per l'avvio",
-          "body": "Installare e caricare sono due cose diverse. L'interruttore Mod di una riga aggiunge la mod a -mod. Usa l'interruttore Lato server solo per le mod che i client NON devono avere (strumenti di amministrazione)."
-        },
-        {
-          "title": "Attenzione all'ordine di caricamento",
-          "body": "Trascina le righe in modo che i framework vengano per primi: @CF prima di tutto ciò che dipende da esso, Expansion Core prima dei suoi addon. Un ordine sbagliato è una causa molto comune di server che non si avvia."
-        }
-      ],
-      "tips": [
-        "Aggiorna copia i file più recenti da !Workshop al server. Attiva Aggiorna le mod a ogni riavvio nelle Impostazioni perché avvenga da solo.",
-        "Alla disinstallazione il .bikey viene rimosso solo se nessun'altra mod installata usa la stessa chiave: le chiavi condivise (Expansion) restano al loro posto.",
-        "Se una mod porta bottino, premi Cerca tipi di bottino nella sua riga: il gestore trova il types.xml della mod e lo registra per te."
-      ]
+     "title": "Scegli da dove arrivano le mod",
+     "body": "Al primo avvio scegli la fonte delle mod: il *client* di DayZ (la sua cartella !Workshop, dove Steam scarica le mod), una qualsiasi cartella con @mod o workshop/content/221100 di SteamCMD, oppure Solo server per un hosting senza il gioco: allora carichi le mod tu e l'aggiornamento automatico è disattivato. Si può cambiare poi in Impostazioni."
     },
     {
-      "id": "economy",
-      "title": "Bottino ed economia",
-      "intro": "L'economia centrale di DayZ decide cosa esiste nel mondo e in che quantità. types.xml è l'elenco principale: una voce per classe di oggetto, con quanti devono essercene e dove possono comparire. Sbagliare questi numeri è il motivo abituale per cui un server sembra vuoto o annega nel bottino.",
-      "steps": [
-        {
-          "title": "Capisci i quattro numeri",
-          "body": "nominal è la quantità obiettivo che il server cerca di mantenere nel mondo. min è la soglia che innesca una ricomparsa. lifetime è per quanti secondi sopravvive un oggetto non toccato. restock è quanto il server attende prima di rifornirlo. nominal = 0 significa che l'oggetto non compare mai."
-        },
-        {
-          "title": "Modifica direttamente nella tabella",
-          "body": "nominal, min, lifetime e categoria si modificano nella riga stessa; le righe cambiate restano evidenziate finché non premi Salva modifiche. Modifica apre l'oggetto completo: usages, values, tags e flags."
-        },
-        {
-          "title": "usage e value = dove compare",
-          "body": "usage è il tipo di edificio (Military, Police, Farm…), value è il livello di bottino (Tier1 è la costa, Tier4 l'entroterra profondo e il militare). Un oggetto senza usage non ha dove comparire. Entrambi i nomi devono esistere in cfglimitsdefinition.xml."
-        },
-        {
-          "title": "Usa i modelli per il lavoro in blocco",
-          "body": "Seleziona delle righe, poi premi un modello di comparsa: i suoi usage/value/tags si applicano a tutte insieme. Molto più veloce che modificare centinaia di voci a mano."
-        }
-      ],
-      "tips": [
-        "Tieni i tuoi oggetti in un file di types separato invece di toccare il types.xml originale: il gestore lo registra in cfgeconomycore.xml e un aggiornamento del gioco non può sovrascriverlo.",
-        "Esegui il validatore dopo ogni modifica in blocco. La sua correzione automatica aggiunge i nomi usage/value/tag sconosciuti in cfglimitsdefinition.xml, ed è proprio questo che fa comparire il bottino delle mod."
-      ]
-    },
-    {
-      "id": "attachments",
-      "title": "Accessori per armi",
-      "intro": "cfgspawnabletypes.xml decide con cosa compare un'arma: caricatore, ottica, calcio. È costruito a slot, e i numeri significano due cose diverse: è qui che sbagliano tutti.",
-      "steps": [
-        {
-          "title": "Uno slot è un lancio di dadi",
-          "body": "Ogni slot ha una probabilità: 1.0 significa che compare sempre qualcosa, 0.35 significa il 35 % delle volte."
-        },
-        {
-          "title": "Gli oggetti in uno slot competono",
-          "body": "Il numero su ogni oggetto è un peso relativo, non una percentuale: DayZ sceglie ESATTAMENTE UN oggetto dallo slot. Pesi di 60 e 40 dentro uno slot da 0.35 valgono in realtà 21 % e 14 %. Il pannello ti mostra quel valore reale, così non devi calcolarlo."
-        },
-        {
-          "title": "Parti da un modello",
-          "body": "Scegli un modello di arma (AKM, M4-A1, Mosin…) e regolalo. I nomi di classe si completano dal tuo types.xml, e tutto ciò che non c'è viene segnalato: un errore di battitura è il motivo abituale per cui un accessorio non compare mai."
-        }
-      ],
-      "tips": [
-        "Uno slot per pezzo: uno per i caricatori, uno per le ottiche, uno per il calcio. Mettere caricatore e ottica nello stesso slot significa che l'arma riceve l'uno o l'altra, mai entrambi.",
-        "Viene riscritta solo la voce che modifichi: i tuoi commenti e la formattazione nel resto del file si conservano."
-      ]
-    },
-    {
-      "id": "loadout",
-      "title": "Equipaggiamento del giocatore",
-      "intro": "Decidi cosa indossa e porta con sé un giocatore nel momento in cui rinasce. Vanilla lo fissa nell'init.c della missione; il pannello usa invece i preset di equipaggiamento di spawn di DayZ e attiva l'intero sistema per te.",
-      "steps": [
-        {
-          "title": "Attiva il sistema",
-          "body": "Apri Equipaggiamento del giocatore. Se la missione fa ancora comparire i giocatori da init.c, la pagina lo segnala e offre un pulsante che crea un preset iniziale, lo registra in cfggameplay.json e attiva l'interruttore enableCfgGameplayFile, tutto in una volta."
-        },
-        {
-          "title": "Modifica vestiti ed equipaggiamento",
-          "body": "Ogni preset elenca cosa si indossa per slot (Corpo, Gambe, Piedi…) e cosa si porta sfuso. Aggiungi oggetti per nome classe, imposta un peso di spawn quando uno slot deve scegliere tra più opzioni, e scegli una condizione: perfetta, usata, danneggiata o un intervallo personalizzato."
-        },
-        {
-          "title": "Prova estrazione e condivisione",
-          "body": "Premi Prova estrazione per campionare uno spawn e vedere esattamente cosa riceve un giocatore, personaggio incluso. Esporta un preset in un file per un altro server e reimportalo."
-        }
-      ],
-      "tips": [
-        "healthMin/healthMax sono frazioni di salute: 1.0 è perfetto, 0.0 è rovinato. Tieni tutto perfetto così gli spawn non arrivano con vestiti logori.",
-        "L'equipaggiamento si salva a server fermo, come ogni modifica di config — riavvia il server dopo."
-      ]
-    },
-    {
-      "id": "rcon",
-      "title": "RCon, giocatori e annunci",
-      "intro": "RCon è la console remota di BattlEye: elenco giocatori in tempo reale, espulsioni, ban e messaggi in chat. Serve una password che BattlEye legge da beserver_x64.cfg all'avvio del server.",
-      "steps": [
-        {
-          "title": "Imposta la password",
-          "body": "Scrivila nella sezione RCon. Il gestore la scrive in battleye/beserver_x64.cfg, creando il file se necessario."
-        },
-        {
-          "title": "Riavvia il server",
-          "body": "BattlEye legge quel file solo all'avvio, quindi una password nuova non fa nulla fino al riavvio successivo. È normale, non è un bug."
-        },
-        {
-          "title": "Annunci e pianificazione",
-          "body": "Gli annunci pianificati scattano a un'ora del giorno; quelli a intervallo si ripetono ogni N minuti. Entrambi passano da RCon, quindi la password deve funzionare."
-        }
-      ],
-      "tips": [
-        "Anche gli avvisi di riavvio usano RCon. Senza password il riavvio avviene comunque: i giocatori semplicemente non vedono il conto alla rovescia.",
-        "La sezione Giocatori costruisce uno storico dal log di amministrazione: nomi, GUID, tempo di gioco, uccisioni. Richiede il parametro -adminlog attivo nelle Impostazioni."
-      ]
-    },
-    {
-      "id": "weather",
-      "title": "Meteo e ora",
-      "intro": "Il meteo è definito nel cfgweather.xml della missione, che DayZ legge una sola volta al caricamento: i cambi di meteo richiedono quindi sempre un riavvio, e senza mod non c'è modo di programmare «pioggia alle 20:00».",
-      "steps": [
-        {
-          "title": "Scegli un preset o regolalo a mano",
-          "body": "Un preset fisso blocca il meteo perché resti dov'è. Dinamico lo lascia variare da solo."
-        },
-        {
-          "title": "Scegli quanto è graduale il cambio",
-          "body": "La velocità di transizione controlla la gradualità: Graduale impiega circa mezz'ora a piccoli passi, come il gioco originale. Rapida percorre l'intero intervallo in due minuti, ed è questo che fa sembrare il meteo un interruttore."
-        },
-        {
-          "title": "Imposta la durata del giorno",
-          "body": "L'accelerazione di giorno e notte moltiplica lo scorrere del tempo di gioco: 12 significa che una giornata completa dura due ore reali. La notte è separata così puoi tenerla corta."
-        }
-      ],
-      "tips": [
-        "La densità dei temporali conta solo quando pioggia e nuvolosità sono sufficienti perché un temporale possa scatenarsi.",
-        "La neve compare solo sulle mappe che la supportano, come Sakhal."
-      ]
-    },
-    {
-      "id": "maintenance",
-      "title": "Tenerlo in salute",
-      "intro": "Tre cose salvano i server: i backup, il validatore e l'abitudine di leggere davvero i log quando qualcosa si rompe.",
-      "steps": [
-        {
-          "title": "Attiva i backup automatici",
-          "body": "Le Impostazioni possono scrivere uno zip con configurazioni e file di missione secondo una pianificazione e conservare gli N più recenti. Inoltre ogni file che il pannello sovrascrive riceve accanto un .bak con marca temporale."
-        },
-        {
-          "title": "Valida prima di riavviare",
-          "body": "Il validatore analizza tutti gli XML della missione, verifica le parentesi nei .cfg, controlla che i file elencati in cfgeconomycore.xml esistano e segnala i nomi di tipo duplicati."
-        },
-        {
-          "title": "Leggi il log giusto",
-          "body": "Il file .RPT registra cosa ha fatto il server stesso: un crash o una mod che non si carica compaiono lì. Il file .ADM registra cosa hanno fatto i giocatori."
-        }
-      ],
-      "tips": [
-        "Il wipe cancella lo stato salvato del mondo: giocatori, veicoli, basi. Le tabelle del bottino e le configurazioni non vengono toccate. Le cartelle vengono prima spostate di lato, quindi un wipe per errore si può recuperare a mano.",
-        "Il watchdog riavvia il server se si chiude da solo. Dopo tre crash in cinque minuti si ferma e mostra un banner: un ciclo di crash richiede una persona, non un altro riavvio."
-      ]
-    },
-    {
-      "id": "health",
-      "title": "Stato del server",
-      "intro": "Una pagina che risponde a colpo d'occhio se qualcosa non va, più gli strumenti per tenere il server in ordine: annullare una modifica di config sbagliata e liberare spazio su disco.",
-      "steps": [
-        {
-          "title": "Leggi le caselle di stato",
-          "body": "La pagina Stato del server mostra quattro caselle: il server è attivo (o bloccato in un ciclo di crash), c'è spazio su disco, la config è valida e, se non parte, perché. Ogni casella porta alla pagina che risolve."
-        },
-        {
-          "title": "Annulla una modifica",
-          "body": "Il gestore salva ogni file di config prima di scrivere. La pagina Cronologia elenca quegli snapshot per file, con un confronto di cosa riporterebbe un ripristino e ripristino con un clic — la tua rete di sicurezza dopo una modifica sbagliata."
-        },
-        {
-          "title": "Libera spazio",
-          "body": "Nella pagina di stato un clic elimina i log del server e i dump di crash (gli ultimi RPT e ADM restano) o i vecchi backup di config, così un server di lunga durata non riempie il disco in silenzio."
-        }
-      ],
-      "tips": [
-        "La casella di validità esegue il validatore completo, che su una missione grande richiede un attimo — si riempie un paio di secondi dopo le altre.",
-        "Ripristinare un backup richiede il server fermo, come ogni modifica di config."
-      ]
-    },
-    {
-      "id": "remote",
-      "title": "Accesso da telefono o da un altro PC",
-      "intro": "Per impostazione predefinita il pannello risponde solo su questa macchina. Portare l'esposizione su Rete locale lo rende raggiungibile da qualsiasi cosa sulla stessa Wi-Fi.",
-      "steps": [
-        {
-          "title": "Cambia l'esposizione",
-          "body": "Impostazioni → Esposizione del pannello → Rete locale, poi riavvia il gestore. La scheda Accesso di rete mostrerà allora gli indirizzi esatti."
-        },
-        {
-          "title": "Consentilo nel firewall",
-          "body": "Windows chiede una volta. Se un telefono non riesce a connettersi, consenti il gestore per le reti private nel Firewall di Windows."
-        }
-      ],
-      "tips": [
-        "Un login continua a non esserci. Non esporre mai il pannello direttamente a internet: mettici davanti Caddy o nginx con password."
-      ]
-    },
-    {
-      "id": "presets",
-      "title": "Economia del loot e preset",
-      "intro": "Oltre a modificare un item alla volta, tre strumenti plasmano il loot in massa: una dashboard che mostra cosa genera la mappa, il ridimensionamento dell'intero file in un clic e preset riutilizzabili che colleghi agli item per nome.",
-      "steps": [
-        {
-          "title": "Vedere la forma del tuo loot",
-          "body": "Apri Economia del loot per sommare nominal e min di ogni item e suddividerli per categoria, livello e uso — il modo più rapido per notare una mappa annegata in una cosa e affamata di un'altra."
-        },
-        {
-          "title": "Ridimensionare in un clic",
-          "body": "I preset di tuning moltiplicano tutti i nominal e min insieme — ×2 per un server ricco di loot, ×0.5 per hardcore. ×1 ripristina i valori di prima del primo ridimensionamento, quindi sempre reversibile."
-        },
-        {
-          "title": "Riutilizzare gruppi con i preset",
-          "body": "Un preset è un gruppo di item con nome e una probabilità di spawn. Creane uno nella pagina Preset, poi referenzialo per nome dallo slot accessorio di un'arma o dal cargo di un contenitore invece di ripetere ovunque la stessa lista."
-        }
-      ],
-      "tips": [
-        "Ridimensionamento e preset scrivono file della missione, quindi il server deve essere fermo per salvarli."
-      ]
+     "title": "Avvia il server",
+     "body": "Premi Avvia nella dashboard. Se manca DayZServer_x64.exe o una mod è rotta, il server si chiude e ne vedrai il motivo nella sezione Log."
     }
-  ],
-  "help": {
-    "weather.overcast": "Copertura nuvolosa, 0–100%. Più alta = più grigia e scura; abilita anche la pioggia — serve copertura sopra ~70%.",
-    "weather.fog": "Densità della nebbia, 0–100%. La nebbia fitta riduce molto la visuale — teso per il loot, duro per i cecchini.",
-    "weather.rain": "Intensità della pioggia, 0–100%. Cade davvero solo con copertura sufficiente; bagna il giocatore e maschera il suono.",
-    "weather.snowfall": "Intensità della neve, 0–100% (visibile soprattutto su mappe innevate come Sakhal).",
-    "weather.wind": "Velocità del vento in m/s. Muove le nuvole e, con l'opzione dinamica, la rapidità del cambio meteo.",
-    "events.lifetime": "Secondi per cui un gruppo generato resta nel mondo prima di sparire se non toccato.",
-    "events.restock": "Secondi prima che un evento ripulito o esaurito riappaia. 0 = rifornisce appena possibile.",
-    "events.saveable": "1 = il gruppo generato è scritto nella persistenza e sopravvive a un riavvio; 0 = rigenerato a ogni avvio.",
-    "moddrift.help.ships": "Quanti tipi di loot definisce il file types di questo mod.",
-    "moddrift.help.active": "Quanti di quei tipi sono davvero presenti nella tua economia (types.xml + moded_types).",
-    "moddrift.help.missing": "Tipi forniti dal mod ma assenti dalla tua economia — non compariranno finché non vengono uniti.",
-    "leaderboard.metrics": "Scegli il criterio di classifica: tempo di gioco totale, uccisioni, rapporto uccisioni/morti o numero di sessioni.",
-    "server.hostname": "Il nome del server mostrato nel browser di DayZ. Tienilo corto e facile da cercare.",
-    "server.password": "Password di accesso. Vuota = server pubblico; impostala per renderlo privato.",
-    "server.passwordAdmin": "Password admin in gioco (#login). Diversa da quella RCon — tienila segreta.",
-    "server.timeAccel": "Moltiplicatore velocità del giorno (1 = tempo reale, 24 = un giorno in un'ora). Intervallo ~0.1–64.",
-    "server.nightTimeAccel": "Moltiplicatore extra di velocità notturna oltre a quello diurno, così le notti passano più in fretta.",
-    "server.timePersistent": "Mantieni l'orario del mondo tra i riavvii (1) invece di riportarlo a serverTime (0).",
-    "server.whitelist": "Solo i giocatori nella tua lista possono entrare. Lascia off se non usi un file whitelist.",
-    "server.forceSameBuild": "Richiedi ai client esattamente la stessa build di gioco (1). Evita crash da versioni diverse.",
-    "server.storageAutoFix": "Lascia che DayZ ripari uno storage di persistenza corrotto al caricamento (1) invece di fallire.",
-    "server.loginQueue": "Quanti giocatori si connettono insieme e attendono in coda — attenua le ondate di ingresso.",
-    "economy.items": "Quanti tipi di oggetto distinti definisce questo file.",
-    "economy.nominal": "Somma del nominal di ogni oggetto — la quantità obiettivo che la mappa cerca di tenere generata.",
-    "economy.categories": "Quante categorie di loot (armi, cibo, attrezzi…) compaiono in questo file.",
-    "economy.min": "Somma del min di ogni oggetto — la soglia fino a cui l'economia ricarica ogni oggetto.",
-    "economy.tune": "Scalatura in un clic di tutti i nominal/min del file. ×2 = doppio loot; ×1 ripristina gli originali.",
-    "types.nominal": "Quanti esemplari di questo oggetto il server cerca di mantenere nel mondo contemporaneamente. 0 significa che non compare mai.",
-    "types.min": "Quando la quantità scende a questo valore, il server programma una ricomparsa. Non deve superare nominal: DayZ lo riduce e annota un avviso.",
-    "types.lifetime": "Secondi di sopravvivenza di un oggetto non toccato prima che sparisca. 3888000 sono 45 giorni.",
-    "types.restock": "Secondi che il server attende prima di rifornire questo oggetto. 0 significa subito.",
-    "types.usage": "In quali tipi di edificio l'oggetto può comparire (Military, Police, Farm…). Senza usage non ha dove comparire.",
-    "types.value": "Livello di bottino: Tier1 è la costa, Tier4 l'entroterra profondo e il militare. Determina a che distanza dal punto di partenza compare l'oggetto.",
-    "types.quant": "Livello di riempimento in percentuale per oggetti con quantità (bevande, carburante). -1 per disattivare, altrimenti 0–100.",
-    "types.bulk": "Applica questi valori a tutte le righe selezionate in una volta. Cambiano solo i campi che compili.",
-    "types.category": "Raggruppa l'oggetto per il sistema del bottino (weapons, food, clothes…). Il nome deve esistere in cfglimitsdefinition.xml o DayZ scarta la voce.",
-    "types.tag": "Precisa dove dentro l'edificio finisce l'oggetto: pavimento, scaffali, terra. Senza tag può usare qualsiasi superficie consentita da usage.",
-    "types.cost": "Priorità di comparsa quando i candidati sono più dei posti. Vince il più alto. Non è denaro e i giocatori non lo vedono mai.",
-    "types.flags": "count_in_cargo / count_in_hoarder / count_in_map / count_in_player decidono se gli oggetti riposti in una tenda, un'auto o uno zaino contano per nominal. Se li disattivi, il server continua a generarne altri anche se i giocatori li hanno già accumulati.",
-    "mods.serverSide": "Carica la mod con -serverMod invece di -mod: gira sul server e i client non ne hanno bisogno né la ricevono. Solo per strumenti di amministrazione — una mod di bottino o contenuti così non funziona.",
-    "mods.order": "DayZ carica le mod da sinistra a destra. I framework vanno per primi: @CF prima di tutto ciò che dipende da esso, Expansion Core prima dei suoi addon. Un ordine sbagliato è una causa comune di server che non parte.",
-    "mods.update": "Copia i file più recenti dal !Workshop del client al server. Il gestore non può scaricare mod: iscriviti prima su Steam.",
-    "mods.scan": "Cerca nella mod un types.xml e lo registra in cfgeconomycore.xml, così il bottino della mod compare davvero.",
-    "mods.uninstall": "Rimuove la cartella della mod dal server. Il suo .bikey viene cancellato solo se nessun'altra mod installata usa la stessa chiave: le chiavi condivise come quelle di Expansion sopravvivono.",
-    "mods.profiles": "Salva con un nome l'insieme attuale di mod attive, per passare da una configurazione con mod a una originale senza riattivare tutto.",
-    "weather.transition": "Quanto gradualmente cambia il meteo. Graduale impiega circa mezz'ora a piccoli passi, come il DayZ originale. Rapida può percorrere l'intero intervallo in due minuti, ed è questo che fa sembrare il meteo un interruttore.",
-    "weather.dynamic": "Disattivato fissa il meteo dove lo imposti. Attivato lascia che il server lo faccia variare da sé entro i limiti.",
-    "weather.accel": "Moltiplica lo scorrere del tempo di gioco. 12 significa che una giornata completa dura due ore reali. La notte è separata così puoi tenerla corta.",
-    "weather.storm": "Ha effetto solo quando pioggia e nuvolosità sono abbastanza alte perché un temporale possa scatenarsi.",
-    "weather.timePreset": "Imposta l'ora di gioco all'avvio del server. SystemTime segue l'orologio del tuo PC; un valore fisso avvia la mappa sempre alla stessa ora.",
-    "rcon.password": "Viene scritta in battleye/beserver_x64.cfg. BattlEye legge quel file solo all'avvio, quindi una password nuova ha effetto solo dopo un riavvio.",
-    "attach.slotChance": "Probabilità che in questo slot compaia qualcosa. 1.0 = sempre, 0.35 = il 35 % delle volte.",
-    "attach.itemWeight": "È un peso relativo, non una percentuale: DayZ sceglie ESATTAMENTE UN oggetto dallo slot. Pesi di 60 e 40 valgono il 60 % e il 40 % della probabilità dello slot.",
-    "settings.restart": "Riavvia il server secondo una pianificazione. I giocatori ricevono prima avvisi via RCon, per i quali serve una password RCon.",
-    "settings.watchdog": "Riavvia il server se si chiude da solo. Dopo tre crash in cinque minuti si ferma e mostra un banner: un ciclo di crash richiede una persona, non un altro riavvio.",
-    "settings.backup": "Comprime configurazioni e file di missione secondo una pianificazione e conserva gli N più recenti. A parte questo, ogni file sovrascritto dal pannello riceve accanto un .bak con marca temporale.",
-    "settings.exposure": "Locale significa che solo questo PC può aprire il pannello. Rete locale lo rende raggiungibile dal telefono. Il pannello non ha login: non esporlo mai direttamente a internet.",
-    "settings.adminlog": "Attiva -adminlog, che scrive il file .ADM. La pagina Giocatori e il registro delle uccisioni si basano su di esso e senza restano vuoti.",
-    "validator.autofix": "Aggiunge i nomi sconosciuti di usage/value/tag/category in cfglimitsdefinition.xml. Di solito è proprio questo che fa comparire il bottino delle mod: i nomi devono esserci, altrimenti DayZ ignora la voce.",
-    "validator.severity": "Gli errori rompono qualcosa adesso. Gli avvisi DayZ li tollera, ma di solito significano che la configurazione non fa quello che intendevi.",
-    "wipe": "Cancella lo stato salvato del mondo: giocatori, veicoli, basi. Tabelle del bottino e configurazioni non vengono toccate. Le cartelle vengono spostate di lato invece che cancellate, quindi un errore si può annullare a mano.",
-    "events.nominal": "Quanti eventi di questo tipo il server tiene attivi contemporaneamente. Veicoli, elicotteri precipitati, branchi di animali e gruppi di infetti sono tutti eventi.",
-    "events.minmax": "min e max limitano la dimensione del gruppo per comparsa. max=0 significa illimitato: per questo gli eventi ambientali originali riportano min=100 max=0.",
-    "events.children": "Le classi di oggetti che questo evento genera, con i propri intervalli di bottino. Modificarle a mano è compito dell'editor Mission DB.",
-    "events.active": "0 spegne l'evento mantenendone la configurazione. È così che arrivano gli eventi stagionali (Natale, Halloween) nel gioco originale.",
-    "server.maxPlayers": "Posti giocatore. Alzare il numero non alza il tuo hardware: ogni posto costa RAM e CPU, e DayZ diventa instabile molto prima che la maggior parte delle macchine si esaurisca.",
-    "server.instanceId": "Quale salvataggio usa il server. Se lo cambi, il server parte su un mondo completamente nuovo; il vecchio salvataggio resta su disco con il proprio id.",
-    "server.steamQueryPort": "La porta che Steam usa per elencare il tuo server. Deve essere libera e inoltrata, altrimenti il server funziona ma non compare mai nel browser.",
-    "server.verifySignatures": "2 significa che ogni file di mod deve essere firmato con una chiave in keys/. Abbassarlo a 0 permette mod non firmate — e client modificati. Lascialo su 2.",
-    "server.thirdPerson": "1 impone la sola prima persona. Cambia il modo di giocare più di qualunque altra impostazione: decidi prima di costruire una community.",
-    "server.von": "Chat vocale nel gioco. Disattivarla la rimuove del tutto, radio compresa.",
-    "server.respawnTime": "Secondi che un giocatore deve attendere per rinascere dopo la morte. Valori alti scoraggiano il suicidio per riestrarre il punto di comparsa.",
-    "server.mission": "Quale cartella di missione sotto mpmissions/ carica il server. È così che si cambia mappa: chernarusplus, enoch (Livonia), sakhal.",
-    "gameplay.file": "cfggameplay.json sovrascrive regole di gioco: resistenza, costruzione, comportamento della mappa. DayZ ignora l'intero file per un singolo errore di sintassi, perciò viene validato prima del salvataggio.",
-    "battleye.bans": "Un ban per riga: GUID o IP, minuti (-1 = permanente), motivo. Salvare su un server attivo ricarica i ban via RCon, senza riavvio.",
-    "logs.rpt": "Cosa ha fatto il server stesso: avvio, caricamento mod, errori di script, crash. È il file da leggere quando il server non parte.",
-    "logs.adm": "Cosa hanno fatto i giocatori: connessioni, chat, uccisioni, posizioni. Richiede il parametro -adminlog; la pagina Giocatori si basa su di esso.",
-    "backup.restore": "Ripristina configurazioni e file di missione da uno zip. Il server deve essere fermo: mentre gira blocca questi file.",
-    "sync.import": "Copia le impostazioni da un'altra installazione del gestore. I valori esistenti vengono sovrascritti, quindi fai prima un backup se hai dubbi.",
-    "attach.class": "La classe che questa voce configura. Non deve essere per forza un'arma: cfgspawnabletypes.xml copre anche abbigliamento, zaini, casse, barili e veicoli.",
-    "attach.cargo": "Il cargo compare DENTRO l'oggetto: il contenuto di uno zaino, il bottino di una cassa, il bagagliaio di un'auto. Gli accessori si montano SOPRA. Metà del file originale è cargo, non accessori.",
-    "attach.hoarder": "Segna la voce come deposito persistente — barili, tende, nascondigli. DayZ conta ciò che i giocatori ci mettono dentro nel limite dei depositi, non nel bottino del mondo.",
-    "attach.damage": "Condizione in cui l'oggetto compare, da 0.0 (perfetto) a 1.0 (rovinato). Lascia entrambi vuoti per mantenere il valore predefinito di DayZ.",
-    "attach.tags": "Limita dove si applica la voce, ad es. floor o shelves. Separati da virgole. La maggior parte non ne ha bisogno.",
-    "diag": "Riconoscimento di pattern nel RPT più recente e nel log del gestore. Individua i pochi guasti che fermano davvero un server DayZ; il resto richiede ancora il log grezzo, quindi un risultato vuoto non è un certificato di salute.",
-    "wipe.undo": "Un wipe sposta le cartelle del mondo in .dayz-manager/wipes/<marca temporale>/ invece di cancellarle, quindi resta reversibile — finché il server non ricostruisce lo stato, perché a quel punto rimettere il vecchio mondo seppellirebbe quello nuovo.",
-    "diag.mod_missing.title": "Una mod elencata in -mod non è sul server",
-    "diag.mod_missing.detail": "DayZ non è riuscito ad aprire {subject}. La mod è nei parametri di avvio ma la sua cartella manca o è incompleta: installala o risincronizzala nella pagina Mod e riavvia.",
-    "diag.mod_missing_generic.title": "Manca un file necessario al server",
-    "diag.mod_missing_generic.detail": "DayZ non è riuscito ad aprire {subject}. Verifica che il percorso esista e che nessun antivirus lo abbia messo in quarantena.",
-    "diag.bad_signature.title": "Un file della mod non è firmato o la chiave non corrisponde",
-    "diag.bad_signature.detail": "{subject} non ha superato il controllo firma di BattlEye. Risincronizza il .bikey nella pagina Mod — NON abbassare verifySignatures, farebbe entrare anche client modificati.",
-    "diag.script_error.title": "Uno script non è stato compilato",
-    "diag.script_error.detail": "Il server si è fermato durante la compilazione degli script. Le righe subito dopo nel RPT indicano file e numero di riga: di solito una mod non allineata alla versione attuale di DayZ.",
-    "diag.mission_missing.title": "La missione indicata in server.cfg non esiste",
-    "diag.mission_missing.detail": "Il template nominato in serverDZ.cfg non ha una cartella in mpmissions/. Scegli una missione esistente nella pagina Server.",
-    "diag.port_busy.title": "La porta del server è già occupata",
-    "diag.port_busy.detail": "Un altro processo tiene la porta, spesso un server DayZ precedente non ancora terminato. Attendi qualche secondo o cambia porta nella pagina Server.",
-    "diag.config_parse.title": "serverDZ.cfg è malformato",
-    "diag.config_parse.detail": "Il parser si è fermato in anticipo. Di solito manca un punto e virgola o una parentesi graffa non è chiusa; il validatore controlla il bilanciamento.",
-    "diag.no_economy.title": "L'economia centrale non si è caricata",
-    "diag.no_economy.detail": "Il server può girare ma non genererà bottino. Esegui il validatore: di solito manca un file referenziato in cfgeconomycore.xml o un nome usage/value è sconosciuto.",
-    "diag.missing_key.title": "Manca una chiave della mod in keys/",
-    "diag.missing_key.detail": "I client con quella mod verranno espulsi per firma non valida. Usa «Sincronizza chiavi» nella pagina Mod.",
-    "loadout": "Cosa indossa e porta un giocatore al respawn. Sono i preset spawn-gear di DayZ, registrati in cfggameplay.json — le modifiche hanno effetto dopo un riavvio del server. In vanilla l'equipaggiamento è in init.c, per questo una missione nuova non mostra nulla qui finché non attivi il sistema.",
-    "loadout.weight": "Il peso di questo preset rispetto agli altri. DayZ sceglie UN preset per spawn, quindi uno con peso 3 è tre volte più probabile di uno con peso 1.",
-    "loadout.characters": "A quali modelli di personaggio si applica il preset (SurvivorM_Mirek, SurvivorF_Eva, …). Vuoto = a tutti; se ne sceglie uno a caso per spawn.",
-    "loadout.worn": "Oggetti messi sul corpo, uno slot alla volta. In uno slot DayZ sceglie UN oggetto in base al peso, quindi più varianti danno varietà tra uno spawn e l'altro.",
-    "loadout.carried": "Oggetti sciolti messi direttamente nell'inventario del nuovo giocatore invece che in uno slot di abbigliamento — stracci, cibo, un attrezzo iniziale.",
-    "loadout.condition": "La condizione in cui un oggetto compare. In DayZ 1.0 = perfetto e 0.0 = distrutto, quindi più alto è meglio. «Perfetto» mantiene nuovo l'equipaggiamento iniziale; scegli «Personalizzato» per impostare un intervallo di salute min–max preciso, e l'oggetto compare al suo interno."
+   ],
+   "tips": [
+    "Per usare il pannello solo su questo PC non serve alcuna password. Per aprirlo da un telefono o da un altro luogo, imposta prima un login del pannello — nella configurazione iniziale o in Impostazioni → Login del pannello.",
+    "Quasi tutti gli editor rifiutano di salvare mentre il server è in esecuzione: DayZ blocca i propri file. Ferma il server; il pannello ti dice quando è questo il motivo."
+   ]
+  },
+  {
+   "id": "mods",
+   "title": "Mod",
+   "intro": "Un server ha bisogno di una propria copia di ogni mod, del .bikey della mod nella cartella keys del server e della mod nel parametro di avvio -mod. Il manager fa tutte e tre le cose prendendo le mod dalla fonte scelta: il !Workshop del client, una cartella di mod o di SteamCMD oppure, in modalità Solo server, le mod che hai caricato tu.",
+   "steps": [
+    {
+     "title": "Iscriviti prima su Steam",
+     "body": "Il manager copia le mod, non le scarica. Iscriviti alla mod nello Steam Workshop e lascia che il launcher di DayZ la scarichi in !Workshop, oppure scaricala con SteamCMD nella tua cartella di mod."
+    },
+    {
+     "title": "Installala sul server",
+     "body": "Apri Mod: lì c'è tutto quello che si trova in !Workshop. Installa copia la mod nella cartella del server e sincronizza il suo .bikey automaticamente. Installa e aggiorna i mod fa l'intero elenco in un colpo solo."
+    },
+    {
+     "title": "Attivala per l'avvio",
+     "body": "Installare e caricare sono due cose diverse. L'interruttore Mod di una riga aggiunge la mod a -mod. Usa l'interruttore Lato server solo per le mod che i client NON devono avere (strumenti di amministrazione)."
+    },
+    {
+     "title": "Attenzione all'ordine di caricamento",
+     "body": "Trascina le righe in modo che i framework vengano per primi: @CF prima di tutto ciò che dipende da esso, Expansion Core prima dei suoi addon. Un ordine sbagliato è una causa molto comune di server che non si avvia."
+    }
+   ],
+   "tips": [
+    "Aggiorna copia i file più recenti dalla fonte delle mod al server. Attiva Aggiorna le mod a ogni riavvio in Impostazioni per tenerle sincronizzate in automatico.",
+    "Alla disinstallazione il .bikey viene rimosso solo se nessun'altra mod installata usa la stessa chiave: le chiavi condivise (Expansion) restano al loro posto.",
+    "Se una mod porta bottino, premi Aggiungi loot del mod nella sua riga: il gestore trova il types.xml della mod e lo registra per te.",
+    "Su Linux il server carica solo le mod con cartelle e file in minuscolo. Il manager le rinomina durante installazione e aggiornamento, e la pagina Mod segnala quelle rimaste con le maiuscole."
+   ]
+  },
+  {
+   "id": "economy",
+   "title": "Bottino ed economia",
+   "intro": "L'economia centrale di DayZ decide cosa esiste nel mondo e in che quantità. types.xml è l'elenco principale: una voce per classe di oggetto, con quanti devono essercene e dove possono comparire. Sbagliare questi numeri è il motivo abituale per cui un server sembra vuoto o annega nel bottino.",
+   "steps": [
+    {
+     "title": "Capisci i quattro numeri",
+     "body": "nominal è la quantità obiettivo che il server cerca di mantenere nel mondo. min è la soglia che innesca una ricomparsa. lifetime è per quanti secondi sopravvive un oggetto non toccato. restock è quanto il server attende prima di rifornirlo. nominal = 0 significa che l'oggetto non compare mai."
+    },
+    {
+     "title": "Modifica direttamente nella tabella",
+     "body": "nominal, min, lifetime e categoria si modificano nella riga stessa; le righe cambiate restano evidenziate finché non premi Salva modifiche. Modifica apre l'oggetto completo: usages, values, tags e flags."
+    },
+    {
+     "title": "usage e value = dove compare",
+     "body": "usage è il tipo di edificio (Military, Police, Farm…), value è il livello di bottino (Tier1 è la costa, Tier4 l'entroterra profondo e il militare). Un oggetto senza usage non ha dove comparire. Entrambi i nomi devono esistere in cfglimitsdefinition.xml."
+    },
+    {
+     "title": "Usa i modelli per il lavoro in blocco",
+     "body": "Seleziona delle righe, poi premi un modello di comparsa: i suoi usage/value/tags si applicano a tutte insieme. Molto più veloce che modificare centinaia di voci a mano."
+    }
+   ],
+   "tips": [
+    "Tieni i tuoi oggetti in un file di types separato invece di toccare il types.xml originale: il gestore lo registra in cfgeconomycore.xml e un aggiornamento del gioco non può sovrascriverlo.",
+    "Esegui il validatore dopo ogni modifica in blocco. La sua correzione automatica aggiunge i nomi usage/value/tag sconosciuti in cfglimitsdefinition.xml, ed è proprio questo che fa comparire il bottino delle mod."
+   ]
+  },
+  {
+   "id": "attachments",
+   "title": "Accessori per armi",
+   "intro": "cfgspawnabletypes.xml decide con cosa compare un'arma: caricatore, ottica, calcio. È costruito a slot, e i numeri significano due cose diverse: è qui che sbagliano tutti.",
+   "steps": [
+    {
+     "title": "Uno slot è un lancio di dadi",
+     "body": "Ogni slot ha una probabilità: 1.0 significa che compare sempre qualcosa, 0.35 significa il 35 % delle volte."
+    },
+    {
+     "title": "Gli oggetti in uno slot competono",
+     "body": "Il numero su ogni oggetto è un peso relativo, non una percentuale: DayZ sceglie ESATTAMENTE UN oggetto dallo slot. Pesi di 60 e 40 dentro uno slot da 0.35 valgono in realtà 21 % e 14 %. Il pannello ti mostra quel valore reale, così non devi calcolarlo."
+    },
+    {
+     "title": "Parti da un modello",
+     "body": "Scegli un modello di arma (AKM, M4-A1, Mosin…) e regolalo. I nomi di classe si completano dal tuo types.xml, e tutto ciò che non c'è viene segnalato: un errore di battitura è il motivo abituale per cui un accessorio non compare mai."
+    }
+   ],
+   "tips": [
+    "Uno slot per pezzo: uno per i caricatori, uno per le ottiche, uno per il calcio. Mettere caricatore e ottica nello stesso slot significa che l'arma riceve l'uno o l'altra, mai entrambi.",
+    "Viene riscritta solo la voce che modifichi: i tuoi commenti e la formattazione nel resto del file si conservano."
+   ]
+  },
+  {
+   "id": "loadout",
+   "title": "Equipaggiamento del giocatore",
+   "intro": "Decidi cosa indossa e porta con sé un giocatore nel momento in cui rinasce. Vanilla lo fissa nell'init.c della missione; il pannello usa invece i preset di equipaggiamento di spawn di DayZ e attiva l'intero sistema per te.",
+   "steps": [
+    {
+     "title": "Attiva il sistema",
+     "body": "Apri Equipaggiamento del giocatore. Se la missione fa ancora comparire i giocatori da init.c, la pagina lo segnala e offre un pulsante che crea un preset iniziale, lo registra in cfggameplay.json e attiva l'interruttore enableCfgGameplayFile, tutto in una volta."
+    },
+    {
+     "title": "Modifica vestiti ed equipaggiamento",
+     "body": "Ogni preset elenca cosa si indossa per slot (Corpo, Gambe, Piedi…) e cosa si porta sfuso. Aggiungi oggetti per nome classe, imposta un peso di spawn quando uno slot deve scegliere tra più opzioni, e scegli una condizione: perfetta, usata, danneggiata o un intervallo personalizzato."
+    },
+    {
+     "title": "Prova estrazione e condivisione",
+     "body": "Premi Prova estrazione per campionare uno spawn e vedere esattamente cosa riceve un giocatore, personaggio incluso. Esporta un preset in un file per un altro server e reimportalo."
+    }
+   ],
+   "tips": [
+    "healthMin/healthMax sono frazioni di salute: 1.0 è perfetto, 0.0 è rovinato. Tieni tutto perfetto così gli spawn non arrivano con vestiti logori.",
+    "L'equipaggiamento si salva a server fermo, come ogni modifica di config — riavvia il server dopo."
+   ]
+  },
+  {
+   "id": "rcon",
+   "title": "RCon, giocatori e annunci",
+   "intro": "RCon è la console remota di BattlEye: elenco giocatori in tempo reale, espulsioni, ban e messaggi in chat. Serve una password che BattlEye legge da beserver_x64.cfg all'avvio del server.",
+   "steps": [
+    {
+     "title": "Imposta la password",
+     "body": "Scrivila nella sezione RCon. Il gestore la scrive in battleye/beserver_x64.cfg, creando il file se necessario."
+    },
+    {
+     "title": "Riavvia il server",
+     "body": "BattlEye legge quel file solo all'avvio, quindi una password nuova non fa nulla fino al riavvio successivo. È normale, non è un bug."
+    },
+    {
+     "title": "Annunci e pianificazione",
+     "body": "Gli annunci pianificati scattano a un'ora del giorno; quelli a intervallo si ripetono ogni N minuti. Entrambi passano da RCon, quindi la password deve funzionare."
+    }
+   ],
+   "tips": [
+    "Anche gli avvisi di riavvio usano RCon. Senza password il riavvio avviene comunque: i giocatori semplicemente non vedono il conto alla rovescia.",
+    "La sezione Giocatori costruisce una cronologia dal log admin: nomi, ID giocatore, tempo di gioco, uccisioni. Richiede il parametro di avvio -adminlog (pagina Server → Parametri di avvio).",
+    "Impostazioni → Comportamento al riavvio può espellere tutti un certo tempo prima del riavvio e bloccare il server perché nessuno rientri nell'ultimo minuto. I personaggi si salvano alla disconnessione, quindi non si perde nulla.",
+    "La pagina Chat conserva un archivio di ogni giorno — compresi i messaggi inviati dal pannello e gli annunci programmati — con ricerca e download in .txt. La durata di conservazione si imposta lì stesso."
+   ]
+  },
+  {
+   "id": "weather",
+   "title": "Meteo e ora",
+   "intro": "Il meteo è definito nel cfgweather.xml della missione, che DayZ legge una sola volta al caricamento: i cambi di meteo richiedono quindi sempre un riavvio, e senza mod non c'è modo di programmare «pioggia alle 20:00».",
+   "steps": [
+    {
+     "title": "Scegli un preset o regolalo a mano",
+     "body": "Un preset fisso blocca il meteo perché resti dov'è. Dinamico lo lascia variare da solo."
+    },
+    {
+     "title": "Scegli quanto è graduale il cambio",
+     "body": "La velocità di transizione controlla la gradualità: Graduale impiega circa mezz'ora a piccoli passi, come il gioco originale. Rapida percorre l'intero intervallo in due minuti, ed è questo che fa sembrare il meteo un interruttore."
+    },
+    {
+     "title": "Imposta la durata del giorno",
+     "body": "L'accelerazione di giorno e notte moltiplica lo scorrere del tempo di gioco: 12 significa che una giornata completa dura due ore reali. La notte è separata così puoi tenerla corta."
+    }
+   ],
+   "tips": [
+    "La densità dei temporali conta solo quando pioggia e nuvolosità sono sufficienti perché un temporale possa scatenarsi.",
+    "La neve compare solo sulle mappe che la supportano, come Sakhal."
+   ]
+  },
+  {
+   "id": "maps",
+   "title": "Mappe, eventi e veicoli",
+   "intro": "Tutto ciò che succede sulla mappa vive nella cartella della missione. Queste pagine la leggono direttamente: terreno, livelli del bottino, edifici e zone contaminate sono disegnati dai tuoi file di missione, quindi la mappa corrisponde al tuo server, mappe modificate incluse.",
+   "steps": [
+    {
+     "title": "Installa la missione di una mappa",
+     "body": "Le mappe mod spesso portano la missione dentro la mod (come cartella o .zip): installando o aggiornando qui la mod della mappa, viene copiata da sola in mpmissions. Missioni (mappe) importa anche una missione da uno .zip o da una cartella e cambia la missione attiva in serverDZ.cfg."
+    },
+    {
+     "title": "Posiziona i punti evento",
+     "body": "Punti evento mostra sulla mappa ogni punto di spawn di un evento. Clicca per aggiungere, trascina per spostare, oppure scrivi X / Y / Z esatti del punto scelto, altezza compresa. Puoi anche incollare un intero elenco di coordinate."
+    },
+    {
+     "title": "Regola i veicoli",
+     "body": "Veicoli elenca ogni evento dei veicoli: quanti possono esistere, quanti punti di spawn ha e quanto sono complete le parti, e imposta la probabilità che ogni parte compaia sul veicolo."
+    }
+   ],
+   "tips": [
+    "Nessuna immagine di mappa è inclusa: i livelli vengono dai tuoi file di missione. Per una mappa tipo foto, carica una tua immagine dall'alto nelle impostazioni della mappa.",
+    "Come gli altri editor, queste pagine salvano solo a server fermo."
+   ]
+  },
+  {
+   "id": "maintenance",
+   "title": "Tenerlo in salute",
+   "intro": "Tre cose salvano i server: i backup, il validatore e l'abitudine di leggere davvero i log quando qualcosa si rompe.",
+   "steps": [
+    {
+     "title": "Attiva i backup automatici",
+     "body": "Le Impostazioni possono scrivere uno zip con configurazioni e file di missione secondo una pianificazione e conservare gli N più recenti. Inoltre ogni file che il pannello sovrascrive riceve accanto un .bak con marca temporale."
+    },
+    {
+     "title": "Valida prima di riavviare",
+     "body": "Il validatore controlla ogni file XML e JSON della missione, serverDZ.cfg, i riferimenti tra file, le probabilità di spawn, le posizioni e le chiavi delle mod. I problemi sono raggruppati e quasi tutti hanno un pulsante Correggi solo per quello, oppure puoi correggere in un colpo tutto ciò che è sicuro."
+    },
+    {
+     "title": "Leggi il log giusto",
+     "body": "Il file .RPT registra cosa ha fatto il server stesso: un crash o una mod che non si carica compaiono lì. Il file .ADM registra cosa hanno fatto i giocatori."
+    }
+   ],
+   "tips": [
+    "Il wipe cancella lo stato salvato del mondo: giocatori, veicoli, basi. Le tabelle del bottino e le configurazioni non vengono toccate. Le cartelle vengono prima spostate di lato, quindi un wipe per errore si può recuperare a mano.",
+    "Il watchdog riavvia il server se si chiude da solo. Dopo tre crash in cinque minuti si ferma e mostra un banner: un ciclo di crash richiede una persona, non un altro riavvio."
+   ]
+  },
+  {
+   "id": "health",
+   "title": "Stato del server",
+   "intro": "Una pagina che risponde a colpo d'occhio se qualcosa non va, più gli strumenti per tenere il server in ordine: annullare una modifica di config sbagliata e liberare spazio su disco.",
+   "steps": [
+    {
+     "title": "Leggi le caselle di stato",
+     "body": "La pagina Stato del server mostra quattro caselle: il server è attivo (o bloccato in un ciclo di crash), c'è spazio su disco, la config è valida e, se non parte, perché. Ogni casella porta alla pagina che risolve."
+    },
+    {
+     "title": "Annulla una modifica",
+     "body": "Il gestore salva ogni file di config prima di scrivere. La pagina Cronologia elenca quegli snapshot per file, con un confronto di cosa riporterebbe un ripristino e ripristino con un clic — la tua rete di sicurezza dopo una modifica sbagliata."
+    },
+    {
+     "title": "Libera spazio",
+     "body": "Nella pagina di stato un clic elimina i log del server e i dump di crash (gli ultimi RPT e ADM restano) o i vecchi backup di config, così un server di lunga durata non riempie il disco in silenzio."
+    }
+   ],
+   "tips": [
+    "La casella di validità esegue il validatore completo, che su una missione grande richiede un attimo — si riempie un paio di secondi dopo le altre.",
+    "Ripristinare un backup richiede il server fermo, come ogni modifica di config."
+   ]
+  },
+  {
+   "id": "remote",
+   "title": "Accesso dal telefono o da ovunque",
+   "intro": "A casa il telefono apre il pannello tramite l'indirizzo locale del computer, che fuori dalla tua rete non esiste — ecco perché al lavoro o con i dati mobili il pannello risulta offline. Impostazioni → Accesso remoto controlla tutti i requisiti per l'accesso da ovunque e corregge ciò che può.",
+   "steps": [
+    {
+     "title": "Imposta un login del pannello",
+     "body": "Impostazioni → Login del pannello: scegli un nome utente e una password di almeno 8 caratteri. Da quel momento ogni dispositivo dovrà accedere, tranne la finestra aperta da questo computer. Password dimenticata? Avvia il manager con -reset-login."
+    },
+    {
+     "title": "Apri il pannello alla rete",
+     "body": "Impostazioni → Esposizione del pannello: «Rete locale» per i telefoni di casa, «Internet» per l'accesso da ovunque (possibile solo con un login). Poi riavvia il manager."
+    },
+    {
+     "title": "Lascia passare le connessioni",
+     "body": "In Accesso remoto, attiva l'UPnP perché il router inoltri la porta del pannello, e consenti il manager nel Firewall di Windows. Senza UPnP, inoltra la porta a mano nelle impostazioni del router. Attiva HTTPS perché la password viaggi cifrata."
+    },
+    {
+     "title": "Verifica da fuori",
+     "body": "Premi «Controlla l'accesso da internet»: mostra il tuo indirizzo pubblico e il link esatto da aprire. Provalo sul telefono con il Wi-Fi disattivato."
+    }
+   ],
+   "tips": [
+    "Se il controllo segnala CGNAT, il tuo provider condivide un solo indirizzo tra molti clienti e nessun inoltro delle porte può funzionare: chiedi un IP pubblico oppure usa Tailscale, ZeroTier o Radmin VPN — a quel punto basta l'esposizione «Rete locale».",
+    "La stessa scheda può inoltrare anche le porte di gioco, così i giocatori trovano il server nell'elenco server di DayZ. La porta RCon non viene mai aperta."
+   ]
+  },
+  {
+   "id": "presets",
+   "title": "Economia del loot e preset",
+   "intro": "Oltre a modificare un item alla volta, tre strumenti plasmano il loot in massa: una dashboard che mostra cosa genera la mappa, il ridimensionamento dell'intero file in un clic e preset riutilizzabili che colleghi agli item per nome.",
+   "steps": [
+    {
+     "title": "Vedere la forma del tuo loot",
+     "body": "Apri Economia del loot per sommare nominal e min di ogni item e suddividerli per categoria, livello e uso — il modo più rapido per notare una mappa annegata in una cosa e affamata di un'altra."
+    },
+    {
+     "title": "Ridimensionare in un clic",
+     "body": "I preset di tuning moltiplicano tutti i nominal e min insieme — ×2 per un server ricco di loot, ×0.5 per hardcore. ×1 ripristina i valori di prima del primo ridimensionamento, quindi sempre reversibile."
+    },
+    {
+     "title": "Riutilizzare gruppi con i preset",
+     "body": "Un preset è un gruppo di item con nome e una probabilità di spawn. Creane uno nella pagina Preset, poi referenzialo per nome dallo slot accessorio di un'arma o dal cargo di un contenitore invece di ripetere ovunque la stessa lista."
+    }
+   ],
+   "tips": [
+    "Ridimensionamento e preset scrivono file della missione, quindi il server deve essere fermo per salvarli."
+   ]
+  },
+  {
+   "id": "servers",
+   "title": "Più server",
+   "intro": "Un solo manager può gestire più server DayZ: ad esempio Chernarus e Livonia, oppure un server vanilla e uno con mod. Ogni server vive nella propria cartella e ha impostazioni, mod, giocatori, chat, ban, backup, pianificazione e notifiche Discord propri; l'accesso al pannello, l'accesso remoto e la lingua dell'interfaccia sono condivisi.",
+   "steps": [
+    {
+     "title": "Aggiungi un server",
+     "body": "Server → Aggiungi un server. Indica una cartella che contiene già un server DayZ (installato con SteamCMD o una copia fatta da te), oppure lascia che il manager ne crei uno: «Nuovo server: una copia» copia i file del gioco, le missioni, le chiavi e le impostazioni di BattlEye di un server esistente in una nuova cartella e lo avvia con un mondo nuovo."
+    },
+    {
+     "title": "Dagli porte proprie",
+     "body": "Due server non possono condividere una porta. Una copia riceve porte libere da sola; per una cartella aggiunta, «Assegna porte libere» la sposta con un clic su una porta di gioco, una porta query di Steam (steamQueryPort) e una porta RCon libere."
+    },
+    {
+     "title": "Passa dall'uno all'altro",
+     "body": "Il menu dei server nella barra in alto passa tutto il pannello a un altro server: ogni pagina mostra e modifica quel server. Due schede del browser possono gestire due server contemporaneamente."
+    }
+   ],
+   "tips": [
+    "Rimuovere un server dal pannello non elimina nulla: la sua cartella, le impostazioni e i log restano dove sono, e può essere aggiunto di nuovo.",
+    "Con più server il pannello principale li mostra tutti a colpo d'occhio con Avvia e Ferma, e chiudendo il manager li si ferma tutti insieme, oppure restano attivi."
+   ]
+  },
+  {
+   "id": "players",
+   "title": "Giocatori e ban",
+   "intro": "La pagina Giocatori conosce tutti quelli visti dal log admin (nomi, ID, tempo di gioco, uccisioni), mostra chi è online ora e tiene i ban del server.",
+   "steps": [
+    {
+     "title": "Trova un giocatore",
+     "body": "Tutti i giocatori: cerca per nome, ID giocatore, IP o nota, ordina per tempo di gioco o uccisioni, e aggiungi una stella ai giocatori da tenere d'occhio. Un clic su un nome apre il profilo con gli ID, la nota, il ban attuale e la cronologia di moderazione."
+    },
+    {
+     "title": "Banna per un po', o per sempre",
+     "body": "«Banna…» nel profilo o nell'elenco online: scegli da 1 ora a 30 giorni, permanente o una durata a tua scelta, e un motivo che il giocatore vede. Il ban finisce nel ban.txt del server stesso, con effetto immediato, e in BattlEye quando il GUID del giocatore è noto. Un ban a tempo viene revocato automaticamente alla scadenza."
+    },
+    {
+     "title": "Gestisci chi è online",
+     "body": "Online ora elenca i giocatori con ping, IP e GUID: scrivi loro, espellili con un motivo o bannali direttamente lì. Serve la password RCon."
+    }
+   ],
+   "tips": [
+    "Niente log admin, niente giocatori: la cronologia richiede il parametro di avvio -adminlog (pagina Server → Parametri di avvio).",
+    "Ban → «Banna per ID» banna qualcuno che non è sul server: incolla lo Steam64 ID dal link del suo profilo Steam, l'ID giocatore dal log admin, un GUID BattlEye o un indirizzo IP."
+   ]
+  },
+  {
+   "id": "discord",
+   "title": "Notifiche Discord",
+   "intro": "Il manager può pubblicare nel tuo canale Discord ciò che succede su un server: quando è online, i riavvii con il motivo, i crash, gli aggiornamenti delle mod, gli ingressi, le uccisioni, la chat, i ban e altro.",
+   "steps": [
+    {
+     "title": "Crea un webhook",
+     "body": "In Discord: impostazioni del canale → Integrazioni → Webhook → Nuovo webhook → Copia URL webhook. Incollalo in Impostazioni → Discord, attiva le notifiche e premi «Invia messaggio di prova»."
+    },
+    {
+     "title": "Scegli cosa pubblicare",
+     "body": "Attiva e disattiva gli eventi. L'attività dei giocatori (ingressi, uccisioni, chat) può andare in un secondo canale, così non sommerge i tuoi annunci, e si può pingare un ruolo quando il server va in crash."
+    },
+    {
+     "title": "Tieni uno stato in diretta",
+     "body": "Il messaggio di stato in diretta è un unico messaggio che mostra sempre se il server è online, i giocatori, la mappa, il tempo attivo e il prossimo riavvio. Fissalo nel canale."
+    }
+   ],
+   "tips": [
+    "Ogni server del pannello ha le sue impostazioni Discord. Più server possono pubblicare in un solo canale: ogni messaggio riporta il nome del server.",
+    "Ingressi e uscite arrivano da RCon in tempo reale (senza RCon, dal log admin circa un minuto dopo); le uccisioni arrivano sempre dal log admin."
+   ]
   }
+ ],
+ "help": {
+  "weather.overcast": "Copertura nuvolosa, 0–100%. Più alta = più grigia e scura; abilita anche la pioggia — serve copertura sopra ~70%.",
+  "weather.fog": "Densità della nebbia, 0–100%. La nebbia fitta riduce molto la visuale — teso per il loot, duro per i cecchini.",
+  "weather.rain": "Intensità della pioggia, 0–100%. Cade davvero solo con copertura sufficiente; bagna il giocatore e maschera il suono.",
+  "weather.snowfall": "Intensità della neve, 0–100% (visibile soprattutto su mappe innevate come Sakhal).",
+  "weather.wind": "Velocità del vento in m/s. Muove le nuvole e, con l'opzione dinamica, la rapidità del cambio meteo.",
+  "events.lifetime": "Secondi per cui un gruppo generato resta nel mondo prima di sparire se non toccato.",
+  "events.restock": "Secondi prima che un evento ripulito o esaurito riappaia. 0 = rifornisce appena possibile.",
+  "events.saveable": "1 = il gruppo generato è scritto nella persistenza e sopravvive a un riavvio; 0 = rigenerato a ogni avvio.",
+  "moddrift.help.ships": "Quanti tipi di loot definisce il file types di questo mod.",
+  "moddrift.help.active": "Quanti di quei tipi sono davvero presenti nella tua economia (types.xml + moded_types).",
+  "moddrift.help.missing": "Tipi forniti dal mod ma assenti dalla tua economia — non compariranno finché non vengono uniti.",
+  "leaderboard.metrics": "Scegli il criterio di classifica: tempo di gioco totale, uccisioni, rapporto uccisioni/morti o numero di sessioni.",
+  "server.hostname": "Il nome del server mostrato nel browser di DayZ. Tienilo corto e facile da cercare.",
+  "server.password": "Password di accesso. Vuota = server pubblico; impostala per renderlo privato.",
+  "server.passwordAdmin": "Password admin in gioco (#login). Diversa da quella RCon — tienila segreta.",
+  "server.timeAccel": "Moltiplicatore velocità del giorno (1 = tempo reale, 24 = un giorno in un'ora). Intervallo ~0.1–64.",
+  "server.nightTimeAccel": "Moltiplicatore extra di velocità notturna oltre a quello diurno, così le notti passano più in fretta.",
+  "server.timePersistent": "Mantieni l'orario del mondo tra i riavvii (1) invece di riportarlo a serverTime (0).",
+  "server.whitelist": "Solo i giocatori nella tua lista possono entrare. Lascia off se non usi un file whitelist.",
+  "server.forceSameBuild": "Richiedi ai client esattamente la stessa build di gioco (1). Evita crash da versioni diverse.",
+  "server.storageAutoFix": "Lascia che DayZ ripari uno storage di persistenza corrotto al caricamento (1) invece di fallire.",
+  "server.loginQueue": "Quanti giocatori si connettono insieme e attendono in coda — attenua le ondate di ingresso.",
+  "economy.items": "Quanti tipi di oggetto distinti definisce questo file.",
+  "economy.nominal": "Somma del nominal di ogni oggetto — la quantità obiettivo che la mappa cerca di tenere generata.",
+  "economy.categories": "Quante categorie di loot (armi, cibo, attrezzi…) compaiono in questo file.",
+  "economy.min": "Somma del min di ogni oggetto — la soglia fino a cui l'economia ricarica ogni oggetto.",
+  "economy.tune": "Scalatura in un clic di tutti i nominal/min del file. ×2 = doppio loot; ×1 ripristina gli originali.",
+  "types.nominal": "Quanti esemplari di questo oggetto il server cerca di mantenere nel mondo contemporaneamente. 0 significa che non compare mai.",
+  "types.min": "Quando la quantità scende a questo valore, il server programma una ricomparsa. Non deve superare nominal: DayZ lo riduce e annota un avviso.",
+  "types.lifetime": "Secondi di sopravvivenza di un oggetto non toccato prima che sparisca. 3888000 sono 45 giorni.",
+  "types.restock": "Secondi che il server attende prima di rifornire questo oggetto. 0 significa subito.",
+  "types.usage": "In quali tipi di edificio l'oggetto può comparire (Military, Police, Farm…). Senza usage non ha dove comparire.",
+  "types.value": "Livello di bottino: Tier1 è la costa, Tier4 l'entroterra profondo e il militare. Determina a che distanza dal punto di partenza compare l'oggetto.",
+  "types.quant": "Livello di riempimento in percentuale per oggetti con quantità (bevande, carburante). -1 per disattivare, altrimenti 0–100.",
+  "types.bulk": "Applica questi valori a tutte le righe selezionate in una volta. Cambiano solo i campi che compili.",
+  "types.category": "Raggruppa l'oggetto per il sistema del bottino (weapons, food, clothes…). Il nome deve esistere in cfglimitsdefinition.xml o DayZ scarta la voce.",
+  "types.tag": "Precisa dove dentro l'edificio finisce l'oggetto: pavimento, scaffali, terra. Senza tag può usare qualsiasi superficie consentita da usage.",
+  "types.cost": "Priorità di comparsa quando i candidati sono più dei posti. Vince il più alto. Non è denaro e i giocatori non lo vedono mai.",
+  "types.flags": "count_in_cargo / count_in_hoarder / count_in_map / count_in_player decidono se gli oggetti riposti in una tenda, un'auto o uno zaino contano per nominal. Se li disattivi, il server continua a generarne altri anche se i giocatori li hanno già accumulati.",
+  "mods.serverSide": "Carica la mod con -serverMod invece di -mod: gira sul server e i client non ne hanno bisogno né la ricevono. Solo per strumenti di amministrazione — una mod di bottino o contenuti così non funziona.",
+  "mods.order": "DayZ carica le mod da sinistra a destra. I framework vanno per primi: @CF prima di tutto ciò che dipende da esso, Expansion Core prima dei suoi addon. Un ordine sbagliato è una causa comune di server che non parte.",
+  "mods.update": "Copia i file più recenti dal !Workshop del client al server. Il gestore non può scaricare mod: iscriviti prima su Steam.",
+  "mods.scan": "Cerca nella mod un types.xml e lo registra in cfgeconomycore.xml, così il bottino della mod compare davvero.",
+  "mods.uninstall": "Rimuove la cartella della mod dal server. Il suo .bikey viene cancellato solo se nessun'altra mod installata usa la stessa chiave: le chiavi condivise come quelle di Expansion sopravvivono.",
+  "mods.profiles": "Salva con un nome l'insieme attuale di mod attive, per passare da una configurazione con mod a una originale senza riattivare tutto.",
+  "weather.transition": "Quanto gradualmente cambia il meteo. Graduale impiega circa mezz'ora a piccoli passi, come il DayZ originale. Rapida può percorrere l'intero intervallo in due minuti, ed è questo che fa sembrare il meteo un interruttore.",
+  "weather.dynamic": "Disattivato fissa il meteo dove lo imposti. Attivato lascia che il server lo faccia variare da sé entro i limiti.",
+  "weather.accel": "Moltiplica lo scorrere del tempo di gioco. 12 significa che una giornata completa dura due ore reali. La notte è separata così puoi tenerla corta.",
+  "weather.storm": "Ha effetto solo quando pioggia e nuvolosità sono abbastanza alte perché un temporale possa scatenarsi.",
+  "weather.timePreset": "Imposta l'ora di gioco all'avvio del server. SystemTime segue l'orologio del tuo PC; un valore fisso avvia la mappa sempre alla stessa ora.",
+  "rcon.password": "Viene scritta in battleye/beserver_x64.cfg. BattlEye legge quel file solo all'avvio, quindi una password nuova ha effetto solo dopo un riavvio.",
+  "attach.slotChance": "Probabilità che in questo slot compaia qualcosa. 1.0 = sempre, 0.35 = il 35 % delle volte.",
+  "attach.itemWeight": "È un peso relativo, non una percentuale: DayZ sceglie ESATTAMENTE UN oggetto dallo slot. Pesi di 60 e 40 valgono il 60 % e il 40 % della probabilità dello slot.",
+  "settings.restart": "Riavvia il server secondo una pianificazione. I giocatori ricevono prima avvisi via RCon, per i quali serve una password RCon.",
+  "settings.watchdog": "Riavvia il server se si chiude da solo. Dopo tre crash in cinque minuti si ferma e mostra un banner: un ciclo di crash richiede una persona, non un altro riavvio.",
+  "settings.backup": "Comprime configurazioni e file di missione secondo una pianificazione e conserva gli N più recenti. A parte questo, ogni file sovrascritto dal pannello riceve accanto un .bak con marca temporale.",
+  "settings.exposure": "Solo locale: solo questo PC può aprire il pannello. Rete locale: possono aprirlo anche il telefono e gli altri dispositivi di casa. Internet: raggiungibile da ovunque — richiede un login del pannello, e Impostazioni → Accesso remoto controlla il resto (router, firewall, IP pubblico).",
+  "settings.adminlog": "Attiva -adminlog, che scrive il file .ADM. La pagina Giocatori e il registro delle uccisioni si basano su di esso e senza restano vuoti.",
+  "validator.autofix": "Aggiunge i nomi sconosciuti di usage/value/tag/category in cfglimitsdefinition.xml. Di solito è proprio questo che fa comparire il bottino delle mod: i nomi devono esserci, altrimenti DayZ ignora la voce.",
+  "validator.severity": "Gli errori rompono qualcosa adesso. Gli avvisi DayZ li tollera, ma di solito significano che la configurazione non fa quello che intendevi.",
+  "wipe": "Cancella lo stato salvato del mondo: giocatori, veicoli, basi. Tabelle del bottino e configurazioni non vengono toccate. Le cartelle vengono spostate di lato invece che cancellate, quindi un errore si può annullare a mano.",
+  "events.nominal": "Quanti eventi di questo tipo il server tiene attivi contemporaneamente. Veicoli, elicotteri precipitati, branchi di animali e gruppi di infetti sono tutti eventi.",
+  "events.minmax": "min e max limitano la dimensione del gruppo per comparsa. max=0 significa illimitato: per questo gli eventi ambientali originali riportano min=100 max=0.",
+  "events.children": "Le classi di oggetti che questo evento genera, con i propri intervalli di bottino. Modificarle a mano è compito dell'editor Mission DB.",
+  "events.active": "0 spegne l'evento mantenendone la configurazione. È così che arrivano gli eventi stagionali (Natale, Halloween) nel gioco originale.",
+  "server.maxPlayers": "Posti giocatore. Alzare il numero non alza il tuo hardware: ogni posto costa RAM e CPU, e DayZ diventa instabile molto prima che la maggior parte delle macchine si esaurisca.",
+  "server.instanceId": "Quale salvataggio usa il server. Se lo cambi, il server parte su un mondo completamente nuovo; il vecchio salvataggio resta su disco con il proprio id.",
+  "server.steamQueryPort": "La porta che Steam usa per elencare il tuo server. Deve essere libera e inoltrata, altrimenti il server funziona ma non compare mai nel browser.",
+  "server.verifySignatures": "2 significa che ogni file di mod deve essere firmato con una chiave in keys/. Abbassarlo a 0 permette mod non firmate — e client modificati. Lascialo su 2.",
+  "server.thirdPerson": "1 impone la sola prima persona. Cambia il modo di giocare più di qualunque altra impostazione: decidi prima di costruire una community.",
+  "server.von": "Chat vocale nel gioco. Disattivarla la rimuove del tutto, radio compresa.",
+  "server.respawnTime": "Secondi che un giocatore deve attendere per rinascere dopo la morte. Valori alti scoraggiano il suicidio per riestrarre il punto di comparsa.",
+  "server.mission": "Quale cartella di missione sotto mpmissions/ carica il server. È così che si cambia mappa: chernarusplus, enoch (Livonia), sakhal.",
+  "gameplay.file": "cfggameplay.json sovrascrive regole di gioco: resistenza, costruzione, comportamento della mappa. DayZ ignora l'intero file per un singolo errore di sintassi, perciò viene validato prima del salvataggio.",
+  "battleye.bans": "Un ban per riga: GUID o IP, quando termina (-1 = permanente, altrimenti la data di fine come tempo Unix), motivo. Salvare su un server in esecuzione ricarica i ban via RCon, quindi non serve riavviare.",
+  "logs.rpt": "Cosa ha fatto il server stesso: avvio, caricamento mod, errori di script, crash. È il file da leggere quando il server non parte.",
+  "logs.adm": "Cosa hanno fatto i giocatori: connessioni, chat, uccisioni, posizioni. Richiede il parametro -adminlog; la pagina Giocatori si basa su di esso.",
+  "backup.restore": "Ripristina configurazioni e file di missione da uno zip. Il server deve essere fermo: mentre gira blocca questi file.",
+  "sync.import": "Copia le impostazioni da un'altra installazione del gestore. I valori esistenti vengono sovrascritti, quindi fai prima un backup se hai dubbi.",
+  "attach.class": "La classe che questa voce configura. Non deve essere per forza un'arma: cfgspawnabletypes.xml copre anche abbigliamento, zaini, casse, barili e veicoli.",
+  "attach.cargo": "Il cargo compare DENTRO l'oggetto: il contenuto di uno zaino, il bottino di una cassa, il bagagliaio di un'auto. Gli accessori si montano SOPRA. Metà del file originale è cargo, non accessori.",
+  "attach.hoarder": "Segna la voce come deposito persistente — barili, tende, nascondigli. DayZ conta ciò che i giocatori ci mettono dentro nel limite dei depositi, non nel bottino del mondo.",
+  "attach.damage": "Condizione in cui l'oggetto compare, da 0.0 (perfetto) a 1.0 (rovinato). Lascia entrambi vuoti per mantenere il valore predefinito di DayZ.",
+  "attach.tags": "Limita dove si applica la voce, ad es. floor o shelves. Separati da virgole. La maggior parte non ne ha bisogno.",
+  "diag": "Riconoscimento di pattern nel RPT più recente e nel log del gestore. Individua i pochi guasti che fermano davvero un server DayZ; il resto richiede ancora il log grezzo, quindi un risultato vuoto non è un certificato di salute.",
+  "wipe.undo": "Un wipe sposta le cartelle del mondo in .dayz-manager/wipes/<marca temporale>/ invece di cancellarle, quindi resta reversibile — finché il server non ricostruisce lo stato, perché a quel punto rimettere il vecchio mondo seppellirebbe quello nuovo.",
+  "diag.mod_missing.title": "Una mod elencata in -mod non è sul server",
+  "diag.mod_missing.detail": "DayZ non è riuscito ad aprire {subject}. La mod è nei parametri di avvio ma la sua cartella manca o è incompleta: installala o risincronizzala nella pagina Mod e riavvia.",
+  "diag.mod_missing_generic.title": "Manca un file necessario al server",
+  "diag.mod_missing_generic.detail": "DayZ non è riuscito ad aprire {subject}. Verifica che il percorso esista e che nessun antivirus lo abbia messo in quarantena.",
+  "diag.bad_signature.title": "Un file della mod non è firmato o la chiave non corrisponde",
+  "diag.bad_signature.detail": "{subject} non ha superato il controllo firma di BattlEye. Risincronizza il .bikey nella pagina Mod — NON abbassare verifySignatures, farebbe entrare anche client modificati.",
+  "diag.script_error.title": "Uno script non è stato compilato",
+  "diag.script_error.detail": "Il server si è fermato durante la compilazione degli script. Le righe subito dopo nel RPT indicano file e numero di riga: di solito una mod non allineata alla versione attuale di DayZ.",
+  "diag.mission_missing.title": "La missione indicata in server.cfg non esiste",
+  "diag.mission_missing.detail": "Il template nominato in serverDZ.cfg non ha una cartella in mpmissions/. Scegli una missione esistente nella pagina Server.",
+  "diag.port_busy.title": "La porta del server è già occupata",
+  "diag.port_busy.detail": "Un altro processo tiene la porta, spesso un server DayZ precedente non ancora terminato. Attendi qualche secondo o cambia porta nella pagina Server.",
+  "diag.config_parse.title": "serverDZ.cfg è malformato",
+  "diag.config_parse.detail": "Il parser si è fermato in anticipo. Di solito manca un punto e virgola o una parentesi graffa non è chiusa; il validatore controlla il bilanciamento.",
+  "diag.no_economy.title": "L'economia centrale non si è caricata",
+  "diag.no_economy.detail": "Il server può girare ma non genererà bottino. Esegui il validatore: di solito manca un file referenziato in cfgeconomycore.xml o un nome usage/value è sconosciuto.",
+  "diag.missing_key.title": "Manca una chiave della mod in keys/",
+  "diag.missing_key.detail": "I client con quella mod verranno espulsi per firma non valida. Usa «Sincronizza chiavi» nella pagina Mod.",
+  "loadout": "Cosa indossa e porta un giocatore al respawn. Sono i preset spawn-gear di DayZ, registrati in cfggameplay.json — le modifiche hanno effetto dopo un riavvio del server. In vanilla l'equipaggiamento è in init.c, per questo una missione nuova non mostra nulla qui finché non attivi il sistema.",
+  "loadout.weight": "Il peso di questo preset rispetto agli altri. DayZ sceglie UN preset per spawn, quindi uno con peso 3 è tre volte più probabile di uno con peso 1.",
+  "loadout.characters": "A quali modelli di personaggio si applica il preset (SurvivorM_Mirek, SurvivorF_Eva, …). Vuoto = a tutti; se ne sceglie uno a caso per spawn.",
+  "loadout.worn": "Oggetti messi sul corpo, uno slot alla volta. In uno slot DayZ sceglie UN oggetto in base al peso, quindi più varianti danno varietà tra uno spawn e l'altro.",
+  "loadout.carried": "Oggetti sciolti messi direttamente nell'inventario del nuovo giocatore invece che in uno slot di abbigliamento — stracci, cibo, un attrezzo iniziale.",
+  "loadout.condition": "La condizione in cui un oggetto compare. In DayZ 1.0 = perfetto e 0.0 = distrutto, quindi più alto è meglio. «Perfetto» mantiene nuovo l'equipaggiamento iniziale; scegli «Personalizzato» per impostare un intervallo di salute min–max preciso, e l'oggetto compare al suo interno.",
+  "settings.modSource": "Da dove il manager copia le mod. Cartella client: l'installazione di DayZ con !Workshop (ti iscrivi su Steam, il manager copia e aggiorna). Cartella di mod: qualsiasi cartella di @mod o workshop/content/221100 di SteamCMD, il modo per avere mod del Workshop su un host senza il gioco. Solo server: nessuna sorgente; le mod caricate a mano restano gestite, ma senza aggiornamento automatico.",
+  "settings.restartBehaviour": "Cosa vivono i giocatori a ogni riavvio automatico: il testo del conto alla rovescia (scrivilo nella loro lingua), una finestra facoltativa subito prima del riavvio in cui il server viene bloccato e tutti espulsi perché i personaggi si salvino bene, e un #shutdown pulito che salva il mondo prima di fermare il processo. La timeline mostra l'ordine esatto.",
+  "settings.perf": "L'affinità CPU lega DayZServer ai core spuntati (quelli non spuntati restano liberi per il sistema, un secondo server o altri programmi). La priorità dice al sistema quanto favorirlo: «Superiore al normale» è una spinta sicura; «Alta» può rallentare il resto della macchina. Entrambe si applicano a ogni avvio. Su Linux alzare la priorità richiede root.",
+  "vehicles.nominal": "Quanti di questi veicoli l'economia cerca di tenere sulla mappa contemporaneamente (tutte le varianti insieme).",
+  "vehicles.min": "Quando ce ne sono meno di questo numero, l'economia ne crea di nuovi (dopo il ritardo) fino a nominal.",
+  "vehicles.max": "Limite assoluto per questo tipo, contando quelli nascosti o parcheggiati dai giocatori. Di solito uguale a nominal.",
+  "vehicles.lifetime": "Il lifetime che l'economia centrale usa per questo evento (veicoli vanilla: 300). Non fa sparire le auto intatte: i veicoli vanilla restano finché non vengono distrutti o fino a un wipe. Lascia il valore vanilla salvo indicazioni diverse nella guida di una mod.",
+  "vehicles.restock": "Secondi di attesa prima di sostituire un veicolo distrutto o sparito. 0 = il prima possibile.",
+  "vehicles.loot": "lootmin / lootmax della variante in events.xml, mantenuti così come sono (i veicoli vanilla usano 0). I pezzi del veicolo — ruote, portiere, batteria, candele — vengono da cfgspawnabletypes: usa i pulsanti «Pezzi alla comparsa» qui sotto o la pagina Accessori per i singoli pezzi."
+ },
+ "gameplay": {
+  "version": "Versione del formato del file. La scrive DayZ: lasciala così.",
+  "GeneralData": "Interruttori per tutto il server: danni a basi e depositi, la schermata di respawn.",
+  "PlayerData": "Regole dei giocatori: luce personale, stamina, shock, movimento, annegamento e gli equipaggiamenti iniziali.",
+  "StaminaData": "Quanto velocemente cala la stamina e quanto peso portano i giocatori senza penalità.",
+  "ShockHandlingData": "Quanto velocemente passa lo shock (il danno che fa svenire i giocatori).",
+  "MovementData": "Inerzia del personaggio: quanto velocemente accelera e gira.",
+  "DrowningData": "Cosa perdono i giocatori ogni secondo mentre annegano.",
+  "WeaponObstructionData": "Se un'arma lunga viene spostata di lato quando entrerebbe in muri e oggetti.",
+  "WorldsData": "Impostazioni del mondo: oscurità notturna, temperature mensili, oggetti extra, peso dei vestiti bagnati.",
+  "BaseBuildingData": "Regole di costruzione delle basi: i controlli di posizionamento e quelli di costruzione.",
+  "HologramData": "Controlli dell'anteprima di posizionamento verde/rossa. Disattivarne uno permette ai giocatori di piazzare cose che il gioco normalmente rifiuta.",
+  "ConstructionData": "Controlli fatti mentre si costruisce una parte della base.",
+  "UIData": "Interfaccia: la mappa 3D e l'indicatore dei colpi.",
+  "HitIndicationData": "Il segnale a schermo che mostra da dove è arrivato un colpo. Usato solo con «Usa queste impostazioni» attivo.",
+  "MapData": "Mappa di gioco: se i giocatori hanno bisogno di mappa, bussola o GPS, e cosa mostra la mappa.",
+  "VehicleData": "Impostazioni dei veicoli.",
+  "disableBaseDamage": "Muri, cancelli, recinzioni e torri di guardia non subiscono alcun danno: i raid diventano impossibili.",
+  "disableContainerDamage": "Tende, barili, casse e nascondigli non subiscono danni.",
+  "disableRespawnDialog": "Nessuna schermata di respawn dopo la morte: il giocatore torna subito in un punto di spawn casuale.",
+  "disableRespawnInUnconsciousness": "Un giocatore incosciente non può premere Respawn: prima si sveglia o muore.",
+  "disablePersonalLight": "Rimuove il debole alone attorno a ogni giocatore di notte: notti più buie. Sostituisce la stessa impostazione di serverDZ.cfg.",
+  "spawnGearPresetFiles": "I file degli equipaggiamenti iniziali. Si gestiscono nella pagina Equipaggiamento giocatore.",
+  "sprintStaminaModifierErc": "Consumo di stamina durante lo scatto in piedi. 1 = come nel gioco; più alto stanca prima, 0 = nessun consumo.",
+  "sprintStaminaModifierCro": "Consumo di stamina correndo accovacciati. 1 = come nel gioco.",
+  "staminaWeightLimitThreshold": "Peso in grammi che i giocatori portano prima che inizi a ridurre la stamina massima. 6000 = 6 kg.",
+  "staminaMax": "Dimensione della riserva di stamina. Più alta = scatti più lunghi.",
+  "staminaKgToStaminaPercentPenalty": "Quanto ogni chilogrammo oltre la soglia riduce la stamina massima.",
+  "staminaMinCap": "Il valore più basso a cui può scendere la stamina massima sotto un carico pesante.",
+  "sprintSwimmingStaminaModifier": "Consumo di stamina nuotando veloce. 1 = come nel gioco.",
+  "sprintLadderStaminaModifier": "Consumo di stamina salendo veloce su una scala. 1 = come nel gioco.",
+  "meleeStaminaModifier": "Costo in stamina degli attacchi in mischia pesanti e della parata. 1 = come nel gioco.",
+  "obstacleTraversalStaminaModifier": "Costo in stamina dello scavalcare e saltare ostacoli. 1 = come nel gioco.",
+  "holdBreathStaminaModifier": "Consumo di stamina trattenendo il respiro per mirare. 1 = come nel gioco.",
+  "shockRefillSpeedConscious": "Quanto velocemente passa lo shock mentre il giocatore è cosciente. Più alto = recupero più rapido.",
+  "shockRefillSpeedUnconscious": "Quanto velocemente passa lo shock mentre il giocatore è incosciente: quanto presto si sveglia.",
+  "allowRefillSpeedModifier": "Le condizioni del giocatore (sangue, salute) accelerano o rallentano il recupero dallo shock.",
+  "timeToStrafeJog": "Secondi per raggiungere la piena velocità correndo di lato. Meno = movimento più scattante.",
+  "rotationSpeedJog": "Quanto velocemente gira il personaggio mentre corre.",
+  "timeToSprint": "Secondi per passare dalla corsa allo scatto.",
+  "timeToStrafeSprint": "Secondi per raggiungere la piena velocità scattando di lato.",
+  "rotationSpeedSprint": "Quanto velocemente gira il personaggio durante lo scatto.",
+  "allowStaminaAffectInertia": "Con poca stamina rimasta, il personaggio accelera e gira più lentamente.",
+  "staminaDepletionSpeed": "Stamina persa al secondo sott'acqua.",
+  "healthDepletionSpeed": "Salute persa al secondo durante l'annegamento.",
+  "shockDepletionSpeed": "Shock aggiunto al secondo durante l'annegamento.",
+  "staticMode": "Contro muri e oggetti statici: 0 = disattivato, 1 = attivo (come nel gioco), 2 = sempre.",
+  "dynamicMode": "Contro giocatori, veicoli e altri oggetti in movimento: 0 = disattivato, 1 = attivo (come nel gioco), 2 = sempre.",
+  "lightingConfig": "Oscurità notturna: 0 = notti più chiare (come nel gioco), 1 = notti buie. Sostituisce la stessa impostazione di serverDZ.cfg.",
+  "objectSpawnersArr": "File JSON (percorsi dentro la missione) che piazzano oggetti statici extra nel mondo.",
+  "environmentMinTemps": "Temperatura dell'aria più bassa di ogni mese, da gennaio a dicembre, °C. Lascia vuoto per usare quelle della mappa.",
+  "environmentMaxTemps": "Temperatura dell'aria più alta di ogni mese, da gennaio a dicembre, °C. Lascia vuoto per usare quelle della mappa.",
+  "wetnessWeightModifiers": "Moltiplicatori del peso dei vestiti per i cinque livelli di bagnato, da asciutto a fradicio.",
+  "disableIsCollidingBBoxCheck": "Le parti possono sovrapporsi ad altri oggetti quando vengono piazzate: costruzioni più strette e sovrapposte.",
+  "disableIsCollidingPlayerCheck": "Le parti possono essere piazzate dove si trova un giocatore.",
+  "disableIsClippingRoofCheck": "Le parti possono essere piazzate attraverso tetti e soffitti.",
+  "disableIsBaseViableCheck": "Gli oggetti possono essere piazzati senza terreno solido sotto.",
+  "disableIsCollidingGPlotCheck": "Gli orti possono essere piazzati dove entrerebbero in collisione con altri oggetti.",
+  "disableIsCollidingAngleCheck": "Gli oggetti possono essere piazzati su pendii normalmente troppo ripidi.",
+  "disableIsPlacementPermittedCheck": "Gli oggetti possono essere piazzati dove la mappa normalmente lo vieta.",
+  "disableHeightPlacementCheck": "Gli oggetti possono essere piazzati più in alto rispetto ai piedi del giocatore di quanto normalmente consentito.",
+  "disableIsUnderwaterCheck": "Gli oggetti possono essere piazzati sott'acqua.",
+  "disableIsInTerrainCheck": "Gli oggetti possono essere affondati nel terreno.",
+  "disableColdAreaBuildingCheck": "Costruire è consentito nelle zone fredde dove il gioco normalmente lo vieta (Sakhal).",
+  "disallowedTypesInUnderground": "Kit che non si possono piazzare nelle aree sotterranee (bunker, grotte).",
+  "disablePerformRoofCheck": "Le parti della base si possono costruire sotto i tetti e al chiuso.",
+  "disableIsCollidingCheck": "Le parti della base si possono costruire anche se qualcosa è d'intralcio.",
+  "disableDistanceCheck": "Le parti della base si possono costruire da qualsiasi distanza.",
+  "use3DMap": "La mappa si apre come oggetto in mano invece che a schermo intero.",
+  "hitDirectionOverrideEnabled": "Applica le impostazioni qui sotto a ogni giocatore invece delle sue.",
+  "hitDirectionBehaviour": "0 = nessun indicatore, 1 = statico, 2 = segue l'attaccante.",
+  "hitDirectionStyle": "0 = macchia, 1 = punta, 2 = freccia.",
+  "hitDirectionIndicatorColorStr": "Colore dell'indicatore come 0xAARRGGBB (alfa, rosso, verde, blu).",
+  "hitDirectionMaxDuration": "Per quanti secondi l'indicatore resta sullo schermo.",
+  "hitDirectionBreakPointRelative": "Parte della durata (0–1) dopo la quale l'indicatore inizia a svanire.",
+  "hitDirectionScatter": "Dispersione casuale aggiunta alla direzione, in gradi.",
+  "hitIndicationPostProcessEnabled": "Lo schermo lampeggia di rosso quando il giocatore viene colpito.",
+  "ignoreMapOwnership": "I giocatori possono aprire la mappa senza averne una con sé.",
+  "ignoreNavItemsOwnership": "La mappa mostra le info di bussola e GPS senza avere con sé bussola o GPS.",
+  "displayPlayerPosition": "La posizione del giocatore viene segnata sulla mappa.",
+  "displayNavInfo": "La mappa mostra le info di navigazione (griglia e bussola).",
+  "boatDecayMultiplier": "Quanto velocemente si degradano le barche. 1 = come nel gioco, più basso = più lento."
+ }
 }

@@ -304,7 +304,8 @@ func TestUnknownRefsAreAggregated(t *testing.T) {
 
 func TestCheckEvents(t *testing.T) {
 	dir := t.TempDir()
-	ev := filepath.Join(dir, "events.xml")
+	os.MkdirAll(filepath.Join(dir, "db"), 0o755)
+	ev := filepath.Join(dir, "db", "events.xml")
 	os.WriteFile(ev, []byte(`<events>
   <event name="Good"><nominal>5</nominal><min>1</min><max>10</max><active>1</active></event>
   <event name="Ambient"><nominal>5</nominal><min>100</min><max>0</max><active>1</active></event>
@@ -318,7 +319,7 @@ func TestCheckEvents(t *testing.T) {
   <event name="Ghost"><pos x="1" z="2"/></event>
 </eventposdef>`), 0o644)
 
-	got := checkEvents(ev, sp)
+	got := checkEvents(dir)
 	joined := ""
 	for _, i := range got {
 		joined += i.Message + "\n"
@@ -347,12 +348,12 @@ func TestCheckEventSpawnBounds(t *testing.T) {
   <event name="Typo"><pos x="-5" z="2"/><pos x="99999" z="1"/><pos x="1" z="1"/></event>
 </eventposdef>`), 0o644)
 
-	got := checkEventSpawnBounds(sp)
+	got := checkEventSpawnBounds(sp, 0)
 	joined := ""
 	for _, i := range got {
 		joined += i.Message + "\n"
 	}
-	if !strings.Contains(joined, `event "Typo" has 2 spawn positions out of range`) {
+	if !strings.Contains(joined, `event "Typo" has 2 spawn positions outside the map`) {
 		t.Errorf("missing Typo out-of-range report in:\n%s", joined)
 	}
 	// A within-bounds event (including a large-but-valid 9000) must not fire.
@@ -373,5 +374,99 @@ func TestValidateCFGIgnoresBracesInStrings(t *testing.T) {
 	os.WriteFile(p2, []byte("class Missions\n{\n\tclass DayZ\n\t{\n"), 0o644)
 	if is := validateCFG(p2); is == nil {
 		t.Fatal("genuinely unbalanced braces were not reported")
+	}
+}
+
+// Events a mod defines in a file registered in cfgeconomycore.xml are real
+// events: their spawn points are neither reported nor removed as orphans.
+// (The auto-fix used to delete them — every modded vehicle and heli lost its
+// spawns after "Fix everything possible".)
+func TestModdedEventSpawnsAreNotOrphans(t *testing.T) {
+	dir := t.TempDir()
+	mission := "dayzOffline.chernarusplus"
+	m := filepath.Join(dir, "mpmissions", mission)
+	write := func(rel, body string) {
+		p := filepath.Join(m, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("cfgeconomycore.xml", `<economycore>
+    <ce folder="expansion_ce">
+        <file name="expansion_events.xml" type="events" />
+    </ce>
+</economycore>`)
+	write("db/events.xml", `<events>
+    <event name="VehicleCivilianSedan"><nominal>8</nominal><active>1</active></event>
+</events>`)
+	write("expansion_ce/expansion_events.xml", `<events>
+    <event name="ExpansionVehicleHeli"><nominal>2</nominal><active>1</active></event>
+</events>`)
+	write("cfgeventspawns.xml", `<eventposdef>
+	<event name="VehicleCivilianSedan">
+		<pos x="1" z="2" a="0"/>
+	</event>
+	<event name="ExpansionVehicleHeli">
+		<pos x="3" z="4" a="0"/>
+	</event>
+	<event name="Ghost">
+		<pos x="5" z="6" a="0"/>
+	</event>
+</eventposdef>`)
+
+	joined := ""
+	for _, i := range checkEvents(m) {
+		joined += i.Message + "\n"
+	}
+	if strings.Contains(joined, "ExpansionVehicleHeli") {
+		t.Fatalf("a registered mod event was called an orphan:\n%s", joined)
+	}
+	if !strings.Contains(joined, `"Ghost"`) {
+		t.Fatalf("the real orphan was not reported:\n%s", joined)
+	}
+
+	if _, err := AutoFix(dir, mission); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(m, "cfgeventspawns.xml"))
+	if !strings.Contains(string(data), "ExpansionVehicleHeli") {
+		t.Fatalf("the auto-fix deleted a mod event's spawn points:\n%s", data)
+	}
+	if strings.Contains(string(data), "Ghost") {
+		t.Fatalf("the auto-fix kept the real orphan:\n%s", data)
+	}
+}
+
+// A registered events file that does not parse may define the events whose
+// points look orphaned: nothing is judged or removed then.
+func TestOrphanFixWaitsForUnparseableModEvents(t *testing.T) {
+	dir := t.TempDir()
+	mission := "dayzOffline.chernarusplus"
+	m := filepath.Join(dir, "mpmissions", mission)
+	write := func(rel, body string) {
+		p := filepath.Join(m, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("cfgeconomycore.xml", `<economycore><ce folder="modce"><file name="ev.xml" type="events" /></ce></economycore>`)
+	write("db/events.xml", `<events><event name="VehicleCivilianSedan"><nominal>1</nominal></event></events>`)
+	write("modce/ev.xml", `<events><event name="ModHeli"><nominal>1</nominal></event`)
+	write("cfgeventspawns.xml", `<eventposdef>
+	<event name="VehicleCivilianSedan">
+		<pos x="1" z="2" a="0"/>
+	</event>
+	<event name="ModHeli">
+		<pos x="3" z="4" a="0"/>
+	</event>
+</eventposdef>`)
+	if _, err := AutoFix(dir, mission); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(m, "cfgeventspawns.xml"))
+	if !strings.Contains(string(data), "ModHeli") {
+		t.Fatalf("positions of an event in an unparseable mod file were deleted:\n%s", data)
 	}
 }

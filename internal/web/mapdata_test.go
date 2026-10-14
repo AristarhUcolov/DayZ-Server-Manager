@@ -1,7 +1,10 @@
 // Copyright (c) 2026 Aristarh Ucolov.
 package web
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestWorldFromTemplate(t *testing.T) {
 	cases := []struct {
@@ -57,5 +60,31 @@ func TestImageExtFor(t *testing.T) {
 		if got := imageExtFor(c.ct, c.urlPath, nil); got != c.want {
 			t.Errorf("imageExtFor(%q,%q) = %q, want %q", c.ct, c.urlPath, got, c.want)
 		}
+	}
+}
+
+// An unknown world's 15360 placeholder used to reach the validator as a real
+// size, so the bounds auto-fix deleted valid positions on larger modded maps.
+func TestValidatorWorldSizeOnlyWhenKnown(t *testing.T) {
+	h, dir := testHandlers(t)
+	setTpl := func(tpl string) {
+		put(t, filepath.Join(dir, "serverDZ.cfg"), "class Missions\n{\n\tclass DayZ\n\t{\n\t\ttemplate=\""+tpl+"\";\n\t};\n};\n")
+	}
+	setTpl("dayzOffline.someRandomMap")
+	if got := h.validatorOptions().WorldSize; got != 0 {
+		t.Errorf("unknown world: WorldSize = %v, want 0 (unknown)", got)
+	}
+	setTpl("empty.sahrani") // registry entry without a verified size
+	if got := h.validatorOptions().WorldSize; got != 0 {
+		t.Errorf("sizeless registry world: WorldSize = %v, want 0", got)
+	}
+	setTpl("dayzOffline.chernarusplus")
+	if got := h.validatorOptions().WorldSize; got != 15360 {
+		t.Errorf("chernarus: WorldSize = %v, want 15360", got)
+	}
+	setTpl("dayzOffline.someRandomMap")
+	h.app.Config.MapSizes = map[string]int{"somerandommap": 20480} // single goroutine: no lock needed
+	if got := h.validatorOptions().WorldSize; got != 20480 {
+		t.Errorf("admin override: WorldSize = %v, want 20480", got)
 	}
 }

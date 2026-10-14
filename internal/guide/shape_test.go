@@ -79,6 +79,9 @@ func TestStepRoutesAreValid(t *testing.T) {
 		"players": true, "rcon": true, "validator": true, "sync": true,
 		"wipe": true, "settings": true, "loadout": true, "health": true,
 		"history": true, "sponsors": true, "economy": true, "randompresets": true,
+		"missions": true, "eventmap": true, "vehicles": true,
+		"settings/access": true, "settings/restarts": true, "settings/backups": true,
+		"settings/discord": true, "servers": true, "servers/add": true,
 	}
 	for _, lang := range Languages() {
 		for ci, ch := range Get(lang) {

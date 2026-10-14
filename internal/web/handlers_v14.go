@@ -14,10 +14,10 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"dayzmanager/internal/config"
+	"dayzmanager/internal/guide"
 	"dayzmanager/internal/players"
 	dztypes "dayzmanager/internal/types"
 	"dayzmanager/internal/util"
@@ -26,16 +26,13 @@ import (
 // ---------------------------------------------------------------------------
 // Player database + killfeed.
 
-var playersStore struct {
-	once sync.Once
-	s    *players.Store
-}
-
 func (h *handlers) playersDB() *players.Store {
-	playersStore.once.Do(func() {
-		playersStore.s = players.Open(h.app.ManagerDir)
+	h.playersOnce.Do(func() {
+		h.players = players.Open(h.app.ManagerDir)
+		// Kills and watched players for Discord, from the live log tail.
+		h.players.OnLive = h.onAdmEvent
 	})
-	return playersStore.s
+	return h.players
 }
 
 func (h *handlers) profilesAbs() string {
@@ -112,7 +109,7 @@ func (h *handlers) playersIngestLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(time.Minute):
+		case <-time.After(30 * time.Second):
 		}
 		h.playersDB().Ingest(h.profilesAbs())
 	}
@@ -136,12 +133,25 @@ func (h *handlers) gameplay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodGet {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			writeJSON(w, map[string]interface{}{"path": path, "exists": false, "content": ""})
-			return
+		out := map[string]interface{}{"path": path, "exists": false, "content": "",
+			// Every vanilla key with the value DayZ uses when the file
+			// leaves it out: the editor shows and restores these.
+			"defaults": json.RawMessage(guide.GameplayDefaults)}
+		// Two settings exist in serverDZ.cfg too; with the file enabled the
+		// values here win, and the editor says so when they differ.
+		if sc, err := config.LoadServerCfg(filepath.Join(h.app.ServerDir, h.app.Cfg().ServerCfg)); err == nil {
+			vals := map[string]string{}
+			for _, k := range []string{"disablePersonalLight", "lightingConfig", "enableCfgGameplayFile"} {
+				if v, ok := sc.Get(k); ok {
+					vals[k] = v
+				}
+			}
+			out["serverCfg"] = vals
 		}
-		writeJSON(w, map[string]interface{}{"path": path, "exists": true, "content": string(data)})
+		if data, err := os.ReadFile(path); err == nil {
+			out["exists"], out["content"] = true, string(data)
+		}
+		writeJSON(w, out)
 		return
 	}
 
@@ -203,11 +213,6 @@ type histSample struct {
 	Running bool    `json:"running"`
 }
 
-var metricsHist struct {
-	mu      sync.Mutex
-	samples []histSample
-}
-
 const (
 	histStep = 30 * time.Second
 	histKeep = 2880 // 24h at 30s
@@ -231,20 +236,29 @@ func (h *handlers) metricsSampler(ctx context.Context) {
 					s.Mem = mem
 				}
 			}
-			players := h.app.RCon.PlayersFresh(45 * time.Second)
+			online := h.app.RCon.PlayersFresh(45 * time.Second)
 			// Record the count only when RCon actually answered; otherwise leave it
 			// nil (unknown) so a broken RCon doesn't graph a false 0-player dip.
 			if h.app.RCon.LastPlayersErr() == nil {
-				n := len(players)
+				n := len(online)
 				s.Players = &n
+				// BattlEye GUIDs and IPs for the player database (bans by
+				// GUID, the profile's IDs).
+				if n > 0 {
+					refs := make([]players.OnlineRef, 0, n)
+					for _, p := range online {
+						refs = append(refs, players.OnlineRef{Name: p.Name, GUID: p.GUID, IP: p.IP})
+					}
+					h.playersDB().LinkRCon(refs)
+				}
 			}
 		}
-		metricsHist.mu.Lock()
-		metricsHist.samples = append(metricsHist.samples, s)
-		if len(metricsHist.samples) > histKeep {
-			metricsHist.samples = metricsHist.samples[len(metricsHist.samples)-histKeep:]
+		h.metrics.mu.Lock()
+		h.metrics.samples = append(h.metrics.samples, s)
+		if len(h.metrics.samples) > histKeep {
+			h.metrics.samples = h.metrics.samples[len(h.metrics.samples)-histKeep:]
 		}
-		metricsHist.mu.Unlock()
+		h.metrics.mu.Unlock()
 	}
 }
 
@@ -257,13 +271,13 @@ func (h *handlers) metricsHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	cutoff := time.Now().Unix() - seconds
-	metricsHist.mu.Lock()
-	out := make([]histSample, 0, len(metricsHist.samples))
-	for _, s := range metricsHist.samples {
+	h.metrics.mu.Lock()
+	out := make([]histSample, 0, len(h.metrics.samples))
+	for _, s := range h.metrics.samples {
 		if s.T >= cutoff {
 			out = append(out, s)
 		}
 	}
-	metricsHist.mu.Unlock()
+	h.metrics.mu.Unlock()
 	writeJSON(w, map[string]interface{}{"samples": out, "stepSeconds": int(histStep.Seconds())})
 }

@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	kernel32            = syscall.NewLazyDLL("kernel32.dll")
-	procGetDFSEx        = kernel32.NewProc("GetDiskFreeSpaceExW")
+	kernel32     = syscall.NewLazyDLL("kernel32.dll")
+	procGetDFSEx = kernel32.NewProc("GetDiskFreeSpaceExW")
 )
 
 // DiskFree reports the number of free bytes available on the volume that

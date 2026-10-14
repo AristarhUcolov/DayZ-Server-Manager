@@ -1,0 +1,595 @@
+{
+ "chapters": [
+  {
+   "id": "start",
+   "title": "Kom igång",
+   "intro": "Managern är ett enda program som körs bredvid din DayZ-server och ger dig en kontrollpanel i stället för Anteckningar och .bat-filer. Den finns i två versioner med samma inställningar: dayz-manager-panel öppnas i ett eget fönster, dayz-manager-web i din webbläsare. Den installerar aldrig något i systemet — ta bort filen så är allt som förut.",
+   "steps": [
+    {
+     "title": "Lägg den i servermappen",
+     "body": "Kopiera dayz-manager-panel.exe (eller dayz-manager-web.exe) till samma mapp som DayZServer_x64.exe och serverDZ.cfg och kör den. Panelen öppnas i ett eget fönster; webbläsarversionen öppnar i stället http://127.0.0.1:8787. På Linux använder du -linux-filerna bredvid DayZServer-programmet."
+    },
+    {
+     "title": "Välj var moddarna hämtas från",
+     "body": "Vid första starten väljer du en moddkälla: DayZ-*klienten* (dess !Workshop-mapp, dit Steam laddar ner moddar), valfri mapp med @moddar eller SteamCMD:s workshop/content/221100, eller Endast server för en värddator utan spelet — då laddar du upp moddarna själv och automatisk uppdatering är avstängd. Du kan ändra det senare under Inställningar."
+    },
+    {
+     "title": "Starta servern",
+     "body": "Tryck på Starta servern i Översikt. Om DayZServer_x64.exe saknas eller en modd är trasig avslutas servern, och du ser det i avsnittet Loggar."
+    }
+   ],
+   "tips": [
+    "Använder du panelen bara på den här datorn behövs inget lösenord. Vill du öppna den från en telefon eller från en annan plats ställer du först in en panelinloggning — i den inledande konfigurationen eller under Inställningar → Panelinloggning.",
+    "Nästan alla filredigerare vägrar spara medan servern körs — DayZ låser sina egna filer. Stoppa servern först; panelen säger till när det är orsaken."
+   ]
+  },
+  {
+   "id": "mods",
+   "title": "Moddar",
+   "intro": "En server behöver en egen kopia av varje modd, moddens .bikey i serverns keys-mapp och modden listad i startparametern -mod. Managern sköter alla tre och hämtar moddarna från källan du valt: spelklientens !Workshop, en modd- eller SteamCMD-mapp eller — i läget Endast server — moddarna du själv laddat upp.",
+   "steps": [
+    {
+     "title": "Prenumerera i Steam först",
+     "body": "Managern kopierar moddar, den laddar inte ner dem. Prenumerera i Steam Workshop och låt DayZ-startprogrammet hämta modden till !Workshop — eller ladda ner den med SteamCMD till din moddmapp."
+    },
+    {
+     "title": "Installera på servern",
+     "body": "Öppna Moddar — allt i !Workshop listas. Installera kopierar modden till servermappen och synkar dess .bikey automatiskt. Installera och uppdatera moddar tar hela listan med ett klick."
+    },
+    {
+     "title": "Aktivera den vid start",
+     "body": "Att installera är inte samma sak som att ladda. Slå på brytaren Moddar på en rad för att lägga till den i -mod. Använd brytaren Servermodd bara för moddar som klienterna INTE får ha (adminverktyg)."
+    },
+    {
+     "title": "Tänk på laddningsordningen",
+     "body": "Dra raderna i Laddningsordning så att ramverken kommer först — @CF före allt som bygger på den, Expansion Core före sina tillägg. Fel ordning är en mycket vanlig orsak till att en server inte startar."
+    }
+   ],
+   "tips": [
+    "Uppdatera kopierar de nyare filerna från moddkällan till servern. Slå på Uppdatera moddar vid varje omstart under Inställningar så hålls de synkade automatiskt.",
+    "När du avinstallerar en modd tas dess .bikey bara bort om ingen annan installerad modd använder samma nyckel, så delade nycklar (Expansion) lämnas orörda.",
+    "Om en modd har egen loot, använd Lägg till moddloot på dess rad — den hittar moddens types.xml och registrerar den åt dig.",
+    "På Linux laddar servern bara moddar vars mappar och filer har små bokstäver. Managern byter namn på dem vid installation och uppdatering, och sidan Moddar markerar allt som fortfarande har fel skiftläge."
+   ]
+  },
+  {
+   "id": "economy",
+   "title": "Loot och ekonomi",
+   "intro": "DayZ:s centrala ekonomi avgör vad som finns i världen och hur mycket. types.xml är huvudlistan: en post per föremålsklass, med hur många som ska finnas och var de får dyka upp. Fel siffror här är den vanliga orsaken till att en server känns tom eller drunknar i loot.",
+   "steps": [
+    {
+     "title": "Förstå de fyra siffrorna",
+     "body": "nominal är målmängden som servern försöker hålla i världen. min är golvet som utlöser en ny spawn. lifetime är hur länge ett orört föremål finns kvar, i sekunder. restock är hur länge servern väntar innan den fyller på föremålet igen. Sätt nominal till 0 så spawnar föremålet aldrig."
+    },
+    {
+     "title": "Redigera i tabellen",
+     "body": "nominal, min, lifetime och category kan redigeras direkt i tabellen — ändrade rader är markerade tills du trycker på Spara ändringar. Använd Redigera för hela föremålet: usages, values, tags och flags."
+    },
+    {
+     "title": "Usage och value = var det spawnar",
+     "body": "usage är byggnadstypen (Military, Police, Farm…), value är lootnivån (Tier1 är kusten, Tier4 är djupt inne i landet / militärt). Ett föremål utan usage har ingenstans att spawna. Båda namnen måste finnas i cfglimitsdefinition.xml."
+    },
+    {
+     "title": "Använd förinställningar för massändringar",
+     "body": "Markera rader och klicka sedan på en spawnförinställning för att slå ihop dess usage/value/tags med alla på en gång — mycket snabbare än att redigera hundratals poster för hand."
+    }
+   ],
+   "tips": [
+    "Lägg dina egna föremål i en egen typfil i stället för att redigera vaniljens types.xml — managern registrerar den i cfgeconomycore.xml åt dig, och en speluppdatering kan inte skriva över den.",
+    "Kör valideraren efter varje massändring. Knappen Åtgärda automatiskt lägger till okända usage-/value-/tag-namn i cfglimitsdefinition.xml, vilket är precis det som får moddloot att börja spawna."
+   ]
+  },
+  {
+   "id": "attachments",
+   "title": "Vapentillbehör",
+   "intro": "cfgspawnabletypes.xml avgör vad ett vapen bär på när det spawnar — ett magasin, ett sikte, en kolv. Den är uppbyggd av slots, och siffrorna betyder två olika saker, vilket är det alla gör fel.",
+   "steps": [
+    {
+     "title": "En slot är ett tärningskast",
+     "body": "Varje attachments-slot har en chans: 1.0 betyder att den alltid spawnar något, 0.35 betyder 35 % av gångerna."
+    },
+    {
+     "title": "Föremålen i en slot tävlar",
+     "body": "Siffran på varje föremål är en relativ vikt, inte en procentsats — DayZ väljer exakt ETT föremål från slotten. Vikterna 60 och 40 i en 0.35-slot betyder i verkligheten 21 % och 14 %. Panelen visar dig den verkliga siffran så att du aldrig behöver räkna ut den."
+    },
+    {
+     "title": "Utgå från en mall",
+     "body": "Välj en vapenmall (AKM, M4-A1, Mosin…) och justera sedan. Klassnamn autokompletteras från din egen types.xml, och allt som inte finns där markeras — ett stavfel är den vanliga orsaken till att ett tillbehör aldrig dyker upp i spelet."
+    }
+   ],
+   "tips": [
+    "En slot per del: en för magasin, en för sikten, en för kolven. Lägger du ett magasin och ett sikte i samma slot får vapnet det ena eller det andra, aldrig båda.",
+    "Bara posten du redigerar skrivs om — dina kommentarer och din formatering i resten av filen bevaras."
+   ]
+  },
+  {
+   "id": "loadout",
+   "title": "Spelarutrustning",
+   "intro": "Bestäm vad en spelare har på sig och bär med sig i samma ögonblick som hen spawnar. Vaniljen hårdkodar detta i missionens init.c; panelen använder i stället DayZ:s datadrivna spawn-gear-förinställningar och slår på hela systemet åt dig.",
+   "steps": [
+    {
+     "title": "Aktivera systemet",
+     "body": "Öppna Spelarutrustning. Om missionen fortfarande spawnar spelare från init.c säger sidan det och erbjuder en knapp som skapar en startförinställning, registrerar den i cfggameplay.json och slår på brytaren enableCfgGameplayFile — allt på en gång."
+    },
+    {
+     "title": "Redigera kläder och utrustning",
+     "body": "Varje förinställning listar vad som bärs per slot (Body, Legs, Feet…) och vad som bärs löst. Lägg till föremål via klassnamn, ange en spawnvikt när en slot ska välja mellan flera, och välj ett skick — Nyskick, Sliten, Skadad eller ett anpassat intervall."
+    },
+    {
+     "title": "Testslumpa och dela",
+     "body": "Tryck på Testslumpa för att prova en spawn och se exakt vad en spelare får, karaktär och allt. Exportera en förinställning till en fil för att återanvända den på en annan server, och Importera tillbaka den."
+    }
+   ],
+   "tips": [
+    "healthMin/healthMax är andelar av hälsan: 1.0 är nyskick, 0.0 är förstört. Håll allt i nyskick så att nyspawnade spelare inte dyker upp i slitna kläder.",
+    "Utrustningen sparas med servern stoppad, som alla konfigändringar — starta servern igen efteråt."
+   ]
+  },
+  {
+   "id": "rcon",
+   "title": "RCon, spelare och meddelanden",
+   "intro": "RCon är BattlEyes fjärrkonsol: spelarlistan i realtid, kickar, bannlysningar och chattutskick. Den behöver ett lösenord som BattlEye läser från beserver_x64.cfg när servern startar.",
+   "steps": [
+    {
+     "title": "Ange lösenordet",
+     "body": "Skriv in ett i avsnittet RCon. Managern skriver det till battleye/beserver_x64.cfg åt dig och skapar filen vid behov."
+    },
+    {
+     "title": "Starta om servern",
+     "body": "BattlEye läser bara den filen vid start, så ett helt nytt lösenord gör ingenting förrän nästa omstart. Det är normalt och ingen bugg."
+    },
+    {
+     "title": "Meddela och schemalägg",
+     "body": "Schemalagda meddelanden skickas vid en viss tid på dygnet; återkommande meddelanden upprepas var N:e minut. Båda skickas via RCon, så de kräver att lösenordet är aktivt."
+    }
+   ],
+   "tips": [
+    "Omstartsvarningar använder också RCon. Utan lösenord sker omstarten ändå — spelarna får bara ingen nedräkning.",
+    "Avsnittet Spelare bygger en historik från adminloggen: namn, spelar-ID:n, speltid, kills. Det kräver startparametern -adminlog (sidan Server → Startparametrar).",
+    "Inställningar → Beteende vid omstart kan kicka alla en viss tid före en omstart och låsa servern så att ingen ansluter igen den sista minuten. Karaktärer sparas när spelaren kopplar från, så inget går förlorat.",
+    "Sidan Chatt sparar ett arkiv för varje dag — inklusive meddelanden som skickats från panelen och de schemalagda meddelandena — med sökning och nedladdning som .txt. Hur länge det sparas ställer du in på samma ställe."
+   ]
+  },
+  {
+   "id": "weather",
+   "title": "Väder och tid",
+   "intro": "Vädret definieras i missionens cfgweather.xml, som DayZ läser en gång när missionen laddas — så väderändringar kräver alltid en omstart av servern, och i vaniljen finns inget sätt att schemalägga ”regn kl. 20:00” utan en modd.",
+   "steps": [
+    {
+     "title": "Välj en förinställning eller justera för hand",
+     "body": "En statisk förinställning låser vädret så att det ligger kvar. Dynamiskt låter det ändra sig av sig självt."
+    },
+    {
+     "title": "Välj hur mjukt det ändras",
+     "body": "Övergångshastighet styr hur gradvis vädret förändras: Mjuk ändras under ungefär en halvtimme i små steg, som i vaniljen. Snabb sveper över hela skalan på två minuter, vilket är det som får vädret att kännas som en strömbrytare."
+    },
+    {
+     "title": "Ställ in dygnets längd",
+     "body": "Tidsaccelerationen för dag och natt multiplicerar hur fort tiden går i spelet — 12 betyder att ett helt dygn tar två verkliga timmar. Nattens acceleration är separat så att du kan hålla nätterna korta."
+    }
+   ],
+   "tips": [
+    "Stormtätheten spelar bara roll när det finns tillräckligt med regn och molntäcke för att en storm alls ska kunna utlösas.",
+    "Snöfall syns bara på kartor som har snö, till exempel Sakhal."
+   ]
+  },
+  {
+   "id": "maps",
+   "title": "Kartor, event och fordon",
+   "intro": "Allt som händer på kartan finns i missionsmappen. De här sidorna läser den direkt: terräng, lootnivåer, byggnader och kontaminerade zoner ritas från dina egna missionsfiler, så kartan stämmer med din server — moddade kartor inräknade.",
+   "steps": [
+    {
+     "title": "Installera en kartas mission",
+     "body": "Moddade kartor har ofta sin mission med i modden (som en mapp eller en .zip) — när du installerar eller uppdaterar kartmodden här kopieras den automatiskt till mpmissions. Missioner (kartor) importerar också en missions-.zip eller -mapp och byter aktiv mission i serverDZ.cfg."
+    },
+    {
+     "title": "Placera eventspawnar",
+     "body": "Eventspawnar visar varje spawnpunkt för ett event på kartan. Klicka för att lägga till, dra för att flytta, eller skriv in exakta X / Y / Z för den markerade punkten — höjden inräknad. Du kan också klistra in en hel lista med koordinater."
+    },
+    {
+     "title": "Justera fordon",
+     "body": "Fordon listar varje fordonsevent: hur många som kan finnas, hur många spawnpunkter det har och hur kompletta delarna är — och ställer in hur troligt det är att varje del spawnar på fordonet."
+    }
+   ],
+   "tips": [
+    "Ingen kartbild medföljer — lagren kommer från dina missionsfiler. Vill du ha en fotoliknande karta laddar du in en egen bild ovanifrån i kartans inställningar.",
+    "Precis som de andra redigerarna sparar de här sidorna bara när servern är stoppad."
+   ]
+  },
+  {
+   "id": "maintenance",
+   "title": "Håll servern frisk",
+   "intro": "Tre saker räddar servrar: säkerhetskopior, valideraren och att faktiskt läsa loggarna när något går sönder.",
+   "steps": [
+    {
+     "title": "Slå på automatiska säkerhetskopior",
+     "body": "Inställningar kan enligt ett schema skriva en zip med dina konfigurationer och missionsfiler och behålla de N senaste. Varje fil som panelen skriver över får dessutom en tidsstämplad .bak bredvid sig."
+    },
+    {
+     "title": "Validera innan du startar om",
+     "body": "Valideraren kontrollerar varje XML- och JSON-fil i missionen, serverDZ.cfg, referenser mellan filer, spawnchanser, positioner och moddnycklar. Problemen grupperas, och de flesta har en Åtgärda-knapp som reparerar just det problemet — eller så åtgärdar du allt som är säkert på en gång."
+    },
+    {
+     "title": "Läs rätt logg",
+     "body": ".RPT-filen registrerar vad servern själv gjorde — en krasch eller en modd som vägrar laddas syns där. .ADM-filen registrerar vad spelarna gjorde."
+    }
+   ],
+   "tips": [
+    "Wipe raderar världens sparade tillstånd — spelare, fordon, baser. Dina loottabeller och konfigurationer lämnas orörda. Mapparna flyttas först undan, så en wipe som gjorts av misstag kan återställas för hand.",
+    "Krasch-watchdogen startar om servern om den avslutas av sig själv. Efter tre krascher på fem minuter slutar den och visar en banderoll i stället — en kraschloop behöver en människa, inte ännu en omstart."
+   ]
+  },
+  {
+   "id": "health",
+   "title": "Serverhälsa",
+   "intro": "En sida som med en blick svarar på ”är något fel?”, plus verktygen för att hålla servern i ordning: rulla tillbaka en dålig konfigändring och frigöra diskutrymme.",
+   "steps": [
+    {
+     "title": "Läs hälsorutorna",
+     "body": "Sidan Serverhälsa visar fyra rutor — är servern igång (eller fast i en kraschloop), finns det diskutrymme, är konfigurationen giltig och, om den inte startar, varför. Varje ruta länkar till sidan där du åtgärdar det."
+    },
+    {
+     "title": "Rulla tillbaka en ändring",
+     "body": "Managern säkerhetskopierar varje konfigfil innan den skriver. Sidan Historik listar de ögonblicksbilderna per fil, med en jämförelse av exakt vad en återställning skulle föra tillbaka och återställning med ett klick — ditt skyddsnät efter en dålig ändring."
+    },
+    {
+     "title": "Frigör utrymme",
+     "body": "På hälsosidan raderar ett klick serverloggar och kraschdumpar (den senaste RPT- och ADM-filen behålls) eller gamla säkerhetskopior av konfig, så att en server som kört länge inte i tysthet fyller disken."
+    }
+   ],
+   "tips": [
+    "Rutan för konfigens giltighet kör hela valideraren, vilket tar en stund på en stor mission — den fylls i en sekund eller två efter de andra rutorna.",
+    "Att återställa en säkerhetskopia kräver att servern är stoppad, precis som alla andra konfigändringar."
+   ]
+  },
+  {
+   "id": "remote",
+   "title": "Åtkomst från telefonen eller var som helst",
+   "intro": "Hemma öppnar en telefon panelen via datorns lokala adress, som inte finns utanför ditt nätverk — därför går panelen offline på jobbet eller via mobildata. Inställningar → Fjärråtkomst kontrollerar allt som krävs för åtkomst var du än är och åtgärdar det den kan.",
+   "steps": [
+    {
+     "title": "Ställ in en panelinloggning",
+     "body": "Inställningar → Panelinloggning: välj ett användarnamn och ett lösenord på minst 8 tecken. Därefter måste alla enheter logga in, utom fönstret som den här datorn öppnar. Glömt lösenordet? Starta managern med -reset-login."
+    },
+    {
+     "title": "Öppna panelen mot nätverket",
+     "body": "Inställningar → Panelens åtkomst: ”Lokalt nätverk” för telefoner hemma, ”Internet” för åtkomst var som helst ifrån (går bara med inloggning). Starta om managern efteråt."
+    },
+    {
+     "title": "Släpp in anslutningarna",
+     "body": "Under Fjärråtkomst slår du på UPnP så att routern vidarebefordrar panelens port, och tillåter managern i Windows-brandväggen. Utan UPnP vidarebefordrar du porten manuellt i routerns inställningar. Slå på HTTPS så att lösenordet skickas krypterat."
+    },
+    {
+     "title": "Kontrollera utifrån",
+     "body": "Tryck på ”Kontrollera åtkomst från internet”: den visar din publika adress och exakt vilken länk du ska öppna. Testa på telefonen med Wi-Fi avstängt."
+    }
+   ],
+   "tips": [
+    "Om kontrollen rapporterar CGNAT delar din leverantör en adress mellan många kunder och ingen portvidarebefordran kan fungera: be om en publik IP eller använd Tailscale, ZeroTier eller Radmin VPN — då räcker åtkomsten ”Lokalt nätverk”.",
+    "Samma kort kan också vidarebefordra spelportarna, så att spelare hittar servern i DayZ:s serverlista. RCon-porten öppnas aldrig."
+   ]
+  },
+  {
+   "id": "presets",
+   "title": "Lootekonomi och förinställningar",
+   "intro": "Utöver att redigera ett föremål i taget finns tre verktyg som formar loot i stor skala: en översikt som visar vad din karta spawnar, skalning av hela filen med ett klick och återanvändbara förinställningar som du kopplar till föremål via namn.",
+   "steps": [
+    {
+     "title": "Se hur din loot ser ut",
+     "body": "Öppna Lootekonomi för att summera alla föremåls nominal och min och dela upp dem per kategori, nivå och usage — det snabbaste sättet att upptäcka en karta som drunknar i en sak och saknar en annan."
+    },
+    {
+     "title": "Skala med ett klick",
+     "body": "Förinställningarna för CE-justering multiplicerar alla nominal och min på en gång — ×2 för en server med gott om loot, ×0,5 för hardcore. ×1 återställer mängderna från före din första skalning, så det går alltid att ångra."
+    },
+    {
+     "title": "Återanvänd grupper med förinställningar",
+     "body": "En förinställning är en namngiven grupp föremål med en spawnchans. Bygg en på sidan Förinställningar och referera sedan till den via namn från ett vapens tillbehörsslot eller en behållares innehåll, i stället för att upprepa samma lista överallt."
+    }
+   ],
+   "tips": [
+    "Både skalning och förinställningar skriver missionsfiler, så servern måste vara stoppad för att de ska kunna sparas."
+   ]
+  },
+  {
+   "id": "servers",
+   "title": "Flera servrar",
+   "intro": "En manager kan köra flera DayZ-servrar — Chernarus och Livonia, till exempel, eller en vanilla-server och en moddad. Varje server bor i en egen mapp och har egna inställningar, moddar, spelare, chatt, bannlysningar, säkerhetskopior, schema och Discord-aviseringar; panelinloggningen, fjärråtkomsten och gränssnittets språk är gemensamma.",
+   "steps": [
+    {
+     "title": "Lägg till en server",
+     "body": "Servrar → Lägg till en server. Peka på en mapp som redan innehåller en DayZ-server (installerad med SteamCMD, eller en kopia du gjort själv), eller låt managern skapa en: ”Ny server — en kopia” kopierar spelfilerna, uppdragen, nycklarna och BattlEye-inställningarna från en befintlig server till en ny mapp och startar den med en ny värld."
+    },
+    {
+     "title": "Ge den egna portar",
+     "body": "Två servrar kan inte dela en port. En kopia får lediga portar av sig själv; för en mapp du lagt till flyttar ”Tilldela lediga portar” den med ett klick till en ledig spelport, Steam-frågeport (steamQueryPort) och RCon-port."
+    },
+    {
+     "title": "Växla mellan dem",
+     "body": "Servermenyn i det övre fältet växlar hela panelen till en annan server — varje sida visar och redigerar sedan den servern. Två webbläsarflikar kan hantera två servrar samtidigt."
+    }
+   ],
+   "tips": [
+    "Att ta bort en server från panelen raderar ingenting: dess mapp, inställningar och loggar ligger kvar där de är, och den kan läggas till igen.",
+    "Med flera servrar visar översikten alla på en gång med Starta och Stoppa, och när managern stängs stoppas alla på en gång — eller får fortsätta köra."
+   ]
+  },
+  {
+   "id": "players",
+   "title": "Spelare och bannlysningar",
+   "intro": "Sidan Spelare känner alla som adminloggen har sett — namn, ID:n, speltid, kills —, visar vem som är online just nu och håller serverns bannlysningar.",
+   "steps": [
+    {
+     "title": "Hitta en spelare",
+     "body": "Alla spelare: sök på namn, spelar-ID, IP eller anteckning, sortera på speltid eller kills, och stjärnmärk spelare för att hålla ett öga på dem. Ett klick på ett namn öppnar profilen med ID:n, anteckningen, den aktuella bannlysningen och modereringshistoriken."
+    },
+    {
+     "title": "Bannlys en tid — eller för gott",
+     "body": "”Bannlys…” i profilen eller i onlinelistan: välj 1 timme till 30 dagar, permanent eller en egen längd, och en anledning som spelaren ser. Bannlysningen hamnar i serverns egen ban.txt — den gäller direkt — och i BattlEye när spelarens GUID är känt. En tidsbegränsad bannlysning hävs automatiskt när den löper ut."
+    },
+    {
+     "title": "Hantera vem som är online",
+     "body": "Online nu listar spelarna med ping, IP och GUID — skicka meddelanden, kicka dem med en anledning eller bannlys dem direkt där. Det kräver RCon-lösenordet."
+    }
+   ],
+   "tips": [
+    "Ingen adminlogg — inga spelare: historiken kräver startparametern -adminlog (sidan Server → Startparametrar).",
+    "Bannlysningar → ”Bannlys via ID” bannlyser någon som inte är på servern: klistra in Steam64-ID:t från länken till hens Steam-profil, spelar-ID:t från adminloggen, ett BattlEye-GUID eller en IP-adress."
+   ]
+  },
+  {
+   "id": "discord",
+   "title": "Discord-aviseringar",
+   "intro": "Managern kan posta det som händer på en server i din Discord-kanal: när den är online, omstarter med anledningen, krascher, moddsuppdateringar, anslutningar, kills, chatt, bannlysningar med mera.",
+   "steps": [
+    {
+     "title": "Skapa en webhook",
+     "body": "I Discord: kanalinställningar → Integrationer → Webhooks → Ny webhook → Kopiera webhook-URL. Klistra in den under Inställningar → Discord, slå på aviseringarna och tryck på ”Skicka testmeddelande”."
+    },
+    {
+     "title": "Välj vad som postas",
+     "body": "Slå på och av händelser. Spelaraktivitet (anslutningar, kills, chatt) kan gå till en andra kanal så att den inte dränker dina meddelanden, och en roll kan pingas när servern kraschar."
+    },
+    {
+     "title": "Håll en live-status",
+     "body": "Live-statusmeddelandet är ett enda meddelande som alltid visar om servern är online, spelarna, kartan, upptiden och nästa omstart. Fäst det i kanalen."
+    }
+   ],
+   "tips": [
+    "Varje server i panelen har egna Discord-inställningar. Flera servrar kan posta i samma kanal — varje meddelande bär serverns namn.",
+    "Anslutningar och avslut kommer från RCon i realtid (utan RCon från adminloggen ungefär en minut senare); kills kommer alltid från adminloggen."
+   ]
+  }
+ ],
+ "help": {
+  "attach.cargo": "Cargo spawnar INUTI föremålet: innehållet i en ryggsäck, looten i en låda, det som ligger i bilens bagageutrymme. Attachments monteras PÅ det. Halva vaniljfilen är cargo, inte attachments.",
+  "attach.class": "Klassen som den här posten konfigurerar. Det behöver inte vara ett vapen — cfgspawnabletypes.xml omfattar även kläder, ryggsäckar, lådor, tunnor och fordon.",
+  "attach.damage": "Skicket föremålet spawnar i, från 0.0 (nyskick) till 1.0 (förstört). Lämna båda tomma för att behålla DayZ:s standard.",
+  "attach.hoarder": "Markerar posten som beständig förvaring — tunnor, tält, gömmor. DayZ räknar det spelarna lägger i dem mot hoarder-gränsen i stället för mot världens loot.",
+  "attach.itemWeight": "En relativ vikt, inte en procentsats — DayZ väljer exakt ETT föremål från slotten. Vikterna 60 och 40 betyder 60 % och 40 % av slottens egen chans.",
+  "attach.slotChance": "Sannolikheten att slotten spawnar något överhuvudtaget. 1.0 = alltid, 0.35 = 35 % av gångerna.",
+  "attach.tags": "Begränsar var posten gäller, t.ex. floor eller shelves. Kommaseparerat. De flesta poster behöver inga.",
+  "backup.restore": "Återställer konfigurationer och missionsfiler från en zip. Servern måste vara stoppad — den låser de här filerna medan den körs.",
+  "battleye.bans": "En bannlysning per rad: GUID eller IP, när den slutar (-1 = permanent, annars slutdatumet lagrat som Unix-tid), anledning. Att spara på en körande server läser in bannlysningarna på nytt via RCon, så ingen omstart behövs.",
+  "diag": "Mönstermatchat från den senaste RPT-filen och managerns stdout-logg. Den känner igen den handfull fel som faktiskt stoppar en DayZ-server; allt den inte känner igen kräver fortfarande den råa loggen, så ett tomt resultat betyder inte att allt är friskt.",
+  "diag.bad_signature.detail": "{subject} klarade inte BattlEyes signaturkontroll. Synka om moddens .bikey på sidan Moddar — sänk INTE verifySignatures, det skulle även släppa in modifierade klienter.",
+  "diag.bad_signature.title": "En moddfil är osignerad eller så matchar inte dess nyckel",
+  "diag.config_parse.detail": "Konfigtolken avbröt i förtid. Ett saknat semikolon eller en oparad klammerparentes är den vanliga orsaken — valideraren kontrollerar att klamrarna är balanserade.",
+  "diag.config_parse.title": "serverDZ.cfg är felformaterad",
+  "diag.missing_key.detail": "Klienter som använder den modden kickas för felaktig signatur. Använd Synka nycklar på sidan Moddar.",
+  "diag.missing_key.title": "En moddnyckel saknas i keys/",
+  "diag.mission_missing.detail": "Mallen som anges i serverDZ.cfg har ingen motsvarande mapp under mpmissions/. Välj en befintlig mission på sidan Server.",
+  "diag.mission_missing.title": "Missionen i server.cfg finns inte",
+  "diag.mod_missing.detail": "DayZ kunde inte öppna {subject}. Modden finns i startparametrarna men dess mapp saknas eller är ofullständig — installera eller synka om den på sidan Moddar och starta sedan igen.",
+  "diag.mod_missing.title": "En moddmapp som anges i -mod finns inte på servern",
+  "diag.mod_missing_generic.detail": "DayZ kunde inte öppna {subject}. Kontrollera att sökvägen finns och att inget antivirusprogram har satt den i karantän.",
+  "diag.mod_missing_generic.title": "En fil som servern behöver saknas",
+  "diag.no_economy.detail": "Servern kan köra men inte spawna någon loot. Kör valideraren: en saknad fil som refereras från cfgeconomycore.xml, eller ett okänt usage-/value-namn, är den vanliga orsaken.",
+  "diag.no_economy.title": "Den centrala ekonomin kunde inte laddas",
+  "diag.port_busy.detail": "En annan process — mycket ofta en tidigare DayZ-server som inte har avslutats helt — håller porten. Vänta några sekunder, eller ändra porten på sidan Server.",
+  "diag.port_busy.title": "Serverporten är redan upptagen",
+  "diag.script_error.detail": "Servern stoppade medan skripten kompilerades. Raderna strax efter den här i RPT-filen anger fil och radnummer — oftast en modd som inte passar den aktuella DayZ-versionen.",
+  "diag.script_error.title": "Ett skript kunde inte kompileras",
+  "economy.categories": "Hur många lootkategorier (vapen, mat, verktyg…) som förekommer i den här filen.",
+  "economy.items": "Hur många olika föremålstyper den här filen definierar.",
+  "economy.min": "Summan av alla föremåls min — golvet som den centrala ekonomin fyller på varje föremål upp till.",
+  "economy.nominal": "Summan av alla föremåls nominal — det antal av varje föremål som kartan försöker hålla spawnat.",
+  "economy.tune": "Skala alla nominal/min i den här filen med ett klick. ×2 = dubbelt så mycket loot; ×1 återställer originalvärdena.",
+  "events.active": "0 stänger av eventet men behåller dess konfiguration. Det är så säsongsevent (jul, halloween) levereras i vaniljen.",
+  "events.children": "Objektklasserna som det här eventet spawnar, med egna lootintervall. Att redigera dem för hand är vad redigeraren Missions-DB är till för.",
+  "events.lifetime": "Sekunder som en spawnad grupp finns kvar i världen innan den försvinner om ingen rör den.",
+  "events.minmax": "min och max begränsar gruppens storlek per spawn. max=0 betyder obegränsat — därför står det min=100 max=0 på vaniljens omgivningsevent.",
+  "events.nominal": "Hur många av det här eventet servern håller igång samtidigt. Fordon, helikopterkrascher, djurflockar och grupper av infekterade är alla event.",
+  "events.restock": "Sekunder innan ett tömt eller förbrukat event spawnar igen. 0 = fyll på så snart det går.",
+  "events.saveable": "1 = den spawnade gruppen skrivs till persistensen och överlever en omstart; 0 = den slumpas fram på nytt vid varje start.",
+  "gameplay.file": "cfggameplay.json åsidosätter spelreglerna — uthållighet, byggande, kartans beteende. DayZ ignorerar hela filen vid ett enda syntaxfel, så den valideras innan den sparas.",
+  "leaderboard.metrics": "Välj vad som ska rankas: total speltid, kills, kill/död-kvot eller antal sessioner.",
+  "loadout": "Vad en spelare har på sig och bär med sig när hen spawnar. Det här är DayZ:s spawn-gear-förinställningar, registrerade i cfggameplay.json — ändringarna börjar gälla efter en omstart av servern. I vaniljen finns utrustningen i stället i init.c, därför visar en ny mission ingenting här förrän du aktiverar systemet.",
+  "loadout.carried": "Lösa föremål som läggs direkt i den nya spelarens inventarie i stället för i en klädslot — trasor, mat, ett startverktyg.",
+  "loadout.characters": "Vilka överlevarmodeller förinställningen gäller för (SurvivorM_Mirek, SurvivorF_Eva, …). Lämna tomt för att gälla alla; en väljs slumpmässigt vid varje spawn.",
+  "loadout.condition": "Skicket ett föremål spawnar i. I DayZ är 1.0 = nyskick och 0.0 = förstört, så högre är bättre. Nyskick håller nyspawnades utrustning ny; välj Anpassad… för att ange ett exakt min–max-intervall för hälsan, så spawnar föremålet någonstans inom det.",
+  "loadout.weight": "Den här förinställningens vikt jämfört med de andra. DayZ väljer EN förinställning per spawn, så en förinställning med vikt 3 är tre gånger så trolig som en med vikt 1.",
+  "loadout.worn": "Föremål som placeras på kroppen, en kroppsslot i taget. Inom en slot väljer DayZ ETT föremål efter vikt, så flera varianter ger variation från spawn till spawn.",
+  "logs.adm": "Vad spelarna gjorde: anslutningar, chatt, kills, positioner. Kräver flaggan -adminlog; sidan Spelare bygger på den.",
+  "logs.rpt": "Vad servern själv gjorde: uppstart, laddning av moddar, skriptfel, krascher. Det är den här filen du ska läsa när servern inte vill starta.",
+  "moddrift.help.active": "Hur många av de typerna som faktiskt finns i din ekonomi (types.xml + moded_types).",
+  "moddrift.help.missing": "Typer som modden har med men som saknas i din ekonomi — de här föremålen spawnar inte förrän de har slagits ihop.",
+  "moddrift.help.ships": "Hur många loottyper moddens egen typfil definierar.",
+  "mods.order": "DayZ laddar moddar från vänster till höger. Ramverk måste komma först: @CF före allt som bygger på den, Expansion Core före sina tillägg. Fel ordning är en vanlig orsak till att en server vägrar starta.",
+  "mods.profiles": "Sparar den nuvarande uppsättningen aktiverade moddar under ett namn, så att du kan växla mellan en moddad och en vanilj-uppsättning utan att slå på och av allt igen.",
+  "mods.scan": "Letar efter en types.xml i modden och registrerar den i cfgeconomycore.xml, så att moddens loot faktiskt spawnar.",
+  "mods.serverSide": "Laddar modden med -serverMod i stället för -mod: den körs på servern och klienterna varken behöver eller får den. Endast för adminverktyg — en loot- eller innehållsmodd som körs på serversidan fungerar inte.",
+  "mods.uninstall": "Tar bort moddmappen från servern. Dess .bikey raderas bara om ingen annan installerad modd använder samma nyckel, så delade nycklar som Expansions finns kvar.",
+  "mods.update": "Kopierar nyare filer från klientens !Workshop till servern. Managern kan inte ladda ner moddar — prenumerera i Steam först.",
+  "rcon.password": "Skrivs till battleye/beserver_x64.cfg. BattlEye läser den filen bara vid start, så ett nytt lösenord gör ingenting förrän nästa omstart.",
+  "server.forceSameBuild": "Kräv att klienterna kör exakt samma spelversion (1). Förhindrar krascher på grund av versionsskillnader.",
+  "server.hostname": "Servernamnet som visas i DayZ:s serverlista. Håll det kort och lätt att söka efter.",
+  "server.instanceId": "Vilken sparfil servern använder. Ändrar du den startar servern i en helt ny värld — den gamla sparfilen ligger kvar på disken under sitt eget id.",
+  "server.loginQueue": "Hur många spelare som får ansluta samtidigt och vänta i inloggningskön — jämnar ut stora anstormningar.",
+  "server.maxPlayers": "Spelarplatser. Att höja antalet uppgraderar inte din hårdvara: varje plats kostar RAM och CPU, och DayZ blir instabilt långt innan de flesta datorer tar slut på resurser.",
+  "server.mission": "Vilken missionsmapp under mpmissions/ servern laddar. Det är så du byter karta — chernarusplus, enoch (Livonia), sakhal.",
+  "server.nightTimeAccel": "Extra hastighetsmultiplikator för natten ovanpå dagens takt, så att nätterna kan gå fortare än dagarna.",
+  "server.password": "Lösenord för att ansluta. Lämna tomt för en publik server; ange ett för att göra servern privat.",
+  "server.passwordAdmin": "Adminlösenord i spelet (#login). Skilt från RCon-lösenordet — håll det hemligt.",
+  "server.respawnTime": "Sekunder en spelare måste vänta innan hen kan spawna igen efter döden. Långa värden avskräcker från självmord för att slumpa om spawnpunkten.",
+  "server.steamQueryPort": "Porten som Steam använder för att lista din server. Den måste vara ledig och vidarebefordrad, annars kör servern utan problem men syns aldrig i serverlistan.",
+  "server.storageAutoFix": "Låt DayZ reparera en skadad persistenslagring vid laddning (1) i stället för att misslyckas med att starta.",
+  "server.thirdPerson": "1 tvingar fram enbart förstapersonsvy. Den ändrar hur spelet spelas mer än någon annan enskild inställning, så bestäm dig innan du bygger upp en spelarbas.",
+  "server.timeAccel": "Hastighetsmultiplikator för dagtid (1 = verklig tid, 24 = ett helt dygn på en timme). Intervall ~0.1–64.",
+  "server.timePersistent": "Behåll världens klocka mellan omstarter (1) i stället för att återställa den till serverTime vid varje start (0).",
+  "server.verifySignatures": "2 betyder att varje moddfil måste vara signerad med en nyckel i keys/. Sänker du till 0 laddas osignerade moddar — och modifierade klienter släpps in. Låt den stå på 2.",
+  "server.von": "Röstchatt över nätverket. Stänger du av den försvinner röstchatten i spelet helt, även radion.",
+  "server.whitelist": "Endast spelare som du har listat får ansluta. Låt den vara av om du inte underhåller en vitlistefil.",
+  "settings.adminlog": "Aktiverar -adminlog, som skriver .ADM-filen. Sidan Spelare och killfeeden bygger på den och förblir tomma utan den.",
+  "settings.backup": "Zippar dina konfigurationer och missionsfiler enligt ett schema och behåller de N senaste. Dessutom får varje fil som panelen skriver över en tidsstämplad .bak bredvid sig.",
+  "settings.exposure": "”Endast lokalt” betyder att bara den här datorn kan öppna panelen. ”Lokalt nätverk” låter din telefon och andra enheter hemma öppna den. ”Internet” gör den nåbar var som helst ifrån — det kräver en panelinloggning, och Inställningar → Fjärråtkomst kontrollerar resten (router, brandvägg, publik IP).",
+  "settings.modSource": "Varifrån managern kopierar moddar. DayZ-klientmapp: spelinstallationen med !Workshop (prenumerera i Steam, managern kopierar och uppdaterar). Moddmapp: valfri mapp med @moddar, eller SteamCMD:s workshop/content/221100 — sättet att få Workshop-moddar på en värd utan installerat spel. Endast server: ingen källa; moddar som du laddar upp för hand hanteras ändå, men automatisk uppdatering är avstängd.",
+  "settings.perf": "CPU-affinitet låser DayZServer till de kärnor du bockar för (kärnor utan bock förblir lediga för operativsystemet, en andra server eller andra program). Prioriteten talar om för operativsystemet hur ivrigt det ska schemalägga processen — Över normal är en säker förstärkning; Hög kan göra resten av datorn trög. Båda tillämpas vid varje start. På Linux kräver höjd prioritet root.",
+  "settings.restart": "Startar om servern enligt ett schema. Spelarna får varningar via RCon i förväg, vilket kräver att ett RCon-lösenord är angivet.",
+  "settings.restartBehaviour": "Vad spelarna upplever kring varje automatisk omstart: nedräkningstexten de ser (skriv den på deras språk), ett valfritt fönster precis före omstarten då servern låses och alla kickas så att deras karaktärer sparas korrekt, och en kontrollerad #shutdown som sparar världen innan processen stoppas. Tidslinjen nedan visar exakt ordning.",
+  "settings.watchdog": "Startar om servern om den avslutas av sig själv. Efter tre krascher på fem minuter slutar den och visar en banderoll — en kraschloop behöver en människa, inte ännu en omstart.",
+  "sync.import": "Kopierar inställningar från en annan installation av managern. Befintliga värden skrivs över, så säkerhetskopiera först om du är osäker.",
+  "types.bulk": "Tillämpar de här värdena på alla markerade rader på en gång. Bara fälten du fyller i ändras.",
+  "types.category": "Grupperar föremålet för lootsystemet (vapen, mat, kläder…). Namnet måste finnas i cfglimitsdefinition.xml, annars hoppar DayZ över posten.",
+  "types.cost": "Spawnprioritet när servern har fler kandidater än platser. Högre vinner. Det är inte pengar och spelarna ser det aldrig.",
+  "types.flags": "count_in_cargo / count_in_hoarder / count_in_map / count_in_player avgör om föremål som redan förvaras i ett tält, en bil eller en ryggsäck räknas mot nominal. Stänger du av dem fortsätter servern att spawna mer av ett föremål som spelarna har hamstrat.",
+  "types.lifetime": "Sekunder som ett orört föremål finns kvar innan det försvinner. 3888000 är 45 dagar.",
+  "types.min": "När antalet sjunker till detta köar servern en ny spawn. Får inte överstiga nominal — DayZ begränsar det och loggar en varning.",
+  "types.nominal": "Hur många av det här föremålet servern försöker hålla i världen samtidigt. 0 betyder att det aldrig spawnar.",
+  "types.quant": "Fyllnadsgrad i procent för föremål med en mängd (drycker, bränsle). Använd -1 för att stänga av, annars 0–100.",
+  "types.restock": "Sekunder som servern väntar innan den fyller på föremålet igen. 0 betyder direkt.",
+  "types.tag": "Begränsar var i en byggnad föremålet hamnar: floor, shelves, ground. Ett föremål utan tag kan använda alla ytor som dess usage tillåter.",
+  "types.usage": "Vilka byggnadstyper föremålet får spawna i (Military, Police, Farm…). Ingen usage betyder ingen plats att spawna på.",
+  "types.value": "Lootnivå: Tier1 är kusten, Tier4 är djupt inne i landet och militärt. Styr hur långt från spawnen föremålet dyker upp.",
+  "validator.autofix": "Lägger till okända usage-/value-/tag-/category-namn i cfglimitsdefinition.xml. Det är oftast det som får moddloot att börja spawna — namnen måste finnas där, annars ignorerar DayZ posten.",
+  "validator.severity": "Fel förstör något redan nu. Varningar är sådant som DayZ tolererar men som oftast betyder att konfigurationen inte gör det du tänkt dig.",
+  "vehicles.lifetime": "Den lifetime som den centrala ekonomin använder för det här eventet (vaniljens fordon: 300). Den får inte hela bilar att försvinna — vaniljens fordon finns kvar tills de förstörs eller världen wipas. Behåll vaniljvärdet om inte en modds guide säger något annat.",
+  "vehicles.loot": "Variantens lootmin / lootmax från events.xml, oförändrade (vaniljens fordon använder 0). Ett fordons delar — hjul, dörrar, batteri, tändstift — kommer från cfgspawnabletypes: använd knapparna ”Delar vid spawn” nedan, eller sidan Tillbehör för chanser per del.",
+  "vehicles.max": "Absolut tak för den här fordonstypen, inklusive de som spelarna har gömt eller parkerat. Oftast lika med nominal.",
+  "vehicles.min": "När färre än så här många finns spawnar ekonomin nya (efter restock-fördröjningen) upp till nominal.",
+  "vehicles.nominal": "Hur många av det här fordonet ekonomin försöker hålla på kartan samtidigt (alla färgvarianter tillsammans).",
+  "vehicles.restock": "Sekunder som ekonomin väntar innan den ersätter ett förstört eller försvunnet fordon. 0 = ersätt så snart som möjligt.",
+  "weather.accel": "Multiplicerar hur fort tiden går i spelet. 12 betyder att ett helt dygn tar två verkliga timmar. Natten är separat så att du kan hålla nätterna korta.",
+  "weather.dynamic": "Av låser vädret där du ställt in det. På låter servern ändra det av sig själv inom gränserna.",
+  "weather.fog": "Dimmans täthet, 0–100 %. Tjock dimma begränsar sikten kraftigt — spännande för lootrundor, tufft för krypskyttar.",
+  "weather.overcast": "Molntäcke, 0–100 %. Högre är gråare och mörkare; det styr också regnet — regn kräver ett molntäcke över ungefär 70 %.",
+  "weather.rain": "Regnets intensitet, 0–100 %. Faller bara när molntäcket är tillräckligt högt; blöter ner spelaren och dämpar ljud.",
+  "weather.snowfall": "Snöfallets intensitet, 0–100 % (syns främst på snökartor som Sakhal).",
+  "weather.storm": "Har bara effekt när regnet och molntäcket är tillräckligt höga för att en storm alls ska kunna utlösas.",
+  "weather.timePreset": "Ställer in klockan i spelet när servern startar. SystemTime följer datorns klocka; ett fast värde startar alltid kartan vid samma timme.",
+  "weather.transition": "Hur gradvis vädret förändras. Mjuk ändras under ungefär en halvtimme i små steg, som i vanilj-DayZ. Snabb kan svepa över hela skalan på två minuter, vilket är det som får vädret att kännas som en strömbrytare.",
+  "weather.wind": "Vindhastighet i m/s. Styr molnens rörelse och, med reglaget för dynamiskt väder, hur fort vädret ändras.",
+  "wipe": "Raderar världens sparade tillstånd: spelare, fordon, baser. Loottabeller och konfigurationer lämnas orörda. Mapparna flyttas undan i stället för att raderas, så ett misstag kan ångras för hand.",
+  "wipe.undo": "En wipe flyttar världsmapparna till .dayz-manager/wipes/<timestamp>/ i stället för att radera dem, så den går att ångra — tills servern bygger upp det tillståndet igen, och då skulle den gamla världen begrava den nya om du lägger tillbaka den."
+ },
+ "gameplay": {
+  "version": "Filens formatversion. DayZ skriver den — låt den vara som den är.",
+  "GeneralData": "Serverövergripande brytare: skada på baser och förvaring, respawnskärmen.",
+  "PlayerData": "Regler för spelare: personligt ljus, uthållighet, chock, rörelse, drunkning och startutrustningarna.",
+  "StaminaData": "Hur snabbt uthålligheten tar slut och hur mycket vikt spelare bär utan straff.",
+  "ShockHandlingData": "Hur snabbt chock (skadan som slår ut spelare) klingar av.",
+  "MovementData": "Figurens tröghet: hur snabbt den accelererar och vrider sig.",
+  "DrowningData": "Vad spelare förlorar per sekund medan de drunknar.",
+  "WeaponObstructionData": "Om ett långt vapen trycks åt sidan när det skulle gå in i väggar och objekt.",
+  "WorldsData": "Världsinställningar: nattmörker, månadstemperaturer, extra objekt, vikt på blöta kläder.",
+  "BaseBuildingData": "Regler för basbygge: placeringskontrollerna och byggkontrollerna.",
+  "HologramData": "Kontroller av den gröna/röda placeringsförhandsvisningen. Att stänga av en låter spelare placera saker som spelet annars vägrar.",
+  "ConstructionData": "Kontroller som görs medan en basdel byggs.",
+  "UIData": "Gränssnitt: 3D-kartan och träffindikatorn.",
+  "HitIndicationData": "Markeringen på skärmen som visar varifrån en träff kom. Används bara med ”Använd de här inställningarna” på.",
+  "MapData": "Kartan i spelet: om spelare behöver karta, kompass eller GPS, och vad kartan visar.",
+  "VehicleData": "Fordonsinställningar.",
+  "disableBaseDamage": "Väggar, grindar, staket och vakttorn tar ingen skada alls — raider blir omöjliga.",
+  "disableContainerDamage": "Tält, tunnor, lådor och gömmor tar ingen skada.",
+  "disableRespawnDialog": "Ingen respawnskärm efter döden: spelaren kommer tillbaka direkt på en slumpmässig spawn.",
+  "disableRespawnInUnconsciousness": "En medvetslös spelare kan inte trycka på Respawn — hen vaknar eller dör först.",
+  "disablePersonalLight": "Tar bort det svaga skenet runt varje spelare på natten — mörkare nätter. Åsidosätter samma inställning i serverDZ.cfg.",
+  "spawnGearPresetFiles": "Filerna med startutrustning. De hanteras på sidan Spelarutrustning.",
+  "sprintStaminaModifierErc": "Uthållighetsförbrukning vid sprint i upprätt läge. 1 = som i spelet; högre tröttar ut snabbare, 0 = ingen förbrukning.",
+  "sprintStaminaModifierCro": "Uthållighetsförbrukning vid hukande löpning. 1 = som i spelet.",
+  "staminaWeightLimitThreshold": "Vikt i gram som spelare bär innan den börjar sänka deras maximala uthållighet. 6000 = 6 kg.",
+  "staminaMax": "Uthållighetsreservens storlek. Högre = längre sprintar.",
+  "staminaKgToStaminaPercentPenalty": "Hur mycket varje kilo över gränsen sänker den maximala uthålligheten.",
+  "staminaMinCap": "Det lägsta den maximala uthålligheten kan sjunka till under tung last.",
+  "sprintSwimmingStaminaModifier": "Uthållighetsförbrukning vid snabb simning. 1 = som i spelet.",
+  "sprintLadderStaminaModifier": "Uthållighetsförbrukning vid snabb klättring i stege. 1 = som i spelet.",
+  "meleeStaminaModifier": "Uthållighetskostnad för tunga närstridsattacker och blockering. 1 = som i spelet.",
+  "obstacleTraversalStaminaModifier": "Uthållighetskostnad för att klättra och hoppa över hinder. 1 = som i spelet.",
+  "holdBreathStaminaModifier": "Uthållighetsförbrukning när andan hålls för att sikta. 1 = som i spelet.",
+  "shockRefillSpeedConscious": "Hur snabbt chock klingar av medan spelaren är vid medvetande. Högre = snabbare återhämtning.",
+  "shockRefillSpeedUnconscious": "Hur snabbt chock klingar av medan spelaren är medvetslös — hur snart hen vaknar.",
+  "allowRefillSpeedModifier": "Spelarens skick (blod, hälsa) snabbar upp eller saktar ned chockåterhämtningen.",
+  "timeToStrafeJog": "Sekunder till full fart vid jogg i sidled. Lägre = kvickare rörelser.",
+  "rotationSpeedJog": "Hur snabbt figuren vrider sig när den joggar.",
+  "timeToSprint": "Sekunder för att accelerera från jogg till sprint.",
+  "timeToStrafeSprint": "Sekunder till full fart vid sprint i sidled.",
+  "rotationSpeedSprint": "Hur snabbt figuren vrider sig när den sprintar.",
+  "allowStaminaAffectInertia": "Med lite uthållighet kvar accelererar och vrider sig figuren långsammare.",
+  "staminaDepletionSpeed": "Uthållighet som förloras per sekund under vatten.",
+  "healthDepletionSpeed": "Hälsa som förloras per sekund under drunkning.",
+  "shockDepletionSpeed": "Chock som läggs till per sekund under drunkning.",
+  "staticMode": "Mot väggar och statiska objekt: 0 = av, 1 = på (som i spelet), 2 = alltid.",
+  "dynamicMode": "Mot spelare, fordon och andra rörliga objekt: 0 = av, 1 = på (som i spelet), 2 = alltid.",
+  "lightingConfig": "Nattmörker: 0 = ljusare nätter (som i spelet), 1 = mörka nätter. Åsidosätter samma inställning i serverDZ.cfg.",
+  "objectSpawnersArr": "JSON-filer (sökvägar inuti uppdraget) som placerar extra statiska objekt i världen.",
+  "environmentMinTemps": "Lägsta lufttemperatur för varje månad, januari till december, °C. Utelämna för att använda kartans egna.",
+  "environmentMaxTemps": "Högsta lufttemperatur för varje månad, januari till december, °C. Utelämna för att använda kartans egna.",
+  "wetnessWeightModifiers": "Viktmultiplikatorer för kläder för de fem väthetsnivåerna, från torr till genomblöt.",
+  "disableIsCollidingBBoxCheck": "Delar får överlappa andra objekt när de placeras — tätare, överlappande byggen.",
+  "disableIsCollidingPlayerCheck": "Delar får placeras där en spelare står.",
+  "disableIsClippingRoofCheck": "Delar får placeras genom tak och innertak.",
+  "disableIsBaseViableCheck": "Objekt får placeras utan fast mark under sig.",
+  "disableIsCollidingGPlotCheck": "Odlingslotter får placeras där de skulle kollidera med andra objekt.",
+  "disableIsCollidingAngleCheck": "Objekt får placeras på sluttningar som normalt är för branta.",
+  "disableIsPlacementPermittedCheck": "Objekt får placeras där kartan normalt förbjuder det.",
+  "disableHeightPlacementCheck": "Objekt får placeras högre ovanför spelarens fötter än normalt tillåtet.",
+  "disableIsUnderwaterCheck": "Objekt får placeras under vatten.",
+  "disableIsInTerrainCheck": "Objekt får sänkas ned i terrängen.",
+  "disableColdAreaBuildingCheck": "Byggande är tillåtet i de kalla områden där spelet normalt förbjuder det (Sakhal).",
+  "disallowedTypesInUnderground": "Byggsatser som inte kan placeras i underjordiska områden (bunkrar, grottor).",
+  "disablePerformRoofCheck": "Basdelar får byggas under tak och inomhus.",
+  "disableIsCollidingCheck": "Basdelar får byggas även när något är i vägen.",
+  "disableDistanceCheck": "Basdelar får byggas från valfritt avstånd.",
+  "use3DMap": "Kartan öppnas som ett föremål i händerna i stället för i helskärm.",
+  "hitDirectionOverrideEnabled": "Tillämpa inställningarna nedan på alla spelare i stället för deras egna.",
+  "hitDirectionBehaviour": "0 = ingen indikator, 1 = statisk, 2 = följer angriparen.",
+  "hitDirectionStyle": "0 = stänk, 1 = spets, 2 = pil.",
+  "hitDirectionIndicatorColorStr": "Indikatorns färg som 0xAARRGGBB (alfa, röd, grön, blå).",
+  "hitDirectionMaxDuration": "Hur många sekunder indikatorn stannar på skärmen.",
+  "hitDirectionBreakPointRelative": "Del av varaktigheten (0–1) efter vilken indikatorn börjar tona ut.",
+  "hitDirectionScatter": "Slumpmässig spridning som läggs till riktningen, i grader.",
+  "hitIndicationPostProcessEnabled": "Skärmen blixtrar rött när spelaren träffas.",
+  "ignoreMapOwnership": "Spelare kan öppna kartan utan att bära en karta.",
+  "ignoreNavItemsOwnership": "Kartan visar kompass- och GPS-info utan att man bär en kompass eller GPS.",
+  "displayPlayerPosition": "Spelarens egen position markeras på kartan.",
+  "displayNavInfo": "Kartan visar navigationsinfon (rutnät och kompass).",
+  "boatDecayMultiplier": "Hur snabbt båtar förfaller. 1 = som i spelet, lägre = långsammare."
+ },
+ "globals": {
+  "AnimalMaxCount": "Högsta antal levande djur på kartan samtidigt.",
+  "CleanupAvoidance": "Faktor som hindrar nyspawnad loot från att städas bort för tidigt.",
+  "CleanupLifetimeDeadAnimal": "Sekunder som ett dött djurkadaver ligger kvar innan det tas bort.",
+  "CleanupLifetimeDeadInfected": "Sekunder som en död infekterad ligger kvar innan den tas bort.",
+  "CleanupLifetimeDeadPlayer": "Sekunder som en död spelares kropp och utrustning ligger kvar innan de tas bort.",
+  "CleanupLifetimeDefault": "Standardtid i sekunder som ett tappat föremål ligger kvar innan städning, när dess typ inte anger någon lifetime.",
+  "CleanupLifetimeLimit": "Undre gräns (s) som städningen använder för föremål med mycket kort lifetime.",
+  "CleanupLifetimeRuined": "Sekunder som ett förstört föremål ligger kvar på marken innan städning.",
+  "FlagRefreshFrequency": "Hur ofta (s) en hissad territorieflagga förnyar lifetime för utplacerade föremål i närheten.",
+  "FlagRefreshMaxDuration": "Högsta lifetime (s) som en flagga kan förnya föremål till — taket för basförfall (vanilj ≈ 45 dagar).",
+  "IdleModeCountdown": "Sekunder utan anslutna spelare innan ekonomin går i viloläge och slutar spawna loot.",
+  "IdleModeStartup": "Starta ekonomin i viloläge tills den första spelaren ansluter (1 = ja).",
+  "InitialSpawn": "Mängden initial loot som spawnas när ekonomin startar första gången.",
+  "LoginTimeMax": "Längsta tid (s) inloggningen får ta innan försöket avbryts.",
+  "LogoutTimeMax": "Längsta väntetid vid utloggning (s).",
+  "RespawnAttempt": "Hur många gånger motorn försöker igen per cykel när en lootspawn misslyckas.",
+  "RespawnTypes": "Hur många loottyper som bearbetas för respawn varje cykel.",
+  "SpawnInitial": "Mängden initial loot som spawnas när ekonomin startar första gången.",
+  "TimeHopping": "Extra inloggningsfördröjning (s) för spelare som serverhoppar, för att avskräcka från det.",
+  "TimeLogin": "Sekunder som en spelare väntar på laddningsskärmen vid inloggning.",
+  "TimeLogout": "Sekunder som en spelare måste stanna kvar i världen efter att ha valt att logga ut (mot combat-logging).",
+  "TimePenalty": "Ytterligare väntetid (s) för att logga ut när man nyligen varit i strid.",
+  "WorldWetTempUpdate": "Hur ofta (s) väta och temperatur för föremål i världen uppdateras.",
+  "ZombieMaxCount": "Högsta antal levande infekterade på kartan samtidigt.",
+  "ZoneSpawnDist": "Avstånd (m) från en spelare där dynamiska zoner för infekterade/djur spawnar."
+ }
+}

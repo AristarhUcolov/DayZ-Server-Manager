@@ -28,9 +28,12 @@ import (
 )
 
 type Player struct {
-	Key       string   `json:"key"`          // GUID when known, else "name:<name>"
-	ID        string   `json:"id,omitempty"` // BE GUID from id=
-	Name      string   `json:"name"`         // most recent name
+	Key string `json:"key"` // the player ID when known, else "name:<name>"
+	// ID is DayZ's player ID from the admin log's id= (44 characters, the
+	// SHA-256 of the Steam64 ID). It is what the server's own ban.txt and
+	// whitelist.txt take — NOT the BattlEye GUID.
+	ID        string   `json:"id,omitempty"`
+	Name      string   `json:"name"` // most recent name
 	Aliases   []string `json:"aliases,omitempty"`
 	FirstSeen string   `json:"firstSeen"` // RFC3339
 	LastSeen  string   `json:"lastSeen"`
@@ -39,6 +42,10 @@ type Player struct {
 	Kills     int      `json:"kills"`
 	Deaths    int      `json:"deaths"`
 	Online    bool     `json:"online"` // filled at serve time from RCon
+	// BattlEye's GUID (32 hex) and the last IP address, learnt from RCon's
+	// player list while the player was online (matched by name).
+	BEGUID string `json:"beGuid,omitempty"`
+	LastIP string `json:"ip,omitempty"`
 	// Admin-set metadata, persisted alongside the derived stats. ADM ingestion
 	// never touches these — a note or a watch flag survives every log pass.
 	Note  string `json:"note,omitempty"`
@@ -88,6 +95,20 @@ type Store struct {
 	// Recent connects of watch-flagged players — a transient notification feed
 	// for the panel, not persisted (a fresh feed after a restart is fine).
 	watchLog []WatchEvent
+
+	// OnLive, when set, receives events from the live tail of the admin log
+	// (not the history read at start-up) — Discord's kill feed and watchlist
+	// pings. Called after the store's lock is released.
+	OnLive  func(LiveEvent)
+	opened  time.Time
+	pending []LiveEvent
+}
+
+// LiveEvent is a fresh admin-log event with the player it concerns.
+type LiveEvent struct {
+	Event  admlog.Event
+	At     time.Time
+	Player Player // the subject, as stored after the event
 }
 
 // WatchEvent is one connect by a watch-flagged player.
@@ -111,6 +132,7 @@ func Open(managerDir string) *Store {
 		open:      map[string]time.Time{},
 		lastPos:   map[string][]float64{},
 		lastPosAt: map[string]time.Time{},
+		opened:    time.Now(),
 	}
 	if data, err := os.ReadFile(s.path); err == nil {
 		_ = json.Unmarshal(data, &s.d)
@@ -139,15 +161,26 @@ func (s *Store) save() {
 // pass per 15s — callers can invoke it opportunistically on every request.
 func (s *Store) Ingest(profilesDir string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	live := s.ingestLocked(profilesDir)
+	hook := s.OnLive
+	s.mu.Unlock()
+	if hook != nil {
+		for _, ev := range live {
+			hook(ev)
+		}
+	}
+}
+
+func (s *Store) ingestLocked(profilesDir string) []LiveEvent {
+	s.pending = nil
 	if time.Since(s.lastIn) < 15*time.Second {
-		return
+		return nil
 	}
 	s.lastIn = time.Now()
 
 	entries, err := os.ReadDir(profilesDir)
 	if err != nil {
-		return
+		return nil
 	}
 	changed := false
 	for _, e := range entries {
@@ -166,6 +199,9 @@ func (s *Store) Ingest(profilesDir string) {
 	if changed {
 		s.save()
 	}
+	out := s.pending
+	s.pending = nil
+	return out
 }
 
 // ingestFile reads the unparsed tail of one ADM file. Returns true when any
@@ -235,6 +271,14 @@ func (s *Store) ingestFile(path string, size int64, mtime time.Time) bool {
 		}
 		if s.apply(ev, at.Format(time.RFC3339), at) {
 			changed = true
+			// Only what happened while the manager runs is news.
+			if s.OnLive != nil && !at.Before(s.opened.Add(-2*time.Minute)) && time.Since(at) < 10*time.Minute {
+				le := LiveEvent{Event: ev, At: at}
+				if p := s.d.Players[keyFor(ev.ID, ev.Player)]; p != nil {
+					le.Player = *p
+				}
+				s.pending = append(s.pending, le)
+			}
 		}
 	}
 	return changed
@@ -453,6 +497,107 @@ func (s *Store) SetMeta(key, note string, watch bool) bool {
 	p.Watch = watch
 	s.save()
 	return true
+}
+
+// OnlineRef is one player of RCon's live list.
+type OnlineRef struct {
+	Name, GUID, IP string
+}
+
+// LinkRCon attaches BattlEye GUIDs and IP addresses from RCon's player list to
+// the players of the database. A player is matched by GUID when already
+// linked, else by name — but only when exactly one player of that name is in
+// an open session (connected in the admin log): "Survivor" is the default
+// name of every new character, so a name alone proves nothing. Returns how
+// many players changed.
+func (s *Store) LinkRCon(online []OnlineRef) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for _, o := range online {
+		guid := strings.ToLower(strings.TrimSpace(o.GUID))
+		if len(guid) != 32 {
+			guid = ""
+		}
+		var match *Player
+		if guid != "" {
+			for _, p := range s.d.Players {
+				if p.BEGUID == guid {
+					match = p
+					break
+				}
+			}
+		}
+		if match == nil {
+			count := 0
+			for key, p := range s.d.Players {
+				if p.Name != o.Name {
+					continue
+				}
+				if _, open := s.open[key]; !open {
+					continue
+				}
+				count++
+				match = p
+			}
+			if count != 1 {
+				match = nil
+			}
+		}
+		if match == nil {
+			continue
+		}
+		changed := false
+		if guid != "" && match.BEGUID != guid {
+			match.BEGUID, changed = guid, true
+		}
+		if ip := strings.TrimSpace(o.IP); ip != "" && match.LastIP != ip {
+			match.LastIP, changed = ip, true
+		}
+		if changed {
+			n++
+		}
+	}
+	if n > 0 {
+		s.save()
+	}
+	return n
+}
+
+// Get returns one player by key.
+func (s *Store) Get(key string) (Player, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p := s.d.Players[key]
+	if p == nil {
+		return Player{}, false
+	}
+	return *p, true
+}
+
+// InSession reports which players have an open session in the admin log
+// (connected, not yet disconnected), by key.
+func (s *Store) InSession() map[string]bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]bool, len(s.open))
+	for k := range s.open {
+		out[k] = true
+	}
+	return out
+}
+
+// SessionStarts is when each player with an open session connected, by key —
+// how long someone online has been in (a fresh join next to a fight reads
+// differently from a regular).
+func (s *Store) SessionStarts() map[string]time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]time.Time, len(s.open))
+	for k, t := range s.open {
+		out[k] = t
+	}
+	return out
 }
 
 // WatchActivity returns the recent connects of watch-flagged players, oldest

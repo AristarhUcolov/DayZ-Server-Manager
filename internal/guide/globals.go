@@ -19,8 +19,8 @@ var globalsHelpEN = map[string]string{
 	"TimeLogout":                  "Seconds a player must stay in-world after choosing to log out (anti-combat-log).",
 	"TimeHopping":                 "Extra login delay (s) applied to players who server-hop, to discourage it.",
 	"TimePenalty":                 "Additional wait (s) for logging out while recently in combat.",
-	"LoginTimeMax":               "Maximum time (s) the login can take before the attempt is dropped.",
-	"LogoutTimeMax":              "Maximum logout wait (s).",
+	"LoginTimeMax":                "Maximum time (s) the login can take before the attempt is dropped.",
+	"LogoutTimeMax":               "Maximum logout wait (s).",
 	"WorldWetTempUpdate":          "How often (s) the wetness and temperature of world items is updated.",
 	"CleanupAvoidance":            "Factor that keeps freshly spawned loot from being cleaned up too soon.",
 	"CleanupLifetimeDefault":      "Default seconds a dropped item stays before cleanup when its type sets no lifetime.",
@@ -47,8 +47,8 @@ var globalsHelpRU = map[string]string{
 	"TimeLogout":                  "Секунд, которые игрок остаётся в мире после выбора выхода (защита от combat-log).",
 	"TimeHopping":                 "Доп. задержка входа (с) для игроков, прыгающих по серверам, чтобы отбить желание.",
 	"TimePenalty":                 "Доп. ожидание (с) за выход из игры сразу после боя.",
-	"LoginTimeMax":               "Максимальное время входа (с), после которого попытка сбрасывается.",
-	"LogoutTimeMax":              "Максимальное ожидание выхода (с).",
+	"LoginTimeMax":                "Максимальное время входа (с), после которого попытка сбрасывается.",
+	"LogoutTimeMax":               "Максимальное ожидание выхода (с).",
 	"WorldWetTempUpdate":          "Как часто (с) обновляется влажность и температура предметов в мире.",
 	"CleanupAvoidance":            "Коэффициент, не дающий только что заспавненному луту быть убранным слишком рано.",
 	"CleanupLifetimeDefault":      "Секунд, сколько лежит выброшенный предмет до уборки, если у типа не задан lifetime.",
@@ -72,6 +72,12 @@ func GlobalsFieldHelp(lang string) map[string]string {
 	if lang == "ru" {
 		for k, v := range globalsHelpRU {
 			out[k] = v
+		}
+	} else if b := bundleFor(lang); b != nil {
+		for k, v := range b.Globals {
+			if v != "" {
+				out[k] = v
+			}
 		}
 	}
 	return out

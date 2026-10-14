@@ -51,7 +51,7 @@ var (
 	// DayZ prints a health annotation between the position and the verb on hit
 	// lines: `pos=<…>)[HP: 98.19] hit by …`. Strip it so the verb detection sees
 	// "hit by …" (without this, no hit line parses → no live-map positions).
-	reHP = regexp.MustCompile(`^\[HP:[^\]]*\]\s*`)
+	reHP       = regexp.MustCompile(`^\[HP:[^\]]*\]\s*`)
 	reByPlayer = regexp.MustCompile(`Player "([^"]*)"\s*(?:\(DEAD\)\s*)?\(id=([^)]*?)\s*(?:pos=<[^>]*>)?\)\s*(.*)$`)
 	reWithWpn  = regexp.MustCompile(`(?:with|into)\s+([A-Za-z0-9_\-]+)`)
 	// Non-player killers: "killed by ZmbM_HermitSkinny_Beard with …",

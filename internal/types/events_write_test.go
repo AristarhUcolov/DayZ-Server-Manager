@@ -172,8 +172,12 @@ func TestAppendEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Find("MyEvent") == nil {
+	ev := doc.Find("MyEvent")
+	if ev == nil {
 		t.Fatal("appended event does not parse back")
+	}
+	if ev.Position != "fixed" || ev.Limit != "mixed" {
+		t.Errorf("new event position/limit = %q/%q, want fixed/mixed", ev.Position, ev.Limit)
 	}
 	if len(doc.Events) != 3 {
 		t.Errorf("events = %d, want 3", len(doc.Events))

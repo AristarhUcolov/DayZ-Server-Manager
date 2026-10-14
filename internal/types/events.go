@@ -39,6 +39,11 @@ type Event struct {
 	Restock  *int     `xml:"restock,omitempty"`
 	Saveable *int     `xml:"saveable,omitempty"`
 	Active   *int     `xml:"active,omitempty"`
+	// Where it spawns: "fixed" (cfgeventspawns.xml points — or, for
+	// animals, the env territory files), "player" (around players) or
+	// "uniform" (anywhere). Read only: edits patch the numbers in place.
+	Position string `xml:"position,omitempty"`
+	Limit    string `xml:"limit,omitempty"`
 	Children *struct {
 		Child []EventChild `xml:"child"`
 	} `xml:"children,omitempty"`

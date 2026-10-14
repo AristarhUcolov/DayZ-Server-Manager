@@ -46,7 +46,9 @@ func (h *handlers) economyStats(w http.ResponseWriter, r *http.Request) {
 
 	for i := range doc.Types {
 		t := &doc.Types[i]
-		cat := "uncategorized"
+		// "" = no <category>: the page names that bucket itself and does not
+		// count it as one of the file's categories.
+		cat := ""
 		if t.Category != nil && t.Category.Name != "" {
 			cat = t.Category.Name
 		}
@@ -88,6 +90,17 @@ func (h *handlers) economyStats(w http.ResponseWriter, r *http.Request) {
 		tops = tops[:20]
 	}
 
+	// When the ×1 snapshot was taken (0 = none yet), so the page can say what a
+	// reset would bring back — or that there is nothing to restore.
+	var baselineAt int64
+	if mission, merr := h.missionTemplate(); merr == nil {
+		if bp, ok := h.lootBaseline(mission, file, false); ok {
+			if st, serr := os.Stat(bp); serr == nil {
+				baselineAt = st.ModTime().Unix()
+			}
+		}
+	}
+
 	writeJSON(w, map[string]interface{}{
 		"file":         path,
 		"total":        len(doc.Types),
@@ -98,6 +111,7 @@ func (h *handlers) economyStats(w http.ResponseWriter, r *http.Request) {
 		"usages":       usages,
 		"values":       values,
 		"top":          tops,
+		"baselineAt":   baselineAt,
 	})
 }
 
@@ -134,14 +148,46 @@ func countMapToSorted(m map[string]int, limit int) []nameCount {
 
 // lootBaselinePath is where the untouched copy of a types file is kept the
 // first time it is scaled, so the ×1 "reset" can restore the original amounts.
-// Lives under the manager's own data dir, never inside the mission.
-func (h *handlers) lootBaselinePath(file string) string {
-	raw := file
-	if raw == "" {
-		raw = "types.xml"
+// Lives under the manager's own data dir, never inside the mission. The data
+// dir is one per server, not per mission, so the snapshot is keyed by mission
+// AND file: Chernarus' types.xml must never be restored into Livonia's.
+func (h *handlers) lootBaselinePath(mission, file string) string {
+	return filepath.Join(h.app.ManagerDir, "loot-baseline", sanitizeKey(mission), lootBaselineName(file))
+}
+
+// lootBaselineName — sanitizeKey caps length; distinct short types-file names
+// don't collide.
+func lootBaselineName(file string) string {
+	if file == "" {
+		file = "types.xml"
 	}
-	// sanitizeKey caps length; distinct short types-file names don't collide.
-	return filepath.Join(h.app.ManagerDir, "loot-baseline", sanitizeKey(filepath.Base(raw))+".xml")
+	return sanitizeKey(filepath.Base(file)) + ".xml"
+}
+
+// lootBaseline returns the snapshot path for a mission's types file and whether
+// a snapshot exists. Snapshots taken before they were keyed by mission sit
+// directly in loot-baseline/; one is claimed (moved under the mission, when
+// adopt is set) only when the server has a single mission — with several it
+// may belong to another map, and restoring it there would be wrong.
+func (h *handlers) lootBaseline(mission, file string, adopt bool) (string, bool) {
+	p := h.lootBaselinePath(mission, file)
+	if _, err := os.Stat(p); err == nil {
+		return p, true
+	}
+	legacy := filepath.Join(h.app.ManagerDir, "loot-baseline", lootBaselineName(file))
+	if _, err := os.Stat(legacy); err != nil || len(findMissions(h.mpmissionsDir(), 0)) != 1 {
+		return p, false
+	}
+	if !adopt {
+		return legacy, true
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return p, false
+	}
+	if err := os.Rename(legacy, p); err != nil {
+		return p, false
+	}
+	return p, true
 }
 
 // economyTune scales <nominal>/<min> across a types file by a factor, or (when
@@ -170,21 +216,37 @@ func (h *handlers) economyTune(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	basePath := h.lootBaselinePath(req.File)
+	mission, err := h.missionTemplate()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	basePath, hasBase := h.lootBaseline(mission, req.File, true)
 
-	// ×1 — restore the original amounts captured before the first scaling.
+	// ×1 — restore the amounts captured before the first scaling. Only
+	// <nominal>/<min> come back, matched by type name: copying the whole file
+	// over would also undo every Types / validator edit made since.
 	if req.Reset {
-		data, rerr := os.ReadFile(basePath)
-		if rerr != nil {
+		if !hasBase {
 			// Never scaled through here, so there's nothing to restore.
 			writeJSON(w, map[string]interface{}{"reset": true, "hadBaseline": false})
 			return
 		}
-		if err := writeFileAtomic(path, data); err != nil {
+		base, berr := dztypes.Load(basePath)
+		if berr != nil {
+			http.Error(w, berr.Error(), http.StatusInternalServerError)
+			return
+		}
+		restored := doc.RestoreAmounts(base)
+		// SaveTypes backs the current file up before writing.
+		if err := dztypes.SaveTypes(path, doc); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, map[string]interface{}{"reset": true, "hadBaseline": true})
+		// The file holds the snapshot's amounts again. The next scaling takes a
+		// fresh snapshot, so edits made after this reset survive a later ×1.
+		_ = os.Remove(basePath)
+		writeJSON(w, map[string]interface{}{"reset": true, "hadBaseline": true, "restored": restored})
 		return
 	}
 
@@ -198,18 +260,21 @@ func (h *handlers) economyTune(w http.ResponseWriter, r *http.Request) {
 	}
 	// Snapshot the untouched file the first time it's scaled, so ×1 can undo
 	// every later scaling back to these amounts.
-	if _, serr := os.Stat(basePath); os.IsNotExist(serr) {
+	if !hasBase {
 		if orig, oerr := os.ReadFile(path); oerr == nil {
 			_ = os.MkdirAll(filepath.Dir(basePath), 0o755)
 			_ = writeFileAtomic(basePath, orig)
 		}
 	}
-	touched := doc.Scale(req.Factor, dztypes.ScaleOpts{Nominal: req.Nominal, Min: req.Min, Category: req.Category})
+	touched, floored := doc.Scale(req.Factor, dztypes.ScaleOpts{Nominal: req.Nominal, Min: req.Min, Category: req.Category})
 	if touched > 0 {
 		if err := dztypes.SaveTypes(path, doc); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
-	writeJSON(w, map[string]interface{}{"touched": touched, "factor": req.Factor})
+	if floored == nil {
+		floored = []string{}
+	}
+	writeJSON(w, map[string]interface{}{"touched": touched, "factor": req.Factor, "floored": floored})
 }

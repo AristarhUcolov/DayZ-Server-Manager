@@ -10,10 +10,32 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 
 	dztypes "dayzmanager/internal/types"
 	"dayzmanager/internal/util"
 )
+
+var (
+	globalIntRe   = regexp.MustCompile(`^-?\d+$`)
+	globalFloatRe = regexp.MustCompile(`^-?\d+(\.\d+)?$`)
+)
+
+// globalValueOK checks a value against its variable's type (0 = integer,
+// 1 = float). An empty or malformed number — "", "abc", "1,5", "0.5" for an
+// integer — would otherwise be written into globals.xml as typed.
+func globalValueOK(typ, v string) bool {
+	v = strings.TrimSpace(v)
+	switch typ {
+	case "0":
+		return globalIntRe.MatchString(v)
+	case "1":
+		return globalFloatRe.MatchString(v)
+	}
+	return v != ""
+}
 
 func (h *handlers) globalsPath() (string, error) {
 	mission, err := h.missionTemplate()
@@ -63,9 +85,24 @@ func (h *handlers) globalsSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "globals.xml not found", http.StatusNotFound)
 		return
 	}
+	// Check every value against its variable's type before writing any.
+	types := map[string]string{}
+	for _, v := range doc.Vars {
+		types[strings.ToLower(v.Name)] = v.Type
+	}
+	var bad []string
+	for _, v := range req.Vars {
+		if typ, ok := types[strings.ToLower(v.Name)]; ok && !globalValueOK(typ, v.Value) {
+			bad = append(bad, v.Name+"="+strconv.Quote(v.Value))
+		}
+	}
+	if len(bad) > 0 {
+		http.Error(w, "not a valid number: "+strings.Join(bad, ", "), http.StatusBadRequest)
+		return
+	}
 	applied := 0
 	for _, v := range req.Vars {
-		if doc.SetValue(v.Name, v.Value) {
+		if doc.SetValue(v.Name, strings.TrimSpace(v.Value)) {
 			applied++
 		}
 	}

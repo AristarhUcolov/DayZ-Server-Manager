@@ -73,3 +73,31 @@ func TestUnregisterHandlesBothFormsAndOrders(t *testing.T) {
 		}
 	}
 }
+
+// A commented-out <file> line is not a registration.
+func TestRegisterCEFilesIgnoresCommentedEntries(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cfgeconomycore.xml")
+	src := `<economycore>
+    <ce folder="dzm_vehicles">
+        <!-- <file name="events.xml" type="events" /> -->
+    </ce>
+</economycore>
+`
+	if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RegisterCEFiles(p, "dzm_vehicles", [][2]string{{"events.xml", "events"}, {"types.xml", "types"}}); err != nil {
+		t.Fatal(err)
+	}
+	refs, err := ListEconomyCE(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, r := range refs {
+		got[r.Name+"/"+r.Type] = true
+	}
+	if !got["events.xml/events"] || !got["types.xml/types"] {
+		t.Fatalf("registrations = %v", refs)
+	}
+}

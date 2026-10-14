@@ -9,7 +9,7 @@ func TestParseChatLine(t *testing.T) {
 	}{
 		{"(Global) Survivor: hello everyone", "Global", "Survivor", "hello everyone"},
 		{"(Direct) Bob: where is the heli?", "Direct", "Bob", "where is the heli?"},
-		{"(Vehicle) Big Boss: drive: left now", "Vehicle", "Big Boss", "drive: left now"}, // colon in text
+		{"(Vehicle) Big Boss: drive: left now", "Vehicle", "Big Boss", "drive: left now"},           // colon in text
 		{"(Global) [ADMIN] Zed_Killer: воду нашли?", "Global", "[ADMIN] Zed_Killer", "воду нашли?"}, // unicode + brackets in name
 	}
 	for _, c := range chat {

@@ -1,19 +1,37 @@
 {
   "FixedFileInfo": {
-    "FileVersion":    { "Major": 0, "Minor": 31, "Patch": 0, "Build": 0 },
-    "ProductVersion": { "Major": 0, "Minor": 31, "Patch": 0, "Build": 0 },
-    "FileFlagsMask": "3f", "FileFlags": "00",
-    "FileOS": "040004", "FileType": "01", "FileSubType": "00"
+    "FileVersion": {
+      "Major": 1,
+      "Minor": 0,
+      "Patch": 0,
+      "Build": 0
+    },
+    "ProductVersion": {
+      "Major": 1,
+      "Minor": 0,
+      "Patch": 0,
+      "Build": 0
+    },
+    "FileFlagsMask": "3f",
+    "FileFlags": "00",
+    "FileOS": "040004",
+    "FileType": "01",
+    "FileSubType": "00"
   },
   "StringFileInfo": {
-    "CompanyName":      "Aristarh Ucolov",
-    "ProductName":      "DayZ Server Manager",
-    "FileDescription":  "Web control panel for a DayZ dedicated server",
-    "InternalName":     "dayz-manager",
-    "OriginalFilename": "dayz-manager.exe",
-    "FileVersion":      "0.31.0",
-    "ProductVersion":   "0.31.0",
-    "LegalCopyright":   "Copyright (c) 2026 Aristarh Ucolov. All rights reserved."
+    "CompanyName": "Aristarh Ucolov",
+    "ProductName": "DayZ Server Manager",
+    "FileDescription": "DayZ Server Manager (browser) — control panel for a DayZ dedicated server",
+    "InternalName": "dayz-manager-web",
+    "OriginalFilename": "dayz-manager-web.exe",
+    "FileVersion": "1.0.0",
+    "ProductVersion": "1.0.0",
+    "LegalCopyright": "Copyright (c) 2026 Aristarh Ucolov. All rights reserved."
   },
-  "VarFileInfo": { "Translation": { "LangID": "0409", "CharsetID": "04B0" } }
+  "VarFileInfo": {
+    "Translation": {
+      "LangID": "0409",
+      "CharsetID": "04B0"
+    }
+  }
 }

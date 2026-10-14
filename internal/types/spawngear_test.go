@@ -228,7 +228,7 @@ func contains2(s, sub string) bool {
 func TestGearFileName(t *testing.T) {
 	cases := map[string]string{
 		"Fresh spawn": "fresh_spawn.json", "Military!!!": "military.json",
-		"":  "loadout.json", "  PvP Kit ": "pvp_kit.json",
+		"": "loadout.json", "  PvP Kit ": "pvp_kit.json",
 	}
 	for in, want := range cases {
 		if got := GearFileName(in); got != want {

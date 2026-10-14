@@ -34,7 +34,14 @@ func (h *handlers) randomPresetsList(w http.ResponseWriter, r *http.Request) {
 	}
 	doc, err := dztypes.LoadRandomPresets(path)
 	if err != nil {
-		writeJSON(w, map[string]interface{}{"path": path, "exists": false, "presets": []interface{}{}})
+		// A missing file and an unreadable one are different answers: saving
+		// over a file the page could not read would replace every preset in it.
+		resp := map[string]interface{}{"path": path, "exists": false, "presets": []interface{}{}}
+		if !os.IsNotExist(err) {
+			resp["exists"] = true
+			resp["error"] = err.Error()
+		}
+		writeJSON(w, resp)
 		return
 	}
 
@@ -116,6 +123,15 @@ func (h *handlers) randomPresetsSave(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	// The page sends the whole list it loaded. When the file on disk cannot be
+	// read, that list is not the file's content, and writing it would wipe the
+	// presets the file really holds.
+	if _, serr := os.Stat(path); serr == nil {
+		if _, lerr := dztypes.LoadRandomPresets(path); lerr != nil {
+			http.Error(w, "cfgrandompresets.xml could not be read ("+lerr.Error()+") — fix it in Files first", http.StatusConflict)
+			return
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

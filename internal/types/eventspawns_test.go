@@ -4,6 +4,7 @@ package types
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -74,5 +75,60 @@ func TestEventSpawnsSetPositions(t *testing.T) {
 	doc.SetPositions("NewEvent", []SpawnPos{{X: 1, Z: 2}, {X: 3, Z: 4}})
 	if e := doc.Find("NewEvent"); e == nil || len(e.Pos) != 2 {
 		t.Fatalf("SetPositions did not replace positions")
+	}
+}
+
+// TestEventSpawnsKeepHeight guards the v1.0.0 fix: saving through the map
+// editor used to strip every y= attribute from the whole file (the model had no
+// Y field), silently re-grounding static events and boats. Both an explicit
+// height and an explicit 0.0 must survive, an absent y must stay absent, and an
+// unknown attribute must round-trip untouched.
+func TestEventSpawnsKeepHeight(t *testing.T) {
+	const src = `<?xml version="1.0" encoding="UTF-8"?>
+<eventposdef>
+	<event name="StaticHeliCrash">
+		<pos x="2593.47" z="5094.11" a="0" y="201.66"/>
+		<pos x="2020.90" z="9813.24" a="0"/>
+	</event>
+	<event name="StaticBoatFishing">
+		<pos x="1107.817993" z="7084.618652" y="0.0" a="0" custom="keep"/>
+	</event>
+</eventposdef>
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cfgeventspawns.xml")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := LoadEventSpawns(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Edit an unrelated event, as the editor does, then save the whole file.
+	doc.SetPositions("VehicleCivilianSedan", []SpawnPos{{X: 1, Z: 2, A: 3}})
+	if err := SaveEventSpawns(path, doc); err != nil {
+		t.Fatal(err)
+	}
+	back, err := LoadEventSpawns(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	heli := back.Find("StaticHeliCrash")
+	if heli == nil || len(heli.Pos) != 2 {
+		t.Fatalf("heli crash positions lost: %+v", heli)
+	}
+	if heli.Pos[0].Y == nil || *heli.Pos[0].Y != 201.66 {
+		t.Errorf("explicit height lost: %+v", heli.Pos[0])
+	}
+	if heli.Pos[1].Y != nil {
+		t.Errorf("absent height became %v", *heli.Pos[1].Y)
+	}
+	boat := back.Find("StaticBoatFishing")
+	if boat == nil || boat.Pos[0].Y == nil || *boat.Pos[0].Y != 0 {
+		t.Fatalf("explicit y=0.0 lost: %+v", boat)
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), `custom="keep"`) {
+		t.Errorf("unknown attribute dropped:\n%s", raw)
 	}
 }

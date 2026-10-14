@@ -17,13 +17,14 @@
 package mods
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,24 +49,28 @@ type Mod struct {
 	UpdateAvailable     bool      `json:"updateAvailable"`
 	DisplayName         string    `json:"displayName,omitempty"`
 	PublishedID         string    `json:"publishedId,omitempty"`
+	MetaTimestamp       int64     `json:"metaTimestamp,omitempty"` // Workshop publish time from meta.cpp (source copy preferred)
+	CaseProblems        []string  `json:"caseProblems,omitempty"`  // Linux: names the server would not load
 }
 
-// List returns the union of mods found in the client Workshop folder and the
-// mods already installed in the server directory.
-func List(serverDir, vanillaDayZPath string) ([]Mod, error) {
+// List returns the union of mods found in the mod source (client !Workshop,
+// a custom folder, or SteamCMD content) and the mods already installed in the
+// server directory. srcDir may be "" (server-only): then only installed mods
+// are listed and none reports an update.
+func List(serverDir, srcDir string) ([]Mod, error) {
 	byName := map[string]*Mod{}
 
 	// Server-side @Mod directories.
 	srvEntries, _ := os.ReadDir(serverDir)
 	for _, e := range srvEntries {
-		if !strings.HasPrefix(e.Name(), "@") {
+		if !strings.HasPrefix(e.Name(), "@") || isStagingDir(e.Name()) {
 			continue
 		}
 		p := filepath.Join(serverDir, e.Name())
 		if !isDirOrJunction(e, p) {
 			continue
 		}
-		size, keys, newest := scanTree(p)
+		size, keys, newest := scanTreeCached(p)
 		byName[e.Name()] = &Mod{
 			Name:              e.Name(),
 			InstalledInServer: true,
@@ -76,76 +81,107 @@ func List(serverDir, vanillaDayZPath string) ([]Mod, error) {
 		}
 	}
 
-	// Workshop-side mods (from the user's main DayZ install).
-	// Steam / DayZ Launcher creates @Mod entries as Windows junctions
-	// pointing at steamapps/workshop/content/221100/<id>/, so we have to
-	// follow them — DirEntry.IsDir() returns false on a symlink.
-	if vanillaDayZPath != "" {
-		ws := filepath.Join(vanillaDayZPath, "!Workshop")
-		wsEntries, _ := os.ReadDir(ws)
-		for _, e := range wsEntries {
-			if !strings.HasPrefix(e.Name(), "@") {
-				continue
-			}
-			p := filepath.Join(ws, e.Name())
-			if !isDirOrJunction(e, p) {
-				continue
-			}
-			m := byName[e.Name()]
-			if m == nil {
-				m = &Mod{Name: e.Name()}
-				byName[e.Name()] = m
-			}
-			m.AvailableInWorkshop = true
-			m.WorkshopPath = p
-			if m.InstalledInServer {
-				m.WorkshopModifiedAt = newestMTime(p)
-			} else {
-				// Not on the server yet — one walk fills size, keys and mtime.
-				size, keys, newest := scanTree(p)
-				m.SizeBytes = size
-				m.KeyCount = keys
-				m.WorkshopModifiedAt = newest
-			}
+	// Source-side mods. Steam / DayZ Launcher creates !Workshop @Mod entries
+	// as Windows junctions pointing at steamapps/workshop/content/221100/<id>/,
+	// so scanSource follows them — DirEntry.IsDir() is false on a junction.
+	for name, p := range scanSource(srcDir) {
+		m := byName[name]
+		if m == nil {
+			m = &Mod{Name: name}
+			byName[name] = m
+		}
+		m.AvailableInWorkshop = true
+		m.WorkshopPath = p
+		if !m.InstalledInServer {
+			// Not on the server yet — one walk fills size, keys and mtime.
+			size, keys, newest := scanTreeCached(p)
+			m.SizeBytes = size
+			m.KeyCount = keys
+			m.WorkshopModifiedAt = newest
 		}
 	}
 
 	out := make([]Mod, 0, len(byName))
 	for _, m := range byName {
+		srcMeta := readMeta(m.WorkshopPath)
+		srvMeta := readMeta(m.ServerPath)
 		if m.InstalledInServer && m.AvailableInWorkshop {
-			m.UpdateAvailable = m.WorkshopModifiedAt.After(m.ServerModifiedAt.Add(2 * time.Second))
+			m.UpdateAvailable = updateAvailable(m, srcMeta, srvMeta)
 		}
-		// meta.cpp lives in the mod root; prefer the workshop copy so the
+		// meta.cpp lives in the mod root; prefer the source copy so the
 		// server-side mod folder can be stripped without losing metadata.
-		meta := readMeta(m.WorkshopPath)
+		meta := srcMeta
 		if meta.Name == "" && meta.PublishedID == "" {
-			meta = readMeta(m.ServerPath)
+			meta = srvMeta
 		}
 		m.DisplayName = meta.Name
 		m.PublishedID = meta.PublishedID
+		m.MetaTimestamp = meta.Timestamp
+		if runtime.GOOS == "linux" && m.InstalledInServer {
+			m.CaseProblems = CaseProblems(m.ServerPath)
+		}
 		out = append(out, *m)
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out, nil
 }
 
-// Install copies @ModName from the client Workshop folder into the server
-// directory and merges its .bikey files into <serverDir>/keys.
-func Install(serverDir, vanillaDayZPath, modName string) error {
+// updateAvailable decides whether the source copy is newer than the server
+// copy. Steam rewrites meta.cpp's timestamp on every Workshop publish, so when
+// both copies carry one it is exact and costs nothing. Without it we fall back
+// to comparing the newest file times (a full walk of the source copy).
+func updateAvailable(m *Mod, srcMeta, srvMeta modMeta) bool {
+	if srcMeta.Timestamp != 0 && srvMeta.Timestamp != 0 {
+		// Both copies use the same encoding, so the raw values compare
+		// directly. (Never time.Unix() them: they are not Unix seconds, and
+		// the resulting year-160-billion date made /api/mods fail to encode —
+		// an empty response and "Unexpected end of JSON input" on the page.)
+		if t := MetaTime(srcMeta.Timestamp); !t.IsZero() {
+			m.WorkshopModifiedAt = t
+		}
+		return srcMeta.Timestamp > srvMeta.Timestamp
+	}
+	_, _, newest := scanTreeCached(m.WorkshopPath)
+	m.WorkshopModifiedAt = newest
+	return newest.After(m.ServerModifiedAt.Add(2 * time.Second))
+}
+
+// Install copies @ModName from the mod source into the server directory and
+// merges its .bikey files into <serverDir>/keys.
+func Install(serverDir, srcDir, modName string) error {
+	if err := ValidName(modName); err != nil {
+		return err
+	}
 	if !strings.HasPrefix(modName, "@") {
 		return fmt.Errorf("mod name must start with '@'")
 	}
-	src := filepath.Join(vanillaDayZPath, "!Workshop", modName)
-	if st, err := os.Stat(src); err != nil || !st.IsDir() {
-		return fmt.Errorf("mod not found in Workshop: %s", src)
+	src, err := SourcePath(srcDir, modName)
+	if err != nil {
+		return err
+	}
+	dst := filepath.Join(serverDir, modName)
+	if _, err := os.Stat(dst); err == nil {
+		// Reinstalling over an existing copy: swap it like an update, so files
+		// the new version dropped do not linger next to the new ones.
+		return Update(serverDir, srcDir, modName)
 	}
 	if err := checkDiskSpace(serverDir, src); err != nil {
 		return err
 	}
-	dst := filepath.Join(serverDir, modName)
-	if err := copyTree(src, dst); err != nil {
+	// Copy into a staging folder and rename at the end: a copy that fails
+	// half-way (disk full, a locked file) must not leave a half mod that looks
+	// installed and then stops the server from starting.
+	staging := dst + ".installing"
+	_ = os.RemoveAll(staging)
+	if err := copyTree(src, staging); err != nil {
+		_ = os.RemoveAll(staging)
 		return fmt.Errorf("copy mod: %w", err)
 	}
+	if err := os.Rename(staging, dst); err != nil {
+		_ = os.RemoveAll(staging)
+		return fmt.Errorf("install mod: %w", err)
+	}
+	afterCopy(dst)
 	if err := SyncKeys(serverDir, []string{modName}); err != nil {
 		return fmt.Errorf("sync keys: %w", err)
 	}
@@ -153,8 +189,8 @@ func Install(serverDir, vanillaDayZPath, modName string) error {
 }
 
 // checkDiskSpace fails fast if the target volume looks too small for a mod
-// copy. We require free space ≥ 1.2× the source size — a 20% headroom covers
-// filesystem overhead. Unknown disk info (non-Windows) is permissive.
+// copy. We require free space >= 1.2x the source size — a 20% headroom covers
+// filesystem overhead. Unknown disk info is permissive.
 func checkDiskSpace(serverDir, src string) error {
 	size := dirSize(src)
 	if size <= 0 {
@@ -162,7 +198,7 @@ func checkDiskSpace(serverDir, src string) error {
 	}
 	free, _ := util.DiskFree(serverDir)
 	if free == 0 {
-		return nil // unknown / non-Windows
+		return nil // unknown
 	}
 	required := uint64(float64(size) * 1.2)
 	if free < required {
@@ -172,20 +208,42 @@ func checkDiskSpace(serverDir, src string) error {
 	return nil
 }
 
-// Update refreshes an already-installed mod from the Workshop copy.
+// isStagingDir reports the temporary folders Install/Update use (left behind
+// only if the manager died mid-copy) — never a real mod.
+// IsStagingDir reports whether name is an install in progress (a temporary
+// folder that must never be taken for a mod).
+func IsStagingDir(name string) bool { return isStagingDir(name) }
+
+func isStagingDir(name string) bool {
+	for _, suf := range []string{".installing", ".updating", ".old"} {
+		if strings.HasSuffix(strings.ToLower(name), suf) {
+			return true
+		}
+	}
+	return false
+}
+
+// Update refreshes an already-installed mod from the source copy.
 // It copies into a staging directory first, then atomically swaps, so a
 // half-broken update never leaves the server in a corrupt state.
-func Update(serverDir, vanillaDayZPath, modName string) error {
+func Update(serverDir, srcDir, modName string) error {
+	if err := ValidName(modName); err != nil {
+		return err
+	}
 	if !strings.HasPrefix(modName, "@") {
 		return fmt.Errorf("mod name must start with '@'")
 	}
-	src := filepath.Join(vanillaDayZPath, "!Workshop", modName)
-	if st, err := os.Stat(src); err != nil || !st.IsDir() {
-		return fmt.Errorf("mod not found in Workshop: %s", src)
+	src, err := SourcePath(srcDir, modName)
+	if err != nil {
+		return err
 	}
 	dst := filepath.Join(serverDir, modName)
 	staging := dst + ".updating"
 	_ = os.RemoveAll(staging)
+	// The staging copy exists next to the old one until the swap.
+	if err := checkDiskSpace(serverDir, src); err != nil {
+		return err
+	}
 
 	if err := copyTree(src, staging); err != nil {
 		_ = os.RemoveAll(staging)
@@ -202,18 +260,23 @@ func Update(serverDir, vanillaDayZPath, modName string) error {
 	if err := os.Rename(staging, dst); err != nil {
 		// try to restore old
 		_ = os.Rename(backup, dst)
+		_ = os.RemoveAll(staging)
 		return fmt.Errorf("swap in updated mod: %w", err)
 	}
 	_ = os.RemoveAll(backup)
+	afterCopy(dst)
 
 	// Idempotent — this re-pushes all installed mods' keys into /keys.
 	return SyncKeys(serverDir, nil)
 }
 
-// UpdateAll updates every installed mod that has a fresher Workshop copy.
+// UpdateAll updates every installed mod that has a fresher source copy.
 // Returns the list of mods it actually touched.
-func UpdateAll(serverDir, vanillaDayZPath string) ([]string, error) {
-	list, err := List(serverDir, vanillaDayZPath)
+func UpdateAll(serverDir, srcDir string) ([]string, error) {
+	if srcDir == "" {
+		return nil, ErrNoSource
+	}
+	list, err := List(serverDir, srcDir)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +285,7 @@ func UpdateAll(serverDir, vanillaDayZPath string) ([]string, error) {
 		if !m.UpdateAvailable {
 			continue
 		}
-		if err := Update(serverDir, vanillaDayZPath, m.Name); err != nil {
+		if err := Update(serverDir, srcDir, m.Name); err != nil {
 			return updated, fmt.Errorf("update %s: %w", m.Name, err)
 		}
 		updated = append(updated, m.Name)
@@ -237,22 +300,21 @@ type SyncAllResult struct {
 	Updated      []string `json:"updated"`
 	Skipped      []string `json:"skipped"` // already up to date
 	WorkshopDir  string   `json:"workshopDir"`
-	Total        int      `json:"total"`        // mods seen in !Workshop
+	Total        int      `json:"total"`        // mods seen in the source
 	NotInstalled int      `json:"notInstalled"` // (before sync) waiting for install
 	OutOfDate    int      `json:"outOfDate"`    // (before sync) update-available count
 }
 
-// SyncAll brings the server directory in line with the client !Workshop:
-// every Workshop mod missing on the server is installed, every outdated one
-// is updated. Nothing is removed — if a mod is only present server-side
-// (user copied manually, or Workshop version was unsubscribed) it stays.
-// Keys are synced once at the end. This is the one-click "match Workshop"
-// the users asked for instead of tracking each mod manually.
-func SyncAll(serverDir, vanillaDayZPath string, only []string) (*SyncAllResult, error) {
-	if vanillaDayZPath == "" {
-		return nil, ErrNoVanillaPath
+// SyncAll brings the server directory in line with the mod source: every
+// source mod missing on the server is installed, every outdated one is
+// updated. Nothing is removed — if a mod is only present server-side (user
+// copied manually, or the Workshop version was unsubscribed) it stays. Keys
+// are synced once at the end.
+func SyncAll(serverDir, srcDir string, only []string) (*SyncAllResult, error) {
+	if srcDir == "" {
+		return nil, ErrNoSource
 	}
-	list, err := List(serverDir, vanillaDayZPath)
+	list, err := List(serverDir, srcDir)
 	if err != nil {
 		return nil, err
 	}
@@ -260,9 +322,7 @@ func SyncAll(serverDir, vanillaDayZPath string, only []string) (*SyncAllResult, 
 	for _, n := range only {
 		filter[n] = true
 	}
-	res := &SyncAllResult{
-		WorkshopDir: filepath.Join(vanillaDayZPath, "!Workshop"),
-	}
+	res := &SyncAllResult{WorkshopDir: srcDir}
 	for _, m := range list {
 		if m.AvailableInWorkshop {
 			res.Total++
@@ -280,12 +340,12 @@ func SyncAll(serverDir, vanillaDayZPath string, only []string) (*SyncAllResult, 
 		}
 		switch {
 		case !m.InstalledInServer:
-			if err := Install(serverDir, vanillaDayZPath, m.Name); err != nil {
+			if err := Install(serverDir, srcDir, m.Name); err != nil {
 				return res, fmt.Errorf("install %s: %w", m.Name, err)
 			}
 			res.Installed = append(res.Installed, m.Name)
 		case m.UpdateAvailable:
-			if err := Update(serverDir, vanillaDayZPath, m.Name); err != nil {
+			if err := Update(serverDir, srcDir, m.Name); err != nil {
 				return res, fmt.Errorf("update %s: %w", m.Name, err)
 			}
 			res.Updated = append(res.Updated, m.Name)
@@ -299,20 +359,43 @@ func SyncAll(serverDir, vanillaDayZPath string, only []string) (*SyncAllResult, 
 	return res, nil
 }
 
+// ValidName checks a mod folder name: "@" plus a single path element. A name
+// with a separator ("@/../..") would otherwise lead Install, Update or
+// Uninstall — which ends in os.RemoveAll — outside the server folder.
+func ValidName(name string) error {
+	if !strings.HasPrefix(name, "@") || len(name) < 2 || len(name) > 200 {
+		return fmt.Errorf("mod name must start with '@'")
+	}
+	if strings.ContainsAny(name, `/\:*?"<>|`) || strings.ContainsRune(name, 0) ||
+		strings.HasSuffix(name, ".") || strings.HasSuffix(name, " ") || filepath.Base(name) != name {
+		return fmt.Errorf("invalid mod name %q", name)
+	}
+	for _, r := range name {
+		if r < 0x20 {
+			return fmt.Errorf("invalid mod name %q", name)
+		}
+	}
+	return nil
+}
+
 // Uninstall removes @ModName from the server directory. Keys are removed from
 // <serverDir>/keys ONLY if no other still-installed mod provides the same key
 // file — so uninstalling one component of a mod suite (e.g. @DayZ-Expansion-AI)
 // does not strip the shared signing key required by the rest of the suite.
 func Uninstall(serverDir, modName string) error {
-	if !strings.HasPrefix(modName, "@") {
-		return fmt.Errorf("mod name must start with '@'")
+	if err := ValidName(modName); err != nil {
+		return err
 	}
 	modDir := filepath.Join(serverDir, modName)
+	if filepath.Dir(modDir) != filepath.Clean(serverDir) {
+		return fmt.Errorf("invalid mod name %q", modName)
+	}
 	keyNames := collectKeyNames(modDir)
 
 	if err := os.RemoveAll(modDir); err != nil {
 		return err
 	}
+	forgetTree(modDir)
 
 	stillProvided := map[string]bool{}
 	entries, _ := os.ReadDir(serverDir)
@@ -491,11 +574,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
 		return err
 	}
-	return nil
+	// Close reports delayed write errors (a full disk often surfaces only
+	// here on Windows) — ignoring it would leave a silently truncated .pbo.
+	return out.Close()
 }
 
 // readMeta parses a DayZ mod's meta.cpp for the human-readable name and
@@ -532,6 +617,12 @@ func readMeta(modDir string) modMeta {
 			m.Name = v
 		case "publishedid":
 			m.PublishedID = v
+		case "timestamp":
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+				m.Timestamp = n
+			} else if u, err := strconv.ParseUint(v, 10, 64); err == nil {
+				m.Timestamp = int64(u) // top bit set (a "local" DateTime kind)
+			}
 		}
 	}
 	return m
@@ -540,11 +631,38 @@ func readMeta(modDir string) modMeta {
 type modMeta struct {
 	Name        string
 	PublishedID string
+	Timestamp   int64 // raw meta.cpp timestamp (see MetaTime); 0 when absent
 }
 
-// ErrNoVanillaPath is returned when install/list is called without a
-// configured vanilla DayZ path.
-var ErrNoVanillaPath = errors.New("vanilla DayZ path is not configured")
+// ticksAtUnixEpoch is 1970-01-01 in .NET ticks (100 ns since 0001-01-01).
+const ticksAtUnixEpoch = 621355968000000000
+
+// MetaTime decodes the timestamp DayZ Tools write into a mod's meta.cpp. It is
+// a .NET DateTime.ToBinary() value — 100 ns ticks since 0001-01-01 in the low
+// 62 bits, the DateTime kind in the top two — e.g. 5249743004478005813 is
+// 2022-12-03. Small values are taken as plain Unix seconds (hand-made mods,
+// tests). Returns the zero time for anything that does not decode to a
+// plausible date, so callers can never produce an unencodable time.Time.
+func MetaTime(ts int64) time.Time {
+	if ts == 0 {
+		return time.Time{}
+	}
+	var t time.Time
+	if ts > 0 && ts < 1<<40 {
+		t = time.Unix(ts, 0).UTC()
+	} else {
+		ticks := int64(uint64(ts) & (1<<62 - 1))
+		if ticks < ticksAtUnixEpoch {
+			return time.Time{}
+		}
+		d := ticks - ticksAtUnixEpoch
+		t = time.Unix(d/10_000_000, (d%10_000_000)*100).UTC()
+	}
+	if y := t.Year(); y < 2000 || y > 2200 {
+		return time.Time{}
+	}
+	return t
+}
 
 // isDirOrJunction reports whether the entry should be treated as a directory.
 // On Windows, DayZ Launcher / Steam mount mods under !Workshop as NTFS

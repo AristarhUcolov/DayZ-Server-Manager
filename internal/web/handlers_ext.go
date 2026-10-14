@@ -9,6 +9,7 @@ package web
 import (
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,20 +36,25 @@ func (h *handlers) modsSyncAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer unlock()
-	if h.app.Cfg().VanillaDayZPath == "" {
-		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
+	if h.app.Cfg().ModSourceDir() == "" {
+		http.Error(w, mods.ErrNoSource.Error(), http.StatusBadRequest)
 		return
 	}
 	var req struct {
 		Only []string `json:"only"` // optional filter by @Mod names
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req) // body optional
-	res, err := mods.SyncAll(h.app.ServerDir, h.app.Cfg().VanillaDayZPath, req.Only)
+	res, err := mods.SyncAll(h.app.ServerDir, h.app.Cfg().ModSourceDir(), req.Only)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, res)
+	touched := append(append([]string(nil), res.Installed...), res.Updated...)
+	writeJSON(w, struct {
+		*mods.SyncAllResult
+		Missions []autoMission  `json:"missions"`
+		Vehicles []autoVehicles `json:"vehicles"`
+	}{res, h.autoInstallModMissions(touched), h.syncModVehicles(touched)})
 }
 
 func (h *handlers) modsCollectionResolve(w http.ResponseWriter, r *http.Request) {
@@ -70,11 +76,11 @@ func (h *handlers) modsCollectionResolve(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	if h.app.Cfg().VanillaDayZPath == "" {
-		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
+	if h.app.Cfg().ModSourceDir() == "" {
+		http.Error(w, mods.ErrNoSource.Error(), http.StatusBadRequest)
 		return
 	}
-	res, err := mods.ResolveCollection(r.Context(), h.app.Cfg().VanillaDayZPath, children)
+	res, err := mods.ResolveCollection(r.Context(), h.app.Cfg().ModSourceDir(), children)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -130,7 +136,11 @@ func (h *handlers) battleyeWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := battleye.Write(h.beDir(), req.Name, req.Content); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		code := http.StatusInternalServerError
+		if errors.Is(err, battleye.ErrNotEditable) {
+			code = http.StatusBadRequest
+		}
+		http.Error(w, err.Error(), code)
 		return
 	}
 	writeJSON(w, map[string]string{"status": "saved"})
@@ -139,15 +149,23 @@ func (h *handlers) battleyeWrite(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 // BattlEye bans editor (bans.txt).
 //
-// Line format: `<GUID|IP> <minutes> <reason>` — minutes 0/perm = permanent.
-// Hand-editing this file is the #1 way admins silently break every ban, so the
-// panel provides a structured table. After a save, if the server is running,
-// we issue RCon `loadBans` so changes apply without a restart.
+// Line format: `<GUID|IP> <expiry> <reason>` — expiry is -1 for a permanent
+// ban or the Unix time the ban ends (what BattlEye itself writes). Versions of
+// the panel before 1.0 wrote a number of minutes there, which BattlEye read as
+// a date in 1970: such timed bans ended at once. Hand-editing this file is the
+// #1 way admins silently break every ban, so the panel provides a structured
+// table. After a save, if the server is running, we issue RCon `loadBans` so
+// changes apply without a restart.
 
 type banEntry struct {
 	ID      string `json:"id"`      // GUID or IP
-	Minutes string `json:"minutes"` // raw token: number, "0", "perm", "-1"
+	Minutes string `json:"minutes"` // the raw second column (kept for older clients)
 	Reason  string `json:"reason"`
+	// Read: what the second column means. Write: Perm or Until (Unix seconds)
+	// set the expiry; when neither is given, Minutes is read as minutes left.
+	Perm    bool  `json:"perm"`
+	Until   int64 `json:"until,omitempty"`
+	Expired bool  `json:"expired,omitempty"`
 }
 
 func (h *handlers) bansPath() string {
@@ -221,7 +239,16 @@ func (h *handlers) battleyeBans(w http.ResponseWriter, r *http.Request) {
 		if bans == nil {
 			bans = []banEntry{}
 		}
-		writeJSON(w, map[string]interface{}{"path": path, "bans": bans})
+		mod := time.Now()
+		if st, err := os.Stat(path); err == nil {
+			mod = st.ModTime()
+		}
+		now := time.Now().Unix()
+		for i := range bans {
+			bans[i].Perm, bans[i].Until = beBanExpiry(bans[i].Minutes, mod)
+			bans[i].Expired = !bans[i].Perm && bans[i].Until <= now
+		}
+		writeJSON(w, map[string]interface{}{"path": path, "bans": bans, "now": now})
 		return
 	}
 
@@ -238,6 +265,25 @@ func (h *handlers) battleyeBans(w http.ResponseWriter, r *http.Request) {
 	var comments []string
 	if data, err := os.ReadFile(path); err == nil {
 		_, comments = parseBans(string(data))
+	}
+	// Write the expiry the way BattlEye reads it.
+	now := time.Now()
+	for i := range req.Bans {
+		b := &req.Bans[i]
+		switch {
+		case b.Perm:
+			b.Minutes = "-1"
+		case b.Until > 0:
+			b.Minutes = beBanToken(b.Until)
+		default:
+			// An older client: minutes left (0 / blank = permanent).
+			perm, until := beBanExpiry(b.Minutes, now)
+			if perm {
+				b.Minutes = "-1"
+			} else {
+				b.Minutes = beBanToken(until)
+			}
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -293,6 +339,48 @@ func (h *handlers) typesBulkPatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]int{"touched": touched})
 }
 
+// typesPatchMany applies its own patch to each named type and writes the file
+// once. The Types page saves its inline edits through it: one bulk-patch call
+// per row rewrote the whole file (and took a backup) per row, and since only
+// five backups are kept, saving six rows pruned the copy of the file as it was
+// before the save.
+func (h *handlers) typesPatchMany(w http.ResponseWriter, r *http.Request) {
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
+		return
+	}
+	defer unlock()
+	var req struct {
+		File string `json:"file"`
+		Rows []struct {
+			Name  string                 `json:"name"`
+			Patch dztypes.BulkFieldPatch `json:"patch"`
+		} `json:"rows"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(req.Rows) == 0 {
+		http.Error(w, "rows required", http.StatusBadRequest)
+		return
+	}
+	doc, path, err := h.loadTypesFile(req.File)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	touched := 0
+	for _, row := range req.Rows {
+		touched += doc.BulkPatch([]string{row.Name}, row.Patch)
+	}
+	if err := dztypes.SaveTypes(path, doc); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]int{"touched": touched})
+}
+
 // ---------------------------------------------------------------------------
 // Mission central-economy DB editor.
 //
@@ -302,22 +390,22 @@ func (h *handlers) typesBulkPatch(w http.ResponseWriter, r *http.Request) {
 // (Types, Events) stay as the higher-level alternative.
 
 var allowedMissionDBFiles = map[string]bool{
-	"types.xml":              true,
-	"events.xml":             true,
-	"economy.xml":            true,
-	"globals.xml":            true,
-	"messages.xml":           true,
-	"cfgeventspawns.xml":     true,
-	"cfgplayerspawnpoints.xml": true,
-	"cfgweather.xml":         true,
-	"cfgeffectarea.json":     true,
-	"init.c":                 true,
-	"cfgeconomycore.xml":     true,
-	"cfgenvironment.xml":     true,
-	"cfggameplay.json":       true,
-	"cfgrandompresets.xml":   true,
-	"cfgspawnabletypes.xml":  true,
-	"cfglimitsdefinition.xml": true,
+	"types.xml":                   true,
+	"events.xml":                  true,
+	"economy.xml":                 true,
+	"globals.xml":                 true,
+	"messages.xml":                true,
+	"cfgeventspawns.xml":          true,
+	"cfgplayerspawnpoints.xml":    true,
+	"cfgweather.xml":              true,
+	"cfgeffectarea.json":          true,
+	"init.c":                      true,
+	"cfgeconomycore.xml":          true,
+	"cfgenvironment.xml":          true,
+	"cfggameplay.json":            true,
+	"cfgrandompresets.xml":        true,
+	"cfgspawnabletypes.xml":       true,
+	"cfglimitsdefinition.xml":     true,
 	"cfglimitsdefinitionuser.xml": true,
 	"cfgundergroundtriggers.json": true,
 	"cfgeventgroups.xml":          true,
@@ -530,11 +618,10 @@ func (h *handlers) missionDBWrite(w http.ResponseWriter, r *http.Request) {
 // Mods without a meta.cpp PublishedID are skipped (e.g. hand-rolled @Mods).
 
 func (h *handlers) modsCheckUpdates(w http.ResponseWriter, r *http.Request) {
-	if h.app.Cfg().VanillaDayZPath == "" {
-		http.Error(w, mods.ErrNoVanillaPath.Error(), http.StatusBadRequest)
-		return
-	}
-	list, err := mods.List(h.app.ServerDir, h.app.Cfg().VanillaDayZPath)
+	// Works without a mod source too (server-only hosting): the installed
+	// copies' meta.cpp timestamps are compared with Steam, so the admin still
+	// learns which mods need a fresh upload.
+	list, err := mods.List(h.app.ServerDir, h.app.Cfg().ModSourceDir())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -563,13 +650,26 @@ func (h *handlers) modsCheckUpdates(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// localUpdated is when the local copy was published on the Workshop: meta.cpp's
+// timestamp when present (exact), else the source copy's newest file, else the
+// server copy's.
+func localUpdated(m *mods.Mod) time.Time {
+	if t := mods.MetaTime(m.MetaTimestamp); !t.IsZero() {
+		return t
+	}
+	if !m.WorkshopModifiedAt.IsZero() {
+		return m.WorkshopModifiedAt
+	}
+	return m.ServerModifiedAt
+}
+
 func buildCheckResults(idToMod map[string]*mods.Mod, remote map[string]mods.WorkshopRemote) []map[string]interface{} {
 	out := make([]map[string]interface{}, 0, len(idToMod))
 	for id, m := range idToMod {
 		row := map[string]interface{}{
 			"name":         m.Name,
 			"publishedId":  id,
-			"localUpdated": m.WorkshopModifiedAt,
+			"localUpdated": localUpdated(m),
 		}
 		r, ok := remote[id]
 		if !ok {
@@ -585,9 +685,9 @@ func buildCheckResults(idToMod map[string]*mods.Mod, remote map[string]mods.Work
 			row["status"] = "missing" // ID was removed/private on Steam
 		case r.TimeUpdated.IsZero():
 			row["status"] = "unknown"
-		case m.WorkshopModifiedAt.IsZero():
+		case localUpdated(m).IsZero():
 			row["status"] = "unknown"
-		case r.TimeUpdated.After(m.WorkshopModifiedAt.Add(2 * time.Minute)):
+		case r.TimeUpdated.After(localUpdated(m).Add(2 * time.Minute)):
 			row["status"] = "outdated"
 		default:
 			row["status"] = "ok"

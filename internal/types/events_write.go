@@ -140,6 +140,21 @@ func RenderEvent(e *Event) string {
 	num("max", e.Max)
 	num("lifetime", e.Lifetime)
 	num("restock", e.Restock)
+	// The structure DayZ expects of every event, as on the vanilla vehicle
+	// events (a block without it is not reliably spawned).
+	b.WriteString("        <saferadius>500</saferadius>\n")
+	b.WriteString("        <distanceradius>500</distanceradius>\n")
+	b.WriteString("        <cleanupradius>200</cleanupradius>\n")
+	b.WriteString("        <flags deletable=\"0\" init_random=\"0\" remove_damaged=\"1\"/>\n")
+	pos, limit := e.Position, e.Limit
+	if pos == "" {
+		pos = "fixed"
+	}
+	if limit == "" {
+		limit = "mixed"
+	}
+	b.WriteString("        <position>" + xmlAttr(pos) + "</position>\n")
+	b.WriteString("        <limit>" + xmlAttr(limit) + "</limit>\n")
 	num("saveable", e.Saveable)
 	num("active", e.Active)
 	if e.Children != nil {

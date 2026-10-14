@@ -238,19 +238,28 @@ type ScaleOpts struct {
 // `factor`, rounding to the nearest integer and never going below zero. It is
 // the engine behind the "CE tuning presets" (more/less loot). When both nominal
 // and min are scaled the ratio is preserved; a rounding overshoot that leaves
-// min > nominal is clamped back down. Returns how many types were touched.
-func (d *TypesDoc) Scale(factor float64, opts ScaleOpts) int {
+// min > nominal is clamped back down. A value that was above zero never rounds
+// down to zero: nominal 1 × 0.25 would make a rare item (M4A1, SVD) stop
+// spawning for good, and no later ×4 could bring it back. Returns how many
+// types were touched and the names held at 1 by that floor.
+func (d *TypesDoc) Scale(factor float64, opts ScaleOpts) (int, []string) {
 	if factor <= 0 || (!opts.Nominal && !opts.Min) {
-		return 0
+		return 0, nil
 	}
+	floorHit := false
 	scale := func(p *int) int {
 		v := int(math.Round(float64(*p) * factor))
+		if v < 1 && *p > 0 {
+			v = 1
+			floorHit = true
+		}
 		if v < 0 {
 			v = 0
 		}
 		return v
 	}
 	touched := 0
+	var floored []string
 	for i := range d.Types {
 		t := &d.Types[i]
 		if opts.Category != "" {
@@ -260,7 +269,11 @@ func (d *TypesDoc) Scale(factor float64, opts ScaleOpts) int {
 		}
 		changed := false
 		if opts.Nominal && t.Nominal != nil {
+			floorHit = false
 			nv := scale(t.Nominal)
+			if floorHit {
+				floored = append(floored, t.Name)
+			}
 			if nv != *t.Nominal {
 				t.Nominal = &nv
 				changed = true
@@ -277,6 +290,53 @@ func (d *TypesDoc) Scale(factor float64, opts ScaleOpts) int {
 		if t.Min != nil && t.Nominal != nil && *t.Min > *t.Nominal {
 			v := *t.Nominal
 			t.Min = &v
+			changed = true
+		}
+		if changed {
+			d.markDirty(t.Name)
+			touched++
+		}
+	}
+	return touched, floored
+}
+
+// RestoreAmounts copies <nominal> and <min> from base into every type of d that
+// base also lists (matched by name, case-insensitively). Every other field, and
+// every type base does not know, is left as it is — so the ×1 reset undoes the
+// scaling without throwing away later edits. Returns how many types changed.
+func (d *TypesDoc) RestoreAmounts(base *TypesDoc) int {
+	if base == nil {
+		return 0
+	}
+	byName := make(map[string]*Type, len(base.Types))
+	for i := range base.Types {
+		k := strings.ToLower(base.Types[i].Name)
+		if _, dup := byName[k]; !dup {
+			byName[k] = &base.Types[i]
+		}
+	}
+	sameInt := func(a, b *int) bool { return (a == nil && b == nil) || (a != nil && b != nil && *a == *b) }
+	cloneInt := func(p *int) *int {
+		if p == nil {
+			return nil
+		}
+		v := *p
+		return &v
+	}
+	touched := 0
+	for i := range d.Types {
+		t := &d.Types[i]
+		b := byName[strings.ToLower(t.Name)]
+		if b == nil {
+			continue
+		}
+		changed := false
+		if !sameInt(t.Nominal, b.Nominal) {
+			t.Nominal = cloneInt(b.Nominal)
+			changed = true
+		}
+		if !sameInt(t.Min, b.Min) {
+			t.Min = cloneInt(b.Min)
 			changed = true
 		}
 		if changed {

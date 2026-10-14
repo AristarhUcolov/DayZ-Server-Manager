@@ -22,11 +22,19 @@ import (
 	"strings"
 )
 
+// SpawnPos is one spawn position. Y (height) is optional in the file — most
+// vanilla points omit it and let the engine snap to the ground, but static
+// events, boats and modded structures carry an explicit height. It was once
+// missing here, so every save through the map editor silently stripped y from
+// the WHOLE file; it is a pointer so "absent" and "0.0" (Sakhal's boats) stay
+// distinct. Extra keeps any attribute we don't model so a save never drops it.
 type SpawnPos struct {
-	X     float64 `xml:"x,attr" json:"x"`
-	Z     float64 `xml:"z,attr" json:"z"`
-	A     float64 `xml:"a,attr" json:"a"`
-	Group string  `xml:"group,attr,omitempty" json:"group,omitempty"`
+	X     float64    `xml:"x,attr" json:"x"`
+	Z     float64    `xml:"z,attr" json:"z"`
+	A     float64    `xml:"a,attr" json:"a"`
+	Y     *float64   `xml:"y,attr,omitempty" json:"y,omitempty"`
+	Group string     `xml:"group,attr,omitempty" json:"group,omitempty"`
+	Extra []xml.Attr `xml:",any,attr" json:"extra,omitempty"`
 }
 
 // SpawnZone is the optional distance/spawn-count zone some events carry. Kept
@@ -104,6 +112,10 @@ func SaveEventSpawns(path string, doc *EventSpawnsDoc) error {
 	out := buf.Bytes()
 	out = bytes.ReplaceAll(out, []byte("></pos>"), []byte("/>"))
 	out = bytes.ReplaceAll(out, []byte("></zone>"), []byte("/>"))
+	// An event with no children (`<event name="Loot" />` in vanilla) encodes as
+	// an open/close pair on one line; with children the close tag always sits on
+	// its own indented line, so this only ever matches an empty event.
+	out = bytes.ReplaceAll(out, []byte(`"></event>`), []byte(`"/>`))
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, out, 0o644); err != nil {
 		return err

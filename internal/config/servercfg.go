@@ -19,9 +19,9 @@ import (
 type ServerCfgEntryKind int
 
 const (
-	EntryKV ServerCfgEntryKind = iota
-	EntryClass       // class Foo { ... };
-	EntryComment     // // ...
+	EntryKV      ServerCfgEntryKind = iota
+	EntryClass                      // class Foo { ... };
+	EntryComment                    // // ...
 	EntryBlank
 )
 
@@ -38,8 +38,8 @@ type ServerCfg struct {
 }
 
 var (
-	reKV      = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*;\s*(?://\s*(.*))?\s*$`)
-	reClass   = regexp.MustCompile(`^\s*class\s+[A-Za-z_][A-Za-z0-9_]*\b`)
+	reKV    = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*;\s*(?://\s*(.*))?\s*$`)
+	reClass = regexp.MustCompile(`^\s*class\s+[A-Za-z_][A-Za-z0-9_]*\b`)
 )
 
 func LoadServerCfg(path string) (*ServerCfg, error) {

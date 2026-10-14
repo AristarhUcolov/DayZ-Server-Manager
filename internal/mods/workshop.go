@@ -18,7 +18,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -117,7 +116,7 @@ func FetchCollectionChildren(collectionID string) ([]string, error) {
 }
 
 // ResolveCollection matches a list of publishedids to @Mod directories in
-// the user's !Workshop folder. Three-pass strategy:
+// the mod source (client !Workshop, custom folder or SteamCMD content). Three-pass strategy:
 //
 //  1. Match by meta.cpp PublishedID (cheapest, exact).
 //  2. For unmatched IDs, hit Steam GetPublishedFileDetails to learn the title
@@ -128,35 +127,30 @@ func FetchCollectionChildren(collectionID string) ([]string, error) {
 //     subscribe in Steam).
 //
 // The Steam call is best-effort — if it fails, fallback IDs stay missing.
-func ResolveCollection(ctx context.Context, vanillaDayZPath string, ids []string) (*CollectionResolution, error) {
-	if vanillaDayZPath == "" {
-		return nil, ErrNoVanillaPath
+func ResolveCollection(ctx context.Context, srcDir string, ids []string) (*CollectionResolution, error) {
+	if srcDir == "" {
+		return nil, ErrNoSource
 	}
 	want := map[string]bool{}
 	for _, id := range ids {
 		want[id] = true
 	}
 
-	// Snapshot @Mod folders once with their meta.cpp so we don't re-stat.
+	// Snapshot source mods once with their meta.cpp so we don't re-stat.
 	type wsEntry struct {
 		Folder      string // "@CommunityFramework"
 		PublishedID string // "" if no meta.cpp / no publishedid line
 		Name        string // human-readable from meta.cpp; "" if absent
 	}
-	ws := filepath.Join(vanillaDayZPath, "!Workshop")
-	entries, _ := os.ReadDir(ws)
-	folders := make([]wsEntry, 0, len(entries))
 	usedFolder := map[string]bool{}
-	for _, e := range entries {
-		if !strings.HasPrefix(e.Name(), "@") {
-			continue
+	var folders []wsEntry
+	for _, sm := range scanSourceList(srcDir) {
+		meta := readMeta(sm.path)
+		pid := meta.PublishedID
+		if pid == "" && sm.steamcmd {
+			pid = filepath.Base(sm.path) // SteamCMD folders ARE the published id
 		}
-		full := filepath.Join(ws, e.Name())
-		if !isDirOrJunction(e, full) {
-			continue
-		}
-		meta := readMeta(full)
-		folders = append(folders, wsEntry{Folder: e.Name(), PublishedID: meta.PublishedID, Name: meta.Name})
+		folders = append(folders, wsEntry{Folder: sm.name, PublishedID: pid, Name: meta.Name})
 	}
 
 	byID := map[string]ResolvedMod{}

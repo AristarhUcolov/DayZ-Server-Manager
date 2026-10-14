@@ -14,6 +14,51 @@ const State = {
   serverStatus: { running: false },
 };
 
+// --------------------------------------------------------------------- servers
+
+// Srv is the DayZ server this tab manages (multi-server). Every API call names
+// it in a header; URLs the browser loads by itself (images, downloads, the log
+// stream) carry ?srv= via srvUrl(). Kept per tab, so two tabs can manage two
+// servers; the last choice is where a new tab starts.
+const Srv = {
+  id: 'main',
+  list: [],
+  init() {
+    let id = '';
+    try {
+      id = new URLSearchParams(location.search).get('srv') || sessionStorage.getItem('srv') ||
+        localStorage.getItem('srv') || '';
+    } catch {}
+    this.id = /^[A-Za-z0-9]{1,16}$/.test(id) ? id : 'main';
+  },
+  remember(id) {
+    try { sessionStorage.setItem('srv', id); localStorage.setItem('srv', id); } catch {}
+  },
+  // switchTo opens another server in this tab: a full reload, so no view keeps
+  // data (caches, open editors, polls) of the server it left.
+  switchTo(id) {
+    if (!id) return;
+    this.remember(id);
+    const url = new URL(location.href);
+    url.searchParams.delete('srv');
+    location.replace(url.pathname + url.search + location.hash);
+    if (url.pathname + url.search === location.pathname + location.search) location.reload();
+  },
+  current() { return this.list.find(s => s.id === this.id) || null; },
+};
+Srv.init();
+
+// srvUrl adds the selected server to an API URL the browser fetches itself.
+function srvUrl(path) {
+  if (!Srv.id || Srv.id === 'main') return path;
+  return path + (path.includes('?') ? '&' : '?') + 'srv=' + encodeURIComponent(Srv.id);
+}
+
+// srvHeaders are the request headers naming the selected server.
+function srvHeaders(extra) {
+  return Object.assign({ 'X-DZM-Server': Srv.id || 'main' }, extra || {});
+}
+
 // --------------------------------------------------------------------- api
 
 // Top-of-page indeterminate progress bar tied to api call lifecycle.
@@ -48,14 +93,46 @@ const Progress = {
   },
 };
 
+// apiError turns a failed response into an Error. Auth and guard errors come
+// as JSON {error: "<i18n key>", retryAfter?, message?} and are translated;
+// everything else keeps the server's plain-text message. A 401 asking for a
+// login (session expired, password changed elsewhere) brings the login screen
+// back.
+async function apiError(r) {
+  const text = await r.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch { /* plain text */ }
+  if (r.status === 401 && data && data.auth) onAuthRequired();
+  // The server this tab was managing is no longer in the panel (removed in
+  // another tab): fall back to the main one.
+  if (r.status === 404 && data && data.error === 'servers.unknown' && Srv.id !== 'main') {
+    Srv.remember('main');
+    Srv.id = 'main';
+    setTimeout(() => location.reload(), 50);
+  }
+  let msg = text;
+  if (data && typeof data.error === 'string') {
+    const k = data.error;
+    msg = (State.i18n[k] ? t(k) : (data.message || k)).replace('{s}', String(data.retryAfter ?? ''));
+  }
+  const err = new Error(msg || (r.status + ' ' + r.statusText));
+  err.status = r.status;
+  err.data = data;
+  return err;
+}
+
 const api = {
-  async get(path) {
+  // opts.timeout (ms) aborts a hung request — the status poll uses it so a
+  // dead connection is noticed instead of waiting on the browser's default.
+  async get(path, opts) {
     Progress.start();
+    const ctl = opts && opts.timeout ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), opts.timeout) : 0;
     try {
-      const r = await fetch(path, { credentials: 'same-origin' });
-      if (!r.ok) throw new Error(await r.text());
+      const r = await fetch(path, { credentials: 'same-origin', headers: srvHeaders(), signal: ctl ? ctl.signal : undefined });
+      if (!r.ok) throw await apiError(r);
       return r.json();
-    } finally { Progress.end(); }
+    } finally { clearTimeout(timer); Progress.end(); }
   },
   async send(path, method, body) {
     Progress.start();
@@ -63,10 +140,10 @@ const api = {
       const r = await fetch(path, {
         method,
         credentials: 'same-origin',
-        headers: body ? { 'Content-Type': 'application/json' } : {},
+        headers: srvHeaders(body ? { 'Content-Type': 'application/json' } : {}),
         body: body ? JSON.stringify(body) : undefined,
       });
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) throw await apiError(r);
       const text = await r.text();
       try { return text ? JSON.parse(text) : {}; } catch { return {}; }
     } finally { Progress.end(); }
@@ -85,10 +162,65 @@ async function loadI18n(lang) {
   State.help = data.help || {}; // hover-help travels with the bundle
   if (data.languages) State.languages = data.languages;
   document.documentElement.lang = State.lang;
+  // Right-to-left languages (Arabic) mirror the whole layout.
+  document.documentElement.dir = data.dir === 'rtl' ? 'rtl' : 'ltr';
   applyI18n();
 }
 
 function t(key) { return State.i18n[key] || key; }
+
+// tn translates key and fills in {vars}. A count shown with a noun is written
+// as an ICU-style plural block — "{n, plural, one {# point} other {# points}}"
+// — and the form is picked by the UI language's own rules (Intl.PluralRules:
+// Russian one/few/many, English one/other, …), # being the number. That is
+// what keeps "4 точек" and "1 points" out of the panel.
+let _plural = null;
+function pluralCategory(n) {
+  if (!_plural || _plural.lang !== State.lang) {
+    let rules;
+    // "md" (Moldovan) is the panel's code for Romanian as written in Moldova;
+    // Intl knows the language as "ro" (one / few / other).
+    const lang = State.lang === 'md' ? 'ro' : (State.lang || 'en');
+    try { rules = new Intl.PluralRules(lang); } catch { rules = new Intl.PluralRules('en'); }
+    _plural = { lang: State.lang, rules };
+  }
+  return _plural.rules.select(Number(n) || 0);
+}
+const PLURAL_RE = /\{(\w+),\s*plural,((?:\s*(?:=\d+|zero|one|two|few|many|other)\s*\{(?:[^{}]|\{\w+\})*\})+)\s*\}/g;
+const PLURAL_FORM_RE = /(=\d+|zero|one|two|few|many|other)\s*\{((?:[^{}]|\{\w+\})*)\}/g;
+function fmtCount(n) {
+  if (typeof n !== 'number') return String(n);
+  try { return n.toLocaleString(State.lang || undefined, { maximumFractionDigits: 2 }); } catch { return String(n); }
+}
+function tn(key, vars = {}) {
+  let s = t(key).replace(PLURAL_RE, (m, name, body) => {
+    const n = vars[name];
+    const forms = {};
+    body.replace(PLURAL_FORM_RE, (mm, cat, txt) => { forms[cat] = txt; return mm; });
+    const txt = forms['=' + n] ?? forms[pluralCategory(n)] ?? forms.other ?? '';
+    return txt.replace(/#/g, fmtCount(n));
+  });
+  for (const [k, v] of Object.entries(vars)) s = s.split('{' + k + '}').join(typeof v === 'number' ? fmtCount(v) : String(v));
+  return s;
+}
+
+// matchBrowserLang picks the UI language closest to the browser's preferred
+// languages, or '' when none is available. Mirrors i18n.Match on the server.
+function matchBrowserLang() {
+  const codes = new Set((State.languages || []).map(l => l.code));
+  const prefs = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || ''];
+  for (const raw of prefs) {
+    const tag = String(raw || '').toLowerCase().replace(/_/g, '-');
+    if (!tag) continue;
+    if (codes.has(tag)) return tag;
+    const [base, ...rest] = tag.split('-');
+    const region = rest.join('-');
+    if (base === 'zh' && /hant|tw|hk|mo/.test(region) && codes.has('zh-tw')) return 'zh-tw';
+    if ((base === 'ro' || base === 'mo') && codes.has('md')) return 'md';
+    if (codes.has(base)) return base;
+  }
+  return '';
+}
 
 // fillLangSelect populates a <select> with the available UI languages. `short`
 // shows the uppercase code (compact, for the topbar); otherwise the native name.
@@ -103,6 +235,16 @@ function fillLangSelect(sel, selected, short) {
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     el.textContent = t(el.dataset.i18n);
+  });
+  // Icon-only controls: translated tooltip + accessible name.
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const v = t(el.dataset.i18nTitle);
+    el.title = v;
+    el.setAttribute('aria-label', v);
+  });
+  // Accessible name only (the control already shows visible text).
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    el.setAttribute('aria-label', t(el.dataset.i18nAria));
   });
 }
 
@@ -200,6 +342,20 @@ function toast(msg, kind = '') {
   setTimeout(dismiss, kind === 'error' ? 8000 : 3500);
 }
 
+// toastAction is a toast with one button (e.g. "Open Vehicles").
+function toastAction(msg, kind, actionLabel, onAction) {
+  const region = document.getElementById('toast-region');
+  if (!region) return;
+  while (region.children.length >= 3) region.firstChild.remove();
+  const el = h('div', { class: `toast toast-action ${kind || ''}`, role: 'status' });
+  const dismiss = () => { el.classList.remove('visible'); setTimeout(() => el.remove(), 250); };
+  el.append(h('span', { text: msg }), h('button', { class: 'small', text: actionLabel, onclick: (e) => { e.stopPropagation(); dismiss(); onAction(); } }));
+  el.onclick = dismiss;
+  region.append(el);
+  requestAnimationFrame(() => el.classList.add('visible'));
+  setTimeout(dismiss, 9000);
+}
+
 function handleErr(err) {
   console.error(err);
   let msg = String(err && err.message || err);
@@ -229,11 +385,20 @@ async function withBusy(btn, fn) {
 const Views = {};
 
 function setActiveRoute(name) {
+  const base = String(name || '').split('/')[0];
   document.querySelectorAll('.nav a').forEach(a => {
-    const on = a.dataset.route === name;
+    const on = a.dataset.route === base;
     a.classList.toggle('active', on);
     if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
+  // Keep the active entry visible in the (scrolling) sidebar — the lower
+  // groups sat below its fold. Not scrollIntoView: that can move the page too.
+  const side = document.getElementById('sidebar');
+  const act = side && side.querySelector('.nav a.active');
+  if (act && side.scrollHeight > side.clientHeight) {
+    const s = side.getBoundingClientRect(), r = act.getBoundingClientRect();
+    if (r.top < s.top + 8 || r.bottom > s.bottom - 8) side.scrollTop += r.top - s.top - (side.clientHeight - r.height) / 2;
+  }
 }
 
 // routeFromHash reads the current section from location.hash, falling back to
@@ -251,9 +416,26 @@ function routeFromHash() {
 // duplicate "Support" cards when switching sections quickly.
 let _navSeq = 0;
 
+// _route is the full route being shown, sub-tab included ('settings/access').
+// The sidebar only marks the base section, so it can't answer this itself.
+let _route = 'dashboard';
+
 async function navigate(name) {
+  // Unsaved edits on the page being left: ask first.
+  const cur = document.getElementById('view');
+  if (cur && typeof cur._isDirty === 'function' && cur._isDirty()) {
+    if (!(await confirmModal(t('refresh.discard'), { danger: true, okText: t('action.discard') }))) {
+      if (routeFromHash() !== _route) history.replaceState(null, '', '#' + _route);
+      return;
+    }
+    cur._isDirty = null;
+  }
   const myNav = ++_navSeq;
+  _route = Views[name] ? name : 'dashboard';
   setActiveRoute(name);
+  // The Guide and Sponsors pages end with their own support call — no second
+  // card from the persistent footer under them.
+  document.body.classList.toggle('no-support-footer', _route === 'guide' || _route === 'sponsors');
   // Mirror the route into the URL hash so a reload restores this section.
   // Done before awaiting the view so the resulting hashchange sees the active
   // route already updated and becomes a no-op (avoids a double render).
@@ -262,6 +444,10 @@ async function navigate(name) {
   const root = document.getElementById('view');
   if (root._teardown) { try { root._teardown(); } catch {} root._teardown = null; }
   root._save = null; // stale Ctrl+S handlers must not survive navigation
+  // Same for the unsaved-changes hooks Refresh consults; a page that never sets
+  // them would otherwise inherit the previous page's prompt.
+  root._isDirty = null;
+  root._beforeRefresh = null;
   root.innerHTML = '';
   window.scrollTo(0, 0); // a new section always starts at the top
   try {
@@ -295,6 +481,12 @@ document.addEventListener('click', e => {
   if (a && a.dataset.route) { e.preventDefault(); navigate(a.dataset.route); }
 });
 
+// Closing or reloading the tab with unsaved edits: the browser asks.
+window.addEventListener('beforeunload', (e) => {
+  const root = document.getElementById('view');
+  if (root && typeof root._isDirty === 'function' && root._isDirty()) { e.preventDefault(); e.returnValue = ''; }
+});
+
 // Browser back/forward and manual hash edits. navigate() also writes the hash,
 // but only when it differs from the active route, so its own updates don't
 // re-trigger this handler.
@@ -310,7 +502,8 @@ window.addEventListener('hashchange', () => {
 document.addEventListener('keydown', e => {
   const meta = e.ctrlKey || e.metaKey;
   if (!meta) return;
-  if (e.key === 's' || e.key === 'S') {
+  // e.code too: with a Russian layout e.key is "ы", and Ctrl+S did nothing.
+  if (e.key === 's' || e.key === 'S' || e.code === 'KeyS') {
     // Always swallow the browser's Save-Page dialog, even on views without a
     // registered save handler — it is never what the user wants here.
     e.preventDefault();
@@ -334,7 +527,11 @@ const h = (tag, attrs = {}, children = []) => {
     else if (k === 'html') el.innerHTML = v;
     else if (k === 'i18n') { el.dataset.i18n = v; el.textContent = t(v); }
     else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
-    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k === 'style' && typeof v === 'object') {
+      for (const [sk, sv] of Object.entries(v)) {
+        if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv;
+      }
+    }
     else if (v === true) el.setAttribute(k, '');
     else if (v === false || v == null) {} // skip
     else el.setAttribute(k, v);
@@ -453,24 +650,131 @@ async function refreshStatus() {
   const chip = document.getElementById('server-indicator');
   const txt = document.getElementById('server-indicator-text');
   try {
-    const s = await api.get('/api/server/status');
+    const s = await api.get('/api/server/status', { timeout: 10000 });
     State.serverStatus = s;
     _statusFails = 0;
+    if (Number.isFinite(s.serverTime)) State.clockSkew = s.serverTime - Date.now();
     chip.classList.remove('offline');
-    chip.classList.toggle('running', s.running);
+    chip.removeAttribute('title');
+    // "Starting…" until the server answers the Steam query (mission loaded).
+    const loading = s.running && !s.stopping && !!s.loading;
+    chip.classList.toggle('running', s.running && !s.stopping && !loading);
+    chip.classList.toggle('stopping', !!s.stopping || loading);
     chip.classList.toggle('stopped', !s.running);
-    txt.dataset.i18n = s.running ? 'status.running' : 'status.stopped';
+    txt.dataset.i18n = s.stopping ? 'status.stopping' : (loading ? 'status.loading' : (s.running ? 'status.running' : 'status.stopped'));
     txt.textContent = t(txt.dataset.i18n);
   } catch (err) {
     // After a few consecutive failures the manager itself is unreachable —
     // show that instead of freezing on the last known Running/Stopped forever.
+    if (err && err.status === 401) return; // the login screen is taking over
     if (++_statusFails >= 3 && chip) {
       chip.classList.remove('running', 'stopped');
       chip.classList.add('offline');
       txt.dataset.i18n = 'status.offline';
       txt.textContent = t('status.offline');
+      // The usual reason on a phone: the LAN address only works at home.
+      chip.title = t('status.offline.hint');
     }
   }
+}
+
+// --------------------------------------------------------------------- login
+
+// Panel login (Settings → Panel login). The login screen is a separate layer
+// over the app; on success the page reloads so every view starts signed in.
+let _loginShown = false;
+
+function onAuthRequired() {
+  if (_loginShown) return;
+  showLogin().then(() => location.reload());
+}
+
+// tryLocalAutologin trades the one-time token the manager puts into the URL
+// it opens on this computer (#autologin=…) for a session. The token is
+// removed from the address bar either way.
+async function tryLocalAutologin() {
+  const m = /(?:^#|&)autologin=([A-Za-z0-9_-]+)/.exec(location.hash);
+  if (!m) return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  try {
+    await api.post('/api/auth/local', { token: m[1] });
+    return true;
+  } catch { return false; }
+}
+
+// showLogin resolves once the user has signed in.
+function showLogin() {
+  _loginShown = true;
+  document.body.classList.add('auth-locked');
+  const screen = document.getElementById('login-screen');
+  const form = document.getElementById('login-form');
+  const user = document.getElementById('login-user');
+  const pass = document.getElementById('login-pass');
+  const remember = document.getElementById('login-remember');
+  const errBox = document.getElementById('login-error');
+  const submit = document.getElementById('login-submit');
+  const langSel = document.getElementById('login-lang');
+  screen.classList.remove('hidden');
+  applyI18n();
+  fillLangSelect(langSel, State.lang, false);
+  langSel.onchange = async () => {
+    localStorage.setItem('lang', langSel.value);
+    try { await loadI18n(langSel.value); } catch {}
+  };
+  try { user.value = localStorage.getItem('loginUser') || user.value; } catch {}
+  (user.value ? pass : user).focus();
+  const showErr = (msg) => { errBox.textContent = msg; errBox.hidden = !msg; };
+  let lockTimer = 0;
+  return new Promise((resolve) => {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      if (submit.disabled) return;
+      showErr('');
+      submit.disabled = true;
+      let locked = false;
+      try {
+        await api.post('/api/auth/login', { user: user.value.trim(), password: pass.value, remember: remember.checked });
+        try { localStorage.setItem('loginUser', user.value.trim()); } catch {}
+        pass.value = '';
+        screen.classList.add('hidden');
+        document.body.classList.remove('auth-locked');
+        _loginShown = false;
+        resolve();
+      } catch (err) {
+        pass.value = '';
+        pass.focus();
+        const wait = err.data && err.data.retryAfter;
+        if (err.status === 429 && wait) {
+          // Too many attempts: count the lock down, then allow the next try.
+          locked = true;
+          let left = wait;
+          clearInterval(lockTimer);
+          const tick = () => {
+            if (left <= 0) { clearInterval(lockTimer); showErr(''); submit.disabled = false; return; }
+            showErr(t('auth.err.locked').replace('{s}', String(left--)));
+          };
+          tick();
+          lockTimer = setInterval(tick, 1000);
+          return;
+        }
+        showErr(err.message || t('auth.err.invalid'));
+      } finally {
+        if (!locked) submit.disabled = false;
+      }
+    };
+  });
+}
+
+// Logout button in the topbar (only when a login is configured).
+function setupLogoutButton() {
+  const btn = document.getElementById('logout-btn');
+  if (!btn) return;
+  const on = !!(State.info && State.info.auth && State.info.auth.enabled);
+  btn.hidden = !on;
+  btn.onclick = async () => {
+    try { await api.post('/api/auth/logout', {}); } catch {}
+    location.reload();
+  };
 }
 
 // --------------------------------------------------------------------- first-run
@@ -479,8 +783,22 @@ async function ensureFirstRunDone() {
   if (State.config.firstRunDone) return;
   const modal = document.getElementById('first-run');
   modal.classList.remove('hidden');
-  fillLangSelect(document.getElementById('fr-lang'), State.config.language || 'en', false);
+  fillLangSelect(document.getElementById('fr-lang'), State.lang || State.config.language || 'en', false);
   document.getElementById('fr-vanilla').value = State.config.vanillaDayZPath || '';
+  document.getElementById('fr-modsfolder').value = State.config.modsFolderPath || '';
+  // Mod source choice shows only the field that mode needs.
+  const frSource = () => (document.querySelector('input[name=fr-modsource]:checked') || {}).value || 'client';
+  const frSyncSource = () => {
+    const v = frSource();
+    document.getElementById('fr-client-block').classList.toggle('hidden', v !== 'client');
+    document.getElementById('fr-folder-block').classList.toggle('hidden', v !== 'folder');
+    document.getElementById('fr-server-block').classList.toggle('hidden', v !== 'server');
+  };
+  document.querySelectorAll('input[name=fr-modsource]').forEach(r => {
+    r.checked = r.value === (State.config.modSource || 'client');
+    r.addEventListener('change', frSyncSource);
+  });
+  frSyncSource();
 
   // Steam auto-detect button. Populates the vanilla path field in one click;
   // if multiple installs are found, renders a small chooser under it.
@@ -550,15 +868,44 @@ async function ensureFirstRunDone() {
   }
   refreshMissionsPreview();
 
+  // Panel login: optional, but required when the panel is opened to the
+  // internet (the server would otherwise belong to whoever finds the address).
+  const frLoginOn = () => (document.querySelector('input[name=fr-login]:checked') || {}).value === 'on';
+  const frSyncLogin = () => {
+    const internet = (document.querySelector('input[name=fr-exposure]:checked') || {}).value === 'internet';
+    const off = document.querySelector('input[name=fr-login][value=off]');
+    if (internet) document.querySelector('input[name=fr-login][value=on]').checked = true;
+    if (off) off.disabled = internet;
+    document.getElementById('fr-login-internet').classList.toggle('hidden', !internet);
+    document.getElementById('fr-login-block').classList.toggle('hidden', !frLoginOn());
+  };
+  document.querySelectorAll('input[name=fr-login], input[name=fr-exposure]').forEach(r => r.addEventListener('change', frSyncLogin));
+  frSyncLogin();
+
   document.getElementById('fr-finish').onclick = (e) => withBusy(e.currentTarget, async () => {
     const exposure = document.querySelector('input[name=fr-exposure]:checked').value;
     const body = {
       language: document.getElementById('fr-lang').value,
       vanillaDayZPath: document.getElementById('fr-vanilla').value.trim(),
+      modSource: frSource(),
+      modsFolderPath: document.getElementById('fr-modsfolder').value.trim(),
       exposure,
     };
+    if (frLoginOn()) {
+      const user = document.getElementById('fr-user').value.trim();
+      const p1 = document.getElementById('fr-pass').value;
+      const p2 = document.getElementById('fr-pass2').value;
+      const bad = !user ? 'auth.err.user' : p1.length < 8 ? 'auth.err.short' : p1 !== p2 ? 'auth.err.mismatch' : '';
+      if (bad) { toast(t(bad), 'error'); return; }
+      body.login = { user, password: p1 };
+    }
     try {
       State.config = await api.post('/api/config/finish-first-run', body);
+      if (body.login) {
+        try { localStorage.setItem('loginUser', body.login.user); } catch {}
+        State.info = await api.get('/api/info');
+        setupLogoutButton();
+      }
       await loadI18n(State.config.language);
       document.getElementById('lang-switch').value = State.config.language;
       modal.classList.add('hidden');
@@ -579,16 +926,27 @@ Views.dashboard = async (root) => {
   // teardown NOW against mutable refs: navigate() already ran the previous
   // view's teardown, so assigning later would land on the next view instead
   // and leak both intervals for the rest of the session.
-  const timers = { tick: 0, perf: 0, stopped: false };
+  const timers = { tick: 0, perf: 0, cd: 0, fleet: 0, stopped: false };
   root._teardown = () => {
     timers.stopped = true;
+    if (timers.fleet) clearInterval(timers.fleet);
     if (timers.tick) clearInterval(timers.tick);
     if (timers.perf) clearInterval(timers.perf);
+    if (timers.cd) clearInterval(timers.cd);
   };
+  // 1s local tick for the restart countdown between 5s metric polls.
+  timers.cd = setInterval(() => document.querySelectorAll('.restart-countdown').forEach(updateRestartCountdown), 1000);
   await refreshStatus();
   // Start/Stop/Restart live in the Server card below — no duplicate set in the
   // header (was confusing to have two).
   root.append(pageHeader('nav.dashboard', 'dashboard.subtitle'));
+  // Open to the internet without a login: the most dangerous setting there is.
+  if (State.config && State.config.exposure === 'internet' && !(State.info && State.info.auth && State.info.auth.enabled)) {
+    root.append(h('div', { class: 'warning-bar' }, [
+      h('span', { i18n: 'dashboard.openNoLogin' }), ' ',
+      h('a', { href: '#settings/access', i18n: 'settings.tab.access' }),
+    ]));
+  }
 
   // Silent probe — if a newer manager version is out, show a non-blocking
   // banner. Failures are swallowed; this should never block the dashboard.
@@ -609,7 +967,12 @@ Views.dashboard = async (root) => {
   })();
 
   const metricsHost = h('div');
+  // The live state of this server comes first; then every server of the
+  // panel at a glance, then the getting-started steps (a compact strip).
+  const fleetCard = allServersCard();
   root.append(metricsHost);
+  if (fleetCard) root.append(fleetCard.card);
+  root.append(setupChecklistCard());
 
   // Ring buffers for sparklines. 60 samples @ 5s = 5 minutes of history.
   const cpuHist = [];
@@ -619,25 +982,37 @@ Views.dashboard = async (root) => {
   const render = (m) => {
     metricsHost.innerHTML = '';
     const s = {
-      running: m.running, pid: m.pid, uptime: m.uptime, port: m.port,
+      running: m.running, pid: m.pid, port: m.port,
+      // Localized ("2 h 5 min", "2 ч 5 мин"); a stopped server has no uptime.
+      uptime: m.running ? fmtAge(m.uptimeSec) : '',
     };
-    const mods = m.mods || { total: 0, installed: 0, active: 0 };
+    // No count yet (the first mods walk is still running): '—', not a false 0.
+    const mods = m.mods || null;
     const disk = m.diskFreeBytes != null ? bytes(m.diskFreeBytes) : '—';
     const players = m.playerCount != null ? m.playerCount : '—';
     // RCon answered with an error while the server is up → show an honest
     // "not connected" indicator rather than a misleading 0-player count.
     const rconDown = !!(s.running && m.rconError);
+    // Without RCon the Steam query still knows how many players are on.
+    const q = m.query || null;
+    const qPlayers = rconDown && q && q.ok && q.info ? q.info.players : null;
+    // Who would a Stop / Restart throw out? RCon's count, else the query's.
+    const online = qPlayers != null ? qPlayers : (Number.isFinite(players) ? players : 0);
     const recent = Array.isArray(m.recentAdm) ? m.recentAdm : [];
     const proc = m.proc || null;
     if (proc) {
       pushHist(cpuHist, proc.cpuPercent || 0);
       pushHist(memHist, proc.memBytes || 0);
     }
-    const nextRestart = nextRestartLabel(s.running, s.uptime);
+    if (Number.isFinite(m.serverTime)) State.clockSkew = m.serverTime - Date.now();
+    const nextRestart = nextRestartNode(m);
 
+    if (m.adopted && s.running) {
+      metricsHost.append(h('div', { class: 'info-bar', text: t('dashboard.adopted').replace('{pid}', s.pid) }));
+    }
     if (State.serverStatus.loopPaused) {
-      metricsHost.append(h('div', { class: 'warning-bar', style: { display: 'flex', gap: '10px', alignItems: 'center' } }, [
-        h('span', { style: { flex: '1' }, i18n: 'status.crashLoop' }),
+      metricsHost.append(h('div', { class: 'warning-bar bar-action' }, [
+        h('span', { class: 'bar-text', i18n: 'status.crashLoop' }),
         h('button', { i18n: 'action.resume', onclick: async (e) => {
           await withBusy(e.currentTarget, async () => {
             try { await api.post('/api/server/clear-crash-loop'); toast(t('msg.saved'), 'ok'); await navigate('dashboard'); }
@@ -647,13 +1022,44 @@ Views.dashboard = async (root) => {
       ]));
     }
 
+    // Status as a coloured badge, like the Servers page.
+    const loading = s.running && !m.stopping && !!m.loading;
+    const stateBadge = m.stopping ? h('span', { class: 'badge warn', i18n: 'status.stopping' })
+      : loading ? h('span', { class: 'badge warn', i18n: 'status.loading' })
+      : s.running ? h('span', { class: 'badge ok', i18n: 'status.running' })
+      : h('span', { class: 'badge mute', i18n: 'status.stopped' });
+    const confirmOnline = async (okKey) => online <= 0 ||
+      confirmModal(t('confirm.playersOnline').replace('{n}', online), { danger: true, okText: t(okKey) });
+
+    const serverActions = h('div', { class: 'actions dash-actions' });
+    if (s.running) {
+      serverActions.append(
+        h('button', { class: 'secondary', i18n: 'action.restart',
+          onclick: async (e) => {
+            const btn = e.currentTarget;
+            if (!(await confirmOnline('action.restart'))) return;
+            await withBusy(btn, async () => { try { await api.post('/api/server/restart'); await navigate('dashboard'); } catch (err) { handleErr(err); } });
+          }}),
+        h('button', { class: 'danger', i18n: 'action.stop',
+          onclick: async (e) => {
+            // Capture the button BEFORE any await — e.currentTarget is only
+            // valid during dispatch and turns null after it.
+            const btn = e.currentTarget;
+            // Players online — a mis-click kills their session; confirm.
+            if (!(await confirmOnline('action.stop'))) return;
+            await withBusy(btn, async () => { try { await api.post('/api/server/stop'); await navigate('dashboard'); } catch (err) { handleErr(err); } });
+          }}),
+      );
+    } else {
+      serverActions.append(h('button', { class: 'primary', i18n: 'action.start',
+        onclick: (e) => withBusy(e.currentTarget, async () => { try { await api.post('/api/server/start'); await navigate('dashboard'); } catch (err) { handleErr(err); } }) }));
+    }
+
     metricsHost.append(
-      h('div', { class: 'grid-4' }, [
-        h('div', { class: 'card' }, [
-          h('h3', { i18n: 'nav.server' }),
+      h('div', { class: 'grid-3 dash-grid' }, [
+        h('div', { class: 'card dash-server' }, [
+          h('div', { class: 'card-head' }, [cardTitle('i-server', 'nav.server'), stateBadge]),
           h('div', { class: 'kv' }, [
-            h('div', { class: 'k', i18n: 'status.running' }),
-            h('div', { text: s.running ? t('status.yes') : t('status.no') }),
             h('div', { class: 'k', i18n: 'status.pid' }),
             h('div', { text: s.pid || '—' }),
             h('div', { class: 'k', i18n: 'status.uptime' }),
@@ -661,66 +1067,76 @@ Views.dashboard = async (root) => {
             h('div', { class: 'k', i18n: 'status.port' }),
             h('div', { text: s.port }),
             h('div', { class: 'k', i18n: 'status.players' }),
-            rconDown
+            qPlayers != null
+              ? h('div', { title: t('dashboard.playersViaQuery') }, [
+                  h('span', { text: `${qPlayers} / ${q.info.maxPlayers} ` }),
+                  h('span', { class: 'rcon-down', i18n: m.rconConfigured === false ? 'chat.needRcon.badge' : 'dashboard.rconDown' }),
+                ])
+              : rconDown
               ? h('div', { class: 'rcon-down', title: m.rconError },
                   [h('span', { i18n: m.rconConfigured === false ? 'chat.needRcon.badge' : 'dashboard.rconDown' })])
               : h('div', { text: String(players) }),
+            // Server FPS from the RPT log (logAverageFps + -dologs).
+            ...(s.running ? [
+              h('div', { class: 'k', i18n: 'status.serverFps' }),
+              m.serverFps != null
+                ? h('div', { class: 'fps-val ' + (m.serverFps >= 20 ? 'ok' : m.serverFps >= 10 ? 'warn' : 'bad'), text: String(m.serverFps) })
+                : h('div', {}, h('button', { class: 'fps-none link-btn', type: 'button', text: '—', title: t('status.serverFps.off'),
+                    'aria-label': t('status.serverFps.off'), onclick: () => focusTarget('server', '[data-key="logAverageFps"]') })),
+            ] : []),
+            ...(s.running && !m.stopping ? [
+              h('div', { class: 'k', i18n: 'dashboard.browser', title: t('dashboard.browser.hint') }),
+              q && q.ok
+                ? h('div', { class: 'browser-ok', title: q.info ? `${q.info.name}
+${q.info.map} · ${q.info.version || ''}` : '' },
+                    [h('span', { class: 'dot-ok' }), h('span', { i18n: 'dashboard.browser.listed' })])
+                : m.loading
+                ? h('div', { class: 'browser-wait' }, [h('span', { class: 'dot-wait' }), h('span', { i18n: 'dashboard.browser.loading' })])
+                : h('div', { class: 'browser-bad', title: (q && q.error) || '',
+                    text: t('dashboard.browser.noAnswer').replace('{port}', (q && q.port) || 27016) }),
+            ] : []),
             ...(nextRestart ? [
               h('div', { class: 'k', i18n: 'status.nextRestart' }),
-              h('div', { text: nextRestart }),
+              nextRestart,
             ] : []),
           ]),
-          h('div', { class: 'actions' }, [
-            s.running
-              ? h('button', { class: 'danger', i18n: 'action.stop',
-                  onclick: async (e) => {
-                    // Capture the button BEFORE any await — e.currentTarget is
-                    // only valid during dispatch and turns null after it.
-                    const btn = e.currentTarget;
-                    // Players online — a mis-click kills their session; confirm.
-                    if (players > 0 && !(await confirmModal(t('confirm.playersOnline').replace('{n}', players), { danger: true, okText: t('action.stop') }))) return;
-                    await withBusy(btn, async () => { try { await api.post('/api/server/stop'); await navigate('dashboard'); } catch(err){handleErr(err);} });
-                  }})
-              : h('button', { class: 'primary', i18n: 'action.start',
-                  onclick: (e) => withBusy(e.currentTarget, async () => { try { await api.post('/api/server/start'); await navigate('dashboard'); } catch(err){handleErr(err);} })}),
-            h('button', { i18n: 'action.restart',
-              onclick: async (e) => {
-                const btn = e.currentTarget;
-                if (players > 0 && !(await confirmModal(t('confirm.playersOnline').replace('{n}', players), { danger: true, okText: t('action.restart') }))) return;
-                await withBusy(btn, async () => { try { await api.post('/api/server/restart'); await navigate('dashboard'); } catch(err){handleErr(err);} });
-              }}),
-          ]),
+          serverActions,
         ]),
         h('div', { class: 'card' }, [
-          h('h3', { i18n: 'dashboard.mods' }),
+          cardTitle('i-mods', 'dashboard.mods'),
           h('div', { class: 'kv' }, [
             h('div', { class: 'k', i18n: 'dashboard.mods.active' }),
-            h('div', { text: String(mods.active) }),
+            h('div', { text: mods ? String(mods.active) : '—' }),
             h('div', { class: 'k', i18n: 'dashboard.mods.installed' }),
-            h('div', { text: String(mods.installed) }),
+            h('div', { text: mods ? String(mods.installed) : '—' }),
             h('div', { class: 'k', i18n: 'dashboard.mods.total' }),
-            h('div', { text: String(mods.total) }),
+            h('div', { text: mods ? String(mods.total) : '—' }),
           ]),
           h('div', { class: 'actions' }, [
-            h('button', { i18n: 'nav.mods', onclick: () => navigate('mods') }),
+            h('button', { class: 'secondary', i18n: 'nav.mods', onclick: () => navigate('mods') }),
           ]),
         ]),
-        h('div', { class: 'card' }, [
-          h('h3', { i18n: 'dashboard.disk' }),
-          h('div', { class: 'metric-num', text: disk }),
-          h('div', { class: 'metric-sub', i18n: 'dashboard.disk.free' }),
-        ]),
-        h('div', { class: 'card' }, [
-          h('h3', { i18n: 'dashboard.process' }),
-          h('div', { class: 'metric-num',
-            text: proc ? (Math.round(proc.cpuPercent * 10) / 10).toFixed(1) + ' %' : '—' }),
-          h('div', { class: 'metric-sub', i18n: 'dashboard.process.cpu' }),
-          sparkline(cpuHist, 100),
-          h('div', { class: 'metric-num',
-            text: proc ? bytes(proc.memBytes) : '—', style: 'margin-top:8px' }),
-          h('div', { class: 'metric-sub', i18n: 'dashboard.process.mem' }),
-          sparkline(memHist, 0),
-        ]),
+        // Disk and the server process in one "resources" card.
+        h('div', { class: 'card dash-res' }, [
+          cardTitle('i-health', 'dashboard.resources'),
+          h('div', { class: 'res-row' }, [
+            h('div', {}, [h('div', { class: 'metric-num', text: disk }), h('div', { class: 'metric-sub', i18n: 'dashboard.disk.free' })]),
+          ]),
+          s.running ? h('div', { class: 'res-row' }, [
+            h('div', {}, [
+              h('div', { class: 'metric-num', text: proc ? (Math.round(proc.cpuPercent * 10) / 10).toFixed(1) + ' %' : '—' }),
+              h('div', { class: 'metric-sub', i18n: 'dashboard.process.cpu' }),
+            ]),
+            sparkline(cpuHist, 100),
+          ]) : null,
+          s.running ? h('div', { class: 'res-row' }, [
+            h('div', {}, [
+              h('div', { class: 'metric-num', text: proc ? bytes(proc.memBytes) : '—' }),
+              h('div', { class: 'metric-sub', i18n: 'dashboard.process.mem' }),
+            ]),
+            sparkline(memHist, 0),
+          ]) : h('p', { class: 'hint', i18n: 'dashboard.process.idle' }),
+        ].filter(Boolean)),
       ])
     );
 
@@ -736,9 +1152,9 @@ Views.dashboard = async (root) => {
     }
     metricsHost.append(
       h('div', { class: 'card' }, [
-        h('div', { class: 'toolbar' }, [
-          h('h3', { i18n: 'dashboard.recentAdm' }),
-          h('button', { i18n: 'nav.admlog', onclick: () => navigate('admlog') }),
+        h('div', { class: 'card-head' }, [
+          cardTitle('i-admlog', 'dashboard.recentAdm'),
+          h('button', { class: 'small secondary', i18n: 'nav.admlog', onclick: () => navigate('admlog') }),
         ]),
         list,
       ])
@@ -758,19 +1174,19 @@ Views.dashboard = async (root) => {
   // /api/dashboard/metrics — and thus RCon — from detached pages).
   // ---- Performance history card (CPU / RAM / players over time). Lives
   // outside the 5s metrics tick — charts refetch on their own 60s cadence.
-  const perfCard = h('div', { class: 'card' }, [h('h3', { i18n: 'perf.title' })]);
+  const perfCard = h('div', { class: 'card' }, [cardTitle('i-economy', 'perf.title')]);
   const perfRange = h('div', { class: 'chart-range' });
   const perfHost = h('div', { class: 'perf-grid' });
   perfCard.append(perfRange, perfHost);
-  root.append(perfCard);
+  root.append(perfCard, quickFoldersCard());
   let perfSec = Number(localStorage.getItem('perfRange')) || 3600;
-  const RANGES = [[3600, '1h'], [21600, '6h'], [86400, '24h']];
+  const RANGES = [[3600, 'perf.range.1h'], [21600, 'perf.range.6h'], [86400, 'perf.range.24h']];
   function renderRangeButtons() {
     perfRange.innerHTML = '';
     for (const [sec, label] of RANGES) {
       perfRange.append(h('button', {
         class: sec === perfSec ? 'primary' : '',
-        text: label,
+        text: t(label),
         onclick: () => { perfSec = sec; localStorage.setItem('perfRange', String(sec)); renderRangeButtons(); loadPerf(); },
       }));
     }
@@ -785,6 +1201,12 @@ Views.dashboard = async (root) => {
         applyI18n();
         return;
       }
+      // Stopped the whole time: one sentence, not three empty charts.
+      if (!samples.some(x => x.running)) {
+        perfHost.append(h('p', { class: 'hint', i18n: 'perf.notRunning' }));
+        applyI18n();
+        return;
+      }
       perfHost.append(
         perfChart(samples, { label: t('dashboard.process.cpu'), val: x => x.running ? x.cpu : null, fmt: v => v.toFixed(1) + '%' }),
         perfChart(samples, { label: t('dashboard.process.mem'), val: x => x.running ? x.mem : null, fmt: v => bytes(v) }),
@@ -796,68 +1218,48 @@ Views.dashboard = async (root) => {
   loadPerf();
   timers.perf = setInterval(loadPerf, 60000);
   timers.tick = setInterval(tick, 5000);
+  if (fleetCard && !timers.stopped) timers.fleet = setInterval(fleetCard.refresh, 10000);
   await tick();
   // After tick() so State.serverStatus is fresh; the card renders only when
   // the server is down and something was actually recognised.
   if (myNav === _navSeq) await renderDiagnosis(root, true);
 };
 
-// parseUptimeSeconds turns the backend's Duration string ("3h17m4s",
-// "47m12s", "5s") into seconds. Returns 0 for unparsable input.
-function parseUptimeSeconds(s) {
-  if (!s || typeof s !== 'string') return 0;
-  let total = 0;
-  const re = /(\d+)([hms])/g;
-  let m;
-  while ((m = re.exec(s)) !== null) {
-    const n = parseInt(m[1], 10);
-    if (m[2] === 'h') total += n * 3600;
-    else if (m[2] === 'm') total += n * 60;
-    else total += n;
-  }
-  return total;
+// nextRestartNode renders the dashboard's "Next restart" value from the plan
+// the supervisor itself reports (m.nextRestart) — never re-derived in the
+// browser, whose clock and timezone may differ from the server's. That drift
+// (plus a stale server-side timer) is how players once heard "3 minutes" while
+// the panel still showed 8. Returns null when nothing is scheduled at all.
+function nextRestartNode(m) {
+  const c = State.config || {};
+  const configured = (Array.isArray(c.scheduledRestarts) && c.scheduledRestarts.length > 0) ||
+    (!!c.autoRestartEnabled && (c.autoRestartSeconds || 0) > 0) ||
+    (Array.isArray(c.scheduledProfiles) && c.scheduledProfiles.some(p => p.enabled));
+  const plan = m.nextRestart || null;
+  if (!plan && !configured) return null;
+  if (!m.running) return h('div', { text: t('status.notRunning') || '—' });
+  if (!plan) return h('div', { text: '—' });
+  const span = h('span', { class: 'restart-countdown mono', 'data-at': String(plan.at) });
+  updateRestartCountdown(span);
+  const tags = [h('span', { class: 'badge mute', i18n: 'restart.reason.' + plan.reason })];
+  if (plan.kicking) tags.push(h('span', { class: 'badge err', i18n: 'restart.kicking' }));
+  else if (plan.active) tags.push(h('span', { class: 'badge warn', i18n: 'restart.active' }));
+  if (plan.waitingEmpty) tags.push(h('span', { class: 'badge', i18n: 'restart.waitingEmpty' }));
+  return h('div', { class: 'restart-next' }, [span, ...tags]);
 }
 
-// nextRestartLabel returns "in HH:MM:SS" / "—" / null based on the active
-// auto-restart configuration. Returns null if no schedule is configured at
-// all (so the dashboard hides the row entirely).
-function nextRestartLabel(running, uptimeStr) {
-  const c = State.config || {};
-  const times = Array.isArray(c.scheduledRestarts) ? c.scheduledRestarts : [];
-  const intervalOn = !!c.autoRestartEnabled && (c.autoRestartSeconds || 0) > 0;
-  const hasSchedule = times.length > 0 || intervalOn;
-  if (!hasSchedule) return null;
-  if (!running) return t('status.notRunning') || '—';
-
-  const candidates = [];
-  // Interval-based: AutoRestartSeconds - uptime.
-  if (intervalOn) {
-    const remaining = c.autoRestartSeconds - parseUptimeSeconds(uptimeStr);
-    if (remaining > 0) candidates.push(remaining);
-  }
-  // HH:MM schedule: pick nearest in the future (today or tomorrow).
-  const now = new Date();
-  for (const tm of times) {
-    const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(tm || '');
-    if (!m) continue;
-    const hh = parseInt(m[1], 10), mm = parseInt(m[2], 10);
-    if (hh > 23 || mm > 59) continue;
-    const target = new Date(now);
-    target.setHours(hh, mm, 0, 0);
-    if (target <= now) target.setDate(target.getDate() + 1);
-    candidates.push(Math.round((target - now) / 1000));
-  }
-  if (candidates.length === 0) return '—';
-  let s = Math.min(...candidates);
-  if (s < 0) s = 0;
-  // Never name locals h/t here — they shadow the global DOM builder and the
-  // i18n function for this whole scope (a `let t` bug already cost us a
-  // broken Types editor).
-  const hrs = Math.floor(s / 3600);
-  const mins = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
+// updateRestartCountdown refreshes one countdown element against the server
+// clock (State.clockSkew = server time − browser time at the last poll).
+function updateRestartCountdown(el) {
+  const at = Number(el.dataset.at);
+  if (!Number.isFinite(at)) return;
+  const now = Date.now() + (State.clockSkew || 0);
+  const sec = Math.max(0, Math.round((at - now) / 1000));
   const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(hrs)}:${pad(mins)}:${pad(sec)}`;
+  const hrs = Math.floor(sec / 3600), mins = Math.floor((sec % 3600) / 60), secs = sec % 60;
+  // The wall-clock moment, in the viewer's own timezone (same instant).
+  const when = new Date(at - (State.clockSkew || 0)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  el.textContent = `${pad(hrs)}:${pad(mins)}:${pad(secs)} · ${when}`;
 }
 
 // sparkline renders an SVG polyline from a numeric series.
@@ -903,36 +1305,30 @@ function openCommandPalette() {
   if (_commandPaletteOpen) return;
   _commandPaletteOpen = true;
 
+  // Every page in the sidebar, in sidebar order — the list used to be a
+  // hand-kept subset that missed half the sections added since.
   const items = [
-    { kind: 'route', label: t('nav.dashboard') || 'Dashboard',  route: 'dashboard' },
-    { kind: 'route', label: t('nav.server')    || 'Server',     route: 'server' },
-    { kind: 'route', label: t('nav.mods')      || 'Mods',       route: 'mods' },
-    { kind: 'route', label: t('nav.events')    || 'Events',     route: 'events' },
-    { kind: 'route', label: t('nav.types')     || 'Types',      route: 'types' },
-    { kind: 'route', label: t('nav.modedTypes')|| 'Custom types', route: 'moded' },
-    { kind: 'route', label: t('nav.missionDb') || 'Mission DB', route: 'missiondb' },
-    { kind: 'route', label: t('nav.files')     || 'Files',      route: 'files' },
-    { kind: 'route', label: t('nav.profiles')  || 'Profiles',   route: 'profiles' },
-    { kind: 'route', label: t('nav.battleye')  || 'BattlEye',   route: 'battleye' },
-    { kind: 'route', label: t('nav.logs')      || 'Logs',       route: 'logs' },
-    { kind: 'route', label: t('nav.admlog')    || 'ADM log',    route: 'admlog' },
-    { kind: 'route', label: t('nav.players')   || 'Players',    route: 'players' },
-    { kind: 'route', label: t('nav.rcon')      || 'RCon',       route: 'rcon' },
-    { kind: 'route', label: t('nav.validator') || 'Validator',  route: 'validator' },
-    { kind: 'route', label: t('nav.weather')   || 'Weather & Time', route: 'weather' },
-    { kind: 'route', label: t('nav.sync')      || 'Sync',       route: 'sync' },
-    { kind: 'route', label: t('nav.wipe')      || 'Wipe',       route: 'wipe' },
-    { kind: 'route', label: t('nav.gameplay')  || 'Gameplay',   route: 'gameplay' },
-    { kind: 'route', label: t('nav.attach')    || 'Attachments', route: 'attachments' },
-    { kind: 'route', label: t('nav.settings')  || 'Settings',   route: 'settings' },
+    ...[...document.querySelectorAll('.nav a[data-route]')].map(a => ({
+      kind: 'route', label: a.textContent.trim(), route: a.dataset.route,
+    })),
     { kind: 'action', label: (t('action.start') || 'Start server'),
-      run: async () => { try { await api.post('/api/server/start'); toast('starting', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
+      run: async () => { try { await api.post('/api/server/start'); toast(t('msg.starting'), 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
     { kind: 'action', label: (t('action.stop') || 'Stop server'),
-      run: async () => { try { await api.post('/api/server/stop'); toast('stopping', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
+      run: async () => {
+        if (!(await confirmModal(t('servers.confirmStop').replace('{name}', (Srv.current() || {}).name || 'DayZ'), { danger: true, okText: t('action.stop') }))) return;
+        try { await api.post('/api/server/stop'); toast(t('msg.stopping'), 'ok'); refreshStatus(); } catch (e) { handleErr(e); }
+      } },
     { kind: 'action', label: (t('action.restart') || 'Restart server'),
-      run: async () => { try { await api.post('/api/server/restart'); toast('restarting', 'ok'); refreshStatus(); } catch (e) { handleErr(e); } } },
+      run: async () => {
+        if (!(await confirmModal(t('servers.confirmRestart').replace('{name}', (Srv.current() || {}).name || 'DayZ'), { okText: t('action.restart') }))) return;
+        try { await api.post('/api/server/restart'); toast(t('msg.restarting'), 'ok'); refreshStatus(); } catch (e) { handleErr(e); }
+      } },
     { kind: 'action', label: (t('action.theme.toggle') || 'Toggle theme'),
       run: () => { const cur = (localStorage.getItem('theme') || 'dark'); setTheme(cur === 'dark' ? 'light' : 'dark'); } },
+    // Multi-server: jump to another server of the panel.
+    ...(Srv.list.length > 1 ? Srv.list.filter(s => s.id !== Srv.id && !s.error).map(s => ({
+      kind: 'action', label: t('servers.switch') + ': ' + s.name, run: () => Srv.switchTo(s.id),
+    })) : []),
   ];
 
   const overlay = h('div', { class: 'modal modal-overlay cmdp-overlay' });
@@ -993,6 +1389,14 @@ function openCommandPalette() {
       .filter(x => x.s > 0)
       .sort((a, b) => b.s - a.s)
       .map(x => x.it);
+    // Typed text also goes to config Search and Where to find, so a class
+    // name ("AKM") leads somewhere instead of "No matches".
+    if (q.length >= 2) {
+      filtered.push(
+        { kind: 'action', label: tn('cmdp.searchConfigs', { q }), run: () => { _lastSearch = q; return navigate('search'); } },
+        { kind: 'action', label: tn('cmdp.whereLoot', { q }), run: () => { _lastLoot = q; return navigate('lootwhere'); } },
+      );
+    }
     selected = 0;
     render();
   }
@@ -1028,20 +1432,28 @@ function openCommandPalette() {
 // subtitle + right-aligned action buttons. Use as the first element appended
 // to a view's `root` so every page reads consistently.
 function pageHeader(titleKey, subKey, actions) {
-  const left = h('div', {}, [h('h1', { i18n: titleKey })]);
+  const left = h('div', { class: 'page-title' }, [h('h1', { i18n: titleKey })]);
   if (subKey) left.append(h('div', { class: 'page-sub', i18n: subKey }));
+  // The section's own sidebar icon heads the page, so every page carries the
+  // same visual identity as its menu entry.
+  const navLabel = document.querySelector(`.nav a[data-route] span[data-i18n="${titleKey}"]`);
+  const use = navLabel && navLabel.closest('a').querySelector('use');
+  const iconId = use && (use.getAttribute('href') || '').replace('#', '');
+  const head = [];
+  if (iconId) head.push(h('span', { class: 'page-icon', 'aria-hidden': 'true', html: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#${iconId}"/></svg>` }));
+  head.push(left);
   const right = h('div', { class: 'page-actions' }, actions || []);
-  return h('div', { class: 'page-header' }, [left, right]);
+  return h('div', { class: 'page-header' }, [h('div', { class: 'page-head-main' }, head), right]);
 }
 
 // openModal renders a content-agnostic modal overlay with a close button.
 // Returns { close, body } so callers can build their UI inside `body` and
 // dismiss programmatically. Click on backdrop or Escape both close. The
 // caller's onClose callback (if provided) runs after the DOM is removed.
-function openModal({ title, onClose, wide } = {}) {
+function openModal({ title, onClose, wide, isDirty } = {}) {
   const body = h('div', { class: 'modal-body' });
   const closeBtn = h('button', { class: 'modal-close', text: '×',
-    'aria-label': 'Close', onclick: () => close() });
+    'aria-label': t('action.close'), onclick: () => tryClose() });
   const card = h('div', { class: 'modal-card' + (wide ? ' wide' : '') }, [
     h('div', { class: 'modal-header' }, [
       h('h3', { text: title || '' }),
@@ -1050,9 +1462,27 @@ function openModal({ title, onClose, wide } = {}) {
     body,
   ]);
   const overlay = h('div', { class: 'modal modal-overlay' }, card);
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) tryClose(); });
+  // Esc closes only the top dialog (a confirm over an editor, not both).
+  const onKey = (e) => {
+    if (e.key !== 'Escape') return;
+    const open = document.querySelectorAll('.modal-overlay');
+    if (open[open.length - 1] === overlay) tryClose();
+  };
   document.addEventListener('keydown', onKey);
+  // A stray click outside an editor must not throw its edits away: with
+  // isDirty, the backdrop / Esc / × ask first (close() from code does not).
+  let asking = false;
+  async function tryClose() {
+    if (isDirty && isDirty()) {
+      if (asking) return;
+      asking = true;
+      const ok = await confirmModal(t('refresh.discard'), { danger: true, okText: t('action.discard') });
+      asking = false;
+      if (!ok) return;
+    }
+    close();
+  }
   function close() {
     document.removeEventListener('keydown', onKey);
     overlay.remove();
@@ -1212,139 +1642,61 @@ function fmtClock(unixSec) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-function admEventRow(e) {
-  const typeClass = 'adm-type adm-' + (e.type || 'other');
+// killSourceLabel names a non-player killer the admin log writes as a class
+// ("ZmbM_HermitSkinny_Beard", "Animal_UrsusArctos", "FallDamage") in words.
+function killSourceLabel(src) {
+  const s = String(src || '');
+  if (/^(Zmb|Infected)/i.test(s)) return t('kill.src.infected');
+  if (/^Animal/i.test(s)) return t('kill.src.animal');
+  if (/^Fall/i.test(s)) return t('kill.src.fall');
+  return s;
+}
+// killSourceEl shows it, keeping the raw class in the tooltip.
+function killSourceEl(src) {
+  const label = killSourceLabel(src);
+  return h('span', { class: 'adm-meta adm-source', text: label, title: label !== src ? src : null });
+}
+// fmtMeters is a log distance ("167.2") with the UI language's unit.
+function fmtMeters(d) { return d + ' ' + t('unit.m'); }
+// admName is a player's name in a log row: a link to the profile when
+// opts.keyOf(name) knows the player (opts.onChange runs after edits there).
+function admName(name, opts = {}) {
+  const key = name && opts.keyOf ? opts.keyOf(name) : '';
+  return key
+    ? h('span', { class: 'adm-player player-link', text: name, onclick: () => openPlayerProfile(key, opts.onChange) })
+    : h('span', { class: 'adm-player', text: name || '—' });
+}
+
+function admEventRow(e, opts = {}) {
+  const type = e.type || 'other';
   const pieces = [
     h('span', { class: 'adm-time', text: e.time || '' }),
-    h('span', { class: typeClass, text: e.type || '' }),
+    h('span', { class: 'adm-type adm-' + type, text: t('admlog.ev.' + type) }),
   ];
-  if (e.player) pieces.push(h('span', { class: 'adm-player', text: e.player }));
-  if (e.type === 'kill' || e.type === 'hit') {
-    if (e.target) pieces.push(h('span', { class: 'adm-arrow', text: '→' }));
-    if (e.target) pieces.push(h('span', { class: 'adm-player', text: e.target }));
+  if (type === 'kill' || type === 'hit') {
+    // The log names the victim first ("Player «Victim» … killed by Player
+    // «Killer»"): show it the Killfeed's way, whoever did it → victim. A
+    // zombie, animal or fall is the source, not a player.
+    if (e.target || e.source) {
+      pieces.push(e.target ? admName(e.target, opts) : killSourceEl(e.source));
+      pieces.push(h('span', { class: 'adm-arrow', text: '→' }));
+    }
+    if (e.player) pieces.push(admName(e.player, opts));
     const meta = [];
     if (e.weapon) meta.push(e.weapon);
-    if (e.distance) meta.push(e.distance + 'm');
+    if (e.distance) meta.push(fmtMeters(e.distance));
     if (meta.length) pieces.push(h('span', { class: 'adm-meta', text: '(' + meta.join(', ') + ')' }));
-  } else if (e.type === 'chat' && e.message) {
-    pieces.push(h('span', { class: 'adm-msg', text: e.message }));
-  } else if (e.message) {
-    pieces.push(h('span', { class: 'adm-meta', text: e.message }));
+  } else {
+    if (e.player) pieces.push(admName(e.player, opts));
+    if (type === 'chat' && e.message) pieces.push(h('span', { class: 'adm-msg', text: e.message }));
+    else if (e.message) pieces.push(h('span', { class: 'adm-meta', text: e.message }));
   }
   return h('div', { class: 'adm-row' }, pieces);
 }
 
 // --------------------------------------------------------------------- server.cfg
 
-Views.server = async (root) => {
-  const data = await api.get('/api/servercfg');
-  const form = h('div', { class: 'grid-2' });
-  const bag = {};
-  const KEYS = [
-    'hostname','password','passwordAdmin','description','maxPlayers','serverTime',
-    'serverTimeAcceleration','serverNightTimeAcceleration','serverTimePersistent',
-    'enableWhitelist','disableVoN','vonCodecQuality','disable3rdPerson','disableCrosshair',
-    'disablePersonalLight','lightingConfig','verifySignatures','forceSameBuild',
-    'shardId','instanceId','storageAutoFix','loginQueueConcurrentPlayers','loginQueueMaxPlayers',
-    'steamProtocolMaxDataSize',
-  ];
-  // Only the keys whose effect is non-obvious get an explanation; the rest
-  // are self-describing and a marker on every row would be noise.
-  const CFG_HELP = {
-    hostname: 'server.hostname',
-    password: 'server.password',
-    passwordAdmin: 'server.passwordAdmin',
-    maxPlayers: 'server.maxPlayers',
-    serverTimeAcceleration: 'server.timeAccel',
-    serverNightTimeAcceleration: 'server.nightTimeAccel',
-    serverTimePersistent: 'server.timePersistent',
-    enableWhitelist: 'server.whitelist',
-    disableVoN: 'server.von',
-    disable3rdPerson: 'server.thirdPerson',
-    verifySignatures: 'server.verifySignatures',
-    forceSameBuild: 'server.forceSameBuild',
-    instanceId: 'server.instanceId',
-    storageAutoFix: 'server.storageAutoFix',
-    loginQueueConcurrentPlayers: 'server.loginQueue',
-    loginQueueMaxPlayers: 'server.loginQueue',
-  };
-  for (const k of KEYS) {
-    const val = data.values[k] ?? '';
-    const input = h('input', { type: 'text', value: val });
-    bag[k] = input;
-    const label = h('label', { text: k, for: assocId(input) });
-    form.append(h('div', {}, [
-      CFG_HELP[k] ? withHelp(label, CFG_HELP[k]) : label,
-      input,
-    ]));
-  }
-
-  const missionSelect = h('select', { id: 'mission-input', 'data-help': 'server.mission', 'aria-label': t('sync.mission') });
-  let missions = { missions: [], active: data.mission || '' };
-  try { missions = await api.get('/api/missions'); } catch {}
-  for (const m of missions.missions) {
-    missionSelect.append(h('option', { value: m.name, text: m.name }));
-  }
-  missionSelect.value = data.mission || missions.active || '';
-
-  root.append(pageHeader('nav.server', 'server.subtitle'));
-  if (State.serverStatus.running) root.append(runningBanner());
-  root.append(
-    h('div', { class: 'card' }, [
-      h('h2', { i18n: 'settings.title' }),
-      h('div', { class: 'kv' }, [
-        h('div', { class: 'k', text: 'mission' }),
-        h('div', {}, [
-          missionSelect,
-          h('button', { style: { marginLeft: '8px' }, text: 'Change',
-            onclick: async () => {
-              try {
-                const v = missionSelect.value.trim();
-                await api.post('/api/servercfg/mission', { template: v });
-                toast('mission changed', 'ok');
-              } catch (e) { handleErr(e); }
-            }
-          }),
-          h('button', { style: { marginLeft: '8px' }, i18n: 'mission.duplicate',
-            onclick: async () => {
-              const src = missionSelect.value.trim();
-              if (!src) return;
-              const tgt = await promptModal(t('mission.duplicate.prompt'), { value: `${src}.copy`, title: t('mission.duplicate') });
-              if (!tgt) return;
-              try {
-                await api.post('/api/missions/duplicate', { source: src, target: tgt });
-                toast('duplicated', 'ok');
-                await navigate('server');
-              } catch (e) { handleErr(e); }
-            }
-          }),
-        ]),
-      ]),
-      form,
-      h('div', { class: 'actions' }, [
-        h('button', { class: 'primary', i18n: 'action.save',
-          onclick: async () => {
-            const NUMERIC = new Set(['maxPlayers','serverTimeAcceleration','serverNightTimeAcceleration',
-              'serverTimePersistent','enableWhitelist','disableVoN','vonCodecQuality','disable3rdPerson',
-              'disableCrosshair','disablePersonalLight','verifySignatures','forceSameBuild','instanceId',
-              'storageAutoFix','loginQueueConcurrentPlayers','loginQueueMaxPlayers','steamProtocolMaxDataSize']);
-            const patch = {};
-            for (const k of KEYS) {
-              const v = bag[k].value.trim();
-              // Coerce ONLY known-numeric keys — hostname "123", a numeric
-              // password or a zero-padded value must survive as strings.
-              patch[k] = (NUMERIC.has(k) && v !== '' && !isNaN(Number(v))) ? Number(v) : v;
-            }
-            try {
-              await api.post('/api/servercfg', patch);
-              toast(t('msg.saved'), 'ok');
-            } catch (e) { handleErr(e); }
-          }
-        }),
-      ]),
-    ])
-  );
-};
+// Views.server lives in sections.js (map, serverDZ.cfg, launch, performance).
 
 // --------------------------------------------------------------------- mods
 
@@ -1353,11 +1705,19 @@ Views.mods = async (root) => {
   // switches section while it runs, we must not append into their new page.
   const myNav = _navSeq;
   const d = await api.get('/api/mods');
-  root.append(pageHeader('nav.mods', 'mods.subtitle'));
+  root.append(pageHeader('nav.mods', 'mods.subtitle', [revealBtn({ kind: 'server' }, { label: 'folders.server' }),
+    d.sourceDir ? revealBtn({ kind: 'modsource' }, { label: 'folders.modsource' }) : null].filter(Boolean)));
   const wrap = h('div');
 
   if (State.serverStatus.running) wrap.append(runningBanner());
-  if (!d.vanillaPath) wrap.append(h('div', { class: 'warning-bar', text: t('mods.noClientFolder') }));
+  if (!d.sourceDir) {
+    // No mod source: server-only hosting (deliberate) or nothing configured yet.
+    const serverOnly = d.modSource === 'server';
+    wrap.append(h('div', { class: serverOnly ? 'info-bar' : 'warning-bar', style: { display: 'flex', gap: '10px', alignItems: 'center' } }, [
+      h('span', { style: { flex: '1' }, text: t(serverOnly ? 'mods.serverOnly' : 'mods.noSource') }),
+      h('button', { i18n: 'mods.chooseSource', onclick: () => navigate('settings') }),
+    ]));
+  }
 
   const outdatedCount = d.mods.filter(m => m.updateAvailable).length;
 
@@ -1393,7 +1753,8 @@ Views.mods = async (root) => {
           const r = await api.post('/api/mods/enable', { mod: m.name, enabled: activeCb.checked });
           // Keep State.config in sync so a later config POST (language switch,
           // Settings save) can never send a stale mod list back (hotfix).
-          if (r) { State.config.mods = r.active; State.config.serverMods = r.server; }
+          if (r) { State.config.mods = r.active; State.config.serverMods = r.server; syncRowSwitches(); }
+          reportModVehicles(r);
         } catch (e) { handleErr(e); activeCb.checked = prev; }
         finally { activeCb.disabled = false; }
       };
@@ -1419,7 +1780,8 @@ Views.mods = async (root) => {
         srvCb.disabled = true;
         try {
           const r = await api.post('/api/mods/enable', { mod: m.name, enabled: srvCb.checked, serverSide: true });
-          if (r) { State.config.mods = r.active; State.config.serverMods = r.server; }
+          if (r) { State.config.mods = r.active; State.config.serverMods = r.server; syncRowSwitches(); }
+          reportModVehicles(r);
           toast(t('msg.saved'), 'ok');
         } catch (e) { handleErr(e); srvCb.checked = prev; }
         finally { srvCb.disabled = false; }
@@ -1432,14 +1794,14 @@ Views.mods = async (root) => {
     const actions = h('div', { class: 'actions', style: { margin: 0 } });
     if (!m.installedInServer && m.availableInWorkshop) {
       actions.append(h('button', { class: 'primary', i18n: 'action.install',
-        onclick: (e) => withBusy(e.currentTarget, async () => { try { await api.post('/api/mods/install', { mod: m.name }); toast(t('msg.installed'),'ok'); await navigate('mods'); } catch (err) { handleErr(err); } })}));
+        onclick: (e) => withBusy(e.currentTarget, async () => { try { const r = await api.post('/api/mods/install', { mod: m.name }); toast(t('msg.installed'),'ok'); await navigate('mods'); reportModMissions(r); } catch (err) { handleErr(err); } })}));
     }
     if (m.installedInServer && m.availableInWorkshop) {
       actions.append(h('button', {
         class: m.updateAvailable ? 'primary' : '',
         i18n: 'action.update',
         onclick: (e) => withBusy(e.currentTarget, async () => {
-          try { await api.post('/api/mods/update', { mod: m.name }); toast(t('msg.updated'),'ok'); await navigate('mods'); }
+          try { const r = await api.post('/api/mods/update', { mod: m.name }); toast(t('msg.updated'),'ok'); await navigate('mods'); reportModMissions(r); }
           catch (err) { handleErr(err); }
         })
       }));
@@ -1454,14 +1816,10 @@ Views.mods = async (root) => {
             await openModTypesDialog(m.name, files);
           } catch (e) { handleErr(e); }
         }}));
+      actions.append(revealBtn({ kind: 'mod', mod: m.name }, { iconOnly: true }));
+      // Uninstall also offers to remove a map mod's mission from mpmissions.
       actions.append(h('button', { class: 'danger', i18n: 'action.uninstall',
-        onclick: async (ev) => {
-          const btn = ev.currentTarget; // must be captured before the await
-          if (!(await confirmModal(t('confirm.uninstall').replace('{mod}', m.name), { danger: true, okText: t('action.delete') }))) return;
-          await withBusy(btn, async () => {
-            try { await api.post('/api/mods/uninstall', { mod: m.name }); toast(t('msg.removed'),'ok'); await navigate('mods'); } catch (e) { handleErr(e); }
-          });
-        }}));
+        onclick: (ev) => uninstallModFlow(m.name, ev.currentTarget) }));
     }
 
     let statusBadge;
@@ -1492,14 +1850,33 @@ Views.mods = async (root) => {
       h('td', {}, actions),
     ]);
     if (m.publishedId) tr.dataset.published = m.publishedId;
+    tr.dataset.search = [m.name, m.displayName || '', m.publishedId || ''].join(' ').toLowerCase();
+    tr.dataset.state = [
+      (d.activeMods || []).includes(m.name) ? 'on' : '',
+      (d.serverMods || []).includes(m.name) ? 'server' : '',
+      m.updateAvailable ? 'update' : '',
+      m.installedInServer ? '' : 'notinstalled',
+    ].filter(Boolean).join(' ');
+    tr._switches = { mod: m.name, active: activeControl, server: serverControl };
     tbody.append(tr);
+  }
+  // After a toggle the server may have moved the mod from one list to the
+  // other (a mod is either for everyone or server-only): mirror that.
+  function syncRowSwitches() {
+    for (const tr of tbody.querySelectorAll('tr')) {
+      const sw = tr._switches;
+      if (!sw) continue;
+      if (sw.active && sw.active.type === 'checkbox') sw.active.checked = (State.config.mods || []).includes(sw.mod);
+      if (sw.server && sw.server.type === 'checkbox') sw.server.checked = (State.config.serverMods || []).includes(sw.mod);
+    }
   }
   // Empty state: a fresh setup with zero mods otherwise renders a bare header
   // row with no explanation of what to do next.
   if (!d.mods.length) {
+    tbl.classList.add('is-empty'); // column heads over nothing read as a broken table
     tbody.append(h('tr', {}, h('td', { colspan: '8' },
       h('div', { class: 'empty-state' }, [
-        h('div', { class: 'es-title', i18n: 'mods.title' }),
+        h('div', { class: 'es-title', i18n: 'mods.empty.title' }),
         h('div', { class: 'es-hint', i18n: 'mods.syncAll.empty.hint' }),
       ]))));
   }
@@ -1525,7 +1902,7 @@ Views.mods = async (root) => {
         outdated++;
         const ms = new Date(r.remoteUpdated).getTime() - new Date(r.localUpdated || 0).getTime();
         const days = Math.max(1, Math.round(ms / (24 * 3600 * 1000)));
-        label = (t('mods.steam.outdated') || 'Steam: outdated') + ` (~${days}d)`;
+        label = t('mods.steam.outdated') + ` (~${days} ${t('unit.days')})`;
       } else if (r.status === 'ok') {
         cls = 'ok'; label = t('mods.steam.ok') || 'Steam: up-to-date';
       } else if (r.status === 'missing') {
@@ -1554,7 +1931,7 @@ Views.mods = async (root) => {
           const r = await api.post('/api/mods/check-updates', {});
           const out = applySteamCheck(r.results || []);
           if (r.error) toast(r.error, 'error');
-          else toast((t('mods.checkSteam.done') || 'Checked: ') + (out > 0 ? `${out} outdated` : 'all up-to-date'), out > 0 ? 'warn' : 'ok');
+          else toast(out > 0 ? tn('mods.checkSteam.outdatedN', { n: out }) : t('mods.checkSteam.allOk'), out > 0 ? 'warn' : 'ok');
         } catch (err) { handleErr(err); }
         finally { btn.disabled = false; btn.textContent = original; }
       }
@@ -1569,8 +1946,9 @@ Views.mods = async (root) => {
       onclick: async () => {
         try {
           const r = await api.post('/api/mods/update-all');
-          toast(`updated ${r.count || 0} mod(s)`, 'ok');
+          toast(t('msg.modsUpdated').replace('{n}', r.count || 0), 'ok');
           await navigate('mods');
+          reportModMissions(r);
         } catch (e) { handleErr(e); }
       },
     }, [h('span', { i18n: 'action.updateAll' }), h('span', { text: ` (${outdatedCount})` })]));
@@ -1596,20 +1974,41 @@ Views.mods = async (root) => {
             const ok = r.resolved || [];
             const missing = r.missing || [];
             collectionResults.append(
-              h('div', { text: `Collection #${r.collectionId}: ${ok.length} resolved, ${missing.length} missing` }),
+              h('div', { text: t('mods.collection.summary').replace('{id}', r.collectionId).replace('{ok}', ok.length).replace('{missing}', missing.length) }),
             );
             if (ok.length) {
               const list = h('ul');
               for (const m of ok) list.append(h('li', { text: `${m.modName}${m.displayName ? ' — ' + m.displayName : ''} (id ${m.publishedId})` }));
               collectionResults.append(list);
+              // Found in the mod source is not installed on the server: copy
+              // the missing ones over first, then switch every one on — and
+              // report what really happened (it used to say "enabled" when
+              // nothing could be).
               const activate = h('button', { class: 'primary', style: { marginTop: '8px' }, text: t('mods.collection.activate'),
-                onclick: async () => {
-                  for (const m of ok) {
-                    try { await api.post('/api/mods/enable', { mod: m.modName, enabled: true }); } catch {}
+                disabled: !!State.serverStatus.running, title: State.serverStatus.running ? t('mods.toggleRunning') : '',
+                onclick: (e) => withBusy(e.currentTarget, async () => {
+                  const installed = new Set((d.mods || []).filter(x => x.installedInServer).map(x => x.name));
+                  const toInstall = ok.map(m => m.modName).filter(n => !installed.has(n));
+                  let synced = null;
+                  if (toInstall.length) {
+                    try { synced = await api.post('/api/mods/sync-all', { only: toInstall }); }
+                    catch (err) { handleErr(err); return; }
                   }
-                  toast('activated', 'ok');
+                  const vehicles = [], failed = [];
+                  let enabled = 0;
+                  for (const m of ok) {
+                    try {
+                      const r = await api.post('/api/mods/enable', { mod: m.modName, enabled: true });
+                      enabled++;
+                      vehicles.push(...((r && r.vehicles) || []));
+                    } catch (err) { failed.push(m.modName + ' — ' + (err.message || err)); }
+                  }
+                  reportModVehicles({ vehicles });
+                  if (synced) reportModMissions(synced);
+                  if (failed.length) toast(tn('mods.collection.partial', { done: enabled, total: ok.length }) + ': ' + failed.slice(0, 3).join('; '), 'warn');
+                  else toast(tn('mods.collection.enabledN', { n: enabled }), 'ok');
                   await navigate('mods');
-                }
+                })
               });
               collectionResults.append(activate);
             }
@@ -1619,7 +2018,7 @@ Views.mods = async (root) => {
               for (const id of missing) {
                 dl.append(h('div', {}, h('a', {
                   href: `https://steamcommunity.com/sharedfiles/filedetails/?id=${id}`,
-                  target: '_blank', rel: 'noopener', text: `subscribe id ${id}`,
+                  target: '_blank', rel: 'noopener', text: t('mods.collection.subscribe').replace('{id}', id),
                 })));
               }
               collectionResults.append(dl);
@@ -1632,11 +2031,38 @@ Views.mods = async (root) => {
   ]);
 
   if (myNav !== _navSeq) return; // superseded while /api/mods was loading
+  // Find a mod among dozens: a search box and state chips with counts.
+  const modSearch = h('input', { type: 'search', placeholder: t('mods.search.ph'), 'aria-label': t('mods.search.ph') });
+  const modChips = h('div', { class: 'pills mods-chips' });
+  let modFilter = 'all';
+  const MOD_FILTERS = [['all', ''], ['on', 'on'], ['update', 'update'], ['notinstalled', 'notinstalled'], ['server', 'server']];
+  const applyModFilter = () => {
+    const q = modSearch.value.trim().toLowerCase();
+    const want = (MOD_FILTERS.find(f => f[0] === modFilter) || MOD_FILTERS[0])[1];
+    for (const tr of tbody.querySelectorAll('tr[data-search]')) {
+      const okState = !want || (' ' + tr.dataset.state + ' ').includes(' ' + want + ' ');
+      tr.hidden = !(okState && (!q || tr.dataset.search.includes(q)));
+    }
+  };
+  const renderModChips = () => {
+    modChips.innerHTML = '';
+    const rows = [...tbody.querySelectorAll('tr[data-search]')];
+    for (const [key, state] of MOD_FILTERS) {
+      const n = state ? rows.filter(tr => (' ' + tr.dataset.state + ' ').includes(' ' + state + ' ')).length : rows.length;
+      if (!n && key !== 'all') continue;
+      modChips.append(h('button', { type: 'button', class: 'pill' + (modFilter === key ? ' active' : ''),
+        onclick: () => { modFilter = key; renderModChips(); applyModFilter(); } },
+      [h('span', { text: t('mods.filter.' + key) }), h('span', { class: 'pill-count', text: String(n) })]));
+    }
+  };
+  modSearch.oninput = applyModFilter;
+  renderModChips();
+  wrap.append(pendingModMissionsBanner());
   wrap.append(h('div', { class: 'card' }, [
-    h('h2', { i18n: 'mods.title' }),
     toolbar,
-    tbl,
-  ]));
+    d.mods.length > 5 ? h('div', { class: 'players-toolbar mods-find' }, [modSearch, modChips]) : null,
+    h('div', { class: 'table-scroll-narrow' }, tbl),
+  ].filter(Boolean)));
   wrap.append(collectionCard);
 
   // Load-order (drag-to-reorder) panel. Reflects the current config.mods list.
@@ -1705,151 +2131,306 @@ Views.mods = async (root) => {
 
 // --------------------------------------------------------------------- types
 
+// Types filter chips. Categories are DayZ's own <category> names; ammo and
+// magazines are split out by class-name prefix (see typeKind in Views.types).
+// lootdispatch is the loot events hand out (heli crashes, police cars) — its
+// own chip, as on the Economy page, not lumped into "Other".
+const TYPE_KINDS = ['weapons', 'tools', 'food', 'clothes', 'containers', 'explosives', 'books', 'lootdispatch'];
+const TYPE_KIND_ORDER = ['weapons', 'ammo', 'mags', 'clothes', 'food', 'tools', 'containers', 'explosives', 'books', 'lootdispatch', 'other'];
+
+// _typesTarget is a pending filter ({file, q, usage, tier, category}) the Types
+// view applies on its next mount — set by the Economy charts and Where-to-find
+// before navigating there. category '' means "no category".
+let _typesTarget = null;
+
+// typeCategoryLabel shows a DayZ <category> name in the UI language when the
+// panel knows it (weapons → Оружие); a modded category keeps its own name.
+function typeCategoryLabel(name) {
+  if (!name) return t('economy.cat.none');
+  const k = 'types.kind.' + String(name).toLowerCase();
+  return State.i18n[k] ? t(k) : name;
+}
+
+// The last query of config Search and of Where to find. A page opened from a
+// hit and then left with Back comes back with its query and results, and the
+// Ctrl+K palette hands a typed word to either page through these.
+let _lastSearch = '';
+let _lastLoot = '';
+
+// _pageQuery pre-fills the search box of the next page opened ({route, q}) —
+// "show this item over there" links from Where to find. takePageQuery reads
+// it once.
+let _pageQuery = null;
+function takePageQuery(route) {
+  if (!_pageQuery || _pageQuery.route !== route) return '';
+  const q = _pageQuery.q || '';
+  _pageQuery = null;
+  return q;
+}
+
 Views.types = async (root) => {
   // Heavy fetch ahead — remember which navigation we are. If the user
   // switches section while it runs, we must not append into their new page.
   const myNav = _navSeq;
+  // A pending deep link (an Economy chart row, Where to find) is taken at once,
+  // so no later visit inherits it.
+  const target = _typesTarget; _typesTarget = null;
   const fileSelect = h('select', { 'aria-label': t('economy.file') });
-  fileSelect.append(h('option', { value: '', text: 'types.xml (base)' }));
-  try {
-    const moded = await api.get('/api/moded');
-    for (const f of moded.files || []) {
-      fileSelect.append(h('option', { value: f.name, text: `moded_types/${f.name}${f.registered ? '' : ' (unregistered)'}` }));
-    }
-  } catch (e) { /* no mission yet */ }
+  fileSelect.append(h('option', { value: '', text: t('types.baseFile') }));
 
-  const search = h('input', { type: 'text', placeholder: t('types.search') });
-  const tableWrap = h('div');
+  const search = h('input', { type: 'search', placeholder: t('types.search'), 'aria-label': t('types.search') });
+  if (target && target.q) search.value = target.q;
+  // Until the first fetch lands the table area says so: it used to sit empty
+  // under blank filters with no sign that anything was loading.
+  const tableWrap = h('div', { class: 'table-scroll-narrow' }, [
+    h('p', { class: 'hint', i18n: 'msg.loading' }),
+    ...[0, 1, 2, 3, 4, 5].map(() => h('div', { class: 'skeleton types-skel' })),
+  ]);
   const pagerHost = h('div');
+  const catList = h('datalist', { id: 'dz-types-cats' });
+  let typesFilePath = '';
 
-  // Pagination state. Page size kept conservative so large types.xml files
-  // (5k+ entries) render snappily. Search resets to page 1.
-  const PAGE_SIZE = 200;
+  // Filters (v1.0.0): kind chips + usage / tier / spawning-only. The list is
+  // fetched once per file and filtered here — it used to re-download the whole
+  // types file on every keystroke, sort click and page turn.
+  let cache = null;          // { file, d }
+  let kindFilter = 'all';
+  // Category comes only from a deep link ('' = no category, null = any): the
+  // chips split weapons into ammo and magazines, an Economy bar does not.
+  let catFilter = target && typeof target.category === 'string' ? target.category.toLowerCase() : null;
+  const usageSel = h('select', { class: 'types-filter', 'aria-label': t('types.filter.usage') },
+    h('option', { value: '', i18n: 'types.filter.anyUsage' }));
+  const tierSel = h('select', { class: 'types-filter', 'aria-label': t('types.filter.tier') },
+    h('option', { value: '', i18n: 'types.filter.anyTier' }));
+  // A deep-linked value is added now, so fillFilterOptions finds it selected.
+  if (target && target.usage) { usageSel.append(h('option', { value: target.usage, text: target.usage })); usageSel.value = target.usage; }
+  if (target && target.tier) { tierSel.append(h('option', { value: target.tier, text: target.tier })); tierSel.value = target.tier; }
+  const spawnOnly = h('input', { type: 'checkbox', class: 'switch' });
+  const kindBar = h('div', { class: 'pills type-kinds' });
+  const catHost = h('span', { class: 'types-catfilter' });
+
+  // Pagination. Search resets to page 1. A phone gets shorter pages: 200 rows
+  // made a 12,000px page with the pager at the very end.
+  const PAGE_SIZE = window.matchMedia && window.matchMedia('(max-width: 600px)').matches ? 50 : 200;
   let currentPage = 1;
-  let lastFilteredCount = 0;
-  let lastTotalCount = 0;
+  let lastFiltered = [];  // every row matching the filters, for "select all matching"
   let sortKey = 'name';   // click a column header to sort (item #8)
   let sortDir = 1;        // 1 = asc, -1 = desc
+  let syncHead = () => {};
 
   // Inline editing (item #8): unsaved edits live here (name -> {field: value})
   // and survive sort/search/page changes until saved or discarded.
   const dirty = {};
-  const dirtyBtn = h('button', { class: 'primary', onclick: () => saveDirty() });
-  const discardBtn = h('button', { onclick: () => { clearDirty(); refreshTable(); } });
+  const dirtyCount = () => Object.keys(dirty).length;
   function clearDirty() { for (const k of Object.keys(dirty)) delete dirty[k]; }
+
+  // Ticked rows, by name. They survive sorting, searching, filtering and
+  // paging — the checkboxes are redrawn on every refresh, this set is not.
+  const selected = new Set();
+
+  // Bottom dock: the selection actions and the unsaved-changes bar stay in
+  // view while scrolling a long table (Save used to be only at the top).
+  const selText = h('span');
+  const selAllBtn = h('button', { class: 'secondary small', onclick: () => {
+    for (const r of lastFiltered) selected.add(r.name);
+    syncChecks(); updateSelUI();
+  } });
+  let presetsList = [];
+  const presetSel = h('select', { class: 'types-preset-sel', 'aria-label': t('types.presets') },
+    h('option', { value: '', i18n: 'types.presets.apply' }));
+  presetSel.title = t('types.presets.hint');
+  presetSel.onchange = () => applyPreset();
+  const selBar = h('div', { class: 'sticky-save types-selbar', hidden: true }, [
+    selText, selAllBtn,
+    h('button', { class: 'secondary small', i18n: 'types.sel.clear', onclick: () => { selected.clear(); syncChecks(); updateSelUI(); } }),
+    h('span', { class: 'grow' }),
+    hlp(h('button', { class: 'small', i18n: 'types.bulk', onclick: () => openBulkEdit() }), 'types.bulk'),
+    presetSel,
+  ]);
+  const saveText = h('span');
+  const saveBtn = h('button', { class: 'primary small', i18n: 'action.save', title: 'Ctrl+S', onclick: (e) => saveDirty(e.currentTarget) });
+  const saveBar = h('div', { class: 'sticky-save', hidden: true }, [
+    saveText, h('span', { class: 'grow' }),
+    h('button', { class: 'secondary small', i18n: 'action.discard', onclick: () => { clearDirty(); updateDirtyUI(); refreshTable(); } }),
+    saveBtn,
+  ]);
+  const dock = h('div', { class: 'types-dock', hidden: true }, [selBar, saveBar]);
+  const updateDock = () => { dock.hidden = selBar.hidden && saveBar.hidden; };
   function updateDirtyUI() {
-    const n = Object.keys(dirty).length;
-    dirtyBtn.textContent = t('types.saveChanges') + (n ? ` (${n})` : '');
-    discardBtn.textContent = t('types.discard');
-    dirtyBtn.style.display = n ? '' : 'none';
-    discardBtn.style.display = n ? '' : 'none';
+    const n = dirtyCount();
+    saveBar.hidden = n === 0;
+    saveText.textContent = tn('server.cfg.unsaved', { n });
+    updateDock();
   }
-  async function saveDirty() {
-    const names = Object.keys(dirty);
-    if (!names.length) return;
-    try {
-      for (const name of names) {
-        const dd = dirty[name], patch = {};
-        for (const f of ['nominal', 'min', 'lifetime']) {
-          if (f in dd) { const v = parseInt(dd[f], 10); if (Number.isFinite(v)) patch[f] = v; }
-        }
-        if ('category' in dd) patch.category = dd.category;
-        if (Object.keys(patch).length) {
-          await api.post('/api/types/bulk-patch', { file: fileSelect.value, names: [name], patch });
-        }
+  function updateSelUI() {
+    const n = selected.size;
+    selBar.hidden = n === 0;
+    selText.textContent = tn('types.sel.count', { n });
+    selAllBtn.hidden = !lastFiltered.some(r => !selected.has(r.name));
+    selAllBtn.textContent = tn('types.sel.allMatching', { n: lastFiltered.length });
+    updateDock();
+  }
+  function syncChecks() {
+    tableWrap.querySelectorAll('input[type=checkbox][data-name]').forEach(cb => { cb.checked = selected.has(cb.dataset.name); });
+    syncHead();
+  }
+
+  async function saveDirty(btn) {
+    const rows = [], bad = [];
+    for (const [name, dd] of Object.entries(dirty)) {
+      const patch = {};
+      for (const f of ['nominal', 'min', 'lifetime']) {
+        if (!(f in dd)) continue;
+        const v = String(dd[f]).trim();
+        if (!/^\d+$/.test(v)) { bad.push(name); continue; }
+        patch[f] = parseInt(v, 10);
       }
-      clearDirty();
+      if ('category' in dd) patch.category = String(dd.category).trim();
+      if (Object.keys(patch).length) rows.push({ name, patch });
+    }
+    // A blank or broken number used to be skipped without a word — the cell
+    // looked saved but kept its old value.
+    if (bad.length) { toast(tn('types.badNumbers', { names: [...new Set(bad)].slice(0, 5).join(', ') }), 'error'); return; }
+    if (!rows.length) { clearDirty(); updateDirtyUI(); return; }
+    await withBusy(btn, async () => {
+      try {
+        // One request: the file is written once and backed up once, so the copy
+        // of it as it was before this save stays restorable.
+        await api.post('/api/types/patch-many', { file: fileSelect.value, rows });
+        clearDirty();
+        updateDirtyUI();
+        toast(t('msg.saved'), 'ok');
+        await refreshTable(true);
+      } catch (e) { handleErr(e); }
+    });
+  }
+
+  async function applyPreset() {
+    const p = presetsList.find(x => x.id === presetSel.value);
+    presetSel.value = '';
+    if (!p) return;
+    const names = [...selected];
+    if (!names.length) { toast(t('msg.selectFirst')); return; }
+    const label = State.lang === 'ru' ? p.labelRu : p.label;
+    if (!(await confirmModal(tn('types.presets.confirm', { name: label, n: names.length })))) return;
+    try {
+      await api.post('/api/types/apply-preset', { file: fileSelect.value, names, presetId: p.id });
       toast(t('msg.saved'), 'ok');
-      await refreshTable();
+      await refreshTable(true);
     } catch (e) { handleErr(e); }
   }
 
-  const presetsWrap = h('div', { class: 'card' }, [h('h3', { i18n: 'types.presets' })]);
-  try {
-    const presets = await api.get('/api/types/presets');
-    const pills = h('div', { class: 'pills' });
-    for (const p of presets) {
-      pills.append(h('button', {
-        class: 'pill', text: State.lang === 'ru' ? p.labelRu : p.label,
-        onclick: async () => {
-          const selected = [...tableWrap.querySelectorAll('input[type=checkbox][data-name]:checked')]
-            .map(cb => cb.dataset.name);
-          if (!selected.length) { toast(t('msg.selectFirst')); return; }
-          try {
-            await api.post('/api/types/apply-preset', {
-              file: fileSelect.value, names: selected, presetId: p.id,
-            });
-            toast('applied', 'ok');
-            await refreshTable();
-          } catch (e) { handleErr(e); }
-        }
-      }));
+  // The scalar fields, shared by the bulk and the full editor: a localized
+  // label with the types.xml tag as small code — the bare tags read as English
+  // in any UI language.
+  const FIELDS = [
+    { k: 'nominal', label: 'types.field.nominal', help: 'types.nominal' },
+    { k: 'min', label: 'types.field.min', help: 'types.min' },
+    { k: 'lifetime', label: 'types.field.lifetime', help: 'types.lifetime' },
+    { k: 'restock', label: 'types.field.restock', help: 'types.restock' },
+    { k: 'quantmin', label: 'types.field.quantmin', help: 'types.quant' },
+    { k: 'quantmax', label: 'types.field.quantmax', help: 'types.quant' },
+    { k: 'cost', label: 'types.field.cost', help: 'types.cost' },
+    { k: 'category', label: 'types.field.category', help: 'types.category', text: true },
+  ];
+  const fieldInput = (f, value) => f.text
+    ? h('input', { type: 'text', value: value ?? '', list: 'dz-types-cats', spellcheck: 'false' })
+    : h('input', { type: 'number', value: value ?? '', step: '1' });
+  const fieldBox = (f, el) => h('div', { class: 'types-field' }, [
+    h('div', { class: 'cfg-label' }, [
+      withHelp(h('label', { for: assocId(el), i18n: f.label }), f.help),
+      h('code', { class: 'cfg-key', text: f.k }),
+    ]),
+    el,
+  ]);
+  // Reads the fields into a patch; returns null (after a toast) when a number
+  // is not a whole number.
+  function readFields(inputs, toPatch) {
+    for (const f of FIELDS) {
+      const v = inputs[f.k].value.trim();
+      if (v === '') continue;
+      if (f.text) { toPatch(f.k, v); continue; }
+      if (!/^-?\d+$/.test(v)) { toast(tn('types.badNumber', { field: t(f.label) }), 'error'); inputs[f.k].focus(); return false; }
+      toPatch(f.k, parseInt(v, 10));
     }
-    presetsWrap.append(pills);
-    presetsWrap.append(h('p', { class: 'hint', i18n: 'types.presets.hint' }));
-  } catch (e) { /* empty */ }
+    return true;
+  }
 
-  // Bulk-edit modal — opened from the toolbar when at least one row is
-  // selected. Scalar fields only; per-type editor handles usages/values/tags.
+  // Bulk-edit modal — opened from the selection bar. Scalar fields only; the
+  // full editor handles usages/values/tags.
   function openBulkEdit() {
-    const selected = [...tableWrap.querySelectorAll('input[type=checkbox][data-name]:checked')]
-      .map(cb => cb.dataset.name);
-    if (!selected.length) { toast(t('msg.selectFirst')); return; }
-    const fields = {
-      nominal: h('input', { type: 'number', placeholder: 'nominal' }),
-      min: h('input', { type: 'number', placeholder: 'min' }),
-      lifetime: h('input', { type: 'number', placeholder: 'lifetime' }),
-      restock: h('input', { type: 'number', placeholder: 'restock' }),
-      quantmin: h('input', { type: 'number', placeholder: 'quantmin' }),
-      quantmax: h('input', { type: 'number', placeholder: 'quantmax' }),
-      cost: h('input', { type: 'number', placeholder: 'cost' }),
-      category: h('input', { type: 'text', placeholder: 'category' }),
-    };
-    const grid = h('div', { class: 'grid-3' });
-    for (const [k, el] of Object.entries(fields)) {
-      grid.append(h('div', {}, [h('label', { text: k }), el]));
-    }
-    const m = openModal({ title: t('types.bulk') + ` — ${selected.length} selected`, wide: true });
+    const names = [...selected];
+    if (!names.length) { toast(t('msg.selectFirst')); return; }
+    const inputs = {};
+    const grid = h('div', { class: 'grid-3 types-fields' });
+    for (const f of FIELDS) { inputs[f.k] = fieldInput(f, ''); grid.append(fieldBox(f, inputs[f.k])); }
+    let edited = false;
+    const m = openModal({ title: tn('types.bulk.title', { n: names.length }), wide: true, isDirty: () => edited });
+    m.body.addEventListener('input', () => { edited = true; });
     m.body.append(
       h('p', { class: 'hint', i18n: 'types.bulk.hint' }),
       grid,
       h('div', { class: 'actions' }, [
-        h('button', { class: 'primary', i18n: 'types.bulk.apply',
-          onclick: async () => {
-            const patch = {};
-            for (const [k, el] of Object.entries(fields)) {
-              const v = el.value.trim();
-              if (v === '') continue;
-              if (k === 'category') patch.category = v;
-              else patch[k] = Number(v);
-            }
-            if (Object.keys(patch).length === 0) { toast(t('msg.setOneField')); return; }
-            try {
-              const r = await api.post('/api/types/bulk-patch', {
-                file: fileSelect.value, names: selected, patch,
-              });
-              toast(t('msg.patched').replace('{n}', r.touched), 'ok');
-              m.close();
-              await refreshTable();
-            } catch (e) { handleErr(e); }
-          }
-        }),
+        h('button', { class: 'primary', i18n: 'types.bulk.apply', onclick: (e) => withBusy(e.currentTarget, async () => {
+          const patch = {};
+          if (!readFields(inputs, (k, v) => { patch[k] = v; })) return;
+          if (Object.keys(patch).length === 0) { toast(t('msg.setOneField')); return; }
+          try {
+            const r = await api.post('/api/types/bulk-patch', { file: fileSelect.value, names, patch });
+            toast(tn('msg.patched', { n: r.touched || 0 }), 'ok');
+            m.close();
+            await refreshTable(true);
+          } catch (err) { handleErr(err); }
+        }) }),
         h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
       ]),
     );
+    applyI18n();
   }
 
-  async function refreshTable() {
+  async function refreshTable(refetch) {
+    let d;
+    if (!cache || refetch || cache.file !== fileSelect.value) {
+      try { d = await api.get(`/api/types?file=${encodeURIComponent(fileSelect.value)}`); }
+      catch (e) {
+        if (myNav !== _navSeq) return;
+        tableWrap.innerHTML = ''; pagerHost.innerHTML = '';
+        tableWrap.append(h('div', { class: 'warning-bar err-bar', text: e.message }));
+        return;
+      }
+      if (myNav !== _navSeq) return;
+      cache = { file: fileSelect.value, d };
+      typesFilePath = d.file || '';
+      fillFilterOptions(d.types || []);
+    }
+    d = cache.d;
     tableWrap.innerHTML = '';
     pagerHost.innerHTML = '';
-    let d;
-    try { d = await api.get(`/api/types?file=${encodeURIComponent(fileSelect.value)}`); }
-    catch (e) { tableWrap.append(h('p', { text: e.message })); return; }
 
-    const q = search.value.toLowerCase();
-    const filtered = q ? d.types.filter(r => r.name.toLowerCase().includes(q)) : d.types;
-    lastFilteredCount = filtered.length;
-    lastTotalCount = d.count;
+    const q = search.value.trim().toLowerCase();
+    const us = usageSel.value, tier = tierSel.value, onlySpawn = spawnOnly.checked;
+    const base = (d.types || []).filter(r =>
+      (!q || r.name.toLowerCase().includes(q)) &&
+      (!us || (r.usages || []).includes(us)) &&
+      (!tier || (r.values || []).includes(tier)) &&
+      (catFilter === null || (r.category || '').toLowerCase() === catFilter) &&
+      (!onlySpawn || (r.nominal || 0) > 0));
+    renderKindBar(base);
+    renderCatFilter();
+    const filtered = kindFilter === 'all' ? base : base.filter(r => typeKind(r) === kindFilter);
+    lastFiltered = filtered;
+
+    if (!filtered.length) {
+      syncHead = () => {};
+      const fileEmpty = !(d.types || []).length;
+      tableWrap.append(h('div', { class: 'empty-state' }, [
+        h('div', { class: 'es-title', i18n: fileEmpty ? 'types.emptyFile' : 'filter.none' }),
+        fileEmpty ? null : h('div', { class: 'actions' }, [h('button', { class: 'secondary', i18n: 'filter.reset', onclick: resetFilters })]),
+      ].filter(Boolean)));
+      updateSelUI();
+      applyI18n();
+      return;
+    }
 
     // Sort by the active column (numeric columns numerically, text columns
     // alphabetically), then paginate.
@@ -1865,11 +2446,18 @@ Views.types = async (root) => {
     if (currentPage < 1) currentPage = 1;
     const start = (currentPage - 1) * PAGE_SIZE;
     const slice = sorted.slice(start, start + PAGE_SIZE);
+    const pageNames = slice.map(r => r.name);
 
-    const tbl = h('table');
-    const headCb = h('input', { type: 'checkbox', title: t('types.selectPage') });
+    const tbl = h('table', { class: 'types-table' });
+    const headCb = h('input', { type: 'checkbox', title: t('types.selectPage'), 'aria-label': t('types.selectPage') });
+    syncHead = () => {
+      const n = pageNames.filter(x => selected.has(x)).length;
+      headCb.checked = n > 0 && n === pageNames.length;
+      headCb.indeterminate = n > 0 && n < pageNames.length;
+    };
     headCb.onchange = () => {
-      tableWrap.querySelectorAll('input[type=checkbox][data-name]').forEach(cb => cb.checked = headCb.checked);
+      for (const nm of pageNames) { if (headCb.checked) selected.add(nm); else selected.delete(nm); }
+      syncChecks(); updateSelUI();
     };
     const sortTh = (label, key, num) => {
       const active = sortKey === key;
@@ -1893,6 +2481,11 @@ Views.types = async (root) => {
     for (const row of slice) {
       const cb = h('input', { type: 'checkbox', 'aria-label': t('col.select') + ' ' + row.name });
       cb.dataset.name = row.name;
+      cb.checked = selected.has(row.name);
+      cb.onchange = () => {
+        if (cb.checked) selected.add(row.name); else selected.delete(row.name);
+        syncHead(); updateSelUI();
+      };
       let tr;
       const mkCell = (field, numeric) => {
         const has = dirty[row.name] && (field in dirty[row.name]);
@@ -1900,6 +2493,7 @@ Views.types = async (root) => {
           type: numeric ? 'number' : 'text', class: 'inline-cell',
           value: has ? dirty[row.name][field] : (row[field] ?? ''),
           'aria-label': row.name + ' ' + field,
+          list: numeric ? undefined : 'dz-types-cats',
         });
         inp.onchange = () => {
           const orig = row[field] ?? '';
@@ -1918,19 +2512,23 @@ Views.types = async (root) => {
       };
       tr = h('tr', {}, [
         h('td', {}, cb),
-        h('td', { text: row.name }),
+        // The name opens the full editor too — on a phone it is the only way
+        // in, the Edit column does not fit there.
+        h('td', {}, h('button', { type: 'button', class: 'types-name-btn', text: row.name,
+          title: t('types.openEditor'), onclick: () => openEditor(row.name) })),
         mkCell('nominal', true),
         mkCell('min', true),
         mkCell('lifetime', true),
         mkCell('category', false),
-        h('td', {}, h('button', { i18n: 'action.edit', onclick: () => openEditor(row.name) })),
+        h('td', {}, h('button', { class: 'small', i18n: 'action.edit', onclick: () => openEditor(row.name) })),
       ]);
       if (dirty[row.name]) tr.classList.add('dirty');
       tbody.append(tr);
     }
     tbl.append(tbody);
-    updateDirtyUI();
     tableWrap.append(tbl);
+    syncHead();
+    updateSelUI();
 
     // Pager: prev / page X of Y / next + jump-to.
     const prev = h('button', { text: '←', onclick: () => { currentPage--; refreshTable(); } });
@@ -1945,12 +2543,13 @@ Views.types = async (root) => {
     pagerHost.append(h('div', { class: 'pager' }, [
       prev, next,
       h('span', { class: 'pager-num',
-        text: `${start + 1}–${Math.min(start + PAGE_SIZE, filtered.length)} / ${filtered.length}${q ? ` (of ${d.count})` : ''}` }),
+        text: `${start + 1}–${Math.min(start + PAGE_SIZE, filtered.length)} / ${filtered.length}${filtered.length !== d.count ? ` (${t('types.filter.of')} ${d.count})` : ''}` }),
       h('span', { class: 'spacer' }),
       h('span', { class: 'hint', text: t('pager.jump') || 'Page' }),
       jump,
       h('span', { class: 'hint', text: `/ ${totalPages}` }),
     ]));
+    applyI18n();
   }
 
   async function openEditor(name) {
@@ -1961,210 +2560,356 @@ Views.types = async (root) => {
     try {
       item = await api.get(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
     } catch (e) { handleErr(e); return; }
-    const m = openModal({ title: name, wide: true });
-    const fields = {
-      nominal: h('input', { type: 'number', value: item.nominal ?? '', 'data-help': 'types.nominal' }),
-      min: h('input', { type: 'number', value: item.min ?? '' }),
-      lifetime: h('input', { type: 'number', value: item.lifetime ?? '' }),
-      restock: h('input', { type: 'number', value: item.restock ?? '' }),
-      quantmin: h('input', { type: 'number', value: item.quantmin ?? '' }),
-      quantmax: h('input', { type: 'number', value: item.quantmax ?? '' }),
-      cost: h('input', { type: 'number', value: item.cost ?? '' }),
-      category: h('input', { type: 'text',   value: item.category?.name || '' }),
-    };
-    const FIELD_HELP = {
-      nominal: 'types.nominal', min: 'types.min', lifetime: 'types.lifetime',
-      restock: 'types.restock', quantmin: 'types.quant', quantmax: 'types.quant',
-      cost: 'types.cost', category: 'types.category',
-    };
-    const grid = h('div', { class: 'grid-3' });
-    grid.append(
-      ...Object.entries(fields).map(([k, el]) => {
-        const label = h('label', { text: k, for: assocId(el) });
-        return h('div', {}, [FIELD_HELP[k] ? withHelp(label, FIELD_HELP[k]) : label, el]);
-      })
-    );
+    if (myNav !== _navSeq) return;
+    // Esc, a backdrop click or × ask before throwing edits away.
+    let edited = false;
+    const markEdited = () => { edited = true; };
+    const m = openModal({ title: name, wide: true, isDirty: () => edited });
+    m.body.addEventListener('input', markEdited);
+    m.body.addEventListener('change', markEdited);
 
-    // Usages / Values / Tags as editable pill lists.
-    function editableList(label, items, setItems) {
+    const fields = {};
+    const grid = h('div', { class: 'grid-3 types-fields' });
+    for (const f of FIELDS) {
+      fields[f.k] = fieldInput(f, f.k === 'category' ? (item.category?.name || '') : item[f.k]);
+      grid.append(fieldBox(f, fields[f.k]));
+    }
+
+    // Usages / Values / Tags as editable pill lists. Text typed but not yet
+    // added with Enter is added on Save, so it is never dropped silently.
+    const pendingAdds = [];
+    function editableList(labelKey, helpKey, items) {
       const wrap = h('div', { class: 'pills' });
+      const inp = h('input', { type: 'text', class: 'types-list-inp', placeholder: t('types.list.add'), spellcheck: 'false' });
+      const add = () => {
+        const v = inp.value.trim();
+        if (!v) return false;
+        if (!items.some(x => x.name.toLowerCase() === v.toLowerCase())) items.push({ name: v });
+        inp.value = '';
+        return true;
+      };
       const render = () => {
         wrap.innerHTML = '';
-        for (let i = 0; i < items.length; i++) {
-          const pill = h('span', { class: 'pill', text: items[i].name });
-          pill.append(h('button', { text: '×', onclick: () => { items.splice(i, 1); render(); } }));
-          wrap.append(pill);
-        }
-        const inp = h('input', { type: 'text', style: { width: '140px' }, placeholder: '+ add' });
-        inp.onkeydown = (e) => {
-          if (e.key === 'Enter' && inp.value.trim()) {
-            items.push({ name: inp.value.trim() });
-            render();
-          }
-        };
+        items.forEach((it, i) => {
+          wrap.append(h('span', { class: 'pill' }, [it.name,
+            h('button', { type: 'button', text: '×', 'aria-label': t('action.delete') + ' ' + it.name,
+              onclick: () => { items.splice(i, 1); markEdited(); render(); } })]));
+        });
         wrap.append(inp);
       };
+      inp.onkeydown = (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (add()) { markEdited(); render(); inp.focus(); }
+      };
+      pendingAdds.push(add);
       render();
-      return h('div', {}, [h('label', { text: label }), wrap]);
+      return h('div', {}, [withHelp(h('label', { for: assocId(inp), i18n: labelKey }), helpKey), wrap]);
     }
 
     const usages = item.usages || [];
     const values = item.values || [];
     const tags = item.tags || [];
     const lists = h('div', { class: 'grid-3' }, [
-      editableList('usages', usages, v => {}),
-      editableList('values', values, v => {}),
-      editableList('tags', tags, v => {}),
+      editableList('types.filter.usage', 'types.usage', usages),
+      editableList('types.filter.tier', 'types.value', values),
+      editableList('attach.tags', 'types.tag', tags),
     ]);
 
-    // Flags.
+    // Flags are 0/1 in the file — switches, labelled, with the XML name.
+    const FLAGS = [['countInCargo', 'count_in_cargo'], ['countInHoarder', 'count_in_hoarder'], ['countInMap', 'count_in_map'],
+      ['countInPlayer', 'count_in_player'], ['crafted', 'crafted'], ['deloot', 'deloot']];
     const flags = item.flags || {};
     const flagInputs = {};
-    const flagGrid = h('div', { class: 'grid-3' });
-    for (const key of ['countInCargo','countInHoarder','countInMap','countInPlayer','crafted','deloot']) {
-      const inp = h('input', { type: 'number', value: flags[key] ?? 0 });
-      flagInputs[key] = inp;
-      flagGrid.append(h('div', {}, [h('label', { text: key }), inp]));
+    const flagGrid = h('div', { class: 'cfg-bools' });
+    for (const [key, xml] of FLAGS) {
+      const sw = h('input', { type: 'checkbox', class: 'switch' });
+      sw.checked = Number(flags[key]) > 0;
+      flagInputs[key] = sw;
+      flagGrid.append(h('label', { class: 'cfg-bool' }, [sw, h('span', { class: 'cfg-bool-text' }, [
+        h('span', { class: 'cfg-bool-label', i18n: 'types.flag.' + key }),
+        h('code', { class: 'cfg-key', text: xml }),
+      ])]));
     }
 
     m.body.append(
       grid,
       lists,
-      h('label', { text: 'flags' }),
+      h('h4', { class: 'sub-title' }, withHelp(h('span', { i18n: 'types.flags.title' }), 'types.flags')),
       flagGrid,
       h('div', { class: 'actions' }, [
-        h('button', { class: 'primary', i18n: 'action.save',
-          onclick: async () => {
-            const body = { name };
-            for (const [k, el] of Object.entries(fields)) {
-              const v = el.value.trim();
-              if (v === '') continue;
-              if (k === 'category') body.category = { name: v };
-              else body[k] = Number(v);
-            }
-            body.usages = usages;
-            body.values = values;
-            body.tags = tags;
-            body.flags = Object.fromEntries(Object.entries(flagInputs).map(([k, el]) => [k, Number(el.value) || 0]));
-            try {
-              await api.post(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`, body);
-              toast(t('msg.saved'), 'ok');
-              m.close();
-              await refreshTable();
-            } catch (e) { handleErr(e); }
-          }
-        }),
+        h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => withBusy(e.currentTarget, async () => {
+          pendingAdds.forEach(add => add());
+          const body = { name };
+          if (!readFields(fields, (k, v) => { body[k] = k === 'category' ? { name: v } : v; })) return;
+          body.usages = usages;
+          body.values = values;
+          body.tags = tags;
+          body.flags = Object.fromEntries(Object.entries(flagInputs).map(([k, el]) => [k, el.checked ? 1 : 0]));
+          try {
+            await api.post(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`, body);
+            toast(t('msg.saved'), 'ok');
+            m.close();
+            await refreshTable(true);
+          } catch (err) { handleErr(err); }
+        }) }),
         h('button', { class: 'danger', i18n: 'action.delete',
-          onclick: async () => {
+          onclick: async (e) => {
+            const btn = e.currentTarget; // capture BEFORE the await
             if (!(await confirmModal(t('confirm.delete').replace('{name}', name), { danger: true, okText: t('action.delete') }))) return;
-            try {
-              await api.del(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
-              toast(t('msg.deleted'), 'ok');
-              m.close();
-              await refreshTable();
-            } catch (e) { handleErr(e); }
+            await withBusy(btn, async () => {
+              try {
+                await api.del(`/api/types/item?file=${encodeURIComponent(fileSelect.value)}&name=${encodeURIComponent(name)}`);
+                toast(t('msg.deleted'), 'ok');
+                selected.delete(name);
+                delete dirty[name];
+                updateDirtyUI();
+                m.close();
+                await refreshTable(true);
+              } catch (err) { handleErr(err); }
+            });
           }
         }),
         h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
       ]),
     );
+    applyI18n();
   }
 
-  fileSelect.onchange = () => { clearDirty(); currentPage = 1; refreshTable(); };
+  let shownFile = '';
+  fileSelect.onchange = async () => {
+    // Switching file used to drop the unsaved inline edits without a word.
+    if (dirtyCount() && !(await confirmModal(t('refresh.discard'), { danger: true, okText: t('action.discard') }))) {
+      fileSelect.value = shownFile;
+      return;
+    }
+    shownFile = fileSelect.value;
+    clearDirty(); selected.clear();
+    currentPage = 1; kindFilter = 'all'; catFilter = null; usageSel.value = ''; tierSel.value = '';
+    updateDirtyUI(); updateSelUI();
+    refreshTable(true);
+  };
+  [usageSel, tierSel, spawnOnly].forEach(el => el.addEventListener('change', () => { currentPage = 1; refreshTable(); }));
+
+  function resetFilters() {
+    search.value = ''; usageSel.value = ''; tierSel.value = ''; spawnOnly.checked = false;
+    kindFilter = 'all'; catFilter = null; currentPage = 1;
+    refreshTable();
+  }
+
+  // typeKind sorts an entry into the filter chips. Ammo and magazines are
+  // "weapons" in vanilla's category, but admins look for them separately, so
+  // they are recognised by their standard class-name prefixes.
+  function typeKind(r) {
+    const n = (r.name || '').toLowerCase();
+    if (n.startsWith('ammo_') || n.startsWith('ammobox')) return 'ammo';
+    if (n.startsWith('mag_')) return 'mags';
+    const c = (r.category || '').toLowerCase();
+    if (TYPE_KINDS.includes(c)) return c;
+    return 'other';
+  }
+  function renderKindBar(rows) {
+    const counts = { all: rows.length };
+    for (const r of rows) { const k = typeKind(r); counts[k] = (counts[k] || 0) + 1; }
+    kindBar.innerHTML = '';
+    for (const k of ['all', ...TYPE_KIND_ORDER]) {
+      if (k !== 'all' && !counts[k] && kindFilter !== k) continue;
+      kindBar.append(h('button', {
+        class: 'pill' + (kindFilter === k ? ' active' : ''), type: 'button',
+        onclick: () => { kindFilter = k; currentPage = 1; refreshTable(); },
+      }, [h('span', { i18n: 'types.kind.' + k }), h('span', { class: 'pill-count', text: String(counts[k] || 0) })]));
+    }
+  }
+  // The deep-linked category, as a chip that clears it.
+  function renderCatFilter() {
+    catHost.innerHTML = '';
+    if (catFilter === null) return;
+    catHost.append(h('button', { type: 'button', class: 'pill', title: t('filter.remove'),
+      onclick: () => { catFilter = null; currentPage = 1; refreshTable(); } }, [
+      h('span', { text: tn('types.filter.catChip', { cat: typeCategoryLabel(catFilter) }) }),
+      h('span', { class: 'types-chip-x', 'aria-hidden': 'true', text: '×' }),
+    ]));
+  }
+  function fillFilterOptions(rows) {
+    const us = new Set(), vs = new Set(), cs = new Set();
+    for (const r of rows) {
+      (r.usages || []).forEach(u => us.add(u));
+      (r.values || []).forEach(v => vs.add(v));
+      if (r.category) cs.add(r.category);
+    }
+    const fill = (sel, set, allKey) => {
+      const cur = sel.value;
+      sel.innerHTML = '';
+      sel.append(h('option', { value: '', i18n: allKey }));
+      [...set].sort((a, b) => a.localeCompare(b)).forEach(v => sel.append(h('option', { value: v, text: v })));
+      sel.value = set.has(cur) ? cur : '';
+    };
+    fill(usageSel, us, 'types.filter.anyUsage');
+    fill(tierSel, vs, 'types.filter.anyTier');
+    catList.innerHTML = '';
+    [...cs].sort((a, b) => a.localeCompare(b)).forEach(c => catList.append(h('option', { value: c })));
+  }
   let _searchT = 0;
   search.oninput = () => { clearTimeout(_searchT); _searchT = setTimeout(() => { currentPage = 1; refreshTable(); }, 250); };
 
-  if (myNav !== _navSeq) return;
+  root.append(catList);
+  root.append(pageHeader('nav.types', 'types.subtitle', [revealBtn(() => typesFilePath ? { path: typesFilePath } : { kind: 'db' })]));
   if (State.serverStatus.running) root.append(runningBanner());
   root.append(
     h('div', { class: 'card' }, [
-      h('h2', { i18n: 'types.title' }),
+      kindBar,
       h('div', { class: 'toolbar' }, [
-        fileSelect, search,
-        h('button', { i18n: 'types.bulk', onclick: openBulkEdit }),
-        h('span', { class: 'grow' }),
-        discardBtn,
-        dirtyBtn,
+        fileSelect, search, usageSel, tierSel,
+        h('label', {}, [spawnOnly, h('span', { i18n: 'types.filter.spawning' })]),
+        catHost,
       ]),
       h('p', { class: 'hint', i18n: 'types.inline.hint' }),
       tableWrap,
       pagerHost,
+      dock,
     ]),
-    presetsWrap,
   );
+  // Leaving the page or reloading the tab with unsaved cells asks first, and
+  // Ctrl+S saves them.
+  root._isDirty = () => dirtyCount() > 0;
+  root._save = () => saveDirty(saveBtn);
+  applyI18n();
+
+  // Custom types files and the spawn presets, then the table.
+  const [moded, presets] = await Promise.all([
+    api.get('/api/moded').catch(() => null),
+    api.get('/api/types/presets').catch(() => []),
+  ]);
+  if (myNav !== _navSeq) return;
+  for (const f of (moded && moded.files) || []) {
+    fileSelect.append(h('option', { value: f.name, text: `moded_types/${f.name}${f.registered ? '' : ' (' + t('moded.notRegistered') + ')'}` }));
+  }
+  if (target && target.file && [...fileSelect.options].some(o => o.value === target.file)) fileSelect.value = target.file;
+  shownFile = fileSelect.value;
+  presetsList = Array.isArray(presets) ? presets : [];
+  for (const p of presetsList) presetSel.append(h('option', { value: p.id, text: State.lang === 'ru' ? p.labelRu : p.label }));
   await refreshTable();
 };
 
 // --------------------------------------------------------------------- moded types
 
 Views.moded = async (root) => {
+  const myNav = _navSeq;
   let d;
   try { d = await api.get('/api/moded'); }
   catch (e) { root.append(h('div', { class: 'card' }, h('p', { text: e.message }))); return; }
+  if (myNav !== _navSeq) return;
+  const running = !!State.serverStatus.running;
+  const files = d.files || [];
 
-  const table = h('table');
-  table.append(h('thead', {}, h('tr', {}, [
-    h('th', { i18n: 'col.file' }),
-    h('th', { i18n: 'col.size' }),
-    h('th', { i18n: 'col.registered' }),
-    h('th', { text: '' }),
-  ])));
-  const tbody = h('tbody');
-  for (const f of d.files) {
-    tbody.append(h('tr', {}, [
-      h('td', { text: f.name }),
-      h('td', { text: bytes(f.size) }),
-      h('td', {}, f.registered ? h('span', { class: 'badge ok', text: '✓' }) : h('span', { class: 'badge warn', text: '!' })),
-      h('td', {}, h('button', { class: 'danger', i18n: 'action.delete',
-        onclick: async () => {
-          if (!(await confirmModal(t('confirm.delete').replace('{name}', f.name), { danger: true, okText: t('action.delete') }))) return;
-          try { await api.post('/api/moded/delete', { fileName: f.name }); toast(t('msg.deleted'),'ok'); await navigate('moded'); }
-          catch (e) { handleErr(e); }
-        }
-      })),
+  const nameInput = h('input', { type: 'text', placeholder: 'mymod_types.xml', spellcheck: 'false' });
+  const regCb = h('input', { type: 'checkbox', class: 'switch' }); regCb.checked = true;
+
+  const filesCard = h('div', { class: 'card' }, [cardTitle('i-moded', 'moded.title')]);
+  if (!files.length) {
+    // Bare column headers over nothing told the admin nothing.
+    filesCard.append(h('div', { class: 'empty-state' }, [
+      h('div', { class: 'es-icon', html: svgIcon('i-moded', 34) }),
+      h('div', { class: 'es-title', i18n: 'moded.empty.title' }),
+      h('div', { class: 'es-hint', i18n: 'moded.empty.hint' }),
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'primary', i18n: 'moded.import.pick', onclick: () => openImportFromMod() }),
+        h('button', { class: 'secondary', i18n: 'moded.create', onclick: () => { nameInput.scrollIntoView({ block: 'center' }); nameInput.focus(); } }),
+      ]),
     ]));
+  } else {
+    const table = h('table', { class: 'moded-table' });
+    table.append(h('thead', {}, h('tr', {}, [
+      h('th', { i18n: 'col.file' }),
+      h('th', { class: 'num', i18n: 'moded.col.types' }),
+      h('th', { class: 'num', i18n: 'col.size' }),
+      h('th', { i18n: 'col.status' }),
+      h('th', { text: '' }),
+    ])));
+    const tbody = h('tbody');
+    for (const f of files) {
+      // DayZ only loads a types file cfgeconomycore.xml lists — say so in words,
+      // and offer the fix right on the row.
+      const status = f.registered
+        ? h('span', { class: 'badge ok', i18n: 'moded.registered' })
+        : h('span', { class: 'badge warn', i18n: 'moded.notRegistered', title: t('moded.notRegistered.hint') });
+      const actions = [
+        // An unreadable file is not offered for registration: DayZ would then
+        // try to load the broken XML.
+        f.registered || f.broken ? null : h('button', { class: 'small primary', i18n: 'moded.register', disabled: running,
+          title: t('moded.notRegistered.hint'), onclick: (e) => withBusy(e.currentTarget, async () => {
+            try {
+              await api.post('/api/moded/register', { fileName: f.name });
+              toast(tn('moded.registeredOk', { name: f.name }), 'ok');
+              await navigate('moded');
+            } catch (err) { handleErr(err); }
+          }) }),
+        f.broken ? null : h('button', { class: 'small secondary', i18n: 'moded.openInTypes',
+          onclick: () => { _typesTarget = { file: f.name }; navigate('types'); } }),
+        h('button', { class: 'small danger', i18n: 'action.delete', disabled: running, onclick: async (e) => {
+          const btn = e.currentTarget; // capture BEFORE the await
+          if (!(await confirmModal(tn('moded.deleteConfirm', { name: f.name, n: f.types || 0 }), { danger: true, okText: t('action.delete') }))) return;
+          await withBusy(btn, async () => {
+            try {
+              await api.post('/api/moded/delete', { fileName: f.name });
+              toast(t('moded.deleted'), 'ok');
+              await navigate('moded');
+            } catch (err) { handleErr(err); }
+          });
+        } }),
+      ].filter(Boolean);
+      tbody.append(h('tr', {}, [
+        h('td', {}, [
+          h('span', { class: 'mono', text: f.name }),
+          f.broken ? h('span', { class: 'badge err moded-broken', i18n: 'moded.broken', title: t('moded.broken.hint') }) : null,
+        ].filter(Boolean)),
+        h('td', { class: 'num', 'data-label': t('moded.col.types'), text: f.broken ? '—' : fmtCount(f.types || 0) }),
+        h('td', { class: 'num', text: bytes(f.size) }),
+        h('td', {}, status),
+        h('td', {}, h('div', { class: 'moded-actions' }, actions)),
+      ]));
+    }
+    table.append(tbody);
+    filesCard.append(h('div', { class: 'table-scroll-narrow' }, table));
   }
-  table.append(tbody);
 
-  const nameInput = h('input', { type: 'text', placeholder: 'mymod_types.xml' });
-  const regCb    = h('input', { type: 'checkbox' }); regCb.checked = true;
+  async function create(btn) {
+    let name = nameInput.value.trim();
+    // An empty name used to do nothing at all.
+    if (!name) { toast(t('moded.needName'), 'warn'); nameInput.focus(); return; }
+    if (!/\.xml$/i.test(name)) name += '.xml';
+    await withBusy(btn, async () => {
+      try {
+        await api.post('/api/moded/create', { fileName: name, autoRegister: regCb.checked });
+        toast(t('msg.created'), 'ok');
+        await navigate('moded');
+      } catch (e) { handleErr(e); }
+    });
+  }
+  nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); create(createBtn); } });
+  const createBtn = h('button', { class: 'primary', i18n: 'action.create', disabled: running, onclick: (e) => create(e.currentTarget) });
 
-  root.append(pageHeader('nav.modedTypes', 'moded.subtitle'));
-  if (State.serverStatus.running) root.append(runningBanner());
+  // The folder path lives in the Open-folder button's tooltip: as a hint it
+  // took three monospace lines on a phone.
+  const reveal = revealBtn({ kind: 'moded' });
+  reveal.removeAttribute('data-i18n-title');
+  reveal.title = t('reveal.title') + ': ' + d.folder;
+  root.append(pageHeader('nav.modedTypes', 'moded.subtitle', [reveal]));
+  if (running) root.append(runningBanner());
   root.append(
+    filesCard,
     h('div', { class: 'card' }, [
-      h('h2', { i18n: 'moded.title' }),
-      h('p', { class: 'hint', text: d.folder }),
-      table,
-    ]),
-    h('div', { class: 'card' }, [
-      h('h3', { i18n: 'moded.import' }),
+      cardTitle('i-mods', 'moded.import'),
       h('p', { class: 'hint', i18n: 'moded.import.hint' }),
       h('div', { class: 'actions' }, [
-        h('button', { class: 'primary', i18n: 'moded.import.pick',
-          onclick: () => openImportFromMod() }),
+        h('button', { class: 'primary', i18n: 'moded.import.pick', onclick: () => openImportFromMod() }),
       ]),
     ]),
     h('div', { class: 'card' }, [
-      h('h3', { i18n: 'moded.create' }),
-      h('label', { i18n: 'moded.fileName' }), nameInput,
-      h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, [
-        regCb, h('span', { i18n: 'moded.autoRegister' })
-      ]),
-      h('div', { class: 'actions' }, [
-        h('button', { class: 'primary', i18n: 'action.create',
-          onclick: async () => {
-            let name = nameInput.value.trim();
-            if (!name) return;
-            if (!name.endsWith('.xml')) name += '.xml';
-            try {
-              await api.post('/api/moded/create', { fileName: name, autoRegister: regCb.checked });
-              toast('created', 'ok');
-              await navigate('moded');
-            } catch (e) { handleErr(e); }
-          }
-        }),
-      ]),
+      cardTitle('i-plus', 'moded.create'),
+      field('moded.fileName', nameInput),
+      h('label', {}, [regCb, h('span', { i18n: 'moded.autoRegister' })]),
+      h('div', { class: 'actions' }, [createBtn]),
     ]),
   );
 
@@ -2188,11 +2933,12 @@ Views.moded = async (root) => {
         onclick: async () => {
           try {
             const r = await api.get('/api/mods/scan-types?mod=' + encodeURIComponent(mod.name));
-            const files = r.files || [];
-            if (!files.length) { toast(t('modtypes.none')); return; }
+            const found = r.files || [];
+            if (!found.length) { toast(t('modtypes.none')); return; }
             m.close();
-            await openModTypesDialog(mod.name, files);
-            await navigate('moded');
+            // The list is rebuilt once the dialog closes, so an installed file
+            // shows up right away.
+            await openModTypesDialog(mod.name, found, () => navigate('moded'));
           } catch (e) { handleErr(e); }
         },
       }, [
@@ -2211,18 +2957,30 @@ Views.moded = async (root) => {
 
 Views.files = async (root) => {
   const tree = h('div', { class: 'tree' });
-  const editorHost = h('textarea', { placeholder: t('files.selectFile') });
-  const pathLabel = h('div', { class: 'hint' });
-  const backupList = h('div', { class: 'card', style: { marginTop: '12px' } });
+  const crumbs = h('nav', { class: 'files-crumbs', 'aria-label': t('files.tree') });
+  const editorHost = h('textarea', { placeholder: t('files.selectFile'), 'aria-label': t('files.editor') });
+  const pathLabel = h('div', { class: 'hint mono files-path' });
+  const backupList = h('div', { class: 'card', style: { marginTop: '12px' }, hidden: true });
   let currentPath = '';
+  let loadedText = '';
   let cm = null;
+  const isDirty = () => !!currentPath && getValue() !== loadedText;
+  // Refresh keeps the open file and warns about unsaved edits.
+  root._isDirty = isDirty;
+  root._beforeRefresh = () => { if (currentPath) _filesTarget = { path: currentPath }; };
 
   const getValue = () => cm ? cm.getValue() : editorHost.value;
   const setValue = (v) => { if (cm) cm.setValue(v || ''); else editorHost.value = v || ''; };
   const setMode = (path) => { if (cm) cm.setOption('mode', CM.modeFor(path)); };
 
+  // Opening another file used to replace unsaved edits without a word.
+  const mayLeaveFile = async () => !isDirty() ||
+    await confirmModal(tn('eventmap.discard', { name: currentPath }), { danger: true, okText: t('action.discard') });
+
   async function refreshBackups() {
     backupList.innerHTML = '';
+    // An empty card is a blank framed box — show it only once a file is open.
+    backupList.hidden = !currentPath;
     if (!currentPath) return;
     backupList.append(withHelp(h('h3', { i18n: 'backup.title' }), 'settings.backup'));
     try {
@@ -2232,6 +2990,7 @@ Views.files = async (root) => {
         backupList.append(h('p', { class: 'hint', i18n: 'backup.none' }));
         return;
       }
+      const running = !!State.serverStatus.running;
       for (const b of baks) {
         const when = new Date(b.time * 1000).toLocaleString();
         backupList.append(h('div', { class: 'row', style: { padding: '4px 0' } }, [
@@ -2240,28 +2999,61 @@ Views.files = async (root) => {
           // See what restoring would change before committing to it.
           h('button', { class: 'secondary', i18n: 'backup.diff',
             onclick: () => openBackupDiff(currentPath, b.name) }),
-          h('button', { i18n: 'backup.restore', 'data-help': 'backup.restore', onclick: async () => {
-            try {
-              await api.post('/api/backups/restore', { path: currentPath, backup: b.name });
-              const r = await api.get('/api/files/read?path=' + encodeURIComponent(currentPath));
-              setValue(r.content);
-              toast(t('backup.restored'), 'ok');
-              refreshBackups();
-            } catch (e) { handleErr(e); }
-          }}),
+          // Confirmed like History's restore; the backend refuses while the
+          // server runs, so the button says so up front.
+          h('button', { i18n: 'backup.restore', 'data-help': 'backup.restore', disabled: running,
+            title: running ? t('history.restoreStopped') : null, onclick: async (ev) => {
+              const btn = ev.currentTarget;
+              const msg = tn('history.restoreConfirm', { file: currentPath }) + (isDirty() ? ' ' + t('files.restoreUnsaved') : '');
+              if (!(await confirmModal(msg, { danger: true, okText: t('backup.restore') }))) return;
+              await withBusy(btn, async () => {
+                try {
+                  await api.post('/api/backups/restore', { path: currentPath, backup: b.name });
+                  const r = await api.get('/api/files/read?path=' + encodeURIComponent(currentPath));
+                  setValue(r.content);
+                  loadedText = getValue(); // what is on disk now — not an unsaved change
+                  toast(t('backup.restored'), 'ok');
+                  refreshBackups();
+                } catch (e) { handleErr(e); }
+              });
+            } }),
         ]));
       }
     } catch (e) { handleErr(e); }
   }
+
+  // Until a file is open the column says what to do instead of showing an
+  // empty editor whose Save silently did nothing.
+  const pickHint = h('div', { class: 'empty-state' }, [
+    h('div', { class: 'es-icon', html: svgIcon('i-files', 34) }),
+    h('div', { class: 'es-title', i18n: 'files.pick.title' }),
+    h('div', { class: 'es-hint', i18n: 'files.pick.hint' }),
+  ]);
+  const editorWrap = h('div', { hidden: true }, [editorHost]);
+  const saveBtn = h('button', { class: 'primary', i18n: 'files.save', title: 'Ctrl+S', disabled: true, onclick: () => doSave() });
+  const reloadBtn = h('button', { class: 'secondary', i18n: 'files.reload', disabled: true, onclick: async () => {
+    if (!currentPath) return;
+    if (isDirty() && !(await confirmModal(t('refresh.discard'), { danger: true }))) return;
+    try { await openFilePath(currentPath); toast(t('refresh.done'), 'ok'); } catch (e) { handleErr(e); }
+  } });
+  const markActive = () => {
+    for (const n of tree.querySelectorAll('.node[data-path]')) n.classList.toggle('active', n.dataset.path === currentPath);
+  };
 
   // Open a single file into the editor. Shared by tree clicks and the global
   // config-search deep-link (via _filesTarget). Optionally jumps to a line.
   async function openFilePath(path, line) {
     const r = await api.get(`/api/files/read?path=${encodeURIComponent(path)}`);
     currentPath = path;
+    pickHint.hidden = true;
+    editorWrap.hidden = false;
     setMode(path.split('/').pop());
     setValue(r.content);
+    loadedText = getValue();
+    if (cm) cm.refresh(); // it was measured while hidden
     pathLabel.textContent = path;
+    saveBtn.disabled = reloadBtn.disabled = false;
+    markActive();
     await refreshBackups();
     if (cm && line > 0) {
       cm.setCursor(line - 1, 0);
@@ -2270,48 +3062,72 @@ Views.files = async (root) => {
     }
   }
 
+  // The folder being shown, as a clickable path: inside mpmissions/…/db the
+  // lone "⬆ .." gave no idea where you were.
+  function renderCrumbs(path) {
+    const parts = path ? path.split('/') : [];
+    crumbs.innerHTML = '';
+    const crumb = (label, target, last) => last
+      ? h('span', { class: 'files-crumb current', text: label, 'aria-current': 'location' })
+      : h('button', { type: 'button', class: 'files-crumb', text: label, onclick: () => loadDir(target).catch(handleErr) });
+    crumbs.append(crumb(t('files.root'), '', !parts.length));
+    parts.forEach((p, i) => {
+      crumbs.append(h('span', { class: 'files-crumb-sep', 'aria-hidden': 'true', text: '/' }));
+      crumbs.append(crumb(p, parts.slice(0, i + 1).join('/'), i === parts.length - 1));
+    });
+  }
+
   async function loadDir(path) {
     const d = await api.get(`/api/files/tree?path=${encodeURIComponent(path || '')}`);
     tree.innerHTML = '';
-    if (path) {
-      tree.append(h('div', { class: 'node dir', text: '⬆ ..',
-        onclick: () => loadDir(path.split('/').slice(0, -1).join('/')) }));
-    }
+    renderCrumbs(path || '');
     for (const e of d.entries) {
       if (/\.bak\.\d/.test(e.name)) continue; // hide .bak.* clutter from the tree
       const node = h('div', { class: `node ${e.isDir ? 'dir' : ''}`,
         text: `${e.isDir ? '📁' : '📄'} ${e.name}`,
       });
+      if (!e.isDir) node.dataset.path = e.path;
       node.onclick = async () => {
         // Any error here (413 for a >2 MB file, 404 for one that vanished)
         // used to be an unhandled rejection: no toast, nothing happened.
         try {
           if (e.isDir) return await loadDir(e.path);
+          if (e.path === currentPath && isDirty()) return; // already open, keep the edits
+          if (!(await mayLeaveFile())) return;
           await openFilePath(e.path);
+          // One column on phones: the editor is below the tree, out of sight.
+          if (window.matchMedia('(max-width: 900px)').matches) editorCol.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (err) { handleErr(err); }
       };
       tree.append(node);
     }
+    markActive();
   }
   try { await loadDir(''); } catch (e) { handleErr(e); }
 
+  const editorCol = h('div', { class: 'files-editor-col' }, [
+    h('div', { class: 'files-editor-head' }, [
+      h('h3', { i18n: 'files.editor' }),
+      h('button', { type: 'button', class: 'small secondary files-totree', text: '↑ ' + t('files.tree'),
+        onclick: () => crumbs.scrollIntoView({ behavior: 'smooth', block: 'start' }) }),
+    ]),
+    pathLabel,
+    pickHint,
+    editorWrap,
+    h('div', { class: 'actions' }, [
+      saveBtn,
+      reloadBtn,
+      revealBtn(() => currentPath ? { path: currentPath } : null),
+    ]),
+    backupList,
+  ]);
+  root.append(pageHeader('nav.files', 'files.subtitle'));
   if (State.serverStatus.running) root.append(runningBanner());
   root.append(
-    h('div', { class: 'card' }, [
-      h('h2', { i18n: 'files.title' }),
+    h('div', { class: 'card files-view' }, [
       h('div', { class: 'grid-2' }, [
-        h('div', {}, [h('h3', { i18n: 'files.tree' }), tree]),
-        h('div', {}, [
-          h('h3', { i18n: 'files.editor' }),
-          pathLabel,
-          editorHost,
-          h('div', { class: 'actions' }, [
-            h('button', { class: 'primary', i18n: 'files.save', title: 'Ctrl+S',
-              onclick: () => doSave(),
-            }),
-          ]),
-          backupList,
-        ]),
+        h('div', {}, [h('h3', { i18n: 'files.tree' }), crumbs, tree]),
+        editorCol,
       ]),
     ])
   );
@@ -2320,7 +3136,8 @@ Views.files = async (root) => {
     if (!currentPath) return;
     try {
       await api.post('/api/files/write', { path: currentPath, content: getValue() });
-      toast(t('files.save'), 'ok');
+      loadedText = getValue();
+      toast(t('msg.saved'), 'ok');
       await refreshBackups();
     } catch (e) { handleErr(e); }
   }
@@ -2369,28 +3186,57 @@ function highlightNodes(text, q) {
 
 Views.search = async (root) => {
   root.append(pageHeader('nav.search', 'search.subtitle'));
-  const input = h('input', { type: 'search', placeholder: t('search.placeholder') });
+  const input = h('input', { type: 'search', placeholder: t('search.placeholder'), 'aria-label': t('search.placeholder') });
+  // The last query comes back: opening a hit in Files and pressing Back used
+  // to land on an empty search.
+  input.value = _lastSearch;
   const resultsCard = h('div', { class: 'card' });
   root.append(h('div', { class: 'card' }, h('div', { class: 'toolbar' }, [
     input,
     h('button', { class: 'primary', i18n: 'search.go', onclick: () => run() }),
   ])));
   root.append(resultsCard);
-  setTimeout(() => input.focus(), 0);
+  // No auto-focus on touch screens: it popped the keyboard over the page.
+  if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) setTimeout(() => input.focus(), 0);
 
   let timer = null, seq = 0;
   input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 350); });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(timer); run(); } });
 
+  // Before the first query: what can be searched, and a few examples — an
+  // empty framed box said nothing.
+  function intro() {
+    resultsCard.innerHTML = '';
+    resultsCard.append(h('div', { class: 'empty-state' }, [
+      h('div', { class: 'es-icon', html: svgIcon('i-search', 34) }),
+      h('div', { class: 'es-title', i18n: 'search.intro.title' }),
+      h('div', { class: 'es-hint', i18n: 'search.intro.hint' }),
+      h('div', { class: 'actions' }, [
+        h('span', { class: 'hint', i18n: 'lootwhere.example' }),
+        ...['AKM', 'MaxPlayers', 'Mag_STANAG'].map(ex => h('button', { type: 'button', class: 'pill', text: ex,
+          onclick: () => { input.value = ex; run(); } })),
+      ]),
+    ]));
+    applyI18n();
+  }
+
   async function run() {
     const q = input.value.trim();
+    _lastSearch = q;
     const mine = ++seq;
     resultsCard.innerHTML = '';
+    if (!q) { intro(); return; }
     if (q.length < 2) { resultsCard.append(h('p', { class: 'hint', i18n: 'search.hintShort' })); applyI18n(); return; }
     let d;
     try { d = await api.get('/api/config/search?q=' + encodeURIComponent(q)); }
     catch (e) { handleErr(e); return; }
     if (mine !== seq) return; // a newer keystroke already fired
+    // A class-like word is also a loot question: link the loot lookup.
+    if (/^[A-Za-z][A-Za-z0-9_]+$/.test(q)) {
+      resultsCard.append(h('div', { class: 'search-xlink' }, h('button', { type: 'button', class: 'secondary small',
+        html: svgIcon('i-lootwhere', 14), onclick: () => { _lastLoot = q; navigate('lootwhere'); } },
+        [h('span', { text: tn('search.whereLoot', { q }) })])));
+    }
     const matches = d.matches || [];
     if (!matches.length) {
       resultsCard.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'search.none' })));
@@ -2398,7 +3244,7 @@ Views.search = async (root) => {
       return;
     }
     resultsCard.append(h('p', { class: 'hint',
-      text: t('search.count').replace('{n}', d.total) + (d.truncated ? ' ' + t('search.truncated') : '') }));
+      text: tn('search.count', { n: d.total }) + (d.truncated ? ' ' + t('search.truncated') : '') }));
 
     // Group consecutive matches by file (backupItems order keeps them together).
     let curFile = null, group = null;
@@ -2425,32 +3271,38 @@ Views.search = async (root) => {
     }
     applyI18n();
   }
+  if (input.value.trim()) await run(); else intro();
 };
 
 // ----------------------------------------------------------- config profiles
 
 Views.cfgprofiles = async (root) => {
+  const myNav = _navSeq;
   root.append(pageHeader('nav.cfgProfiles', 'cfgProfiles.subtitle'));
   const running = !!State.serverStatus.running;
   if (running) root.append(runningBanner());
 
-  const nameIn = h('input', { type: 'text', placeholder: t('cfgProfiles.namePh') });
-  const noteIn = h('input', { type: 'text', placeholder: t('cfgProfiles.notePh') });
+  const nameIn = h('input', { type: 'text', placeholder: t('cfgProfiles.namePh'), 'aria-label': t('cfgProfiles.namePh') });
+  const noteIn = h('input', { type: 'text', placeholder: t('cfgProfiles.notePh'), 'aria-label': t('cfgProfiles.notePh') });
+  const saveBtn = h('button', { class: 'primary', i18n: 'cfgProfiles.save', onclick: () => save(saveBtn) });
+  nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(saveBtn); });
   root.append(h('div', { class: 'card' }, [
-    h('h3', { i18n: 'cfgProfiles.saveTitle' }),
+    cardTitle('i-plus', 'cfgProfiles.saveTitle'),
     h('p', { class: 'hint', i18n: 'cfgProfiles.saveHint' }),
-    h('div', { class: 'toolbar' }, [
-      nameIn, noteIn,
-      h('button', { class: 'primary', i18n: 'cfgProfiles.save', onclick: (e) => save(e.currentTarget) }),
-    ]),
+    h('div', { class: 'toolbar' }, [nameIn, noteIn, saveBtn]),
   ]));
 
-  const listCard = h('div', { class: 'card' }, [h('h3', { i18n: 'cfgProfiles.list' })]);
-  root.append(listCard);
+  const listCard = h('div', { class: 'card' }, [cardTitle('i-cfgprofiles', 'cfgProfiles.list')]);
+  const schedCard = h('div', { class: 'card' });
+  root.append(listCard, schedCard);
+  let profiles = [];
 
   async function save(btn) {
     const name = nameIn.value.trim();
     if (!name) { toast(t('cfgProfiles.needName'), 'warn'); nameIn.focus(); return; }
+    // The same name (any case) replaces that profile — say so first.
+    const same = profiles.find(p => String(p.name || '').trim().toLowerCase() === name.toLowerCase());
+    if (same && !(await confirmModal(tn('cfgProfiles.overwriteConfirm', { name: same.name }), { okText: t('cfgProfiles.overwrite') }))) return;
     await withBusy(btn, async () => {
       try {
         await api.post('/api/config-profiles/save', { name, note: noteIn.value.trim() });
@@ -2461,12 +3313,85 @@ Views.cfgprofiles = async (root) => {
     });
   }
 
+  // Refresh a profile from the current config without retyping its name.
+  async function update(p, btn) {
+    if (!(await confirmModal(tn('cfgProfiles.updateConfirm', { name: p.name }), { okText: t('cfgProfiles.update') }))) return;
+    await withBusy(btn, async () => {
+      try {
+        await api.post('/api/config-profiles/save', { name: p.name, note: p.note || '', slug: p.slug });
+        toast(t('cfgProfiles.saved'), 'ok');
+        await load();
+      } catch (e) { handleErr(e); }
+    });
+  }
+
+  const LAUNCH_LABEL = {
+    mods: 'nav.mods', serverCfg: 'settings.serverCfg', cpuCount: 'settings.cpuCount', limitFPS: 'settings.limitFps',
+    extraLaunchParams: 'settings.extraParams', doLogs: 'settings.flag.dologs', adminLog: 'settings.flag.adminlog',
+    netLog: 'settings.flag.netlog', freezeCheck: 'settings.flag.freezecheck', filePatching: 'settings.flag.filePatching',
+  };
+  function launchRow(c) {
+    let val;
+    if (c.key === 'mods' || c.key === 'serverMods') {
+      const a = c.from ? c.from.split(';') : [], b = c.to ? c.to.split(';') : [];
+      const add = b.filter(x => !a.includes(x)), del = a.filter(x => !b.includes(x));
+      val = (add.length || del.length)
+        ? [...add.map(x => h('span', { class: 'diff-plus', text: '+' + x })), ...del.map(x => h('span', { class: 'diff-minus', text: '−' + x }))]
+        : [h('span', { class: 'hint', i18n: 'cfgProfiles.diff.order' })];
+    } else {
+      const fmt = (v) => v === 'true' ? t('cfgProfiles.on') : v === 'false' ? t('cfgProfiles.off') : (v || '—');
+      val = [h('span', { text: fmt(c.from) + ' → ' + fmt(c.to) })];
+    }
+    return h('div', { class: 'cfgp-diff-row' }, [
+      LAUNCH_LABEL[c.key] ? h('span', { class: 'cfgp-diff-key', i18n: LAUNCH_LABEL[c.key] }) : h('code', { class: 'cfgp-diff-key', text: '-serverMod' }),
+      h('span', { class: 'cfgp-diff-val' }, val),
+    ]);
+  }
+
+  // The confirm lists what applying would actually change instead of a blind
+  // "every config is overwritten".
+  function applyPreview(p, d) {
+    return new Promise((resolve) => {
+      let ok = false;
+      const m = openModal({ title: tn('cfgProfiles.applyTitle', { name: p.name }), wide: true, onClose: () => resolve(ok) });
+      const files = d.files || [], launch = d.launch || [];
+      const body = [];
+      if (!files.length && !launch.length) {
+        body.push(h('p', { class: 'hint', i18n: 'cfgProfiles.diff.none' }));
+      } else {
+        body.push(h('p', { class: 'hint', i18n: 'cfgProfiles.applyConfirm' }));
+        if (launch.length) {
+          body.push(h('h4', { class: 'sub-title', i18n: 'server.launch.title' }), h('div', { class: 'cfgp-diff' }, launch.map(launchRow)));
+        }
+        if (files.length) {
+          body.push(h('h4', { class: 'sub-title', i18n: 'files.title' }), h('div', { class: 'cfgp-diff' }, files.map(f => h('div', { class: 'cfgp-diff-row' }, [
+            h('span', { class: 'cfgp-diff-path', text: f.path }),
+            f.status === 'new'
+              ? h('span', { class: 'badge', i18n: 'cfgProfiles.diff.new' })
+              : h('span', { class: 'cfgp-diff-val' }, [h('span', { class: 'diff-plus', text: '+' + (f.added || 0) }), h('span', { class: 'diff-minus', text: '−' + (f.removed || 0) })]),
+          ]))));
+        }
+      }
+      if (d.same) body.push(h('p', { class: 'hint', text: tn('cfgProfiles.diff.same', { n: d.same }) }));
+      const okBtn = h('button', { class: 'primary', i18n: 'cfgProfiles.apply', onclick: () => { ok = true; m.close(); } });
+      body.push(h('div', { class: 'actions' }, [okBtn, h('button', { i18n: 'action.cancel', onclick: () => m.close() })]));
+      m.body.append(...body);
+      setTimeout(() => okBtn.focus(), 0);
+    });
+  }
+
   async function apply(p, btn) {
-    if (!(await confirmModal(t('cfgProfiles.applyConfirm').replace('{name}', p.name)))) return;
+    let d = null;
+    await withBusy(btn, async () => {
+      try { d = await api.get('/api/config-profiles/diff?slug=' + encodeURIComponent(p.slug)); } catch (e) { handleErr(e); }
+    });
+    if (!d || !(await applyPreview(p, d))) return;
     await withBusy(btn, async () => {
       try {
         const r = await api.post('/api/config-profiles/apply', { slug: p.slug });
-        toast(t('cfgProfiles.applied').replace('{n}', r.count || 0), 'ok');
+        toast(tn('cfgProfiles.applied', { n: r.count || 0 }), 'ok');
+        // The mod list and launch flags may have changed with it.
+        State.config = await api.get('/api/config');
       } catch (e) { handleErr(e); }
     });
   }
@@ -2481,17 +3406,38 @@ Views.cfgprofiles = async (root) => {
     });
   }
 
+  // Swaps on a timer are set up in Settings → Restarts; this page only said
+  // nothing about them.
+  function renderSchedule() {
+    const names = Object.fromEntries(profiles.map(p => [p.slug, p.name]));
+    const sched = ((State.config && State.config.scheduledProfiles) || []).filter(s => s.enabled && s.profile);
+    schedCard.innerHTML = '';
+    schedCard.append(cardTitle('i-clock', 'cfgProfiles.schedule.title'));
+    if (!sched.length) schedCard.append(h('p', { class: 'hint', i18n: 'cfgProfiles.schedule.none' }));
+    for (const s of sched) {
+      schedCard.append(h('div', { class: 'cfgp-sched-row' }, [
+        h('span', { class: 'mono', text: s.time || '—' }),
+        h('span', { text: '→ ' + (names[s.profile] || s.profile) }),
+        (s.days || []).length ? h('span', { class: 'hint', text: weekdayList(s.days) }) : null,
+      ].filter(Boolean)));
+    }
+    schedCard.append(h('div', { class: 'actions' }, [h('button', { class: 'secondary', i18n: 'cfgProfiles.schedule.open', onclick: async () => {
+      await navigate('settings/restarts');
+      const card = document.getElementById('sched-profiles');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } })]));
+  }
+
   async function load() {
-    listCard.innerHTML = '';
-    listCard.append(h('h3', { i18n: 'cfgProfiles.list' }));
     let d;
     try { d = await api.get('/api/config-profiles'); }
     catch (e) { handleErr(e); return; }
-    const profiles = d.profiles || [];
+    if (myNav !== _navSeq) return;
+    profiles = d.profiles || [];
+    listCard.innerHTML = '';
+    listCard.append(cardTitle('i-cfgprofiles', 'cfgProfiles.list'));
     if (!profiles.length) {
       listCard.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'cfgProfiles.none' })));
-      applyI18n();
-      return;
     }
     for (const p of profiles) {
       listCard.append(h('div', { class: 'profile-row' }, [
@@ -2499,15 +3445,17 @@ Views.cfgprofiles = async (root) => {
           h('div', { class: 'profile-name', text: p.name }),
           p.note ? h('div', { class: 'hint', text: p.note }) : null,
           h('div', { class: 'hint', text:
-            fmtWhen(p.created) + ' · ' + t('cfgProfiles.files').replace('{n}', p.files) + ' · ' + bytes(p.size) }),
+            fmtWhen(p.created) + ' · ' + tn('cfgProfiles.files', { n: p.files }) + ' · ' + bytes(p.size) }),
         ]),
         h('div', { class: 'profile-actions' }, [
-          h('button', { class: 'primary', i18n: 'cfgProfiles.apply', disabled: running,
+          h('button', { class: 'primary', i18n: 'cfgProfiles.apply', disabled: running, title: running ? t('guard.serverRunning') : null,
             onclick: (e) => apply(p, e.currentTarget) }),
+          h('button', { class: 'secondary', i18n: 'cfgProfiles.update', onclick: (e) => update(p, e.currentTarget) }),
           h('button', { class: 'danger', i18n: 'action.delete', onclick: (e) => del(p, e.currentTarget) }),
         ]),
       ]));
     }
+    renderSchedule();
     applyI18n();
   }
   await load();
@@ -2517,7 +3465,6 @@ Views.cfgprofiles = async (root) => {
 
 Views.economy = async (root) => {
   const myNav = _navSeq;
-  root.append(pageHeader('nav.economy', 'economy.subtitle'));
   const running = !!State.serverStatus.running;
 
   // File picker — vanilla types.xml plus any custom (moded) types files.
@@ -2526,105 +3473,167 @@ Views.economy = async (root) => {
   catch {}
   if (myNav !== _navSeq) return;
   let curFile = '';
-  const fileSel = h('select', { onchange: () => { curFile = fileSel.value; loadStats(); } });
+  let cats = [];          // the file's real categories, for the tuning scope
+  let tuneCat = '';       // '' = scale the whole file
+  let tuneScaleMin = true;
+  let baselineAt = 0;     // when the ×1 snapshot was taken (0 = none yet)
+  const fileSel = h('select', { 'aria-label': t('economy.file'), onchange: () => { curFile = fileSel.value; loadStats(); } });
   files.forEach(f => fileSel.append(h('option', { value: f === 'types.xml' ? '' : f, text: f })));
-  root.append(h('div', { class: 'card' }, h('div', { class: 'toolbar' }, [
-    h('label', { i18n: 'economy.file' }), fileSel,
-  ])));
+  // The file picker lives in the header: a card holding one select was a box
+  // in a box and, on a phone, a whole screen row.
+  root.append(pageHeader('nav.economy', 'economy.subtitle', [
+    h('label', { class: 'econ-file' }, [h('span', { i18n: 'economy.file' }), fileSel]),
+    revealBtn({ kind: 'db' }, { label: 'economy.openDb' }),
+  ]));
 
-  const tiles = h('div', { class: 'grid-4' });
-  root.append(tiles);
+  // players-tiles: 2×2 on a phone instead of four full-width cards.
+  const tiles = h('div', { class: 'grid-4 players-tiles' });
   const tuneCard = h('div', { class: 'card' });
-  root.append(tuneCard);
   const chartsHost = h('div');
-  root.append(chartsHost);
+  root.append(tiles, tuneCard, chartsHost);
 
   const tile = (key, val, helpKey) => h('div', { class: 'card' }, [
     helpKey ? withHelp(h('h3', { i18n: key }), helpKey) : h('h3', { i18n: key }),
     h('div', { class: 'metric-num', text: val })]);
 
-  function hbar(label, value, max, sub) {
+  // One bar. With a target the row opens Types filtered to exactly that slice,
+  // so a chart is a way in rather than a dead end. Spans, not divs: the row
+  // can be a <button>.
+  function hbar(label, value, max, sub, target) {
     const pct = max > 0 ? Math.max(2, Math.round(value / max * 100)) : 0;
-    return h('div', { class: 'ebar-row' }, [
-      h('div', { class: 'ebar-label', text: label, title: label }),
-      h('div', { class: 'ebar-track' }, h('div', { class: 'ebar-fill', style: { width: pct + '%' } })),
-      h('div', { class: 'ebar-val', text: sub != null ? sub : String(value) }),
-    ]);
+    const lbl = h('span', { class: 'ebar-label' }, label);
+    lbl.title = lbl.textContent;
+    const kids = [
+      lbl,
+      h('span', { class: 'ebar-track' }, h('span', { class: 'ebar-fill', style: { width: pct + '%' } })),
+      h('span', { class: 'ebar-val', text: sub != null ? sub : fmtCount(value) }),
+    ];
+    if (!target) return h('div', { class: 'ebar-row' }, kids);
+    return h('button', { type: 'button', class: 'ebar-row ebar-link', title: t('economy.openInTypes'),
+      onclick: () => { _typesTarget = Object.assign({ file: curFile }, target); navigate('types'); } }, kids);
+  }
+
+  // A category in the UI language, with DayZ's own name as small code.
+  function catLabel(name) {
+    if (!name) return h('span', { text: t('economy.cat.none') });
+    const loc = typeCategoryLabel(name);
+    return loc === name ? h('span', { text: name })
+      : h('span', { class: 'ebar-cat' }, [h('span', { text: loc }), ' ', h('code', { class: 'cfg-key', text: name })]);
   }
 
   function renderTune() {
     tuneCard.innerHTML = '';
-    tuneCard.append(withHelp(h('h3', { i18n: 'economy.tune.title' }), 'economy.tune'), h('p', { class: 'hint', i18n: 'economy.tune.hint' }));
+    tuneCard.append(cardTitle('i-globals', 'economy.tune.title', 'economy.tune'), h('p', { class: 'hint', i18n: 'economy.tune.hint' }));
     if (running) tuneCard.append(runningBanner());
+    // Scope: the whole file or one category — "less military loot, more food"
+    // is the usual request.
+    const catSel = h('select', {});
+    catSel.append(h('option', { value: '', text: t('economy.tune.allCats') }));
+    for (const c of cats) {
+      const loc = typeCategoryLabel(c);
+      catSel.append(h('option', { value: c, text: loc === c ? c : `${loc} (${c})` }));
+    }
+    if (!cats.includes(tuneCat)) tuneCat = '';
+    catSel.value = tuneCat;
+    catSel.onchange = () => { tuneCat = catSel.value; };
     const scaleBtn = (p) =>
       h('button', { class: 'secondary', i18n: p.label, disabled: running, onclick: (e) => tune(p.f, e.currentTarget) });
     // ×1 restores the amounts captured before the first scaling — a one-click undo.
     // It sits between the "more" and "less" presets so the row reads high→low.
     const resetBtn = h('button', { class: 'secondary', i18n: 'economy.tune.reset', title: t('economy.tune.reset.hint'), disabled: running, onclick: (e) => tuneReset(e.currentTarget) });
-    tuneCard.append(h('div', { class: 'toolbar' }, [
-      scaleBtn({ f: 2, label: 'economy.tune.x2' }),
-      scaleBtn({ f: 1.5, label: 'economy.tune.x15' }),
-      resetBtn,
-      scaleBtn({ f: 0.5, label: 'economy.tune.half' }),
-      scaleBtn({ f: 0.25, label: 'economy.tune.quarter' }),
-    ]));
-    const scaleMin = h('input', { type: 'checkbox' });
-    scaleMin.checked = true;
-    tuneCard.append(h('label', { class: 'inline-check' }, [scaleMin, h('span', { i18n: 'economy.tune.scaleMin' })]));
-    tuneCard._scaleMin = scaleMin;
+    const scaleMin = h('input', { type: 'checkbox', class: 'switch' });
+    scaleMin.checked = tuneScaleMin;
+    scaleMin.onchange = () => { tuneScaleMin = scaleMin.checked; };
+    tuneCard.append(
+      h('div', { class: 'econ-tune-scope' }, [h('label', { for: assocId(catSel), i18n: 'economy.tune.scope' }), catSel]),
+      h('div', { class: 'toolbar' }, [
+        scaleBtn({ f: 2, label: 'economy.tune.x2' }),
+        scaleBtn({ f: 1.5, label: 'economy.tune.x15' }),
+        resetBtn,
+        scaleBtn({ f: 0.5, label: 'economy.tune.half' }),
+        scaleBtn({ f: 0.25, label: 'economy.tune.quarter' }),
+      ]),
+      h('label', {}, [scaleMin, h('span', { i18n: 'economy.tune.scaleMin' })]),
+    );
+    // Say what ×1 would bring back, so it is never a blind overwrite.
+    if (baselineAt) {
+      tuneCard.append(h('p', { class: 'hint', text: tn('economy.tune.baseline', { when: new Date(baselineAt * 1000).toLocaleString() }) }));
+    }
   }
 
   async function tune(factor, btn) {
-    const scaleMin = tuneCard._scaleMin ? tuneCard._scaleMin.checked : true;
-    if (!(await confirmModal(t('economy.tune.confirm').replace('{pct}', Math.round(factor * 100))))) return;
+    const pct = Math.round(factor * 100);
+    const msg = tuneCat ? tn('economy.tune.confirmCat', { pct, cat: typeCategoryLabel(tuneCat) }) : tn('economy.tune.confirm', { pct });
+    if (!(await confirmModal(msg))) return;
     await withBusy(btn, async () => {
       try {
-        const r = await api.post('/api/economy/tune', { file: curFile, factor, nominal: true, min: scaleMin });
-        toast(t('economy.tune.done').replace('{n}', r.touched || 0), 'ok');
+        const r = await api.post('/api/economy/tune', { file: curFile, factor, nominal: true, min: tuneScaleMin, category: tuneCat });
+        toast(tn('economy.tune.done', { n: r.touched || 0 }), 'ok');
+        // Rare items (nominal 1) are held at 1 instead of rounding to 0 and
+        // never spawning again — name them, so the floor is no surprise.
+        const fl = r.floored || [];
+        if (fl.length) {
+          toast(tn('economy.tune.floored', { n: fl.length, names: fl.slice(0, 6).join(', ') + (fl.length > 6 ? ', …' : '') }), 'warn');
+        }
         await loadStats();
       } catch (e) { handleErr(e); }
     });
   }
 
   async function tuneReset(btn) {
-    if (!(await confirmModal(t('economy.tune.reset.confirm')))) return;
+    if (!baselineAt) { toast(t('economy.tune.reset.none'), 'warn'); return; }
+    const when = new Date(baselineAt * 1000).toLocaleString();
+    if (!(await confirmModal(tn('economy.tune.reset.confirm', { when })))) return;
     await withBusy(btn, async () => {
       try {
         const r = await api.post('/api/economy/tune', { file: curFile, reset: true });
-        if (r.hadBaseline) { toast(t('economy.tune.reset.done'), 'ok'); await loadStats(); }
+        if (r.hadBaseline) { toast(tn('economy.tune.reset.doneN', { n: r.restored || 0 }), 'ok'); await loadStats(); }
         else toast(t('economy.tune.reset.none'), 'warn');
       } catch (e) { handleErr(e); }
     });
   }
 
-  function barCard(titleKey, rows, valOf, subOf, limit) {
+  // opts: { icon, sub(r), limit, label(r), target(r) }.
+  function barCard(titleKey, rows, valOf, opts = {}) {
     if (!rows || !rows.length) return null;
-    const max = Math.max.apply(null, rows.map(valOf));
-    const card = h('div', { class: 'card' }, [h('h3', { i18n: titleKey })]);
-    rows.slice(0, limit || rows.length).forEach(r => card.append(hbar(r.name, valOf(r), max, subOf ? subOf(r) : null)));
-    return card;
+    const list = rows.slice(0, opts.limit || rows.length);
+    const max = Math.max.apply(null, list.map(valOf));
+    const bars = h('div', { class: 'ebar-list' });
+    for (const r of list) {
+      bars.append(hbar(opts.label ? opts.label(r) : r.name, valOf(r), max,
+        opts.sub ? opts.sub(r) : null, opts.target ? opts.target(r) : null));
+    }
+    return h('div', { class: 'card' }, [cardTitle(opts.icon || 'i-economy', titleKey), bars]);
   }
 
   async function loadStats() {
     let d;
     try { d = await api.get('/api/economy/stats' + (curFile ? '?file=' + encodeURIComponent(curFile) : '')); }
     catch (e) { handleErr(e); return; }
+    if (myNav !== _navSeq) return;
+    // "" is the no-category bucket: shown as a bar, but not one of the file's
+    // categories.
+    const realCats = (d.categories || []).filter(c => c.name);
+    cats = realCats.map(c => c.name);
+    baselineAt = d.baselineAt || 0;
     tiles.innerHTML = '';
     tiles.append(
-      tile('economy.tiles.items', String(d.total || 0), 'economy.items'),
-      tile('economy.tiles.nominal', String(d.totalNominal || 0), 'economy.nominal'),
-      tile('economy.tiles.categories', String((d.categories || []).length), 'economy.categories'),
-      tile('economy.tiles.min', String(d.totalMin || 0), 'economy.min'),
+      tile('economy.tiles.items', fmtCount(d.total || 0), 'economy.items'),
+      tile('economy.tiles.nominal', fmtCount(d.totalNominal || 0), 'economy.nominal'),
+      tile('economy.tiles.categories', fmtCount(realCats.length), 'economy.categories'),
+      tile('economy.tiles.min', fmtCount(d.totalMin || 0), 'economy.min'),
     );
+    renderTune();
     chartsHost.innerHTML = '';
     const cards = [
-      barCard('economy.byCategory', d.categories, r => r.nominal,
-        r => r.nominal + ' · ' + t('economy.itemsN').replace('{n}', r.count), 14),
-      barCard('economy.byUsage', d.usages, r => r.count, null, 12),
-      barCard('economy.byTier', d.values, r => r.count, null, 0),
-      barCard('economy.top', d.top, r => r.nominal, r => String(r.nominal), 20),
-    ];
-    for (const c of cards) if (c) chartsHost.append(c);
+      barCard('economy.byCategory', d.categories, r => r.nominal, {
+        limit: 14, label: r => catLabel(r.name), target: r => ({ category: r.name }),
+        sub: r => fmtCount(r.nominal) + ' · ' + tn('economy.itemsN', { n: r.count }) }),
+      barCard('economy.byUsage', d.usages, r => r.count, { limit: 12, target: r => ({ usage: r.name }) }),
+      barCard('economy.byTier', d.values, r => r.count, { target: r => ({ tier: r.name }) }),
+      barCard('economy.top', d.top, r => r.nominal, { icon: 'i-leaderboard', limit: 20, target: r => ({ q: r.name }) }),
+    ].filter(Boolean);
+    if (cards.length) chartsHost.append(h('p', { class: 'hint econ-drill-hint', i18n: 'economy.drillHint' }), ...cards);
     applyI18n();
   }
 
@@ -2712,6 +3721,7 @@ function openSyncAllPicker(d) {
           toast(parts.join(', ') || (t('mods.syncAll.done') || 'Done'), 'ok');
           m.close();
           await navigate('mods');
+          reportModMissions(r);
         } catch (e) { handleErr(e); }
       }}),
       h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
@@ -2721,8 +3731,12 @@ function openSyncAllPicker(d) {
 
 // Inline modal-ish dialog that lists candidate types.xml inside a mod and
 // lets the user install each one into the active mission with a chosen name.
-async function openModTypesDialog(mod, files) {
-  const m = openModal({ title: `${mod} — XML candidates`, wide: true });
+// onDone (optional) runs when the dialog closes after at least one install, so
+// the calling page can show the new file.
+async function openModTypesDialog(mod, files, onDone) {
+  let installedAny = false;
+  const m = openModal({ title: tn('modtypes.title', { mod }), wide: true,
+    onClose: () => { if (installedAny && onDone) onDone(); } });
   if (!files.length) {
     m.body.append(h('p', { class: 'hint', i18n: 'modtypes.none' }));
     m.body.append(h('div', { class: 'actions' }, [
@@ -2738,6 +3752,7 @@ async function openModTypesDialog(mod, files) {
       try {
         await api.post('/api/mods/install-types', { mod, rel: f.rel, fileName: nameInput.value });
         toast(t('modtypes.installed'), 'ok');
+        installedAny = true;
         btn.disabled = true;
       } catch (e) { handleErr(e); }
     }});
@@ -2762,77 +3777,7 @@ async function openModTypesDialog(mod, files) {
 
 // --------------------------------------------------------------------- validator
 
-Views.validator = async (root) => {
-  const listEl = h('div');
-  const cls = (sev) => sev === 'error' ? 'err' : (sev === 'warning' ? 'warn' : 'mute');
-  const run = async () => {
-    listEl.innerHTML = '';
-    try {
-      const d = await api.get('/api/validate');
-      const issues = (d.issues || []).slice();
-      if (!issues.length) {
-        listEl.append(h('p', { class: 'validator-ok', i18n: 'validator.none' }));
-        return;
-      }
-      // Most severe first, so the errors that actually break the mission are at
-      // the top instead of buried in check order.
-      const rank = { error: 0, warning: 1, info: 2 };
-      issues.sort((a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3));
-      const nErr = issues.filter(i => i.severity === 'error').length;
-      const nWarn = issues.filter(i => i.severity === 'warning').length;
-      const nInfo = issues.length - nErr - nWarn;
-      listEl.append(h('div', { class: 'validator-summary' }, [
-        nErr ? h('span', { class: 'badge err', text: nErr + ' ' + (t('validator.severity.error') || 'error') }) : null,
-        nWarn ? h('span', { class: 'badge warn', text: nWarn + ' ' + (t('validator.severity.warning') || 'warning') }) : null,
-        nInfo ? h('span', { class: 'badge mute', text: nInfo + ' ' + (t('validator.severity.info') || 'info') }) : null,
-      ]));
-      const tbl = h('table');
-      tbl.append(h('thead', {}, h('tr', {}, [
-        h('th', { i18n: 'col.severity' }),
-        h('th', { i18n: 'col.file' }),
-        h('th', { i18n: 'col.line' }),
-        h('th', { i18n: 'col.message' }),
-      ])));
-      const tb = h('tbody');
-      for (const i of issues) {
-        tb.append(h('tr', {}, [
-          h('td', {}, h('span', { class: `badge ${cls(i.severity)}`, text: t('validator.severity.' + i.severity) || i.severity })),
-          // Show just the filename; the full path is a mouth-full and repeats.
-          h('td', {}, h('span', { class: 'mono', text: (i.file || '').split(/[\\/]/).pop(), title: i.file })),
-          h('td', { class: 'num', text: i.line || '' }),
-          h('td', { text: i.message }),
-        ]));
-      }
-      tbl.append(tb);
-      listEl.append(h('div', { class: 'table-scroll' }, tbl));
-    } catch (e) { handleErr(e); }
-  };
-  const autofix = async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    try {
-      const r = await api.post('/api/validate/fix', {});
-      if (!r.count) toast(t('validator.fix.none'), 'ok');
-      else toast(t('validator.fix.done').replace('{n}', r.count), 'ok');
-      await run();
-    } catch (e) { handleErr(e); }
-    finally { btn.disabled = false; }
-  };
-  root.append(
-    h('div', { class: 'card' }, [
-      withHelp(h('h2', { i18n: 'validator.title' }), 'validator.severity'),
-      h('div', { class: 'actions' }, [
-        h('button', { class: 'primary', i18n: 'action.validate', onclick: run }),
-        h('button', { i18n: 'validator.fix', onclick: autofix, 'data-help': 'validator.autofix' }),
-      ]),
-      h('p', { class: 'hint', i18n: 'validator.fix.hint' }),
-      listEl,
-    ])
-  );
-  run();
-};
-
-// --------------------------------------------------------------------- logs
+// Views.validator lives in features.js (v1.0.0: grouped by issue code, per-kind fixes).
 
 Views.logs = async (root) => {
   // All three MUST come before the first await: navigate() has already run the
@@ -2844,29 +3789,100 @@ Views.logs = async (root) => {
 
   const sources = await api.get('/api/logs/list');
   if (myNav !== _navSeq) return; // superseded while the list was loading
-  const picker = h('select', {});
-  for (const s of sources) {
-    picker.append(h('option', {
-      value: s.id,
-      text: `${s.label}${s.exists ? '' : ' (no file yet)'}`,
-    }));
+  const srcLabel = (s) => {
+    const k = 'logs.src.' + (s.kind || s.id);
+    return State.i18n[k] ? t(k) : s.label;
+  };
+  const picker = h('select', { 'aria-label': t('logs.source') });
+  for (const s of sources.filter(s => !s.prev)) {
+    picker.append(h('option', { value: s.id, text: s.exists ? srcLabel(s) : `${srcLabel(s)} (${t('logs.noFileYet')})` }));
+  }
+  // Earlier runs: DayZ starts a new RPT / ADM on every launch, so after a crash
+  // and a watchdog restart the crashed run's log is no longer the newest.
+  const prev = sources.filter(s => s.prev);
+  if (prev.length) {
+    picker.append(h('optgroup', { label: t('logs.prevRuns') }, prev.map(s =>
+      h('option', { value: s.id, text: srcLabel(s) + ' · ' + fmtDateTime(s.started) }))));
   }
 
-  const pane = h('pre', { class: 'log-pane' });
-  const autoScroll = h('input', { type: 'checkbox' });
-  autoScroll.checked = true;
-  const paused = h('input', { type: 'checkbox' });
-  const streamBadge = h('span', { class: 'badge mute', style: { display: 'none' } });
+  const pane = h('pre', { class: 'log-pane', tabindex: '0' });
+  const search = h('input', { type: 'search', placeholder: t('logs.search.ph'), 'aria-label': t('logs.search.ph') });
+  const errSw = h('input', { type: 'checkbox', class: 'switch' });
+  const pauseBtn = h('button', { type: 'button', class: 'secondary logs-pause', 'aria-pressed': 'false' });
+  const dlLink = h('a', { class: 'btn-link', download: '', i18n: 'logs.download', title: t('logs.download.hint') });
+  const streamBadge = h('span', { class: 'badge mute', hidden: true });
+  const matchInfo = h('span', { class: 'hint' });
 
   const MAX_CHARS = 200_000;
+  // While filtering, at most this many matching lines stay on screen.
+  const MAX_SHOWN = 5000;
+  // What "errors only" keeps: script errors, exceptions, crashes.
+  const ERR_RE = /error|exception|script\s*\(e\)|crash|fatal/i;
+  let buf = '';          // the tail received so far
+  let query = '';        // search text, lower-cased
+  let onlyErr = false;
+  let paused = false;
+  let missing = false;   // the file is not written yet
+  let cleared = false;   // the admin emptied the screen
+  let shown = 0;         // matching lines on screen
+  const filtering = () => !!(query || onlyErr);
+  const keep = (line) => (!onlyErr || ERR_RE.test(line)) && (!query || line.toLowerCase().includes(query));
 
   // Sticky-bottom autoscroll: scrolling up suspends following so the user can
-  // read; scrolling back to the bottom resumes it. The checkbox is the master
-  // switch.
+  // read; scrolling back to the bottom resumes it.
   let stickBottom = true;
   pane.addEventListener('scroll', () => {
     stickBottom = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 24;
   });
+
+  // lineEl is one matching line with the search text marked (none when case
+  // folding changes the length — the marks would land in the wrong place).
+  function lineEl(line) {
+    const el = h('span', { class: 'log-line' });
+    const low = line.toLowerCase();
+    let i = 0;
+    if (query && low.length === line.length) {
+      for (let j = low.indexOf(query); j >= 0; j = low.indexOf(query, i)) {
+        if (j > i) el.append(line.slice(i, j));
+        el.append(h('mark', { text: line.slice(j, j + query.length) }));
+        i = j + query.length;
+      }
+    }
+    el.append(line.slice(i) + '\n');
+    return el;
+  }
+  function addMatches(text) {
+    const frag = document.createDocumentFragment();
+    for (const line of text.split('\n')) {
+      if (line && keep(line)) { frag.append(lineEl(line)); shown++; }
+    }
+    pane.append(frag);
+    while (shown > MAX_SHOWN && pane.firstChild) { pane.firstChild.remove(); shown--; }
+  }
+  // updateState: what an empty pane says, the waiting badge, the counter.
+  function updateState() {
+    let msg = '';
+    if (!buf) msg = t(missing ? 'logs.empty.missing' : cleared ? 'logs.empty.cleared' : 'logs.empty.none');
+    else if (filtering() && !shown) msg = t('logs.empty.nomatch');
+    pane.classList.toggle('is-empty', !!msg);
+    if (msg) pane.dataset.empty = msg; else delete pane.dataset.empty;
+    matchInfo.textContent = filtering() && buf ? tn('logs.matches', { n: shown }) : '';
+    dlLink.hidden = missing && !buf;
+    if (missing && !buf) { streamBadge.textContent = t('logs.waitingFile'); streamBadge.hidden = false; }
+  }
+  // render draws the whole buffer again: all of it, or the matching lines.
+  function render() {
+    shown = 0;
+    pane.textContent = filtering() ? '' : buf;
+    if (filtering()) addMatches(buf);
+    updateState();
+    if (stickBottom) pane.scrollTop = pane.scrollHeight;
+  }
+  function trimBuf() {
+    if (buf.length <= MAX_CHARS) return;
+    const cut = buf.indexOf('\n', buf.length - MAX_CHARS);
+    buf = buf.slice(cut >= 0 ? cut + 1 : buf.length - MAX_CHARS);
+  }
 
   // Buffer incoming chunks and flush at most every 200 ms so a chatty RPT
   // does not produce hundreds of DOM mutations per second (which is what
@@ -2874,115 +3890,196 @@ Views.logs = async (root) => {
   let pending = '';
   let flushScheduled = false;
   function scheduleFlush() {
-    if (flushScheduled || paused.checked) return;
+    if (flushScheduled || paused) return;
     flushScheduled = true;
     setTimeout(() => {
       flushScheduled = false;
-      if (!pending) return;
-      let next = pane.textContent + pending;
+      if (!pending || paused) return;
+      const chunk = pending;
       pending = '';
-      if (next.length > MAX_CHARS) next = next.slice(-MAX_CHARS);
-      pane.textContent = next;
-      if (autoScroll.checked && stickBottom) pane.scrollTop = pane.scrollHeight;
+      buf += chunk;
+      trimBuf();
+      if (filtering()) addMatches(chunk);
+      else pane.textContent = buf;
+      updateState();
+      if (stickBottom) pane.scrollTop = pane.scrollHeight;
     }, 200);
   }
-  // Un-pausing must flush whatever buffered while paused — otherwise the pane
-  // stays frozen until the next incoming chunk (possibly never on a quiet log).
-  paused.onchange = () => { if (!paused.checked) scheduleFlush(); };
   function append(text) {
     pending += text;
     if (pending.length > MAX_CHARS) pending = pending.slice(-MAX_CHARS);
     scheduleFlush();
   }
+  // One pause / resume toggle. Resuming flushes what came in meanwhile —
+  // otherwise the pane stays frozen until the next line (maybe never).
+  function setPaused(v) {
+    paused = v;
+    pauseBtn.textContent = (v ? '▶ ' : '⏸ ') + t(v ? 'logs.resume' : 'logs.pause');
+    pauseBtn.setAttribute('aria-pressed', String(v));
+    if (!v) scheduleFlush();
+  }
+  pauseBtn.onclick = () => setPaused(!paused);
+  setPaused(false);
+
+  let searchT = 0;
+  search.addEventListener('input', () => {
+    clearTimeout(searchT);
+    searchT = setTimeout(() => { query = search.value.trim().toLowerCase(); stickBottom = true; render(); }, 250);
+  });
+  errSw.addEventListener('change', () => { onlyErr = errSw.checked; stickBottom = true; render(); });
 
   async function attach(id) {
     if (source) { source.close(); source = null; }
     pending = '';
-    pane.textContent = '';
+    buf = '';
+    missing = false;
+    cleared = false;
     stickBottom = true;
-    try {
-      const r = await api.get(`/api/logs/read?id=${encodeURIComponent(id)}`);
-      append(r.content || '');
-    } catch (e) { append(`[snapshot failed: ${e.message}]\n`); }
+    streamBadge.hidden = true;
+    dlLink.href = srvUrl('/api/logs/download?id=' + encodeURIComponent(id));
+    // The stream continues exactly where the snapshot ended, so the tail is
+    // not shown twice (it used to replay the last 64 KB on top of it).
+    let r = null, err = null;
+    try { r = await api.get(`/api/logs/read?id=${encodeURIComponent(id)}`); } catch (e) { err = e; }
+    // Switched source, or left the page, while loading — a stream opened now
+    // would outlive the view's teardown.
+    if (picker.value !== id || myNav !== _navSeq) return;
+    let from = '';
+    if (r) {
+      missing = !!r.missing;
+      buf = r.content || '';
+      trimBuf();
+      if (Number.isFinite(r.end)) from = `&offset=${r.end}`;
+    } else buf = `[${err.message}]\n`;
+    render();
 
-    source = new EventSource(`/api/logs/stream?id=${encodeURIComponent(id)}`, { withCredentials: true });
+    source = new EventSource(srvUrl(`/api/logs/stream?id=${encodeURIComponent(id)}${from}`), { withCredentials: true });
     // Connection state lives in a badge, not injected into the log text —
     // a stopped server otherwise steadily fills the pane with reconnect noise.
-    source.onopen = () => { streamBadge.style.display = 'none'; };
-    source.onmessage = ev => { streamBadge.style.display = 'none'; append(ev.data + '\n'); };
+    // A file not written yet keeps its "waiting for the file" badge.
+    source.onopen = () => { streamBadge.hidden = true; updateState(); };
+    source.onmessage = ev => { missing = false; streamBadge.hidden = true; append(ev.data + '\n'); };
     source.onerror = () => {
       streamBadge.textContent = t('logs.reconnecting');
-      streamBadge.style.display = '';
+      streamBadge.hidden = false;
     };
   }
 
   picker.onchange = () => attach(picker.value);
 
   root.append(
+    pageHeader('nav.logs', 'logs.subtitle'),
     h('div', { class: 'card' }, [
-      h('h2', { i18n: 'nav.logs' }),
-      h('div', { class: 'toolbar' }, [
+      h('div', { class: 'toolbar logs-toolbar' }, [
         picker,
-        h('label', {}, [autoScroll, h('span', { i18n: 'logs.autoscroll' })]),
-        h('label', {}, [paused, h('span', { i18n: 'logs.pause' })]),
-        h('button', { i18n: 'logs.clear', onclick: () => { pane.textContent = ''; pending = ''; } }),
-        streamBadge,
+        search,
+        h('label', { title: t('logs.onlyErrors.hint') }, [errSw, h('span', { i18n: 'logs.onlyErrors' })]),
         h('span', { class: 'spacer' }),
-        h('small', { class: 'hint', i18n: 'logs.capHint' }),
+        pauseBtn,
+        h('button', { type: 'button', class: 'secondary', i18n: 'logs.clear', title: t('logs.clear.hint'),
+          onclick: () => { buf = ''; pending = ''; cleared = true; render(); } }),
+        dlLink,
+        revealBtn({ kind: 'profiles' }, { label: 'folders.profiles' }),
+        streamBadge,
       ]),
       pane,
+      h('div', { class: 'logs-foot' }, [matchInfo, h('span', { class: 'hint', i18n: 'logs.capHint' })]),
     ]),
   );
 
   // Attach to the first source that actually has a file — sources[0] may be a
   // placeholder ("no file yet") while a later entry holds real content.
-  const first = sources.find(s => s.exists) || sources[0];
+  const first = sources.find(s => s.exists && !s.prev) || sources[0];
   if (first) { picker.value = first.id; await attach(first.id); }
 };
 
 // --------------------------------------------------------------------- admlog
 
 Views.admlog = async (root) => {
-  const typeSel = h('select', {});
+  const myNav = _navSeq;
+  const typeSel = h('select', { 'aria-label': t('admlog.type.all') });
   const types = ['all','connect','disconnect','kill','hit','chat','death','other'];
   for (const tp of types) {
     typeSel.append(h('option', { value: tp === 'all' ? '' : tp, i18n: `admlog.type.${tp}` }));
   }
-  const playerInp = h('input', { type: 'text', placeholder: t('admlog.player') });
-  const reloadBtn = h('button', { i18n: 'action.reload' });
+  // This run's .ADM or an earlier run's (DayZ starts a new file every launch).
+  const fileSel = h('select', { 'aria-label': t('admlog.file'), hidden: true });
+  const playerInp = h('input', { type: 'search', placeholder: t('admlog.player'), 'aria-label': t('admlog.player') });
+  const reloadBtn = h('button', { type: 'button', class: 'secondary', i18n: 'rcon.refresh' });
   const pathLbl = h('small', { class: 'hint' });
+  const capNote = h('p', { class: 'hint', hidden: true });
   const list = h('div', { class: 'adm-list' });
+  const LIMIT = 500;
+  let keyOf = () => '';
+  let loadSeq = 0;
+  const setFilters = (on) => { typeSel.disabled = playerInp.disabled = fileSel.disabled = !on; };
+  const openLaunch = async () => {
+    await navigate('server');
+    const el = document.getElementById('srv-launch');
+    if (el) el.scrollIntoView({ block: 'start' });
+  };
 
   async function load() {
-    list.innerHTML = '';
+    const seq = ++loadSeq; // a slower, older answer must not overwrite a newer one
     const q = new URLSearchParams();
     if (typeSel.value) q.set('type', typeSel.value);
     if (playerInp.value.trim()) q.set('player', playerInp.value.trim());
-    q.set('limit', '500');
-    try {
-      const r = await api.get('/api/admlog/recent?' + q.toString());
-      pathLbl.textContent = r.path || '';
-      if (!r.path) { list.append(h('p', { class: 'hint', i18n: 'admlog.noFile' })); return; }
-      if (!r.events || r.events.length === 0) {
-        list.append(h('p', { class: 'hint', i18n: 'admlog.noEvents' }));
-        return;
-      }
-      for (const e of r.events.slice().reverse()) list.append(admEventRow(e));
-    } catch (err) { handleErr(err); }
+    if (fileSel.value) q.set('file', fileSel.value);
+    q.set('limit', String(LIMIT));
+    let r;
+    try { r = await api.get('/api/admlog/recent?' + q.toString()); }
+    catch (err) { if (seq === loadSeq) handleErr(err); return; }
+    if (seq !== loadSeq || myNav !== _navSeq) return;
+    list.innerHTML = '';
+    pathLbl.textContent = r.path || '';
+    capNote.hidden = true;
+    if (!r.path) {
+      // Nothing to filter yet: say why, and where the switch is.
+      setFilters(false);
+      list.append(h('div', { class: 'empty-state' }, [
+        h('div', { class: 'es-icon', html: svgIcon('i-admlog', 34) }),
+        h('div', { class: 'es-title', i18n: 'admlog.empty.title' }),
+        h('div', { class: 'es-hint', i18n: 'admlog.empty.hint' }),
+        h('div', { class: 'actions' }, [h('button', { type: 'button', class: 'secondary', i18n: 'server.launch.title', onclick: openLaunch })]),
+      ]));
+      return;
+    }
+    setFilters(true);
+    const events = r.events || [];
+    if (!events.length) { list.append(h('p', { class: 'hint', i18n: 'admlog.noEvents' })); return; }
+    for (const e of events.slice().reverse()) list.append(admEventRow(e, { keyOf }));
+    if (events.length >= LIMIT) { capNote.textContent = tn('admlog.capped', { n: LIMIT }); capNote.hidden = false; }
   }
 
+  // Earlier runs' files come from the log list; names link to the profiles.
+  async function loadContext() {
+    const [srcs, pl] = await Promise.all([
+      api.get('/api/logs/list').catch(() => []),
+      api.get('/api/players').catch(() => null),
+    ]);
+    if (myNav !== _navSeq) return;
+    if (pl) keyOf = playerKeyLookup(pl.players);
+    const prev = (srcs || []).filter(s => s.prev && s.kind === 'adm');
+    fileSel.append(h('option', { value: '', i18n: 'admlog.file.current' }),
+      ...prev.map(s => h('option', { value: s.id.slice(s.id.indexOf(':') + 1), text: tn('admlog.file.prev', { date: fmtDateTime(s.started) }) })));
+    fileSel.hidden = !prev.length;
+  }
+
+  let playerT = 0;
   reloadBtn.onclick = load;
   typeSel.onchange = load;
-  playerInp.onkeydown = (e) => { if (e.key === 'Enter') load(); };
+  fileSel.onchange = load;
+  playerInp.addEventListener('input', () => { clearTimeout(playerT); playerT = setTimeout(load, 300); });
 
-  root.append(
-    h('div', { class: 'card' }, [
-      h('h2', { i18n: 'admlog.title' }),
-      h('p', { class: 'hint', i18n: 'admlog.hint' }),
-      h('div', { class: 'toolbar' }, [typeSel, playerInp, reloadBtn, pathLbl]),
-      list,
-    ])
-  );
+  root.append(pageHeader('nav.admlog', 'admlog.hint'));
+  { const w = adminLogWarning(); if (w) root.append(w); }
+  root.append(h('div', { class: 'card' }, [
+    h('div', { class: 'toolbar' }, [typeSel, fileSel, playerInp, reloadBtn, pathLbl]),
+    list,
+    capNote,
+  ]));
+  await loadContext();
+  if (myNav !== _navSeq) return;
   await load();
 };
 
@@ -3001,16 +4098,6 @@ Views.rcon = async (root) => {
   try { cfg = await api.get('/api/config'); State.config = cfg; } catch {}
   if (myNav !== _navSeq) return; // navigated away while awaiting — bail cleanly
 
-  const card = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.rcon' })]);
-  const status = h('div', { class: 'hint' });
-  const players = h('div', { class: 'players-grid' });
-  const sayInp = h('input', { type: 'text', placeholder: t('rcon.broadcast.ph') });
-  const cmdInp = h('input', { type: 'text', placeholder: t('rcon.rawCommand.ph') });
-  const cmdOut = h('pre', { class: 'log-pane', style: { height: '180px' } });
-  // Saved quick broadcast messages ("announcement presets") — one-click to send.
-  const presetsHost = h('div', { class: 'preset-list' });
-  const presets = Array.isArray(State.config.broadcastPresets) ? State.config.broadcastPresets.slice() : [];
-
   let timer = 0;
   // Never arm the poll if this view has been superseded (navigated away) — the
   // interval would outlive the view and write into detached DOM until the next
@@ -3023,20 +4110,64 @@ Views.rcon = async (root) => {
   // reads beserver_x64.cfg at launch). Saving POSTs the config, which writes
   // beserver_x64.cfg on the backend; it takes effect on the next server start.
   const passInp = h('input', { type: 'password', value: cfg.rconPassword || '',
-    placeholder: t('rcon.password'), 'data-help': 'rcon.password',
-    style: { flex: '1', minWidth: '180px' } });
-  const showChk = h('input', { type: 'checkbox' });
-  showChk.onchange = () => { passInp.type = showChk.checked ? 'text' : 'password'; };
-  const portInp = h('input', { type: 'number', value: cfg.rconPort || '',
-    placeholder: Number(cfg.serverPort) ? (Number(cfg.serverPort) + 4) : 'auto', style: { width: '130px' } });
-  const accessBadge = h('span', { class: 'badge ' + (cfg.rconPassword ? 'ok' : 'mute'),
-    i18n: cfg.rconPassword ? 'rcon.access.configured' : 'rcon.access.notset' });
+    placeholder: t('rcon.password'), 'data-help': 'rcon.password', 'aria-label': t('rcon.password'),
+    autocomplete: 'new-password' });
+  const eye = h('button', { type: 'button', class: 'icon-btn eye-btn', title: t('rcon.showPassword'),
+    'aria-label': t('rcon.showPassword'), text: '👁',
+    onclick: () => { passInp.type = passInp.type === 'password' ? 'text' : 'password'; } });
+  const portInp = h('input', { type: 'number', value: cfg.rconPort || '', 'aria-label': t('rcon.port'),
+    placeholder: Number(cfg.serverPort) ? (Number(cfg.serverPort) + 4) : 'auto' });
+  // The badge says what the password does right now (loadLive refines it).
+  const accessBadge = h('span', { class: 'badge mute' });
+  const setBadge = (cls, key) => { accessBadge.className = 'badge ' + cls; accessBadge.dataset.i18n = key; accessBadge.textContent = t(key); };
+  if (!cfg.rconPassword) setBadge('mute', 'rcon.access.notset');
+  else setBadge(State.serverStatus.running ? 'ok' : 'info', State.serverStatus.running ? 'rcon.access.active' : 'rcon.access.atStart');
+  // The long how-it-works hint matters only until a password is set.
+  const setupHint = h('p', { class: 'hint', i18n: 'rcon.notConfigured.hint', hidden: !!cfg.rconPassword });
+  let configured = !!cfg.rconPassword;
+  // What the running BattlEye actually uses: it loads its password when the
+  // server starts, so a newer one saved here waits for the next restart.
+  const liveNote = h('div', { class: 'rcon-live hidden' });
+  async function loadLive() {
+    let st;
+    try { st = await api.get('/api/rcon/status'); } catch { return; }
+    if (myNav !== _navSeq) return;
+    configured = !!(st.configured || cfg.rconPassword);
+    if (!configured) setBadge('mute', 'rcon.access.notset');
+    else if (!st.running) setBadge('info', 'rcon.access.atStart');
+    else if (st.errorKey === 'rcon.err.auth') setBadge('err', 'rcon.err.auth.short');
+    else if (st.pending) setBadge('warn', 'rcon.access.pending');
+    else setBadge('ok', 'rcon.access.active');
+    setupHint.hidden = configured;
+    liveNote.innerHTML = '';
+    const lines = [];
+    if (st.running && st.activeFile) {
+      const [pre, post = ''] = t('rcon.live.file').split('{file}');
+      lines.push(h('p', { class: 'hint' }, [
+        pre, h('code', { text: st.activeFile }), post,
+        st.activePort ? ' · ' + t('rcon.port') + ' ' + st.activePort : null,
+      ]));
+    }
+    if (st.running && st.pending) {
+      lines.push(h('div', { class: 'warning-bar' }, [h('span', { i18n: 'rcon.live.pending' })]));
+    }
+    if (st.running && st.errorKey === 'rcon.err.auth') {
+      lines.push(h('div', { class: 'warning-bar err-bar' }, [h('span', { i18n: 'rcon.err.auth' })]));
+    }
+    liveNote.append(...lines);
+    liveNote.classList.toggle('hidden', !lines.length);
+  }
 
+  // Labelled fields with the beserver_x64.cfg key each one writes.
+  const labelled = (cls, input, body, key, cfgKey) => h('div', { class: 'field ' + cls }, [
+    h('div', { class: 'cfg-label' }, [h('label', { for: assocId(input), i18n: key }), h('code', { class: 'cfg-key', text: cfgKey })]),
+    body,
+  ]);
   const accessCard = h('div', { class: 'card' }, [
-    h('h3', { i18n: 'rcon.access.title' }),
-    h('div', { class: 'row', style: { marginBottom: '8px' } }, [accessBadge]),
-    h('div', { class: 'row', style: { gap: '8px' } }, [
-      passInp, portInp,
+    h('div', { class: 'card-head' }, [cardTitle('i-shield', 'rcon.access.title'), accessBadge]),
+    h('div', { class: 'row rcon-access-row' }, [
+      labelled('rcon-pass', passInp, h('div', { class: 'secret-wrap' }, [passInp, eye]), 'rcon.password', 'RConPassword'),
+      labelled('rcon-port', portInp, portInp, 'rcon.port', 'RConPort'),
       h('button', { class: 'primary', i18n: 'action.save', onclick: async () => {
         try {
           const next = { ...(await api.get('/api/config')) };
@@ -3050,61 +4181,83 @@ Views.rcon = async (root) => {
         } catch (e) { handleErr(e); }
       }}),
     ]),
-    h('label', { style: { display: 'inline-flex', gap: '8px', alignItems: 'center', marginTop: '8px' } },
-      [showChk, h('span', { i18n: 'rcon.showPassword' })]),
-    h('p', { class: 'hint', i18n: 'rcon.notConfigured.hint' }),
+    setupHint,
+    liveNote,
   ]);
 
-  async function refresh() {
-    // If the server isn't running there's nothing to connect to. Show a calm
-    // hint instead of the password form. We keep the poll alive (there's no
-    // input form to clobber here) but return before any network call, so it
-    // costs nothing while down and auto-recovers once the server is up.
-    if (!State.serverStatus.running) {
-      startPolling();
-      players.innerHTML = '';
-      status.textContent = t('rcon.serverOffline') || 'Server is not running — start it to use RCon.';
-      return;
+  // --- Who is online: a count and the way to the full list. Kick, ban and
+  // private messages live on Players › Online now (one place, one table).
+  const statusBody = h('div');
+  let statusSig = '';
+  const openOnline = () => { try { localStorage.setItem('playersTab', 'online'); } catch {} navigate('players'); };
+  function showStatus(kind, n, errText) {
+    const sig = kind + ':' + n + ':' + (errText || '') + ':' + configured;
+    if (sig === statusSig) return; // no rebuild every poll — a focused button would lose focus
+    statusSig = sig;
+    statusBody.innerHTML = '';
+    if (kind === 'off') {
+      // Not usable yet: say what is missing — the password first, then a start.
+      statusBody.append(configured
+        ? emptyBox('i-server', 'online.stopped.title', 'rcon.off.stopped.hint', [startServerBtn(() => refresh())])
+        : emptyBox('i-rcon', 'rcon.off.noPassword.title', 'rcon.off.noPassword.hint'));
+    } else if (kind === 'ok') {
+      statusBody.append(h('div', { class: 'rcon-online' }, [
+        h('div', {}, [
+          h('div', { class: 'metric-num', text: String(n) }),
+          h('div', { class: 'hint', text: tn('rcon.online.count', { n }) }),
+        ]),
+        h('span', { class: 'grow' }),
+        h('button', { type: 'button', class: 'secondary', i18n: 'rcon.online.open', onclick: openOnline }),
+      ]), h('p', { class: 'hint', i18n: 'rcon.online.hint' }));
+    } else {
+      statusBody.append(h('p', { class: 'hint', text: errText }));
     }
+  }
+
+  // --- Raw console. Keeps an echoed transcript + ArrowUp/Down history, like a
+  // real terminal — output no longer overwrites the previous command's.
+  const cmdInp = h('input', { type: 'text', placeholder: t('rcon.rawCommand.ph'), 'aria-label': t('rcon.rawCommand') });
+  const cmdBtn = h('button', { i18n: 'rcon.send', onclick: () => doCmd() });
+  const cmdOut = h('pre', { class: 'log-pane', style: { height: '180px' }, hidden: true });
+  // Everyday read-only / reversible commands, put into the line (Enter runs).
+  const chips = h('div', { class: 'rcon-chips' }, [
+    h('span', { class: 'hint', i18n: 'rcon.chips.label' }),
+    ...['players', 'bans', '#lock', '#unlock'].map(c => h('button', { type: 'button', class: 'pill mono', text: c, title: t('rcon.chip.hint'),
+      onclick: () => { cmdInp.value = c; cmdInp.focus(); } })),
+  ]);
+  // Live tools work only while the server runs with a password BattlEye took.
+  function setLive(on) {
+    cmdInp.disabled = cmdBtn.disabled = !on;
+    chips.querySelectorAll('button').forEach(b => { b.disabled = !on; });
+    cmdInp.placeholder = t(on ? 'rcon.rawCommand.ph' : 'rcon.rawCommand.off');
+    cmdOut.hidden = !on && !cmdOut.textContent;
+  }
+
+  async function refresh() {
+    // If the server isn't running there's nothing to connect to: say so and
+    // keep the poll alive (it costs nothing while down and auto-recovers once
+    // the server is up).
     try {
-      const d = await api.get('/api/rcon/players');
-      players.innerHTML = '';
-      players.append(
-        h('div', { class: 'head', i18n: 'col.id' }),
-        h('div', { class: 'head', i18n: 'col.name' }),
-        h('div', { class: 'head', i18n: 'col.guid' }),
-        h('div', { class: 'head', i18n: 'col.ping' }),
-        h('div', { class: 'head', text: '' }),
-      );
-      for (const p of d.players || []) {
-        players.append(
-          h('div', { text: p.id }),
-          h('div', { text: p.name + (p.lobby ? ' (lobby)' : '') }),
-          h('div', { text: p.guid }),
-          h('div', { text: p.ping }),
-          h('div', {}, [
-            h('button', { i18n: 'action.message', onclick: () => messageDialog(p) }),
-            ' ',
-            h('button', { i18n: 'action.kick', onclick: () => kickDialog(p) }),
-            ' ',
-            h('button', { class: 'danger', i18n: 'action.ban', onclick: () => banDialog(p) }),
-          ]),
-        );
+      if (!State.serverStatus.running) {
+        setLive(false);
+        showStatus('off', 0);
+        return;
       }
-      status.textContent = `${t('status.players')}: ${d.count || 0}`;
-    } catch (e) {
-      const msg = e.message || '';
-      if (/not configured|password|auth/i.test(msg)) {
-        // Password missing/wrong, or set but not yet loaded (BE reads it at
-        // start). The access card above is always available to fix this.
-        players.innerHTML = '';
-        status.textContent = t('rcon.notActiveYet') ||
-          'RCon password isn’t active yet — set it above and restart the server.';
-      } else {
-        // Transient (timeout, BattlEye still loading). Keep polling quietly.
-        status.textContent = `RCon: ${msg}`;
+      try {
+        const d = await api.get('/api/rcon/players');
+        if (myNav !== _navSeq) return;
+        setLive(true);
+        showStatus('ok', d.count || (d.players || []).length);
+      } catch (e) {
+        const key = e.data && e.data.error;
+        // No password / a rejected one: commands would fail the same way.
+        setLive(key !== 'rcon.err.notConfigured' && key !== 'rcon.err.auth');
+        // No password anywhere yet — the access card above sets one;
+        // rejected password / no answer: translated, with what to do.
+        showStatus('err', 0, key === 'rcon.err.notConfigured' ? t('rcon.notActiveYet') : key ? t(key) : `RCon: ${e.message || ''}`);
       }
     } finally {
+      await loadLive();
       // Poll regardless of the first outcome — a transient failure right after
       // server start (BattlEye still booting) used to leave the page dead
       // until a manual refresh, because polling only armed on success.
@@ -3112,156 +4265,60 @@ Views.rcon = async (root) => {
     }
   }
 
-  // Private message to one player — RCon `say <id> <text>` (the backend maps
-  // playerId → SayTo). Broadcast to everyone stays available in the Say box.
-  function messageDialog(p) {
-    const m = openModal({ title: t('action.message') + ' — ' + p.name });
-    const msg = h('input', { type: 'text', placeholder: t('rcon.message.ph'), style: { width: '100%' } });
-    const send = async () => {
-      const text = msg.value.trim();
-      if (!text) return;
-      try { await api.post('/api/rcon/say', { playerId: p.id, message: text }); m.close(); toast(t('rcon.message.sent'), 'ok'); }
-      catch (e) { handleErr(e); }
-    };
-    msg.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
-    m.body.append(
-      h('label', { i18n: 'rcon.message.label' }), msg,
-      h('div', { class: 'actions' }, [
-        h('button', { class: 'primary', i18n: 'action.send', onclick: send }),
-        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
-      ]),
-    );
-    setTimeout(() => msg.focus(), 0);
-  }
-
-  // Kick / Ban dialogs — proper modals instead of native prompt().
-  function kickDialog(p) {
-    const m = openModal({ title: t('action.kick') + ' — ' + p.name });
-    const reason = h('input', { type: 'text', value: 'kicked', style: { width: '100%' } });
-    m.body.append(
-      h('label', { i18n: 'rcon.reason' }), reason,
-      h('div', { class: 'actions' }, [
-        h('button', { class: 'danger', i18n: 'action.kick', onclick: async () => {
-          try { await api.post('/api/rcon/kick', { playerId: p.id, reason: reason.value }); m.close(); await refresh(); }
-          catch (e) { handleErr(e); }
-        }}),
-        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
-      ]),
-    );
-    setTimeout(() => reason.focus(), 0);
-  }
-  function banDialog(p) {
-    const m = openModal({ title: t('action.ban') + ' — ' + p.name });
-    const mins = h('input', { type: 'number', value: '60', min: '0', style: { width: '140px' } });
-    const reason = h('input', { type: 'text', value: 'banned', style: { width: '100%' } });
-    m.body.append(
-      h('label', { i18n: 'rcon.ban.minutes' }), mins,
-      h('label', { i18n: 'rcon.reason' }), reason,
-      h('div', { class: 'actions' }, [
-        h('button', { class: 'danger', i18n: 'action.ban', onclick: async () => {
-          try { await api.post('/api/rcon/ban', { playerId: p.id, minutes: Number(mins.value) || 0, reason: reason.value }); m.close(); await refresh(); }
-          catch (e) { handleErr(e); }
-        }}),
-        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
-      ]),
-    );
-    setTimeout(() => mins.focus(), 0);
-  }
-
-  status.style.margin = '4px 0 12px';
-  players.style.margin = '8px 0';
-
-  card.append(
-    h('div', { class: 'actions', style: { marginTop: 0 } }, [
-      h('button', { i18n: 'rcon.refresh', onclick: refresh }),
+  const playersCard = h('div', { class: 'card' }, [
+    h('div', { class: 'card-head' }, [
+      cardTitle('i-players', 'perf.players'),
+      h('button', { class: 'small', i18n: 'rcon.refresh', onclick: refresh }),
     ]),
-    status,
-    players,
-    // Broadcast — separated section so it doesn't bleed into the player table.
-    h('div', { style: { marginTop: '22px' } }, [
-      h('h3', { i18n: 'rcon.broadcast' }),
-      h('div', { class: 'row' }, [
-        sayInp,
-        h('button', { class: 'primary', i18n: 'rcon.say', onclick: doSay }),
-        h('button', { i18n: 'rcon.presets.save', title: t('rcon.presets.saveHint'), onclick: addPreset }),
-      ]),
-      h('div', { style: { marginTop: '12px' } }, [
-        h('h4', { i18n: 'rcon.presets.title' }),
-        presetsHost,
-      ]),
-    ]),
-    h('div', { style: { marginTop: '22px' } }, [
-      h('h3', { i18n: 'rcon.rawCommand' }),
-      h('div', { class: 'row' }, [
-        cmdInp,
-        h('button', { i18n: 'rcon.send', onclick: doCmd }),
-      ]),
-      h('div', { style: { marginTop: '10px' } }, [cmdOut]),
-    ]),
-  );
+    statusBody,
+  ]);
+  // Messages to players are written on the Chat page (live feed, quick messages).
+  const chatLink = h('div', { class: 'card rcon-chat-link' }, [
+    h('span', { class: 'card-title-icon', html: svgIcon('i-chat', 16) }),
+    h('span', { class: 'grow', i18n: 'rcon.toChat' }),
+    h('button', { type: 'button', class: 'secondary small', i18n: 'rcon.toChat.open', onclick: () => navigate('chat') }),
+  ]);
+  const consoleCard = h('div', { class: 'card' }, [
+    cardTitle('i-rcon', 'rcon.rawCommand'),
+    chips,
+    h('div', { class: 'row' }, [cmdInp, cmdBtn]),
+    h('div', { style: { marginTop: '10px' } }, [cmdOut]),
+  ]);
 
-  async function doSay() {
-    if (!sayInp.value.trim()) return;
-    try { await api.post('/api/rcon/say', { message: sayInp.value }); sayInp.value = ''; toast(t('msg.sent'), 'ok'); }
-    catch (e) { handleErr(e); }
-  }
-
-  // Announcement presets: saved messages persisted in the manager config so
-  // they survive restarts. Sending one is a normal RCon broadcast.
-  function renderPresets() {
-    presetsHost.innerHTML = '';
-    if (!presets.length) { presetsHost.append(h('p', { class: 'hint', i18n: 'rcon.presets.none' })); applyI18n(); return; }
-    for (const [i, msg] of presets.entries()) {
-      presetsHost.append(h('div', { class: 'preset-msg' }, [
-        h('button', { class: 'secondary preset-send', text: msg, title: t('rcon.presets.sendHint'), onclick: () => sendPreset(msg) }),
-        h('button', { class: 'icon-x', text: '×', title: t('action.delete'), onclick: () => removePreset(i) }),
-      ]));
-    }
-  }
-  async function savePresets() {
-    try { State.config = await api.post('/api/config', { broadcastPresets: presets }); }
-    catch (e) { handleErr(e); }
-  }
-  async function sendPreset(msg) {
-    try { await api.post('/api/rcon/say', { message: msg }); toast(t('msg.sent'), 'ok'); }
-    catch (e) { handleErr(e); }
-  }
-  async function addPreset() {
-    const v = sayInp.value.trim();
-    if (!v) { toast(t('rcon.presets.needText'), 'warn'); return; }
-    if (!presets.includes(v)) { presets.push(v); await savePresets(); renderPresets(); toast(t('msg.saved'), 'ok'); }
-  }
-  async function removePreset(i) {
-    presets.splice(i, 1);
-    await savePresets();
-    renderPresets();
-  }
-  renderPresets();
-  // Raw console keeps an echoed transcript + ArrowUp/Down history, like a
-  // real terminal — output no longer overwrites the previous command's.
+  // Commands that end sessions or ban: one Enter (or an ArrowUp recall) must
+  // not be enough.
+  const DANGER = [
+    [/^#shutdown\b/i, 'rcon.cmd.shutdown'],
+    [/^#restart/i, 'rcon.cmd.restart'],
+    [/^#exec\b/i, 'rcon.cmd.exec'],
+    [/^#?kick\b/i, 'rcon.cmd.kick'],
+    [/^(#?ban|addban)\b/i, 'rcon.cmd.ban'],
+  ];
   const cmdHist = [];
   let histIdx = -1;
   async function doCmd() {
     const cmd = cmdInp.value.trim();
-    if (!cmd) return;
+    if (!cmd || cmdInp.disabled) return;
+    const danger = DANGER.find(([re]) => re.test(cmd));
+    if (danger && !(await confirmModal(tn(danger[1], { cmd: cmd.split(/\s+/)[0] }), { danger: true, okText: t('rcon.cmd.run') }))) return;
     cmdHist.push(cmd); histIdx = cmdHist.length;
     cmdInp.value = '';
+    cmdOut.hidden = false;
     cmdOut.textContent += (cmdOut.textContent ? '\n' : '') + '> ' + cmd + '\n';
     try {
       const r = await api.post('/api/rcon/command', { command: cmd });
-      cmdOut.textContent += (r.output || '(empty)') + '\n';
+      cmdOut.textContent += (r.output || t('rcon.noOutput')) + '\n';
     } catch (e) { cmdOut.textContent += `ERR: ${e.message}\n`; }
     cmdOut.scrollTop = cmdOut.scrollHeight;
   }
-  sayInp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doSay(); } });
   cmdInp.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); doCmd(); }
     else if (e.key === 'ArrowUp' && cmdHist.length) { e.preventDefault(); histIdx = Math.max(0, histIdx - 1); cmdInp.value = cmdHist[histIdx] || ''; }
     else if (e.key === 'ArrowDown' && cmdHist.length) { e.preventDefault(); histIdx = Math.min(cmdHist.length, histIdx + 1); cmdInp.value = cmdHist[histIdx] || ''; }
   });
 
-  // Access card first (always usable), then the live console below it.
-  root.append(accessCard, card);
+  // Access card first (always usable), then the live tools below it.
+  root.append(pageHeader('nav.rcon', 'rcon.subtitle'), accessCard, playersCard, chatLink, consoleCard);
   root._teardown = stopPolling; // before the await — see logs/battleye above
   await refresh();
 };
@@ -3269,194 +4326,333 @@ Views.rcon = async (root) => {
 // --------------------------------------------------------------------- events
 
 Views.events = async (root) => {
-  const search = h('input', { type: 'text', placeholder: t('events.search') });
-  const tableWrap = h('div');
-  const pagerHost = h('div');
-  const PAGE_SIZE = 200;
-  let currentPage = 1;
+  const myNav = _navSeq;
+  const running = !!State.serverStatus.running;
+  const search = h('input', { type: 'search', placeholder: t('events.search'), 'aria-label': t('events.search') });
+  const chips = h('div', { class: 'pills evl-cats' });
+  const tableWrap = h('div', { class: 'evl-table-wrap' });
+  const foot = h('div', { class: 'evl-foot hint' });
+  const problemsHost = h('div');
+  let all = [];
+  let cat = 'all';
+  let sortKey = 'name';
+  let sortDir = 1;
+  try { const s = JSON.parse(localStorage.getItem('eventsView') || '{}'); cat = s.cat || 'all'; sortKey = s.key || 'name'; sortDir = s.dir || 1; } catch {}
+  const remember = () => { try { localStorage.setItem('eventsView', JSON.stringify({ cat, key: sortKey, dir: sortDir })); } catch {} };
 
-  const NUM_FIELDS = ['nominal','min','max','lifetime','restock','saveable','active'];
+  // Categories come from DayZ's naming (AnimalDeer, InfectedCity, VehicleSedan02, …).
+  const isVanillaFile = (f) => !f || f.toLowerCase() === 'db/events.xml';
+  const CATS = [
+    ['all', () => true],
+    ['animals', r => /^(Ambient|Animal)/i.test(r.name)],
+    ['infected', r => /^Infected/i.test(r.name)],
+    ['vehicles', r => /^Vehicle/i.test(r.name)],
+    ['static', r => /^Static/i.test(r.name)],
+    ['trajectory', r => /^Trajectory/i.test(r.name)],
+    ['other', r => !/^(Ambient|Animal|Infected|Vehicle|Static|Trajectory)/i.test(r.name)],
+    ['mods', r => !isVanillaFile(r.file)],
+  ];
+  const catOf = (k) => (CATS.find(c => c[0] === k) || CATS[0])[1];
+  // Spawn points only exist for "fixed" events; animals take theirs from the
+  // env territory files, and "player"/"uniform" events need none.
+  const pointsMode = (r) => {
+    const pos = r.position || 'fixed';
+    if (pos === 'player') return 'player';
+    if (pos === 'uniform') return 'uniform';
+    if (/^(Ambient|Animal)/i.test(r.name)) return 'territory';
+    return 'points';
+  };
 
-  async function refreshTable() {
+  const SORTS = {
+    name: r => r.name.toLowerCase(),
+    nominal: r => r.nominal ?? -1,
+    max: r => r.max ?? -1,
+    lifetime: r => r.lifetime ?? -1,
+    points: r => r.points || 0,
+    children: r => r.children || 0,
+  };
+
+  function renderChips() {
+    chips.innerHTML = '';
+    for (const [k, fn] of CATS) {
+      const n = all.filter(fn).length;
+      if (!n && k !== 'all') continue;
+      chips.append(h('button', { type: 'button', class: 'pill' + (cat === k ? ' active' : ''),
+        onclick: () => { cat = k; remember(); renderChips(); renderTable(); } },
+      [h('span', { text: t('events.cat.' + k) }), h('span', { class: 'pill-count', text: String(n) })]));
+    }
+  }
+
+  function renderTable() {
     tableWrap.innerHTML = '';
-    pagerHost.innerHTML = '';
-    let d;
-    try { d = await api.get('/api/events'); }
-    catch (e) { tableWrap.append(h('p', { text: e.message })); return; }
-    const q = search.value.toLowerCase();
-    const filtered = q ? d.events.filter(r => r.name.toLowerCase().includes(q)) : d.events;
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-    if (currentPage > totalPages) currentPage = totalPages;
-    if (currentPage < 1) currentPage = 1;
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const slice = filtered.slice(start, start + PAGE_SIZE);
-
-    const tbl = h('table');
+    const q = search.value.trim().toLowerCase();
+    const fn = catOf(cat);
+    const rows = all.filter(r => fn(r) && (!q || r.name.toLowerCase().includes(q) || (r.file || '').toLowerCase().includes(q)));
+    const key = SORTS[sortKey] ? sortKey : 'name';
+    rows.sort((a, b) => {
+      const x = SORTS[key](a), y = SORTS[key](b);
+      return (x < y ? -1 : x > y ? 1 : 0) * sortDir || a.name.localeCompare(b.name);
+    });
+    const th = (k, label, cls, helpKey) => {
+      const el = h('th', { class: (cls || '') + (SORTS[k] ? ' sortable' : '') + (sortKey === k ? ' sorted' : ''),
+        'aria-sort': sortKey === k ? (sortDir > 0 ? 'ascending' : 'descending') : null,
+        onclick: SORTS[k] ? () => { if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = k === 'name' ? 1 : -1; } remember(); renderTable(); } : null },
+      [h('span', { i18n: label })]);
+      return helpKey ? hlp(el, helpKey) : el;
+    };
+    const tbl = h('table', { class: 'evl-table' });
     tbl.append(h('thead', {}, h('tr', {}, [
-      h('th', { text: 'Name' }),
-      hlp(h('th', { class: 'num', i18n: 'events.field.nominal' }), 'events.nominal'),
-      hlp(h('th', { class: 'num', i18n: 'events.field.min' }), 'events.minmax'),
-      h('th', { class: 'num', i18n: 'events.field.max' }),
-      hlp(h('th', { class: 'num', i18n: 'events.field.lifetime' }), 'events.lifetime'),
-      hlp(h('th', { i18n: 'events.field.active' }), 'events.active'),
-      hlp(h('th', { class: 'num', i18n: 'events.field.children' }), 'events.children'),
-      h('th', { text: '' }),
+      th('name', 'col.name'),
+      th('nominal', 'events.col.nominal', 'num', 'events.nominal'),
+      th('max', 'events.col.minmax', 'num evl-hide-sm', 'events.minmax'),
+      th('lifetime', 'events.col.lifetime', 'num evl-hide-sm', 'events.lifetime'),
+      th('', 'events.field.active', 'evl-c', 'events.active'),
+      th('points', 'events.col.points', 'num evl-hide-sm'),
+      th('children', 'events.col.children', 'num evl-hide-sm', 'events.children'),
+      h('th', { class: 'evl-act', 'aria-label': t('action.edit') }),
     ])));
     const tbody = h('tbody');
-    for (const row of slice) {
-      tbody.append(h('tr', {}, [
-        h('td', { text: row.name }),
-        h('td', { class: 'num', text: row.nominal ?? '' }),
-        h('td', { class: 'num', text: row.min ?? '' }),
-        h('td', { class: 'num', text: row.max ?? '' }),
-        h('td', { class: 'num', text: row.lifetime ?? '' }),
-        h('td', {}, row.active ? h('span', { class: 'badge ok', text: '✓' }) : h('span', { class: 'badge mute', text: '—' })),
-        h('td', { class: 'num', text: row.children || 0 }),
-        h('td', {}, h('button', { i18n: 'action.edit', onclick: () => openEditor(row.name) })),
+    for (const r of rows) {
+      const off = !r.active;
+      const nameCell = h('td', { class: 'evl-name' }, [
+        h('span', { class: 'mono', text: r.name }),
+        !isVanillaFile(r.file) ? h('span', { class: 'badge mute mono evl-file', text: r.file, title: r.file }) : null,
+        r.dup ? h('span', { class: 'badge warn', i18n: 'events.dup', title: t('events.dup.hint') }) : null,
+        // Phone: the hidden columns as one line under the name.
+        h('span', { class: 'evl-sub hint', text: [
+          (r.min ?? '?') + '–' + (r.max ?? '?'), fmtLifetime(r.lifetime),
+          pointsMode(r) === 'points' ? t('events.col.points') + ': ' + (r.points || 0) : null].filter(Boolean).join(' · ') }),
+      ]);
+      const mode = pointsMode(r);
+      const pts = mode === 'points'
+        ? h('button', { type: 'button', class: 'link-btn' + (r.points ? '' : ' warn-text'), text: String(r.points || 0),
+          title: r.points ? t('events.points.open') : t('events.points.none'),
+          onclick: (e) => { e.stopPropagation(); window._eventmapTarget = r.name; navigate('eventmap'); } })
+        : h('span', { class: 'hint', text: '—', title: t('events.pos.' + mode) });
+      const edit = h('button', { type: 'button', class: 'icon-btn', title: t('action.edit'), 'aria-label': t('action.edit') + ' ' + r.name,
+        html: svgIcon('i-edit', 15), onclick: (e) => { e.stopPropagation(); openEditor(r); } });
+      tbody.append(h('tr', { class: 'evl-row' + (off ? ' off' : ''), tabindex: '0',
+        onclick: () => openEditor(r), onkeydown: (e) => { if (e.key === 'Enter') openEditor(r); } }, [
+        nameCell,
+        h('td', { class: 'num strong', text: r.nominal ?? '' }),
+        h('td', { class: 'num evl-hide-sm', text: (r.min ?? '') + '–' + (r.max ?? '') }),
+        h('td', { class: 'num evl-hide-sm', text: fmtLifetime(r.lifetime), title: r.lifetime != null ? r.lifetime + ' s' : '' }),
+        h('td', { class: 'evl-c' }, off ? h('span', { class: 'badge mute', i18n: 'events.state.off' })
+          : h('span', { class: 'evl-dot', title: t('events.state.on'), 'aria-label': t('events.state.on') })),
+        h('td', { class: 'num evl-hide-sm' }, pts),
+        h('td', { class: 'num evl-hide-sm', text: r.children || 0 }),
+        h('td', { class: 'evl-act' }, edit),
       ]));
     }
     tbl.append(tbody);
-    tableWrap.append(tbl);
-
-    const prev = h('button', { text: '←', onclick: () => { currentPage--; refreshTable(); } });
-    const next = h('button', { text: '→', onclick: () => { currentPage++; refreshTable(); } });
-    if (currentPage <= 1) prev.disabled = true;
-    if (currentPage >= totalPages) next.disabled = true;
-    const jump = h('input', { type: 'number', value: currentPage, min: 1, max: totalPages, 'aria-label': t('pager.jump') });
-    jump.onchange = () => {
-      const n = parseInt(jump.value, 10);
-      if (Number.isFinite(n) && n >= 1 && n <= totalPages) { currentPage = n; refreshTable(); }
-    };
-    pagerHost.append(h('div', { class: 'pager' }, [
-      prev, next,
-      h('span', { class: 'pager-num',
-        text: `${start + 1}–${Math.min(start + PAGE_SIZE, filtered.length)} / ${filtered.length}${q ? ` (of ${d.count})` : ''}` }),
-      h('span', { class: 'spacer' }),
-      h('span', { class: 'hint', text: t('pager.jump') || 'Page' }),
-      jump,
-      h('span', { class: 'hint', text: `/ ${totalPages}` }),
-    ]));
+    if (!rows.length) {
+      tableWrap.append(h('div', { class: 'empty-state' }, [h('div', { class: 'es-hint', i18n: q ? 'events.none.search' : 'events.none' })]));
+    } else {
+      tableWrap.append(h('div', { class: 'table-scroll-narrow' }, tbl));
+    }
+    const spawning = rows.filter(r => r.active).reduce((s, r) => s + (Number(r.nominal) || 0), 0);
+    foot.textContent = tn('events.count', { n: rows.length, total: all.length, nominal: spawning });
   }
 
-  async function openEditor(name) {
+  async function load() {
+    let d;
+    try { d = await api.get('/api/events'); }
+    catch (e) { tableWrap.innerHTML = ''; tableWrap.append(h('p', { class: 'hint', text: e.message })); return; }
+    if (myNav !== _navSeq) return;
+    all = d.events || [];
+    problemsHost.innerHTML = '';
+    if (d.problems && d.problems.length) {
+      problemsHost.append(h('div', { class: 'warning-bar' }, [h('span', { text: t('events.problems') + ' ' + d.problems.join('; ') })]));
+    }
+    renderChips();
+    renderTable();
+    // Deep link from the event-spawn map ("Open in Events"): its settings.
+    const target = window._eventsTarget;
+    window._eventsTarget = null;
+    const row = target ? all.find(r => r.name === target) : null;
+    if (row) openEditor(row);
+  }
+
+  // ---- editor
+  let classDL = null;
+  async function classList() {
+    if (classDL) return;
+    classDL = h('datalist', { id: 'dz-event-classes' });
+    document.body.append(classDL);
+    let names = [];
+    try { names = (await api.get('/api/spawnable/classnames')).names || []; } catch {}
+    for (const n of names) classDL.append(h('option', { value: n }));
+  }
+
+  async function openEditor(row) {
+    const name = row.name;
+    const fileQ = isVanillaFile(row.file) ? '' : '&file=' + encodeURIComponent(row.file);
     let ev;
-    try { ev = await api.get(`/api/events/item?name=${encodeURIComponent(name)}`); }
+    try { ev = await api.get(`/api/events/item?name=${encodeURIComponent(name)}${fileQ}`); }
     catch (e) { handleErr(e); return; }
-    const m = openModal({ title: name, wide: true });
+    classList();
+    // The item comes as the Go struct (Nominal, Min, …); accept either case.
+    const val = (k) => ev[k] ?? ev[k.charAt(0).toUpperCase() + k.slice(1)];
+    let dirty = false;
+    const m = openModal({ title: name, wide: true, isDirty: () => dirty });
+    m.body.addEventListener('input', () => { dirty = true; });
+    m.body.addEventListener('change', () => { dirty = true; });
 
     const inputs = {};
-    const grid = h('div', { class: 'grid-3' });
-    const EV_FIELD_HELP = { nominal: 'events.nominal', min: 'events.minmax', max: 'events.minmax',
-      lifetime: 'events.lifetime', restock: 'events.restock', saveable: 'events.saveable', active: 'events.active' };
-    for (const k of NUM_FIELDS) {
-      const el = h('input', { type: 'number', value: ev[k] ?? '' });
+    const grid = h('div', { class: 'grid-3 evl-fields' });
+    const NUMS = [
+      ['nominal', 'vehicles.f.nominal', 'events.nominal'],
+      ['min', 'vehicles.f.min', 'events.minmax'],
+      ['max', 'vehicles.f.max', 'events.minmax'],
+      ['lifetime', 'vehicles.f.lifetime', 'events.lifetime'],
+      ['restock', 'vehicles.f.restock', 'events.restock'],
+    ];
+    for (const [k, label, helpKey] of NUMS) {
+      const el = h('input', { type: 'number', min: '0', value: val(k) ?? '', disabled: running });
       inputs[k] = el;
-      const label = h('label', { i18n: `events.field.${k}` });
-      grid.append(h('div', {}, [EV_FIELD_HELP[k] ? withHelp(label, EV_FIELD_HELP[k]) : label, el]));
+      grid.append(h('div', { class: 'field' }, [
+        h('div', { class: 'cfg-label' }, [withHelp(h('label', { for: assocId(el), i18n: label }), helpKey), h('code', { class: 'cfg-key', text: k })]),
+        el,
+      ]));
     }
+    const sw = (k, label, helpKey) => {
+      const cb = h('input', { type: 'checkbox', class: 'switch', disabled: running });
+      cb.checked = Number(val(k)) === 1;
+      inputs[k] = cb;
+      return h('label', { class: 'cfg-bool' }, [cb, h('span', { class: 'cfg-bool-text' }, [
+        h('span', { class: 'cfg-bool-label' }, [h('span', { i18n: label }), help(helpKey)]), h('code', { class: 'cfg-key', text: k })])]);
+    };
+    const bools = h('div', { class: 'cfg-bools evl-bools' }, [sw('active', 'vehicles.activeOn', 'events.active'), sw('saveable', 'events.f.saveable', 'events.saveable')]);
 
-    // Children editor.
-    const children = (ev.Children && ev.Children.Child) ? ev.Children.Child.slice() : [];
-    const childrenWrap = h('div');
+    // Children: the classes the event spawns.
+    const original = (ev.Children && ev.Children.Child) ? ev.Children.Child : [];
+    const children = original.map(c => ({ ...c }));
+    const childrenWrap = h('div', { class: 'evl-kids' });
     function renderChildren() {
       childrenWrap.innerHTML = '';
-      const tbl = h('table');
-      tbl.append(h('thead', {}, h('tr', {}, [
-        h('th', { i18n: 'events.child.type' }),
-        h('th', { i18n: 'events.child.min' }),
-        h('th', { i18n: 'events.child.max' }),
-        h('th', { i18n: 'events.child.lootmin' }),
-        h('th', { i18n: 'events.child.lootmax' }),
-        h('th', { text: '' }),
-      ])));
-      const tb = h('tbody');
-      for (let i = 0; i < children.length; i++) {
-        const c = children[i];
-        const typeIn = h('input', { type: 'text', value: c.Type || '' });
-        const minIn  = h('input', { type: 'number', value: c.Min ?? 0 });
-        const maxIn  = h('input', { type: 'number', value: c.Max ?? -1 });
-        const lmiIn  = h('input', { type: 'number', value: c.LootMin ?? 0 });
-        const lmaIn  = h('input', { type: 'number', value: c.LootMax ?? 0 });
-        typeIn.oninput = () => { c.Type = typeIn.value; };
-        minIn.oninput  = () => { c.Min  = Number(minIn.value)  || 0; };
-        maxIn.oninput  = () => { c.Max  = Number(maxIn.value)  || 0; };
-        lmiIn.oninput  = () => { c.LootMin = Number(lmiIn.value) || 0; };
-        lmaIn.oninput  = () => { c.LootMax = Number(lmaIn.value) || 0; };
-        tb.append(h('tr', {}, [
-          h('td', {}, typeIn),
-          h('td', {}, minIn),
-          h('td', {}, maxIn),
-          h('td', {}, lmiIn),
-          h('td', {}, lmaIn),
-          h('td', {}, h('button', { class: 'danger', text: '×', onclick: () => { children.splice(i, 1); renderChildren(); applyI18n(); } })),
+      if (!children.length) childrenWrap.append(h('p', { class: 'hint', i18n: 'events.kids.none' }));
+      children.forEach((c, i) => {
+        const num = (k, label, def) => {
+          const el = h('input', { type: 'number', value: c[k] ?? def, disabled: running, 'aria-label': t(label) });
+          el.oninput = () => { c[k] = Number(el.value) || 0; };
+          return h('label', { class: 'evl-kid-num' }, [h('span', { i18n: label }), el]);
+        };
+        const typeIn = h('input', { type: 'text', class: 'mono', value: c.Type || '', list: 'dz-event-classes', spellcheck: 'false',
+          placeholder: t('events.child.class.ph'), disabled: running, 'aria-label': t('events.child.type') });
+        typeIn.oninput = () => { c.Type = typeIn.value.trim(); };
+        childrenWrap.append(h('div', { class: 'evl-kid' }, [
+          typeIn,
+          num('Min', 'events.child.min', 0), num('Max', 'events.child.max', -1),
+          num('LootMin', 'events.child.lootmin', 0), num('LootMax', 'events.child.lootmax', 0),
+          h('button', { type: 'button', class: 'icon-btn danger-text', title: t('action.delete'), 'aria-label': t('action.delete'), text: '×', disabled: running,
+            onclick: () => { children.splice(i, 1); dirty = true; renderChildren(); } }),
         ]));
+      });
+      if (!running) {
+        childrenWrap.append(h('button', { type: 'button', class: 'small secondary', i18n: 'events.addChild',
+          onclick: () => { children.push({ Type: '', Min: 1, Max: -1, LootMin: 0, LootMax: 0 }); dirty = true; renderChildren(); } }));
       }
-      tbl.append(tb);
-      childrenWrap.append(tbl);
-      childrenWrap.append(h('button', {
-        i18n: 'events.addChild',
-        onclick: () => { children.push({ Type: '', Min: 1, Max: -1, LootMin: 0, LootMax: 0 }); renderChildren(); applyI18n(); },
-      }));
     }
     renderChildren();
 
-    m.body.append(
+    const save = async (btn) => {
+      const body = { Name: name };
+      for (const [k] of NUMS) {
+        const v = inputs[k].value.trim();
+        if (v !== '') body[k.charAt(0).toUpperCase() + k.slice(1)] = Number(v);
+      }
+      body.Active = inputs.active.checked ? 1 : 0;
+      body.Saveable = inputs.saveable.checked ? 1 : 0;
+      // An emptied list must reach the server too, or the old rows stay.
+      if (children.length || original.length) body.Children = { Child: children.filter(c => (c.Type || '').trim()) };
+      await withBusy(btn, async () => {
+        try {
+          await api.post(`/api/events/item?name=${encodeURIComponent(name)}${fileQ}`, body);
+          toast(t('msg.saved'), 'ok');
+          dirty = false;
+          m.close();
+          await load();
+        } catch (e) { handleErr(e); }
+      });
+    };
+    const del = async () => {
+      if (!(await confirmModal(t('confirm.deleteEvent').replace('{name}', name), { danger: true, okText: t('action.delete') }))) return;
+      try {
+        await api.del(`/api/events/item?name=${encodeURIComponent(name)}${fileQ}`);
+        toast(t('msg.deleted'), 'ok');
+        dirty = false;
+        m.close();
+        await load();
+      } catch (e) { handleErr(e); }
+    };
+
+    const links = h('div', { class: 'evl-links' }, [
+      !isVanillaFile(row.file) ? h('span', { class: 'badge mute mono', text: row.file }) : null,
+      pointsMode(row) === 'points'
+        ? h('button', { type: 'button', class: 'small secondary', onclick: () => { dirty = false; m.close(); window._eventmapTarget = name; navigate('eventmap'); } },
+          [h('span', { html: svgIcon('i-eventmap', 14) }), h('span', { text: ' ' + t('events.points.btn').replace('{n}', row.points || 0) })])
+        : h('span', { class: 'hint', text: t('events.pos.' + pointsMode(row)) }),
+      /^Vehicle/i.test(name) ? h('button', { type: 'button', class: 'small secondary', i18n: 'events.openVehicles',
+        onclick: () => { dirty = false; m.close(); navigate('vehicles'); } }) : null,
+    ].filter(Boolean));
+
+    m.body.append(...[
+      running ? h('div', { class: 'warning-bar', i18n: 'guard.serverRunning' }) : null,
+      links,
       grid,
-      h('h4', { i18n: 'events.field.children' }),
+      bools,
+      h('h4', { class: 'sub-title evl-kids-title' }, [h('span', { i18n: 'events.field.children' }), help('events.children')]),
       childrenWrap,
       h('div', { class: 'actions' }, [
-        h('button', { class: 'primary', i18n: 'action.save',
-          onclick: async () => {
-            const body = { Name: name };
-            for (const k of NUM_FIELDS) {
-              const v = inputs[k].value.trim();
-              if (v === '') continue;
-              const field = k.charAt(0).toUpperCase() + k.slice(1);
-              body[field] = Number(v);
-            }
-            if (children.length) body.Children = { Child: children };
-            try {
-              await api.post(`/api/events/item?name=${encodeURIComponent(name)}`, body);
-              toast(t('msg.saved'), 'ok');
-              m.close();
-              await refreshTable();
-            } catch (e) { handleErr(e); }
-          }
-        }),
-        h('button', { class: 'danger', i18n: 'action.delete',
-          onclick: async () => {
-            if (!(await confirmModal(t('confirm.deleteEvent').replace('{name}', name), { danger: true, okText: t('action.delete') }))) return;
-            try {
-              await api.del(`/api/events/item?name=${encodeURIComponent(name)}`);
-              toast(t('msg.deleted'), 'ok');
-              m.close();
-              await refreshTable();
-            } catch (e) { handleErr(e); }
-          }
-        }),
-        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
-      ]),
-    );
-    applyI18n();
+        running ? null : h('button', { type: 'button', class: 'danger-text', i18n: 'action.delete', onclick: del }),
+        h('span', { class: 'grow' }),
+        h('button', { type: 'button', i18n: 'action.cancel', onclick: () => m.close() }),
+        running ? null : h('button', { type: 'button', class: 'primary', i18n: 'action.save', onclick: (e) => save(e.currentTarget) }),
+      ].filter(Boolean)),
+    ].filter(Boolean));
+  }
+
+  async function newEvent() {
+    const name = await promptModal(t('events.new.prompt'), { title: t('events.new'), placeholder: 'VehicleMyCar' });
+    if (!name) return;
+    if (!/^[A-Za-z0-9_]+$/.test(name)) { toast(t('events.new.bad'), 'error'); return; }
+    if (all.some(r => r.name.toLowerCase() === name.toLowerCase())) { toast(t('events.new.exists'), 'error'); return; }
+    try {
+      await api.post(`/api/events/item?name=${encodeURIComponent(name)}`,
+        { Name: name, Nominal: 0, Min: 0, Max: 0, Lifetime: 300, Restock: 0, Saveable: 0, Active: 0 });
+      await load();
+      const row = all.find(r => r.name === name);
+      if (row) openEditor(row);
+    } catch (e) { handleErr(e); }
   }
 
   let _searchT = 0;
-  search.oninput = () => { clearTimeout(_searchT); _searchT = setTimeout(() => { currentPage = 1; refreshTable(); }, 250); };
+  search.oninput = () => { clearTimeout(_searchT); _searchT = setTimeout(renderTable, 200); };
 
-  if (State.serverStatus.running) root.append(runningBanner());
+  root.append(pageHeader('nav.events', 'events.hint', [
+    running ? null : h('button', { type: 'button', class: 'primary', onclick: newEvent }, [h('span', { html: svgIcon('i-plus', 15) }), h('span', { text: ' ' + t('events.new') })]),
+    revealBtn({ kind: 'missionfile', path: 'db/events.xml' }),
+  ].filter(Boolean)));
+  if (running) root.append(runningBanner());
   root.append(
+    problemsHost,
     h('div', { class: 'card' }, [
-      h('h2', { i18n: 'events.title' }),
-      h('p', { class: 'hint', i18n: 'events.hint' }),
-      h('div', { class: 'toolbar' }, [search]),
+      h('div', { class: 'players-toolbar evl-toolbar' }, [search, chips]),
       tableWrap,
-      pagerHost,
+      foot,
     ]),
   );
-  await refreshTable();
+  await load();
 };
 
 // --------------------------------------------------------------------- settings
+
+// hhmm normalises a stored time ("6:00", "06:00") to what <input type=time>
+// accepts ("06:00"); anything else shows empty rather than a wrong time.
+function hhmm(v) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim());
+  return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? m[1].padStart(2, '0') + ':' + m[2] : '';
+}
 
 // Scheduled RCon announcements UI. Renders a mini-editor inside Settings so
 // admins can add/remove lines without hand-editing manager.json.
@@ -3474,7 +4670,8 @@ function scheduledRestartsCard(c, F, onChange) {
   function render() {
     list.innerHTML = '';
     times.forEach((tm, i) => {
-      const inp = h('input', { type: 'text', value: tm, placeholder: 'HH:MM', style: { width: '90px' } });
+      if (hhmm(tm)) times[i] = hhmm(tm); // "6:00" → "06:00", as the field shows it
+      const inp = h('input', { type: 'time', value: hhmm(tm), style: { width: '120px' } });
       inp.onchange = () => { times[i] = inp.value.trim(); };
       const rm = h('button', { class: 'danger', text: '×',
         onclick: () => { times.splice(i, 1); render(); fire(); } });
@@ -3503,7 +4700,7 @@ function scheduledRestartsCard(c, F, onChange) {
   };
 
   return h('div', { class: 'card' }, [
-    withHelp(h('h3', { i18n: 'settings.restarts.title' }), 'settings.restart'),
+    cardTitle('i-clock', 'settings.restarts.title', 'settings.restart'),
     h('p', { class: 'hint', i18n: 'settings.restarts.hint' }),
     list,
     h('div', { class: 'actions' }, [
@@ -3534,7 +4731,7 @@ function scheduledProfilesCard(c, F, onChange) {
   let profiles = []; // {slug, name}
 
   const card = h('div', { class: 'card' }, [
-    h('h3', { i18n: 'settings.schedprofiles.title' }),
+    cardTitle('i-cfgprofiles', 'settings.schedprofiles.title'),
     h('p', { class: 'hint', i18n: 'settings.schedprofiles.hint' }),
   ]);
   if (!(c.rconPassword || '').trim()) {
@@ -3564,7 +4761,8 @@ function scheduledProfilesCard(c, F, onChange) {
     list.innerHTML = '';
     if (!profiles.length) list.append(h('p', { class: 'hint', i18n: 'settings.schedprofiles.none' }));
     state.items.forEach((a, i) => {
-      const time = h('input', { type: 'text', value: a.time, placeholder: 'HH:MM', style: { width: '80px' } });
+      if (hhmm(a.time)) state.items[i].time = hhmm(a.time);
+      const time = h('input', { type: 'time', value: hhmm(a.time), style: { width: '120px' } });
       const sel = profileSelect(a.profile, () => { state.items[i].profile = sel.value; fire(); });
       const en = h('input', { type: 'checkbox', class: 'switch' });
       en.checked = !!a.enabled;
@@ -3611,7 +4809,7 @@ function announcementsCard(c, F, onChange) {
   };
 
   const card = h('div', { class: 'card' }, [
-    h('h3', { i18n: 'settings.announcements' }),
+    cardTitle('i-chat', 'settings.announcements'),
     h('p', { class: 'hint', i18n: 'settings.announcements.hint' }),
   ]);
   // #4 — announcements broadcast via RCon, so they need an RCon password.
@@ -3624,7 +4822,8 @@ function announcementsCard(c, F, onChange) {
   function render() {
     list.innerHTML = '';
     state.items.forEach((a, i) => {
-      const time = h('input', { type: 'text', value: a.time, placeholder: 'HH:MM', style: { width: '80px' } });
+      if (hhmm(a.time)) state.items[i].time = hhmm(a.time);
+      const time = h('input', { type: 'time', value: hhmm(a.time), style: { width: '120px' } });
       const msg  = h('input', { type: 'text', value: a.message || '', style: { flex: '1' } });
       const en   = h('input', { type: 'checkbox', class: 'switch' });
       en.checked = !!a.enabled;
@@ -3763,7 +4962,7 @@ async function renderDiagnosis(host, placeAtTop) {
 
 Views.loadout = async (root) => {
   const myNav = _navSeq;
-  root.append(pageHeader('nav.loadout', 'loadout.subtitle'));
+  root.append(pageHeader('nav.loadout', 'loadout.subtitle', [revealBtn({ kind: 'mission' }, { label: 'folders.mission' })]));
   if (State.serverStatus.running) root.append(runningBanner());
 
   let d, classNames = [];
@@ -4235,10 +5434,25 @@ Views.guide = async (root) => {
       h('span', { class: 'guide-toc-num', text: String(i + 1) }),
       h('span', { text: c.title }),
     ])));
-  root.append(h('div', { class: 'card' }, [
+  const tocCard = h('div', { class: 'card', id: 'guide-toc' }, [
     h('h3', { i18n: 'guide.contents' }),
     toc,
-  ]));
+  ]);
+  root.append(tocCard);
+  // A long page: a floating button back to the contents once they scroll away.
+  const toTop = h('button', { type: 'button', class: 'guide-to-top', hidden: true, text: t('guide.toTop'),
+    onclick: () => tocCard.scrollIntoView({ behavior: 'smooth', block: 'start' }) });
+  root.append(toTop);
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => { for (const en of entries) toTop.hidden = en.isIntersecting; });
+    io.observe(tocCard);
+    const prevTeardown = root._teardown;
+    root._teardown = () => { io.disconnect(); if (prevTeardown) prevTeardown(); };
+  }
+  const zoom = (src, title) => {
+    const m = openModal({ title, wide: true });
+    m.body.append(h('img', { src, alt: title, class: 'guide-zoom' }));
+  };
 
   const finish = () => root.append(h('div', { class: 'guide-support' }, [
     h('span', { class: 'guide-support-heart', text: '♥' }),
@@ -4283,13 +5497,19 @@ Views.guide = async (root) => {
       // Screenshot of the real section. loading="lazy" so eight of them do not
       // all decode on first paint.
       c.image ? h('figure', { class: 'guide-shot' }, [
-        h('img', { src: c.image, alt: c.title, loading: 'lazy', decoding: 'async' }),
+        h('img', { src: c.image, alt: c.title, loading: 'lazy', decoding: 'async', title: t('guide.zoom'),
+          onclick: () => zoom(c.image, c.title),
+          // A missing picture hides its frame instead of showing a broken one.
+          onerror: (e) => { const f = e.currentTarget.closest('figure'); if (f) f.hidden = true; } }),
       ]) : null,
       steps.length ? h('ol', { class: 'guide-steps' }, steps) : null,
       tips.length ? h('div', { class: 'guide-tips' }, [
         h('div', { class: 'guide-tips-title', i18n: 'guide.tips' }),
         h('ul', {}, tips),
       ]) : null,
+      chapters[ci + 1] ? h('button', { type: 'button', class: 'link-btn guide-next',
+        text: t('guide.next').replace('{title}', chapters[ci + 1].title),
+        onclick: () => { const el = document.getElementById('guide-' + chapters[ci + 1].id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }) : null,
     ]));
   });
   finish();
@@ -4312,39 +5532,37 @@ const WICON = {
 };
 
 Views.weather = async (root) => {
+  const myNav = _navSeq;
   await refreshStatus();
   const running = State.serverStatus.running;
-  const d = await api.get('/api/weather');
+  let d;
+  try { d = await api.get('/api/weather'); }
+  catch (e) { handleErr(e); return; }
+  if (myNav !== _navSeq) return;
   const params = d.params || {};
   const presets = d.presets || [];
   const tm = d.time || {};
 
-  root.append(pageHeader('nav.weather', 'weather.subtitle'));
+  root.append(pageHeader('nav.weather', 'weather.subtitle', [revealBtn({ kind: 'missionfile', path: 'cfgweather.xml' })]));
   const wrap = h('div');
   root.append(wrap);
   if (running) wrap.append(runningBanner());
 
+  // How gradually weather moves — shared by the presets and the manual
+  // values, so it sits with the presets, above both.
+  const transSel = h('select', { id: 'weather-trans', 'aria-label': t('weather.trans.title'), disabled: running }, [
+    h('option', { value: 'smooth', i18n: 'weather.trans.smooth' }),
+    h('option', { value: 'normal', i18n: 'weather.trans.normal' }),
+    h('option', { value: 'fast',   i18n: 'weather.trans.fast' }),
+  ]);
+  transSel.value = params.transition || 'smooth';
+
   // ---- presets ----
   // "Enabled" (not mere file existence) decides whether the manager controls
   // weather — the vanilla cfgweather.xml ships present but with enable="0".
-  const enabled = !!params.enable;
-  const matchedBadge = h('span', { class: 'badge ' + (enabled ? 'ok' : 'mute'),
-    text: enabled ? (t('weather.preset.' + d.matched) || d.matched) : '—' });
-
-  const applyPreset = async (name) => {
-    try {
-      // Carry the current smoothness through so clicking a preset doesn't
-      // quietly revert it.
-      const tr = (document.querySelector('#weather-trans') || {}).value || (params.transition || 'smooth');
-      await api.post('/api/weather/preset', { name, transition: tr });
-      toast(t('msg.saved'), 'ok'); await navigate('weather');
-    }
-    catch (e) { handleErr(e); }
-  };
-  const presetTile = (name) => h('button', {
-    class: 'preset-tile' + ((name === d.matched && enabled) ? ' active' : ''),
-    disabled: running, onclick: () => applyPreset(name),
-  }, [
+  const matchedBadge = h('span', { class: 'badge' });
+  const disabledNote = h('p', { class: 'hint', i18n: 'weather.disabled' });
+  const presetTile = (name) => h('button', { type: 'button', class: 'preset-tile', 'data-name': name, disabled: running, onclick: () => applyPreset(name) }, [
     h('span', { class: 'ic', html: WICON[name] || '' }),
     h('span', { i18n: 'weather.preset.' + name }),
   ]);
@@ -4352,13 +5570,16 @@ Views.weather = async (root) => {
   tiles.push(presetTile('off'));
 
   wrap.append(h('div', { class: 'card' }, [
-    h('h3', { i18n: 'weather.presets.title' }),
+    h('div', { class: 'card-head' }, [cardTitle('i-weather', 'weather.presets.title')]),
     h('p', { class: 'hint', i18n: 'weather.presets.hint' }),
-    h('div', { class: 'row', style: { gap: '6px', alignItems: 'center', marginBottom: '10px' } }, [
+    h('div', { class: 'wx-now' }, [
       h('span', { class: 'k', i18n: 'weather.current' }), matchedBadge,
+      h('span', { class: 'grow' }),
+      h('span', { class: 'wx-trans' }, [withHelp(h('label', { i18n: 'weather.trans.title', for: assocId(transSel) }), 'weather.transition'), transSel]),
     ]),
-    enabled ? null : h('p', { class: 'hint', i18n: 'weather.disabled' }),
+    disabledNote,
     h('div', { class: 'preset-grid' }, tiles),
+    h('small', { class: 'hint', i18n: 'weather.trans.hint' }),
   ]));
 
   // ---- manual editor ----
@@ -4368,14 +5589,14 @@ Views.weather = async (root) => {
     const max = opts.max || 100;
     const step = opts.step || '1';
     const toDisplay = (v) => unit === '%' ? Math.round((v || 0) * 100) : (v || 0);
-    const fmt = (n) => unit === '%' ? n + '%' : n + ' m/s';
-    const cur = toDisplay(val);
-    const out = h('span', { class: 'slider-val', text: fmt(cur) });
+    const fmt = (n) => unit === '%' ? n + '%' : n + ' ' + t('unit.mps');
+    const out = h('span', { class: 'slider-val' });
     const range = h('input', { type: 'range', class: 'wslider', min: '0', max: String(max), step,
-      value: String(cur), style: { flex: '1' }, 'aria-label': t(labelKey) });
+      style: { flex: '1' }, 'aria-label': t(labelKey), disabled: running });
     const fill = () => range.style.setProperty('--val', (Number(range.value) / max * 100) + '%');
+    const set = (v) => { range.value = String(toDisplay(v)); out.textContent = fmt(Number(range.value)); fill(); };
     range.oninput = () => { out.textContent = fmt(Number(range.value)); fill(); };
-    fill();
+    set(val);
     const row = h('div', { class: 'wrow' }, [
       h('span', { class: 'slider-label' }, [
         h('span', { class: 'ic', html: WICON[icon] || '' }),
@@ -4384,7 +5605,7 @@ Views.weather = async (root) => {
       ]),
       range, out,
     ]);
-    return { row, get: () => unit === '%' ? Number(range.value) / 100 : Number(range.value) };
+    return { row, set, get: () => unit === '%' ? Number(range.value) / 100 : Number(range.value) };
   };
   const oc = sliderRow('weather.overcast', 'cloudy', params.overcast, { help: 'weather.overcast' });
   const fog = sliderRow('weather.fog', 'foggy', params.fog, { help: 'weather.fog' });
@@ -4392,113 +5613,79 @@ Views.weather = async (root) => {
   const snow = sliderRow('weather.snowfall', 'snowy', params.snowfall, { help: 'weather.snowfall' });
   const storm = sliderRow('weather.storm', 'storm', params.stormDensity, { help: 'weather.storm' });
   const wind = sliderRow('weather.wind', 'wind', params.wind, { unit: 'm/s', max: 20, step: '0.5', help: 'weather.wind' });
-  const dynChk = h('input', { type: 'checkbox', class: 'switch' });
+  const dynChk = h('input', { type: 'checkbox', class: 'switch', disabled: running });
   dynChk.checked = !!params.dynamic;
-  // How gradually weather moves. The old build hard-coded 2-minute ramps with
-  // full-range steps, which is why changes felt like a light switch.
-  const transSel = h('select', { id: 'weather-trans', style: { maxWidth: '260px' }, 'aria-label': t('weather.trans.title') }, [
-    h('option', { value: 'smooth', i18n: 'weather.trans.smooth' }),
-    h('option', { value: 'normal', i18n: 'weather.trans.normal' }),
-    h('option', { value: 'fast',   i18n: 'weather.trans.fast' }),
-  ]);
-  transSel.value = params.transition || 'smooth';
+
+  // Live "what players will see" preview, updated as the sliders move.
+  const preview = weatherPreview({
+    overcast: oc.get, fog: fog.get, rain: rain.get, snow: snow.get, storm: storm.get, wind: wind.get,
+  });
+  wrap.addEventListener('input', (e) => { if (e.target && e.target.classList.contains('wslider')) preview.update(); });
+
+  // After a save the page shows the saved state in place — no reload, so
+  // unsaved day/night edits below survive and the scroll stays put.
+  const showState = (p, matched) => {
+    const on = !!(p && p.enable);
+    matchedBadge.className = 'badge ' + (on ? 'ok' : 'mute');
+    matchedBadge.textContent = on ? (State.i18n['weather.preset.' + matched] ? t('weather.preset.' + matched) : (matched || '—')) : '—';
+    tiles.forEach(tl => tl.classList.toggle('active', on && tl.dataset.name === matched));
+    disabledNote.hidden = on;
+  };
+  const applySaved = (r) => {
+    const p = (r && r.params) || {};
+    oc.set(p.overcast); fog.set(p.fog); rain.set(p.rain); snow.set(p.snowfall); storm.set(p.stormDensity); wind.set(p.wind);
+    dynChk.checked = !!p.dynamic;
+    if (p.transition) transSel.value = p.transition;
+    preview.update();
+    showState(p, r && r.matched);
+  };
+  showState(params, d.matched);
+
+  async function applyPreset(name) {
+    await withBusyAll(async () => {
+      try {
+        const r = await api.post('/api/weather/preset', { name, transition: transSel.value });
+        applySaved(r);
+        toast(t('msg.saved'), 'ok');
+      } catch (e) { handleErr(e); }
+    });
+  }
 
   wrap.append(h('div', { class: 'card' }, [
-    h('h3', { i18n: 'weather.custom.title' }),
+    h('div', { class: 'card-head' }, [cardTitle('i-weather', 'weather.custom.title')]),
     h('p', { class: 'hint', i18n: 'weather.custom.hint' }),
+    preview.el,
     oc.row, fog.row, rain.row, wind.row, snow.row, storm.row,
-    h('label', {}, [dynChk, h('span', { i18n: 'weather.preset.dynamic' }), help('weather.dynamic')]),
-    h('div', { style: { marginTop: '10px' } }, [
-      withHelp(h('label', { i18n: 'weather.trans.title', style: { display: 'inline-block' } }), 'weather.transition'),
-      transSel,
-      h('small', { class: 'hint', i18n: 'weather.trans.hint' }),
-    ]),
+    h('label', { class: 'wx-dyn' }, [dynChk, h('span', { i18n: 'weather.custom.dynamic' }), help('weather.dynamic')]),
     h('div', { class: 'actions' }, [
-      h('button', { class: 'primary', i18n: 'weather.apply', disabled: running,
-        onclick: async () => {
+      h('button', { type: 'button', class: 'primary', i18n: 'weather.apply', disabled: running,
+        onclick: (e) => withBusy(e.currentTarget, async () => {
           try {
-            await api.post('/api/weather/custom', {
+            const r = await api.post('/api/weather/custom', {
               overcast: oc.get(), fog: fog.get(), rain: rain.get(),
               snowfall: snow.get(), stormDensity: storm.get(),
               wind: wind.get(), dynamic: dynChk.checked,
               transition: transSel.value,
             });
-            toast(t('msg.saved'), 'ok'); await navigate('weather');
-          } catch (e) { handleErr(e); }
-        } }),
-    ]),
-    h('p', { class: 'hint', i18n: 'weather.timedHint' }),
-  ]));
-
-  // ---- in-game time ----
-  const accel = h('input', { type: 'number', min: '0.1', max: '24', step: '0.1', value: tm.serverTimeAcceleration ?? '1', style: { width: '90px' } });
-  const nAccel = h('input', { type: 'number', min: '0.1', max: '64', step: '0.1', value: tm.serverNightTimeAcceleration ?? '1', style: { width: '90px' } });
-  const sTime = h('input', { type: 'text', value: tm.serverTime ?? 'SystemTime', style: { width: '180px' } });
-  const persist = h('input', { type: 'checkbox', class: 'switch' });
-  persist.checked = String(tm.serverTimePersistent ?? '0') === '1';
-
-  // Quick-pick chips so users don't have to know the multiplier / time format.
-  const accelQuick = h('div', { class: 'pills' }, [1, 6, 12, 24].map(v =>
-    h('button', { class: 'pill', text: v + '×', onclick: () => { accel.value = v; } })));
-  const startQuick = h('div', { class: 'pills' }, [
-    ['weather.time.start.system', 'SystemTime'],
-    ['weather.time.start.morning', '2024/7/1/8/0'],
-    ['weather.time.start.noon', '2024/7/1/12/0'],
-    ['weather.time.start.evening', '2024/7/1/19/0'],
-    ['weather.time.start.night', '2024/7/1/0/0'],
-  ].map(([k, val]) => h('button', { class: 'pill', i18n: k, onclick: () => { sTime.value = val; } })));
-
-  const tRow = (labelKey, el, extra, hintKey) => {
-    const id = assocId(el);
-    return h('div', { style: { marginBottom: '12px' } }, [
-      h('label', id ? { i18n: labelKey, for: id } : { i18n: labelKey }), el,
-      extra || null,
-      hintKey ? h('small', { class: 'hint', i18n: hintKey }) : null,
-    ]);
-  };
-
-  wrap.append(h('div', { class: 'card' }, [
-    withHelp(h('h3', { i18n: 'weather.time.title' }), 'weather.accel'),
-    tRow('weather.time.accel', accel, accelQuick),
-    tRow('weather.time.nightAccel', nAccel),
-    tRow('weather.time.serverTime', sTime, startQuick, 'weather.time.serverTime.hint'),
-    h('label', {}, [persist, h('span', { i18n: 'weather.time.persistent' })]),
-    h('div', { class: 'actions' }, [
-      h('button', { class: 'primary', i18n: 'weather.time.save', disabled: running,
-        onclick: (e) => withBusy(e.currentTarget, async () => {
-          // Validate instead of silently substituting: `Number(x) || 1` used to
-          // turn a typo (or a deliberate 0) into 1 without telling anyone.
-          const clamp = (inp, lo, hi) => {
-            const v = Number(inp.value);
-            if (!Number.isFinite(v) || v < lo || v > hi) {
-              inp.style.borderColor = 'var(--error)';
-              return null;
-            }
-            inp.style.borderColor = '';
-            return v;
-          };
-          const day = clamp(accel, 0.1, 24);
-          const night = clamp(nAccel, 0.1, 64);
-          if (day === null || night === null) { toast(t('weather.time.range'), 'error'); return; }
-          try {
-            await api.post('/api/weather/time', {
-              serverTimeAcceleration: day,
-              serverNightTimeAcceleration: night,
-              serverTime: sTime.value.trim() || 'SystemTime',
-              serverTimePersistent: persist.checked ? 1 : 0,
-            });
+            applySaved(r);
             toast(t('msg.saved'), 'ok');
           } catch (err) { handleErr(err); }
         }) }),
     ]),
+    h('p', { class: 'hint', i18n: 'weather.timedHint' }),
   ]));
+
+  // ---- in-game time: day/night planner (features.js)
+  const dn = dayNightCard(tm, d.map, running);
+  wrap.append(dn);
+  root._isDirty = () => dn.isDirty();
 };
 
 // --------------------------------------------------------------------- wipe
 
 Views.wipe = async (root) => {
   const d = await api.get('/api/wipe/preview');
-  root.append(pageHeader('nav.wipe', 'wipe.subtitle'));
+  root.append(pageHeader('nav.wipe', 'wipe.subtitle', [revealBtn({ kind: 'mission' }, { label: 'folders.mission' })]));
   const wrap = h('div');
   root.append(wrap);
 
@@ -4550,8 +5737,8 @@ Views.wipe = async (root) => {
     h('h4', { i18n: 'wipe.preview.title' }),
     list,
     d.serverRunning ? h('p', { class: 'hint', i18n: 'wipe.serverRunning' }) : null,
-    h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '10px 0' } }, [confirm, h('span', { i18n: 'wipe.confirm' })]),
-    h('div', { class: 'actions' }, [wipeBtn]),
+    folders.length ? h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '10px 0' } }, [confirm, h('span', { i18n: 'wipe.confirm' })]) : null,
+    folders.length ? h('div', { class: 'actions' }, [wipeBtn]) : null,
   ]));
 
   // ---- previous wipes, and putting one back -------------------------------
@@ -4607,238 +5794,7 @@ Views.wipe = async (root) => {
   await refreshWipes();
 };
 
-Views.settings = async (root) => {
-  const c = State.config;
-  const F = {
-    language:        h('select', {}),
-    vanillaDayZPath: h('input',  { type: 'text', value: c.vanillaDayZPath || '', 'aria-label': t('settings.vanillaPath') }),
-    exposure:        h('select', { 'aria-label': t('settings.exposure') }, [
-                       h('option', { value: 'local',    i18n: 'settings.exposure.local' }),
-                       h('option', { value: 'lan',      i18n: 'settings.exposure.lan' }),
-                       h('option', { value: 'internet', i18n: 'settings.exposure.internet' }),
-                     ]),
-    serverPort:      h('input',  { type: 'number', value: c.serverPort }),
-    serverCfg:       h('input',  { type: 'text', value: c.serverCfg }),
-    cpuCount:        h('input',  { type: 'number', value: c.cpuCount }),
-    bePath:          h('input',  { type: 'text', value: c.bePath }),
-    profilesDir:     h('input',  { type: 'text', value: c.profilesDir }),
-    autoRestartSeconds: h('input', { type: 'number', value: c.autoRestartSeconds }),
-    autoRestartEnabled: h('input', { type: 'checkbox', class: 'switch' }),
-    autoUpdateCheckMinutes: h('input', { type: 'number', value: c.autoUpdateCheckMinutes ?? 0, 'aria-label': t('settings.autoupdate.check') }),
-    autoUpdateModsOnRestart: h('input', { type: 'checkbox', class: 'switch' }),
-    restartOnCrash: h('input', { type: 'checkbox', class: 'switch' }),
-    restartOnlyWhenEmpty: h('input', { type: 'checkbox', class: 'switch' }),
-    restartEmptyMaxWaitMinutes: h('input', { type: 'number', min: '0', value: c.restartEmptyMaxWaitMinutes ?? 60, 'aria-label': t('settings.smartrestart.maxwait') }),
-    restartOnHighMem: h('input', { type: 'checkbox', class: 'switch' }),
-    restartMemThresholdMB: h('input', { type: 'number', min: '0', value: c.restartMemThresholdMB ?? 8000, 'aria-label': t('settings.smartrestart.memthresh') }),
-    backupIntervalHours: h('input', { type: 'number', min: '0', value: c.backupIntervalHours ?? 0 }),
-    backupKeep: h('input', { type: 'number', min: '1', value: c.backupKeep || 10 }),
-    discordEnabled: h('input', { type: 'checkbox', class: 'switch' }),
-    discordWebhookURL: h('input', { type: 'text', value: c.discordWebhookURL || '', placeholder: 'https://discord.com/api/webhooks/…' }),
-    doLogs:       h('input', { type: 'checkbox', class: 'switch' }),
-    adminLog:     h('input', { type: 'checkbox', class: 'switch' }),
-    netLog:       h('input', { type: 'checkbox', class: 'switch' }),
-    freezeCheck:  h('input', { type: 'checkbox', class: 'switch' }),
-    filePatching: h('input', { type: 'checkbox', class: 'switch' }),
-  };
-  fillLangSelect(F.language, c.language, false);
-  F.exposure.value = c.exposure || 'local';
-  for (const k of ['autoRestartEnabled','autoUpdateModsOnRestart','restartOnCrash','restartOnlyWhenEmpty','restartOnHighMem','discordEnabled','doLogs','adminLog','netLog','freezeCheck','filePatching']) {
-    F[k].checked = !!c[k];
-  }
-
-  const detectBtn = h('button', { i18n: 'settings.detectDayZ', onclick: async () => {
-    try {
-      const d = await api.get('/api/steam/detect');
-      const installs = d.installs || [];
-      if (!installs.length) { toast(t('settings.detectDayZ.none')); return; }
-      // Prefer an install that has !Workshop; fall back to the first hit.
-      const hit = installs.find(i => i.hasWorkshop) || installs[0];
-      F.vanillaDayZPath.value = hit.path;
-      F.vanillaDayZPath.dispatchEvent(new Event('change', { bubbles: true })); // trigger auto-save
-      toast(hit.path, 'ok');
-    } catch (e) { handleErr(e); }
-  }});
-
-  const section = (title, rows) => h('div', { class: 'card' }, [h('h3', { i18n: title }), ...rows]);
-  const row = (labelKey, el) => {
-    const id = assocId(el);
-    return h('div', {}, [h('label', id ? { i18n: labelKey, for: id } : { i18n: labelKey }), el]);
-  };
-
-  const themeSel = h('select', {}, [
-    h('option', { value: 'dark',  i18n: 'settings.theme.dark' }),
-    h('option', { value: 'light', i18n: 'settings.theme.light' }),
-    h('option', { value: 'auto',  i18n: 'settings.theme.auto' }),
-  ]);
-  themeSel.value = localStorage.getItem('theme') || 'dark';
-  themeSel.onchange = () => setTheme(themeSel.value);
-
-  // ---- Auto-save: no manual Save button. Field changes persist on their own
-  // (item #2) — kills the whole class of "forgot to save / save reset X" bugs.
-  const savedNote = h('span', { class: 'saved-note', i18n: 'settings.saved' });
-  const gather = () => {
-    // Send ONLY the fields this form owns — never spread State.config, which can
-    // hold stale values for state changed elsewhere (e.g. mods toggled via
-    // /api/mods/enable). The merge backend preserves every field we omit, so a
-    // Settings save can no longer reset mods (critical hotfix).
-    const next = {};
-    for (const [k, el] of Object.entries(F)) {
-      if (el.type === 'checkbox') next[k] = el.checked;
-      else if (el.type === 'number') {
-        // A field cleared mid-edit must NOT auto-save as 0 (imagine serverPort
-        // becoming 0 six hundred ms after you select-all-delete). Omitting the
-        // key keeps the old value via the merge backend.
-        const v = el.value.trim();
-        if (v === '' || Number.isNaN(Number(v))) continue;
-        next[k] = Number(v);
-      }
-      else next[k] = el.value; // text/select + the list getters (restarts/announcements)
-    }
-    return next;
-  };
-  const save = async () => {
-    const next = gather();
-    const langChanged = next.language !== State.config.language;
-    try {
-      State.config = await api.post('/api/config', next);
-      savedNote.classList.add('show');
-      clearTimeout(save._t); save._t = setTimeout(() => savedNote.classList.remove('show'), 1500);
-      if (langChanged) {
-        await loadI18n(next.language);
-        const ls = document.getElementById('lang-switch'); if (ls) ls.value = next.language;
-      }
-    } catch (e) { handleErr(e); }
-  };
-  let _dbT;
-  const autoSave = () => { clearTimeout(_dbT); _dbT = setTimeout(save, 600); };
-  root._save = save; // Ctrl+S still saves immediately
-
-  const body = h('div');
-  // One delegated listener catches every field change in Settings — inputs in
-  // the schedule/announcement cards bubble here too, so no per-field wiring.
-  body.addEventListener('change', (e) => {
-    if (e.target && e.target.matches('input, select, textarea')) autoSave();
-  });
-  body.append(
-    section('settings.title', [
-      row('settings.language', F.language),
-      row('settings.theme', themeSel),
-      h('div', {}, [
-        h('label', { i18n: 'settings.vanillaPath' }),
-        h('div', { class: 'row' }, [F.vanillaDayZPath, detectBtn]),
-      ]),
-      h('div', {}, [
-        withHelp(h('label', { i18n: 'settings.exposure' }), 'settings.exposure'),
-        F.exposure,
-        h('small', { class: 'hint', i18n: 'settings.exposure.hint' }),
-      ]),
-    ]),
-
-    section('nav.server', [
-      // Server name is edited via the serverDZ.cfg "hostname" field in the
-      // Server section — it lived here too, which only caused confusion (#7).
-      h('div', { class: 'grid-2' }, [
-        row('settings.serverPort', F.serverPort),
-        row('settings.serverCfg', F.serverCfg),
-        row('settings.cpuCount', F.cpuCount),
-        row('settings.bepath', F.bePath),
-        row('settings.profilesDir', F.profilesDir),
-      ]),
-    ]),
-
-    section('settings.flags', [
-      h('div', { class: 'grid-3' }, [
-        h('label', {}, [F.doLogs,       h('span', { i18n: 'settings.flag.dologs' })]),
-        h('label', {}, [F.adminLog,     h('span', { i18n: 'settings.flag.adminlog' }), help('settings.adminlog')]),
-        h('label', {}, [F.netLog,       h('span', { i18n: 'settings.flag.netlog' })]),
-        h('label', {}, [F.freezeCheck,  h('span', { i18n: 'settings.flag.freezecheck' })]),
-        h('label', {}, [F.filePatching, h('span', { i18n: 'settings.flag.filePatching' })]),
-      ]),
-    ]),
-
-    section('settings.autorestart', [
-      h('div', { class: 'row' }, [
-        h('label', {}, [F.autoRestartEnabled, h('span', { i18n: 'settings.autorestart.enable' })]),
-        row('settings.autorestart', F.autoRestartSeconds),
-      ]),
-      h('p', { class: 'hint', i18n: 'settings.autorestart.hint' }),
-      h('label', {}, [F.restartOnCrash, h('span', { i18n: 'settings.watchdog' }), help('settings.watchdog')]),
-      h('small', { class: 'hint', i18n: 'settings.watchdog.hint' }),
-
-      h('h4', { i18n: 'settings.smartrestart.title', style: { marginTop: '16px' } }),
-      h('label', {}, [F.restartOnlyWhenEmpty, h('span', { i18n: 'settings.smartrestart.empty' })]),
-      h('small', { class: 'hint', i18n: 'settings.smartrestart.empty.hint' }),
-      h('div', { style: { marginTop: '8px' } }, [
-        h('label', { i18n: 'settings.smartrestart.maxwait' }), F.restartEmptyMaxWaitMinutes,
-      ]),
-      h('label', { style: { marginTop: '12px' } }, [F.restartOnHighMem, h('span', { i18n: 'settings.smartrestart.mem' })]),
-      h('small', { class: 'hint', i18n: 'settings.smartrestart.mem.hint' }),
-      h('div', { style: { marginTop: '8px' } }, [
-        h('label', { i18n: 'settings.smartrestart.memthresh' }), F.restartMemThresholdMB,
-      ]),
-    ]),
-
-    section('settings.autoupdate.title', [
-      h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
-        [F.autoUpdateModsOnRestart, h('span', { i18n: 'settings.autoupdate.onRestart' })]),
-      h('small', { class: 'hint', i18n: 'settings.autoupdate.onRestart.hint' }),
-      h('div', { style: { marginTop: '12px' } }, [
-        h('label', { i18n: 'settings.autoupdate.check' }),
-        F.autoUpdateCheckMinutes,
-        h('small', { class: 'hint', i18n: 'settings.autoupdate.check.hint' }),
-      ]),
-    ]),
-
-    networkCard(),
-
-    scheduledRestartsCard(c, F, autoSave),
-
-    scheduledProfilesCard(c, F, autoSave),
-
-    announcementsCard(c, F, autoSave),
-
-    intervalAnnouncementsCard(c, F, autoSave),
-
-    section('settings.autobackup.title', [
-      h('p', { class: 'hint', i18n: 'settings.autobackup.hint' }),
-      h('div', { class: 'grid-2' }, [
-        row('settings.autobackup.every', F.backupIntervalHours),
-        row('settings.autobackup.keep', F.backupKeep),
-      ]),
-      h('div', { class: 'actions' }, [
-        h('button', { i18n: 'settings.autobackup.now', onclick: (e) => withBusy(e.currentTarget, async () => {
-          try {
-            const r = await api.post('/api/backup/run', {});
-            toast(`${t('msg.saved')} — ${r.path}`, 'ok');
-          } catch (err) { handleErr(err); }
-        })}),
-      ]),
-    ]),
-
-    section('settings.discord.title', [
-      h('p', { class: 'hint', i18n: 'settings.discord.hint' }),
-      h('label', {}, [F.discordEnabled, h('span', { i18n: 'settings.discord.enable' })]),
-      row('settings.discord.url', F.discordWebhookURL),
-      h('div', { class: 'actions' }, [
-        h('button', { i18n: 'settings.discord.test', onclick: (e) => withBusy(e.currentTarget, async () => {
-          const url = F.discordWebhookURL.value.trim();
-          if (!url) return;
-          try { await api.post('/api/discord/test', { url }); toast(t('msg.sent'), 'ok'); }
-          catch (err) { handleErr(err); }
-        })}),
-      ]),
-    ]),
-
-    backupCard(),
-  );
-
-  root.append(
-    pageHeader('nav.settings', 'settings.subtitle', [savedNote]),
-    body,
-  );
-  // Support card is appended globally by navigate(), so it isn't repeated here.
-};
+// Views.settings lives in sections.js (one tab per topic).
 
 // intervalAnnouncementsCard — repeat a message every N minutes while running.
 function intervalAnnouncementsCard(c, F, onChange) {
@@ -4849,7 +5805,7 @@ function intervalAnnouncementsCard(c, F, onChange) {
     })),
   };
   const card = h('div', { class: 'card' }, [
-    h('h3', { i18n: 'settings.intervalAnn' }),
+    cardTitle('i-chat', 'settings.intervalAnn'),
     h('p', { class: 'hint', i18n: 'settings.intervalAnn.hint' }),
   ]);
   if (!(c.rconPassword || '').trim()) {
@@ -4896,48 +5852,15 @@ function intervalAnnouncementsCard(c, F, onChange) {
   return card;
 }
 
-// networkCard shows how to reach the panel from other devices on the LAN
-// (item 9). Read-only — exposure itself is the select above; this just renders
-// the URLs to type on a phone, or a hint when the panel is local-only.
-function networkCard() {
-  const card = h('div', { class: 'card' }, [
-    h('h3', { i18n: 'settings.network.title' }),
-    h('p', { class: 'hint', i18n: 'settings.network.hint' }),
-  ]);
-  const body = h('div');
-  card.append(body);
-  (async () => {
-    try {
-      const d = await api.get('/api/network/addresses');
-      body.innerHTML = '';
-      if (!d.lanEnabled) {
-        body.append(h('p', { class: 'warning-bar', i18n: 'settings.network.localOnly' }));
-        return;
-      }
-      const urls = d.urls || [];
-      if (urls.length === 0) {
-        body.append(h('p', { class: 'hint', i18n: 'settings.network.localOnly' }));
-      } else {
-        body.append(h('div', { class: 'k', i18n: 'settings.network.urls' }));
-        const ul = h('ul', { style: { margin: '6px 0' } });
-        for (const u of urls) {
-          ul.append(h('li', {}, h('a', { href: u, target: '_blank', rel: 'noopener', text: u })));
-        }
-        body.append(ul);
-      }
-      body.append(h('p', { class: 'hint', i18n: 'settings.network.firewall' }));
-      body.append(h('p', { class: 'hint', i18n: 'settings.network.restartNote' }));
-    } catch (e) { /* non-fatal */ }
-  })();
-  return card;
-}
-
 function backupCard() {
   const fileInp = h('input', { type: 'file', accept: '.zip', 'aria-label': t('settings.backup.import') });
   fileInp.style.display = 'none';
+  // The card sits inside the Backups tab's config form, whose autosave would
+  // otherwise post the tab's pre-import values over the restored manager.json.
+  fileInp.addEventListener('change', (e) => e.stopPropagation());
   const resultBox = h('div', { class: 'hint' });
 
-  const exportBtn = h('a', { class: 'btn-link', href: '/api/backup/export', i18n: 'settings.backup.export' });
+  const exportBtn = h('a', { class: 'btn-link', href: srvUrl('/api/backup/export'), i18n: 'settings.backup.export' });
   const importBtn = h('button', { i18n: 'settings.backup.import',
     onclick: () => fileInp.click() });
 
@@ -4948,20 +5871,25 @@ function backupCard() {
     fd.append('zip', f);
     try {
       const r = await fetch('/api/backup/import', {
+        headers: srvHeaders(),
         method: 'POST', credentials: 'same-origin', body: fd,
       });
       if (!r.ok) throw new Error(await r.text());
       const data = await r.json();
-      resultBox.textContent = `restored: ${(data.restored || []).length}, skipped: ${(data.skipped || []).length}`;
-      toast(t('msg.saved'), 'ok');
-      // Refresh config view so restored values surface.
+      const msg = t('settings.backup.importResult')
+        .replace('{restored}', (data.restored || []).length).replace('{skipped}', (data.skipped || []).length);
+      resultBox.textContent = msg;
+      toast(msg, 'ok');
+      // Refresh config and redraw the tab so its inputs show the restored
+      // values; stale inputs would revert them on the next edit.
       State.config = await api.get('/api/config');
+      if (resultBox.isConnected) await navigate(currentRoute());
     } catch (e) { handleErr(e); }
     fileInp.value = '';
   };
 
   return h('div', { class: 'card' }, [
-    h('h3', { i18n: 'settings.backup' }),
+    cardTitle('i-sync', 'settings.backup'),
     h('p', { class: 'hint', i18n: 'settings.backup.hint' }),
     h('div', { class: 'actions' }, [exportBtn, importBtn, fileInp]),
     resultBox,
@@ -5027,64 +5955,99 @@ function setTheme(mode) {
 // --------------------------------------------------------------------- sync / import
 
 Views.sync = async (root) => {
-  const src = h('input', { type: 'text', placeholder: 'F:\\SteamLibrary\\steamapps\\common\\DayZServer' });
+  const src = h('input', { type: 'text', placeholder: 'F:\\SteamLibrary\\steamapps\\common\\DayZServer',
+    'aria-label': t('sync.source'), list: 'sync-recent' });
+  src.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runPreview(); } });
   const out = h('div');
-  const status = h('div', { class: 'hint' });
+  // Folders imported from before, offered as suggestions (this browser only).
+  let recent = [];
+  try { recent = JSON.parse(localStorage.getItem('syncRecent') || '[]').filter(p => typeof p === 'string').slice(0, 6); } catch {}
+  const recentList = h('datalist', { id: 'sync-recent' }, recent.map(p => h('option', { value: p })));
+  const remember = (dir) => {
+    recent = [dir, ...recent.filter(p => p !== dir)].slice(0, 6);
+    try { localStorage.setItem('syncRecent', JSON.stringify(recent)); } catch {}
+  };
+  // Another server of this panel as the source: no path to type.
+  const others = (Srv.list || []).filter(s => s.id !== Srv.id && s.dir);
+  const srvSel = others.length ? h('select', { 'aria-label': t('sync.fromServer') }, [
+    h('option', { value: '', i18n: 'sync.fromServer.pick' }),
+    ...others.map(s => h('option', { value: s.dir, text: s.name })),
+  ]) : null;
+  if (srvSel) srvSel.onchange = () => { if (srvSel.value) { src.value = srvSel.value; runPreview(); } };
 
   const runPreview = async () => {
     out.innerHTML = '';
-    status.textContent = '';
-    if (!src.value.trim()) return;
-    try {
-      const p = await api.post('/api/import/preview', { sourceDir: src.value.trim() });
-      const copyMods = h('input', { type: 'checkbox', checked: true });
-      const copyCfg  = h('input', { type: 'checkbox' });
-      const missionSel = h('select', {}, [h('option', { value: '', text: '—' }),
-        ...(p.missions || []).map(m => h('option', { value: m, text: m }))]);
-      if (p.mission) missionSel.value = p.mission;
-      const modsList = (p.mods || []).length
-        ? h('ul', {}, (p.mods || []).map(m => h('li', { text: m })))
-        : h('p', { class: 'hint', text: '—' });
-      out.append(
-        h('div', { class: 'card' }, [
-          h('h3', { i18n: 'sync.preview' }),
-          h('div', {}, [h('label', { i18n: 'sync.mods' }), modsList]),
-          h('div', {}, [h('label', { i18n: 'sync.cfgMission' }), h('code', { text: p.mission || '—' })]),
-          h('div', {}, [h('label', {}, [copyMods, h('span', { i18n: 'sync.copyMods' })])]),
-          h('div', {}, [h('label', {}, [copyCfg,  h('span', { i18n: 'sync.copyCfg'  })])]),
-          h('div', {}, [h('label', { i18n: 'sync.mission' }), missionSel]),
-          h('div', { class: 'actions' }, [
-            h('button', { class: 'primary', i18n: 'sync.apply', onclick: async () => {
-              try {
-                const r = await api.post('/api/import/apply', {
-                  sourceDir: src.value.trim(),
-                  copyMods: copyMods.checked,
-                  copyCfg: copyCfg.checked,
-                  mission: missionSel.value,
-                });
-                status.textContent = t('sync.done') + ' ' + (r.copiedMods || []).join(', ');
-                // A mod that could not be copied used to vanish from the
-                // result with no message at all.
-                if ((r.failedMods || []).length) {
-                  toast(r.failedMods.join('; '), 'error');
-                }
-                State.config = await api.get('/api/config');
-              } catch (e) { handleErr(e); }
-            }}),
-          ]),
-        ]),
-      );
-    } catch (e) { handleErr(e); }
+    const dir = src.value.trim();
+    if (!dir) { toast(t('sync.needSource'), 'warn'); src.focus(); return; }
+    let p;
+    try { p = await api.post('/api/import/preview', { sourceDir: dir }); }
+    catch (e) { handleErr(e); return; }
+    remember(dir);
+    const missing = new Set(p.missingMissions || []);
+    const copyMods = h('input', { type: 'checkbox', checked: true });
+    const copyCfg  = h('input', { type: 'checkbox' });
+    // "Don't change" by default: switching the mission is a choice of its
+    // own, not a side effect of importing mods.
+    const missionSel = h('select', { 'aria-label': t('sync.mission') }, [h('option', { value: '', i18n: 'sync.mission.keep' }),
+      ...(p.missions || []).map(m => h('option', { value: m, text: missing.has(m) ? m + ' — ' + t('sync.mission.willCopy') : m }))]);
+    const modsList = (p.mods || []).length
+      ? h('ul', {}, (p.mods || []).map(m => h('li', { text: m })))
+      : h('p', { class: 'hint', text: '—' });
+    // The result shows here, under the button that started it.
+    const result = h('div', { class: 'sync-result' });
+    const inputs = [copyMods, copyCfg, missionSel];
+    const applyBtn = h('button', { class: 'primary', i18n: 'sync.apply' });
+    applyBtn.onclick = () => withBusy(applyBtn, async () => {
+      // Copying whole @mod folders takes a while; nothing may change meanwhile.
+      inputs.forEach(el => { el.disabled = true; });
+      result.innerHTML = '';
+      try {
+        const r = await api.post('/api/import/apply', {
+          sourceDir: dir,
+          copyMods: copyMods.checked,
+          copyCfg: copyCfg.checked,
+          mission: missionSel.value,
+        });
+        State.config = await api.get('/api/config');
+        const copied = r.copiedMods || [], failed = r.failedMods || [];
+        const lines = [h('div', { i18n: 'sync.done' })];
+        if (copyMods.checked) {
+          lines.push(h('div', { text: copied.length ? tn('sync.copiedMods', { n: copied.length, list: copied.join(', ') }) : t('sync.noNewMods') }));
+        }
+        if (r.copiedMission) lines.push(h('div', { text: tn('sync.copiedMission', { name: r.copiedMission }) }));
+        if (r.missionError) lines.push(h('div', { class: 'warn-text', text: tn('sync.missionFailed', { name: r.mission }) }));
+        // A mod that could not be copied used to vanish from the result.
+        for (const f of failed) lines.push(h('div', { class: 'warn-text', text: f }));
+        result.append(h('div', { class: (failed.length || r.missionError) ? 'warning-bar' : 'ok-bar' }, lines),
+          h('div', { class: 'actions' }, [h('button', { class: 'secondary', i18n: 'profiles.openMods', onclick: () => navigate('mods') })]));
+      } catch (e) { handleErr(e); }
+      finally { inputs.forEach(el => { el.disabled = false; }); }
+    });
+    out.append(
+      h('div', { class: 'card' }, [
+        h('h3', { i18n: 'sync.preview' }),
+        h('div', {}, [h('label', { i18n: 'sync.mods' }), modsList]),
+        h('div', {}, [h('label', { i18n: 'sync.cfgMission' }), h('code', { text: p.mission || '—' })]),
+        h('div', {}, [h('label', {}, [copyMods, h('span', { i18n: 'sync.copyMods' })])]),
+        h('div', {}, [h('label', {}, [copyCfg,  h('span', { i18n: 'sync.copyCfg'  })])]),
+        h('div', {}, [h('label', { i18n: 'sync.mission' }), missionSel]),
+        h('div', { class: 'actions' }, [applyBtn]),
+        result,
+      ]),
+    );
+    applyI18n();
   };
 
   root.append(
+    pageHeader('nav.sync', 'sync.subtitle'),
     h('div', { class: 'card' }, [
-      withHelp(h('h2', { i18n: 'sync.title' }), 'sync.import'),
+      cardTitle('i-sync', 'sync.title', 'sync.import'),
       h('p', { class: 'hint', i18n: 'sync.hint' }),
+      srvSel ? h('div', { class: 'field' }, [h('label', { i18n: 'sync.fromServer' }), srvSel]) : null,
       h('label', { i18n: 'sync.source' }),
-      h('div', { class: 'row' }, [src, h('button', { i18n: 'sync.preview', onclick: runPreview })]),
-      status,
-    ]),
+      h('div', { class: 'row path-row' }, [src, h('button', { class: 'primary', i18n: 'sync.preview', onclick: () => runPreview() })]),
+      recentList,
+    ].filter(Boolean)),
     out,
   );
 };
@@ -5093,22 +6056,36 @@ Views.sync = async (root) => {
 
 Views.profiles = async (root) => {
   const tree = h('div', { class: 'left' });
-  const editor = h('textarea', { style: { height: '60vh', fontFamily: 'monospace' }, placeholder: t('profiles.empty') });
+  const editor = h('textarea', { style: { height: '60vh', fontFamily: 'monospace' }, placeholder: t('files.selectFile'), 'aria-label': t('files.editor') });
+  // Which file Save writes: mod folders hold dozens of look-alike JSONs.
+  const pathLabel = h('div', { class: 'hint mono files-path' });
   const savedPath = { path: '' };
   let cm = null;
+  let loadedText = '';
+  const isDirty = () => !!savedPath.path && getValue() !== loadedText;
+  root._isDirty = isDirty;
   const getValue = () => cm ? cm.getValue() : editor.value;
   const setValue = (v) => { if (cm) cm.setValue(v || ''); else editor.value = v || ''; };
   const setMode  = (p) => { if (cm) cm.setOption('mode', CM.modeFor(p)); };
+  const markActive = () => {
+    for (const n of tree.querySelectorAll('.tree-node[data-path]')) n.classList.toggle('active', n.dataset.path === savedPath.path);
+  };
 
   async function doSave() {
     if (!savedPath.path) return;
     try {
       await api.post('/api/profiles/write', { path: savedPath.path, content: getValue() });
-      toast(t('files.save'), 'ok');
+      loadedText = getValue();
+      toast(t('msg.saved'), 'ok');
     } catch (e) { handleErr(e); }
   }
   const savebtn = h('button', { class: 'primary', i18n: 'files.save', disabled: true, title: 'Ctrl+S',
     onclick: doSave });
+  const reloadBtn = h('button', { class: 'secondary', i18n: 'files.reload', disabled: true, onclick: async () => {
+    if (!savedPath.path) return;
+    if (isDirty() && !(await confirmModal(t('refresh.discard'), { danger: true }))) return;
+    if (await openFile(savedPath.path)) toast(t('refresh.done'), 'ok');
+  } });
   root._save = doSave;
 
   async function openFile(path) {
@@ -5116,11 +6093,25 @@ Views.profiles = async (root) => {
       const r = await api.get('/api/profiles/read?path=' + encodeURIComponent(path));
       setMode(path);
       setValue(r.content);
+      loadedText = getValue();
       savedPath.path = path;
-      savebtn.disabled = false;
-    } catch (e) { handleErr(e); }
+      pathLabel.textContent = path;
+      savebtn.disabled = reloadBtn.disabled = false;
+      markActive();
+      return true;
+    } catch (e) { handleErr(e); return false; }
   }
 
+  // Opening another file used to replace unsaved edits without a word.
+  async function pickFile(path) {
+    if (path === savedPath.path && isDirty()) return; // already open, keep the edits
+    if (isDirty() && !(await confirmModal(tn('eventmap.discard', { name: savedPath.path }), { danger: true, okText: t('action.discard') }))) return;
+    if (await openFile(path) && window.matchMedia('(max-width: 900px)').matches) {
+      editorCol.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  // Returns how many entries the folder has (-1 when it could not be read).
   async function renderDir(rel) {
     tree.innerHTML = '';
     if (rel) {
@@ -5129,30 +6120,49 @@ Views.profiles = async (root) => {
     }
     try {
       const r = await api.get('/api/profiles/tree?path=' + encodeURIComponent(rel));
-      if (!(r.entries || []).length) {
+      const entries = r.entries || [];
+      if (!entries.length) {
         tree.appendChild(h('p', { class: 'hint', i18n: 'profiles.empty' }));
       }
-      for (const e of (r.entries || [])) {
+      for (const e of entries) {
         if (e.isDir) {
           tree.appendChild(h('div', { class: 'tree-node dir', text: e.name + '/', onclick: () => renderDir(e.path) }));
         } else {
-          tree.appendChild(h('div', { class: 'tree-node', text: e.name, onclick: () => openFile(e.path) }));
+          tree.appendChild(h('div', { class: 'tree-node', 'data-path': e.path, text: e.name, onclick: () => pickFile(e.path) }));
         }
       }
-    } catch (e) { handleErr(e); }
+      markActive();
+      return entries.length;
+    } catch (e) { handleErr(e); return -1; }
   }
 
+  const editorCol = h('div', {}, [pathLabel, editor, h('div', { class: 'actions' }, [
+    savebtn,
+    reloadBtn,
+    revealBtn(() => ({ kind: 'profilesfile', path: savedPath.path })),
+  ])]);
+  const twoCol = h('div', { class: 'two-col' }, [tree, editorCol]);
   root.append(
+    pageHeader('nav.profiles', 'profiles.subtitle'),
     h('div', { class: 'card' }, [
-      h('h2', { i18n: 'profiles.title' }),
       h('p', { class: 'hint', i18n: 'profiles.hint' }),
-      h('div', { class: 'two-col' }, [
-        tree,
-        h('div', {}, [editor, h('div', { class: 'actions' }, [savebtn])]),
-      ]),
+      twoCol,
     ]),
   );
-  await renderDir('');
+  // Nothing written by mods yet: say so with a way forward instead of a
+  // full-size blank editor.
+  if (await renderDir('') === 0) {
+    twoCol.replaceWith(h('div', { class: 'empty-state' }, [
+      h('div', { class: 'es-icon', html: svgIcon('i-profiles', 34) }),
+      h('div', { class: 'es-title', i18n: 'profiles.none.title' }),
+      h('div', { class: 'es-hint', i18n: 'profiles.empty' }),
+      h('div', { class: 'actions' }, [
+        h('button', { class: 'secondary', i18n: 'profiles.openMods', onclick: () => navigate('mods') }),
+        revealBtn({ kind: 'profiles' }),
+      ]),
+    ]));
+    return;
+  }
   try {
     cm = await CM.mount(editor, { mode: null });
     root._teardown = () => { try { cm && cm.toTextArea(); } catch {} };
@@ -5217,9 +6227,32 @@ async function main() {
     const earlyLang = localStorage.getItem('lang') || 'en';
     try { await loadI18n(earlyLang); } catch {}
 
+    // Panel login: the window this computer opened signs in with its one-time
+    // token; anyone else gets the login screen (in their browser's language
+    // on first visit).
+    const auth = State.info.auth || {};
+    if (auth.enabled && !auth.authenticated) {
+      if (!(await tryLocalAutologin())) {
+        if (!localStorage.getItem('lang')) {
+          const bl = matchBrowserLang();
+          if (bl && bl !== State.lang) { try { await loadI18n(bl); } catch {} }
+        }
+        await showLogin();
+      }
+      State.info = await api.get('/api/info');
+    } else if (/autologin=/.test(location.hash)) {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+
     State.config = await api.get('/api/config');
-    if (State.config.language && State.config.language !== State.lang) {
-      await loadI18n(State.config.language);
+    let wantLang = State.config.language;
+    // A brand-new install greets the admin in their browser's language
+    // (uk-UA → Українська, pt-BR → Português do Brasil…) instead of English.
+    if (!State.config.firstRunDone && !localStorage.getItem('lang')) {
+      wantLang = matchBrowserLang() || wantLang;
+    }
+    if (wantLang && wantLang !== State.lang) {
+      await loadI18n(wantLang);
     }
     fillLangSelect(document.getElementById('lang-switch'), State.lang, true);
     document.getElementById('lang-switch').onchange = async e => {
@@ -5239,6 +6272,10 @@ async function main() {
       } catch (err) { handleErr(err); }
     };
     await ensureFirstRunDone();
+    // Multi-server: the switcher, and the server list the dashboard and the
+    // command palette use.
+    await setupServerSwitcher();
+    setupLogoutButton();
     await refreshStatus();
     if (window._statusInterval) clearInterval(window._statusInterval);
     window._statusInterval = setInterval(refreshStatus, 5000);
@@ -5259,8 +6296,7 @@ async function main() {
 }
 
 function currentRoute() {
-  const active = document.querySelector('.nav a.active');
-  return active ? active.dataset.route : 'dashboard';
+  return _route;
 }
 
 // startWatchlistPing polls for connects by watch-flagged players and toasts new
@@ -5347,118 +6383,132 @@ async function openChangelog(auto) {
 // --------------------------------------------------------------------- battleye
 
 Views.battleye = async (root) => {
+  const myNav = _navSeq;
   const d = await api.get('/api/battleye/list');
+  if (myNav !== _navSeq) return;
   const wrap = h('div');
   if (State.serverStatus.running) wrap.append(runningBanner());
 
-  const fileSelect = h('select', {});
-  for (const f of d.files) {
-    const label = f.exists ? `${f.name} (${bytes(f.size)}${f.lineHint ? ', ' + f.lineHint : ''})` : `${f.name} (empty)`;
+  // bans.txt has one editor, Players → Bans (card below): listed here as raw
+  // text too, it was a second editor whose Ctrl+S reverted the other's saves.
+  const files = (d.files || []).filter(f => f.kind !== 'bans' && f.name.toLowerCase() !== 'bans.txt');
+  const fileOf = (name) => files.find(f => f.name === name) || {};
+  const fileSelect = h('select', { 'aria-label': t('battleye.file') });
+  for (const f of files) {
+    const label = f.exists ? `${f.name} (${bytes(f.size)})` : `${f.name} (${t('file.empty')})`;
     fileSelect.append(h('option', { value: f.name, text: label }));
   }
-  const editorHost = h('textarea', { rows: 22, style: { width: '100%', fontFamily: 'monospace' } });
+  const firstExisting = files.find(f => f.exists);
+  if (firstExisting) fileSelect.value = firstExisting.name;
+  const fileDesc = h('p', { class: 'hint' });
+  const editorHost = h('textarea', { rows: 22, style: { width: '100%', fontFamily: 'monospace' }, 'aria-label': t('files.editor') });
   let cm = null;
+  let loadedText = '', shownName = '';
   const getValue = () => cm ? cm.getValue() : editorHost.value;
   const setValue = (v) => { if (cm) cm.setValue(v || ''); else editorHost.value = v || ''; };
+  const isDirty = () => !!shownName && !fileOf(shownName).readOnly && getValue() !== loadedText;
+  root._isDirty = isDirty;
 
+  const saveBtn = h('button', { class: 'primary', i18n: 'action.save', title: 'Ctrl+S', onclick: () => doSave() });
+  // One line on what the selected file is; the settings are read-only here.
+  const describe = () => {
+    const f = fileOf(shownName);
+    const ro = !!f.readOnly;
+    fileDesc.innerHTML = '';
+    fileDesc.append(h('span', { i18n: f.kind === 'settings' ? 'battleye.kind.settings' : f.kind === 'active' ? 'battleye.kind.active' : 'battleye.kind.file' }));
+    if (ro) fileDesc.append(' ', h('button', { type: 'button', class: 'small btn-link', i18n: 'battleye.openRcon', onclick: () => navigate('rcon') }));
+    saveBtn.disabled = ro;
+    if (cm) cm.setOption('readOnly', ro); else editorHost.readOnly = ro;
+  };
   const load = async () => {
+    if (!fileSelect.value) return;
     try {
       const r = await api.get('/api/battleye/read?name=' + encodeURIComponent(fileSelect.value));
       setValue(r.content || '');
+      loadedText = getValue();
+      shownName = fileSelect.value;
+      describe();
     } catch (e) { handleErr(e); }
   };
-  fileSelect.onchange = load;
+  // Switching files used to drop unsaved edits; Cancel puts the select back.
+  fileSelect.onchange = async () => {
+    if (isDirty() && !(await confirmModal(tn('eventmap.discard', { name: shownName }), { danger: true, okText: t('action.discard') }))) {
+      fileSelect.value = shownName;
+      return;
+    }
+    await load();
+  };
+  const reloadBtn = h('button', { class: 'secondary', i18n: 'files.reload', onclick: async () => {
+    if (isDirty() && !(await confirmModal(t('refresh.discard'), { danger: true }))) return;
+    await load();
+  } });
 
   async function doSave() {
+    if (!shownName || fileOf(shownName).readOnly) return;
     try {
-      await api.post('/api/battleye/write', { name: fileSelect.value, content: getValue() });
+      await api.post('/api/battleye/write', { name: shownName, content: getValue() });
+      loadedText = getValue();
       toast(t('msg.saved'), 'ok');
     } catch (e) { handleErr(e); }
   }
   root._save = doSave;
 
-  wrap.append(h('div', { class: 'card' }, [
-    h('h2', { i18n: 'nav.battleye' }),
-    h('p', { class: 'hint', text: d.dir }),
-    h('div', { class: 'toolbar' }, [
-      fileSelect,
-      h('button', { i18n: 'action.reload', onclick: load }),
-      h('button', { class: 'primary', i18n: 'action.save', title: 'Ctrl+S', onclick: doSave }),
-    ]),
-    editorHost,
-    h('p', { class: 'hint', i18n: 'battleye.hint' }),
-  ]));
-
-  // ---- Structured bans.txt editor. Hand-editing the `GUID minutes reason`
-  // format is the #1 way admins silently break every ban; saving here also
-  // issues RCon `loadBans` so changes apply to a live server.
-  const bansCard = h('div', { class: 'card' }, [
-    withHelp(h('h3', { i18n: 'battleye.bans.title' }), 'battleye.bans'),
-    h('p', { class: 'hint', i18n: 'battleye.bans.hint' }),
-  ]);
-  const bansHost = h('div');
-  bansCard.append(bansHost);
-  let bans = [];
-  function renderBans() {
-    bansHost.innerHTML = '';
-    const tbl = h('table');
-    tbl.append(h('thead', {}, h('tr', {}, [
-      h('th', { i18n: 'battleye.bans.id' }),
-      h('th', { i18n: 'rcon.ban.minutes' }),
-      h('th', { i18n: 'rcon.reason' }),
-      h('th', { text: '' }),
-    ])));
-    const tb = h('tbody');
-    bans.forEach((ban, i) => {
-      const idInp = h('input', { class: 'inline-cell mono', type: 'text', value: ban.id });
-      const minInp = h('input', { class: 'inline-cell', type: 'text', value: ban.minutes, style: { maxWidth: '90px' } });
-      const rsnInp = h('input', { class: 'inline-cell', type: 'text', value: ban.reason });
-      idInp.onchange = () => { ban.id = idInp.value.trim(); };
-      minInp.onchange = () => { ban.minutes = minInp.value.trim(); };
-      rsnInp.onchange = () => { ban.reason = rsnInp.value; };
-      tb.append(h('tr', {}, [
-        h('td', {}, idInp),
-        h('td', {}, minInp),
-        h('td', {}, rsnInp),
-        h('td', {}, h('button', { class: 'danger', text: '×', onclick: () => { bans.splice(i, 1); renderBans(); } })),
-      ]));
-    });
-    tbl.append(tb);
-    if (!bans.length) {
-      bansHost.append(h('p', { class: 'hint', text: '—' }));
-    } else {
-      bansHost.append(h('div', { class: 'table-scroll' }, tbl));
-    }
-    bansHost.append(h('div', { class: 'actions' }, [
-      h('button', { i18n: 'battleye.bans.add', onclick: () => { bans.push({ id: '', minutes: '0', reason: '' }); renderBans(); applyI18n(); } }),
-      h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => withBusy(e.currentTarget, async () => {
-        try {
-          const r = await api.post('/api/battleye/bans', { bans });
-          toast(r.reloaded ? t('battleye.bans.reloaded') : t('msg.saved'), 'ok');
-          await loadBans();
-        } catch (err) { handleErr(err); }
-      })}),
+  wrap.prepend(pageHeader('nav.battleye', 'battleye.subtitle'));
+  if (!files.length) {
+    wrap.append(h('div', { class: 'card' }, [
+      cardTitle('i-battleye', 'files.title'),
+      h('div', { class: 'empty-state' }, [
+        h('div', { class: 'es-hint', i18n: 'battleye.none' }),
+        h('div', { class: 'actions' }, [
+          h('button', { class: 'secondary', i18n: 'battleye.openRcon', onclick: () => navigate('rcon') }),
+          revealBtn({ kind: 'battleye' }),
+        ]),
+      ]),
+    ]));
+  } else {
+    wrap.append(h('div', { class: 'card' }, [
+      cardTitle('i-battleye', 'files.title'),
+      h('div', { class: 'toolbar' }, [
+        fileSelect,
+        reloadBtn,
+        saveBtn,
+        revealBtn(() => ({ path: d.dir + '/' + (fileSelect.value || '') })),
+      ]),
+      fileDesc,
+      editorHost,
+      h('p', { class: 'hint mono', text: d.dir }),
+      h('p', { class: 'hint', i18n: 'battleye.hint' }),
     ]));
   }
-  async function loadBans() {
-    try {
-      const r = await api.get('/api/battleye/bans');
-      bans = r.bans || [];
-      renderBans();
-      applyI18n();
-    } catch (e) { bansHost.textContent = e.message; }
-  }
-  wrap.append(bansCard);
 
+  // One ban list: Players → Bans bans by Steam ID, GUID or IP, keeps the
+  // history and who banned, and lists bans.txt too. The table that used to be
+  // here bypassed that history.
+  const bansCount = h('span', { class: 'hint' });
+  wrap.append(h('div', { class: 'card' }, [
+    cardTitle('i-shield', 'battleye.bans.title'),
+    h('p', { class: 'hint', i18n: 'battleye.bans.moved' }),
+    h('div', { class: 'actions' }, [
+      h('button', { class: 'primary', i18n: 'battleye.bans.open', onclick: () => {
+        try { localStorage.setItem('playersTab', 'bans'); } catch {}
+        navigate('players');
+      } }),
+      bansCount,
+    ]),
+  ]));
   root.append(wrap);
-  await load();
-  await loadBans();
+  api.get('/api/battleye/bans').then(r => {
+    bansCount.textContent = tn('battleye.bans.count', { n: (r.bans || []).filter(b => !b.expired).length });
+  }).catch(() => {});
 
+  if (!files.length) return;
+  await load();
+  if (myNav !== _navSeq) return;
   // Registered BEFORE the await: navigating away mid-mount must not leave the
   // next view's teardown overwritten by this one.
   root._teardown = () => { try { cm && cm.toTextArea(); } catch {} };
   try {
-    cm = await CM.mount(editorHost, { mode: null, lineWrapping: true });
+    cm = await CM.mount(editorHost, { mode: null, lineWrapping: true, readOnly: !!fileOf(shownName).readOnly });
     // Re-apply initial value that was set before mount.
     if (editorHost.value && !cm.getValue()) cm.setValue(editorHost.value);
   } catch (e) { console.warn('CodeMirror load failed', e); }
@@ -5473,7 +6523,7 @@ Views.missiondb = async (root) => {
 
   const fileSelect = h('select', {});
   for (const f of d.files) {
-    const label = f.exists ? `${f.path} (${bytes(f.size)})` : `${f.path} (missing)`;
+    const label = f.exists ? `${f.path} (${bytes(f.size)})` : `${f.path} (${t('file.missing')})`;
     const opt = h('option', { value: f.path, text: label });
     if (!f.exists) opt.disabled = true;
     fileSelect.append(opt);
@@ -5501,13 +6551,14 @@ Views.missiondb = async (root) => {
   }
   root._save = doSave;
 
+  wrap.prepend(pageHeader('nav.missionDb', 'missionDb.subtitle'));
   wrap.append(h('div', { class: 'card' }, [
-    h('h2', { i18n: 'nav.missionDb' }),
-    h('p', { class: 'hint', text: d.dir }),
+    h('p', { class: 'hint mono', text: d.dir }),
     h('div', { class: 'toolbar' }, [
       fileSelect,
       h('button', { i18n: 'action.reload', onclick: load }),
       h('button', { class: 'primary', i18n: 'action.save', title: 'Ctrl+S', onclick: doSave }),
+      revealBtn(() => ({ path: d.dir + '/' + (fileSelect.value || '') })),
     ]),
     editorHost,
     h('p', { class: 'hint', i18n: 'missionDb.hint' }),
@@ -5535,345 +6586,8 @@ function playerNameLink(p, opts = {}) {
     onclick: () => openPlayerProfile(p.key) }, opts));
 }
 
-// banBadgeLabel turns bans.txt minutes-remaining into "Banned" (permanent) or
-// "Banned · 3d left". "0"/"-1"/blank all mean permanent in BattlEye.
-function banBadgeLabel(mins) {
-  const n = parseInt(mins, 10);
-  if (!n || n <= 0) return t('profile.banned');
-  const left = n >= 1440 ? Math.round(n / 1440) + 'd' : (n >= 60 ? Math.round(n / 60) + 'h' : n + 'm');
-  return t('profile.banned') + ' · ' + t('profile.banLeft').replace('{left}', left);
-}
-
-// openPlayerProfile shows a per-player admin panel: identity, stats, moderation
-// actions (ban/unban/kick/message + note & watch) and recent combat.
-async function openPlayerProfile(key) {
-  let d;
-  try { d = await api.get('/api/players/profile?key=' + encodeURIComponent(key)); }
-  catch (e) { handleErr(e); return; }
-  const p = d.player || {};
-  const m = openModal({ title: p.name || '—', wide: true });
-  const reopen = () => { m.close(); openPlayerProfile(key); };
-
-  const badges = h('div', { class: 'profile-badges' }, [
-    p.online ? h('span', { class: 'badge ok', i18n: 'players.onlineBadge' }) : null,
-    p.watch ? h('span', { class: 'badge warn', text: '★ ' + t('players.watched') }) : null,
-    d.banned ? h('span', { class: 'badge err', text: banBadgeLabel(d.banMinutes) }) : null,
-  ]);
-  const identity = h('div', { class: 'profile-id' }, [
-    h('div', {}, [h('span', { class: 'hint', i18n: 'profile.guid' }), h('span', { class: 'mono', text: ' ' + (p.id || '—') })]),
-    (p.aliases && p.aliases.length) ? h('div', { class: 'hint', text: t('players.aliases') + ': ' + p.aliases.join(', ') }) : null,
-    h('div', { class: 'hint', text: fmtWhen(p.firstSeen) + ' → ' + fmtWhen(p.lastSeen) }),
-  ]);
-
-  const kd = p.deaths ? ((p.kills || 0) / p.deaths) : (p.kills || 0);
-  const stat = (label, val) => h('div', { class: 'profile-stat' }, [
-    h('div', { class: 'ps-num', text: val }), h('div', { class: 'hint', i18n: label })]);
-  const stats = h('div', { class: 'profile-stats' }, [
-    stat('col.sessions', String(p.sessions || 0)),
-    stat('col.playtime', fmtMinutes(p.playtimeMinutes || 0)),
-    stat('col.kills', String(p.kills || 0)),
-    stat('col.deaths', String(p.deaths || 0)),
-    stat('col.kd', kd.toFixed(2)),
-  ]);
-
-  // Note + watch.
-  const ta = h('textarea', { rows: '2', style: { width: '100%', height: '58px', minHeight: '58px' }, placeholder: t('players.note.placeholder') });
-  ta.value = p.note || '';
-  const watchCb = h('input', { type: 'checkbox' });
-  watchCb.checked = !!p.watch;
-  async function saveNote(btn) {
-    await withBusy(btn, async () => {
-      try { await api.post('/api/players/note', { key: p.key, note: ta.value, watch: watchCb.checked }); toast(t('msg.saved'), 'ok'); reopen(); }
-      catch (e) { handleErr(e); }
-    });
-  }
-  const noteRow = h('div', {}, [
-    ta,
-    h('div', { class: 'actions' }, [
-      h('label', { class: 'inline-check' }, [watchCb, h('span', { i18n: 'players.watch.flag' })]),
-      h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => saveNote(e.currentTarget) }),
-    ]),
-  ]);
-
-  // Moderation actions.
-  const actions = h('div', { class: 'actions profile-mod' });
-  // 0 = permanent; otherwise the ban lifts itself after N days (BattlEye counts down).
-  const banDur = h('select', { class: 'ban-dur', title: t('profile.banDur') }, [
-    h('option', { value: '0', i18n: 'profile.banDur.perm' }),
-    h('option', { value: '1', text: t('profile.banDur.days').replace('{n}', 1) }),
-    h('option', { value: '3', text: t('profile.banDur.days').replace('{n}', 3) }),
-    h('option', { value: '7', text: t('profile.banDur.days').replace('{n}', 7) }),
-    h('option', { value: '14', text: t('profile.banDur.days').replace('{n}', 14) }),
-    h('option', { value: '30', text: t('profile.banDur.days').replace('{n}', 30) }),
-  ]);
-  async function doBan(btn) {
-    const days = parseInt(banDur.value, 10) || 0;
-    const durTxt = days > 0 ? t('profile.banDur.days').replace('{n}', days) : t('profile.banDur.perm');
-    if (!(await confirmModal(t('profile.banConfirm').replace('{name}', p.name || '—').replace('{dur}', durTxt), { danger: true, okText: t('profile.ban') }))) return;
-    await withBusy(btn, async () => { try { await api.post('/api/players/ban', { guid: p.id, reason: '', days }); toast(t('profile.banned.msg'), 'ok'); reopen(); } catch (e) { handleErr(e); } });
-  }
-  async function doUnban(btn) {
-    if (!(await confirmModal(t('profile.unbanConfirm').replace('{name}', p.name || '—')))) return;
-    await withBusy(btn, async () => { try { await api.post('/api/players/unban', { guid: p.id }); toast(t('profile.unbanned.msg'), 'ok'); reopen(); } catch (e) { handleErr(e); } });
-  }
-  async function doKick(btn) {
-    if (!(await confirmModal(t('profile.kickConfirm').replace('{name}', p.name || '—')))) return;
-    await withBusy(btn, async () => { try { await api.post('/api/rcon/kick', { playerId: d.onlineId, reason: '' }); toast(t('msg.saved'), 'ok'); reopen(); } catch (e) { handleErr(e); } });
-  }
-  async function doMsg(btn) {
-    const txt = await promptModal(t('profile.messagePrompt').replace('{name}', p.name || '—'), { okText: t('profile.message') });
-    if (!txt) return;
-    await withBusy(btn, async () => { try { await api.post('/api/rcon/say', { playerId: d.onlineId, message: txt }); toast(t('msg.saved'), 'ok'); } catch (e) { handleErr(e); } });
-  }
-  if (d.banned) {
-    actions.append(h('button', { class: 'secondary', i18n: 'profile.unban', onclick: (e) => doUnban(e.currentTarget) }));
-  } else {
-    const b = h('button', { class: 'danger', i18n: 'profile.ban', onclick: (e) => doBan(e.currentTarget) });
-    if (!p.id) { b.disabled = true; b.title = t('profile.noGuid'); banDur.disabled = true; }
-    actions.append(banDur, b);
-  }
-  if (d.onlineId >= 0) {
-    actions.append(
-      h('button', { class: 'secondary', i18n: 'profile.kick', onclick: (e) => doKick(e.currentTarget) }),
-      h('button', { class: 'secondary', i18n: 'profile.message', onclick: (e) => doMsg(e.currentTarget) }),
-    );
-  }
-
-  // Recent combat.
-  const activity = h('div', { class: 'profile-activity' });
-  if (!(d.events && d.events.length)) {
-    activity.append(h('p', { class: 'hint', i18n: 'profile.noActivity' }));
-  } else {
-    for (const k of d.events) {
-      const kind = k.kind || (k.suicide ? 'suicide' : (k.killer ? 'pvp' : 'env'));
-      const by = kind === 'pvp' ? k.killer : (kind === 'env' ? k.source : '');
-      const pieces = [
-        h('span', { class: 'adm-time', text: k.time || '' }),
-        h('span', { class: 'adm-type adm-kill', text: t('kill.kind.' + kind) }),
-      ];
-      if (by) { pieces.push(h('span', { class: 'adm-meta', text: by }), h('span', { class: 'adm-arrow', text: '→' })); }
-      pieces.push(h('span', { class: 'adm-player', text: k.victim }));
-      const meta = [];
-      if (k.weapon) meta.push(k.weapon);
-      if (k.distance) meta.push(k.distance + 'm');
-      if (meta.length) pieces.push(h('span', { class: 'adm-meta', text: '(' + meta.join(', ') + ')' }));
-      activity.append(h('div', { class: 'adm-row' }, pieces));
-    }
-  }
-
-  m.body.append(
-    badges, identity, stats,
-    h('h4', { i18n: 'profile.mod' }), noteRow, actions,
-    h('h4', { i18n: 'profile.activity' }), activity,
-  );
-  applyI18n();
-}
-
-Views.players = async (root) => {
-  const myNav = _navSeq;
-  root.append(pageHeader('nav.players', 'players.subtitle'));
-  { const w = adminLogWarning(); if (w) root.append(w); }
-  let d;
-  try { d = await api.get('/api/players'); }
-  catch (e) { handleErr(e); return; }
-  if (myNav !== _navSeq) return; // ADM ingestion can take a moment
-
-  const list = d.players || [];
-
-  // Summary tiles.
-  const watchTile = h('div', { class: 'metric-num', text: '0' });
-  root.append(h('div', { class: 'grid-4' }, [
-    h('div', { class: 'card' }, [
-      h('h3', { i18n: 'players.total' }),
-      h('div', { class: 'metric-num', text: String(d.total || 0) }),
-    ]),
-    h('div', { class: 'card' }, [
-      h('h3', { i18n: 'players.online' }),
-      h('div', { class: 'metric-num', text: String(d.online || 0) }),
-    ]),
-    h('div', { class: 'card' }, [
-      h('h3', { i18n: 'players.watching' }),
-      watchTile,
-    ]),
-  ]));
-
-  // Note & watch editor — a note survives name changes because it is keyed by
-  // the player's stable Key on the server.
-  async function openNoteEditor(p) {
-    const m = openModal({ title: (p.name || '—') + ' — ' + t('players.note.edit') });
-    const ta = h('textarea', { rows: '4', style: { width: '100%', marginBottom: '10px' },
-      placeholder: t('players.note.placeholder') });
-    ta.value = p.note || '';
-    const watchCb = h('input', { type: 'checkbox' });
-    watchCb.checked = !!p.watch;
-    const save = async (btn) => {
-      await withBusy(btn, async () => {
-        try {
-          await api.post('/api/players/note', { key: p.key, note: ta.value, watch: watchCb.checked });
-          p.note = ta.value.trim();
-          p.watch = watchCb.checked;
-          toast(t('msg.saved'), 'ok');
-          m.close();
-          renderAll();
-        } catch (e) { handleErr(e); }
-      });
-    };
-    m.body.append(
-      ta,
-      h('label', { class: 'inline-check', style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' } }, [
-        watchCb, h('span', { i18n: 'players.watch.flag' }),
-      ]),
-      h('div', { class: 'actions' }, [
-        h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => save(e.currentTarget) }),
-        h('button', { i18n: 'action.cancel', onclick: () => m.close() }),
-      ]),
-    );
-    applyI18n();
-    setTimeout(() => ta.focus(), 0);
-  }
-
-  async function toggleWatch(p) {
-    const nv = !p.watch;
-    try {
-      await api.post('/api/players/note', { key: p.key, note: p.note || '', watch: nv });
-      p.watch = nv;
-      renderAll();
-    } catch (e) { handleErr(e); }
-  }
-
-  // Star button that toggles the watch flag inline.
-  function watchStar(p) {
-    return h('button', {
-      class: 'star-btn' + (p.watch ? ' on' : ''),
-      title: t(p.watch ? 'players.watch.off' : 'players.watch.on'),
-      text: p.watch ? '★' : '☆',
-      onclick: () => toggleWatch(p),
-    });
-  }
-
-  function noteBtn(p) {
-    return h('button', { class: 'icon-btn', title: t('players.note.edit'),
-      text: '✎', onclick: () => openNoteEditor(p) });
-  }
-
-  function playerRow(p) {
-    const nameCell = h('td', {}, [
-      h('div', { style: { fontWeight: '600', display: 'flex', gap: '8px', alignItems: 'center' } }, [
-        playerNameLink(p),
-        p.online ? h('span', { class: 'badge ok', i18n: 'players.onlineBadge' }) : null,
-      ]),
-      p.aliases && p.aliases.length
-        ? h('div', { class: 'hint', text: t('players.aliases') + ': ' + p.aliases.join(', ') })
-        : null,
-      p.note ? h('div', { class: 'player-note', text: p.note }) : null,
-    ]);
-    return h('tr', { class: p.watch ? 'row-watch' : '' }, [
-      h('td', { class: 'star-cell' }, watchStar(p)),
-      nameCell,
-      h('td', { class: 'mono', text: p.id ? p.id.slice(0, 12) + (p.id.length > 12 ? '…' : '') : '—', title: p.id || '' }),
-      h('td', { text: fmtWhen(p.firstSeen) }),
-      h('td', { text: fmtWhen(p.lastSeen) }),
-      h('td', { class: 'num', text: String(p.sessions || 0) }),
-      h('td', { class: 'num', text: fmtMinutes(p.playtimeMinutes || 0) }),
-      h('td', { class: 'num', text: String(p.kills || 0) }),
-      h('td', { class: 'num', text: String(p.deaths || 0) }),
-      h('td', { class: 'star-cell' }, noteBtn(p)),
-    ]);
-  }
-
-  // Watchlist card — only shown when at least one player is flagged.
-  const watchCard = h('div', { class: 'card' }, [h('h3', { i18n: 'players.watchlist' })]);
-  root.append(watchCard);
-
-  // Player table.
-  const tableCard = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.players' })]);
-  root.append(tableCard);
-
-  function tableHead() {
-    return h('thead', {}, h('tr', {}, [
-      h('th', { text: '' }),
-      h('th', { i18n: 'col.name' }),
-      h('th', { i18n: 'col.guid' }),
-      h('th', { i18n: 'col.firstSeen' }),
-      h('th', { i18n: 'col.lastSeen' }),
-      h('th', { class: 'num', i18n: 'col.sessions' }),
-      h('th', { class: 'num', i18n: 'col.playtime' }),
-      h('th', { class: 'num', i18n: 'col.kills' }),
-      h('th', { class: 'num', i18n: 'col.deaths' }),
-      h('th', { text: '' }),
-    ]));
-  }
-
-  function renderWatch() {
-    watchCard.innerHTML = '';
-    watchCard.append(h('h3', { i18n: 'players.watchlist' }));
-    const watched = list.filter(p => p.watch);
-    watchTile.textContent = String(watched.length);
-    if (!watched.length) {
-      watchCard.style.display = 'none';
-      return;
-    }
-    watchCard.style.display = '';
-    const tbl = h('table');
-    tbl.append(tableHead());
-    const tb = h('tbody');
-    for (const p of watched) tb.append(playerRow(p));
-    tbl.append(tb);
-    watchCard.append(h('div', { class: 'table-scroll' }, tbl));
-  }
-
-  function renderTable() {
-    tableCard.innerHTML = '';
-    tableCard.append(h('h2', { i18n: 'nav.players' }));
-    if (!list.length) {
-      tableCard.append(h('div', { class: 'empty-state' }, [
-        h('div', { class: 'es-hint', i18n: 'players.noData' }),
-      ]));
-      return;
-    }
-    const tbl = h('table');
-    tbl.append(tableHead());
-    const tb = h('tbody');
-    for (const p of list.slice(0, 500)) tb.append(playerRow(p));
-    tbl.append(tb);
-    tableCard.append(h('div', { class: 'table-scroll' }, tbl));
-  }
-
-  function renderAll() { renderWatch(); renderTable(); applyI18n(); }
-  renderAll();
-
-  // Killfeed.
-  const kfCard = h('div', { class: 'card' }, [h('h3', { i18n: 'players.killfeed' })]);
-  const kf = d.killfeed || [];
-  if (!kf.length) {
-    kfCard.append(h('p', { class: 'hint', i18n: 'admlog.noEvents' }));
-  } else {
-    const listEl = h('div', { class: 'adm-list' });
-    for (const k of kf) {
-      // kind is "pvp" | "env" | "suicide". Older data has no kind, so fall
-      // back to the old suicide flag.
-      const kind = k.kind || (k.suicide ? 'suicide' : (k.killer ? 'pvp' : 'env'));
-      const pieces = [
-        h('span', { class: 'adm-time', text: k.time || '' }),
-        h('span', { class: 'adm-type adm-kill', text: t('kill.kind.' + kind) }),
-      ];
-      // Whoever did it: a player, or the zombie/animal/fall that the log named.
-      const by = kind === 'pvp' ? k.killer : (kind === 'env' ? k.source : '');
-      if (by) {
-        pieces.push(h('span', { class: kind === 'pvp' ? 'adm-player' : 'adm-meta', text: by }));
-        pieces.push(h('span', { class: 'adm-arrow', text: '→' }));
-      }
-      pieces.push(h('span', { class: 'adm-player', text: k.victim }));
-      const meta = [];
-      if (k.weapon) meta.push(k.weapon);
-      if (k.distance) meta.push(k.distance + 'm');
-      if (meta.length) pieces.push(h('span', { class: 'adm-meta', text: '(' + meta.join(', ') + ')' }));
-      listEl.append(h('div', { class: 'adm-row' }, pieces));
-    }
-    kfCard.append(listEl);
-  }
-  root.append(kfCard);
-};
+// The Players page, the player profile and the ban / kick dialogs live in
+// players.js.
 
 function fmtWhen(rfc) {
   if (!rfc) return '—';
@@ -5881,14 +6595,19 @@ function fmtWhen(rfc) {
   if (isNaN(d)) return rfc;
   return d.toLocaleDateString() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
+// fmtMinutes renders a duration with the UI language's units ("1 h 4 min",
+// "1 ч 4 мин") — the hard-coded "1h 4m" read as English everywhere.
 function fmtMinutes(min) {
-  if (min < 60) return min + 'm';
-  return Math.floor(min / 60) + 'h ' + (min % 60) + 'm';
+  min = Math.max(0, Math.round(min || 0));
+  if (min < 60) return `${min} ${t('unit.minutes')}`;
+  const hrs = Math.floor(min / 60);
+  if (hrs >= 48) return `${Math.floor(hrs / 24)} ${t('unit.days')} ${hrs % 24} ${t('unit.hours')}`;
+  return `${hrs} ${t('unit.hours')} ${min % 60} ${t('unit.minutes')}`;
 }
-// fmtAge turns a seconds count into a compact "12s" / "3m" / "1h 4m" label.
+// fmtAge turns a seconds count into a short localized "12 s" / "3 min" label.
 function fmtAge(sec) {
   sec = Math.max(0, Math.round(sec || 0));
-  if (sec < 60) return sec + 's';
+  if (sec < 60) return `${sec} ${t('unit.seconds')}`;
   return fmtMinutes(Math.floor(sec / 60));
 }
 
@@ -5897,8 +6616,8 @@ function fmtAge(sec) {
 Views.leaderboard = async (root) => {
   const myNav = _navSeq;
   root.append(pageHeader('nav.leaderboard', 'leaderboard.subtitle'));
-  let d;
-  try { d = await api.get('/api/players'); }
+  let d, bans = { active: [] };
+  try { [d, bans] = await Promise.all([api.get('/api/players'), api.get('/api/bans').catch(() => bans)]); }
   catch (e) { handleErr(e); return; }
   if (myNav !== _navSeq) return;
 
@@ -5909,12 +6628,28 @@ Views.leaderboard = async (root) => {
     return;
   }
 
-  // Each metric knows how to score a player and how to print the score.
+  // Banned players stay off the board unless asked for — a cheater topping
+  // K/D is the last thing it should show — and carry a badge when shown.
+  const bannedIds = new Set();
+  for (const b of bans.active || []) {
+    if (b.expired) continue;
+    if (b.key) bannedIds.add(b.key);
+    if (b.dayzId) bannedIds.add(b.dayzId);
+  }
+  const isBanned = (p) => bannedIds.has(p.key) || (!!p.id && bannedIds.has(p.id));
+  const anyBanned = list.some(isBanned);
+  let showBanned = false;
+  try { showBanned = localStorage.getItem('lbShowBanned') === '1'; } catch {}
+
+  // K/D needs a sample: one lucky kill and no deaths must not top the board.
+  const KD_MIN_KILLS = 5;
+  // Each metric knows how to score a player and who qualifies.
   const metrics = {
-    playtime: { label: 'leaderboard.metric.playtime', val: p => p.playtimeMinutes || 0, fmt: v => fmtMinutes(v) },
-    kills:    { label: 'leaderboard.metric.kills',    val: p => p.kills || 0,           fmt: v => String(v) },
-    kd:       { label: 'leaderboard.metric.kd',       val: p => (p.deaths ? (p.kills || 0) / p.deaths : (p.kills || 0)), fmt: v => v.toFixed(2) },
-    sessions: { label: 'leaderboard.metric.sessions', val: p => p.sessions || 0,        fmt: v => String(v) },
+    playtime: { label: 'leaderboard.metric.playtime', val: p => p.playtimeMinutes || 0 },
+    kills:    { label: 'leaderboard.metric.kills',    val: p => p.kills || 0 },
+    kd:       { label: 'leaderboard.metric.kd',       val: p => (p.deaths ? (p.kills || 0) / p.deaths : (p.kills || 0)),
+      eligible: p => (p.kills || 0) >= KD_MIN_KILLS },
+    sessions: { label: 'leaderboard.metric.sessions', val: p => p.sessions || 0 },
   };
   const medals = ['🥇', '🥈', '🥉'];
   let cur = 'playtime';
@@ -5924,17 +6659,26 @@ Views.leaderboard = async (root) => {
 
   function render() {
     card.innerHTML = '';
-    card.append(h('div', { class: 'lb-metrics' }, [
-      ...Object.keys(metrics).map(k =>
-        h('button', { class: 'lb-tab' + (k === cur ? ' active' : ''), i18n: metrics[k].label,
-          onclick: () => { cur = k; render(); applyI18n(); } })),
-      help('leaderboard.metrics'),
-    ]));
+    const tabs = h('div', { class: 'section-tabs btn-tabs lb-metrics', role: 'tablist' }, Object.keys(metrics).map(k =>
+      h('button', { type: 'button', role: 'tab', class: 'section-tab' + (k === cur ? ' active' : ''),
+        'aria-selected': String(k === cur), i18n: metrics[k].label, onclick: () => { cur = k; render(); } })));
+    const bannedSw = h('input', { type: 'checkbox', class: 'switch' });
+    bannedSw.checked = showBanned;
+    bannedSw.onchange = () => {
+      showBanned = bannedSw.checked;
+      try { localStorage.setItem('lbShowBanned', showBanned ? '1' : '0'); } catch {}
+      render();
+    };
+    card.append(h('div', { class: 'lb-head' }, [
+      tabs, help('leaderboard.metrics'), h('span', { class: 'grow' }),
+      anyBanned ? switchRow(bannedSw, 'leaderboard.showBanned') : null,
+    ].filter(Boolean)));
 
     const m = metrics[cur];
-    const ranked = list.slice()
+    if (m.eligible) card.append(h('p', { class: 'hint lb-note', text: tn('leaderboard.kdMin', { n: KD_MIN_KILLS }) }));
+    const ranked = list
+      .filter(p => (showBanned || !isBanned(p)) && (!m.eligible || m.eligible(p)) && m.val(p) > 0)
       .sort((a, b) => m.val(b) - m.val(a))
-      .filter(p => m.val(p) > 0)
       .slice(0, 50);
 
     if (!ranked.length) {
@@ -5951,11 +6695,13 @@ Views.leaderboard = async (root) => {
       { key: 'kd', i18n: 'col.kd', val: p => (p.deaths ? ((p.kills || 0) / p.deaths) : (p.kills || 0)).toFixed(2) },
       { key: 'sessions', i18n: 'col.sessions', val: p => String(p.sessions || 0) },
     ];
+    // Phone: only the ranked column stays next to the name (pl-hide-sm).
+    const colCls = (c, on) => 'num' + (c.key === cur ? ' ' + on : ' pl-hide-sm');
     const tbl = h('table');
     tbl.append(h('thead', {}, h('tr', {}, [
       h('th', { class: 'lb-rank-h', i18n: 'col.rank' }),
       h('th', { i18n: 'col.name' }),
-      ...cols.map(c => h('th', { class: 'num' + (c.key === cur ? ' lb-active' : ''), i18n: c.i18n })),
+      ...cols.map(c => h('th', { class: colCls(c, 'lb-active'), i18n: c.i18n })),
     ])));
     const tb = h('tbody');
     ranked.forEach((p, i) => {
@@ -5963,11 +6709,12 @@ Views.leaderboard = async (root) => {
         h('td', { class: 'lb-rank' }, i < 3
           ? h('span', { class: 'lb-medal', text: medals[i] })
           : h('span', { text: String(i + 1) })),
-        h('td', {}, [
+        h('td', { class: 'pl-name' }, [
           playerNameLink(p, { style: { fontWeight: '600' } }),
-          p.watch ? h('span', { class: 'badge mute', text: '★', title: t('players.watched'), style: { marginLeft: '6px' } }) : null,
+          p.watch ? h('span', { class: 'lb-star', text: '★', title: t('players.watched'), 'aria-label': t('players.watched') }) : null,
+          isBanned(p) ? h('span', { class: 'badge err lb-banned', i18n: 'profile.banned' }) : null,
         ]),
-        ...cols.map(c => h('td', { class: 'num' + (c.key === cur ? ' lb-score' : ''), text: c.val(p) })),
+        ...cols.map(c => h('td', { class: colCls(c, 'lb-score'), text: c.val(p) })),
       ]));
     });
     tbl.append(tb);
@@ -6398,7 +7145,7 @@ function drawPoi(parent, poi, w2s) {
   // "major" (labelled at any zoom); towns and landmarks are "minor" (labelled
   // only once zoomed in — see the gm-lod-in toggle) so the overview stays clean.
   const major = type === 'city' || type === 'air' || type === 'mil';
-  const g = svgEl('g', { class: 'gm-poi-g gm-tier-' + (major ? 'major' : 'minor'),
+  const g = svgEl('g', { class: 'gm-poi-g gm-tier-' + (major ? 'major' : 'minor') + ' gm-t-' + type,
     'data-sx': sx, 'data-sy': sy, transform: `translate(${sx} ${sy})` }, parent);
   const tri = (r) => `M 0 ${-r} L ${r} ${r * 0.85} L ${-r} ${r * 0.85} Z`;
   const dia = (r) => `M 0 ${-r} L ${r} 0 L 0 ${r} L ${-r} 0 Z`;
@@ -6426,10 +7173,12 @@ function drawPoi(parent, poi, w2s) {
 // Pan/zoom is done by mutating the root viewBox (never a group transform) so
 // world coordinates read from getScreenCTM().inverse() stay correct at any zoom
 // or pan — see gm.userAt / clientToWorld / mapCoordReadout. opts.panLeft lets
-// read-only maps (heat/live) pan with the left button; editor maps keep the left
-// button for adding/dragging points and pan with the middle button instead.
-// Callers that plot points should set gm.onView(k) to re-scale point radii (gm.k
-// / gm.ptR) so markers keep a roughly constant on-screen size while zoomed.
+// read-only maps (heat/live) pan with the left button at once; on editor maps a
+// left/touch drag pans only once it moves, so a click still adds a point.
+// Callers that plot points should set gm.onView(k) to re-scale point radii
+// (gm.ptR / gm.px) so markers keep a constant on-screen size while zoomed.
+// opts.onImageChange re-renders the page after the map picture changes (the
+// picture controls live in the layers panel).
 function buildGameMap(map, opts = {}) {
   const size = (map && map.size) || 15360;
   const S = 1000;
@@ -6444,7 +7193,7 @@ function buildGameMap(map, opts = {}) {
   // line up. The version param busts the cache after a re-upload.
   if (hasImage) {
     const img = svgEl('image', { x: 0, y: 0, width: S, height: S, preserveAspectRatio: 'none' }, svg);
-    img.setAttribute('href', '/api/map/image?map=' + encodeURIComponent(map.key) + (map.imageVer ? '&v=' + map.imageVer : ''));
+    img.setAttribute('href', srvUrl('/api/map/image?map=' + encodeURIComponent(map.key) + (map.imageVer ? '&v=' + map.imageVer : '')));
   }
 
   // Built-in schematic landmass (when there's no uploaded image).
@@ -6482,6 +7231,10 @@ function buildGameMap(map, opts = {}) {
     svgEl('rect', { x: 0, y: 0, width: S, height: S, class: 'gm-land-soft' }, svg);
   }
 
+  // Real-data overlays (land, loot tiers, buildings, zones) from the mission's
+  // own files — filled by attachMapLayers (features.js).
+  const overlay = svgEl('g', { class: 'gm-overlay' }, svg);
+
   const grid = svgEl('g', { class: 'gm-grid-g' }, svg);
   for (let m = 0; m <= size + 1; m += 1000) {
     const p = m / size * S;
@@ -6514,11 +7267,21 @@ function buildGameMap(map, opts = {}) {
   // ---- pan / zoom (root viewBox mutation) -------------------------------
   const view = { x: 0, y: 0, w: S, h: S };
   const MINW = S / 10; // deepest zoom ≈ 10×
+  // Marker and label sizes are tuned on the 760px desktop map. widthPx is the
+  // map's real width on screen (~330px on a phone), so they keep that screen
+  // size on any screen and at any zoom instead of shrinking to smudges.
+  const REF_W = 760;
+  const LOD_PX = REF_W / (S * 0.55); // screen px per unit at which minor labels show
+  let widthPx = 0;
   const gm = {
-    svg, w2s, s2w, size, layer, S,
+    svg, w2s, s2w, size, layer, S, overlay,
     onView: null,
     get k() { return view.w / S; },              // <1 when zoomed in
-    ptR(base) { return Math.max(1.5, base * (view.w / S)); }, // ~constant on-screen radius
+    // n screen pixels in user units at the current zoom.
+    px(n) { return n * view.w / (widthPx || REF_W); },
+    // Point radius: `base` user units on the unzoomed desktop map, and the
+    // same screen size at any zoom and on any screen.
+    ptR(base) { return gm.px(base * REF_W / S); },
   };
 
   // Client pixel → user (0..1000) space via the live CTM, so it's correct at any
@@ -6535,15 +7298,19 @@ function buildGameMap(map, opts = {}) {
             view.y + (clientY - r.top) / r.height * view.h];
   };
 
-  // Keep POI markers/labels a constant on-screen size (counter-scale each <g> by
-  // the zoom factor around its own point) and reveal the minor labels only once
-  // zoomed in, so the overview stays uncluttered.
+  // Keep POI markers/labels their desktop screen size (counter-scale each <g>
+  // around its own point by zoom and screen width) and reveal the minor labels
+  // only once the map is shown big enough, so the overview stays uncluttered.
+  // A narrow (phone) map labels only the cities until zoomed in.
   let lastPoiK = -1;
-  function updatePois(k) {
-    marks.classList.toggle('gm-lod-in', k < 0.55);
-    if (Math.abs(k - lastPoiK) < 0.0005) return; // only rescale when zoom changed
-    lastPoiK = k;
-    const kk = k.toFixed(4);
+  function updatePois() {
+    const w = widthPx || REF_W;
+    marks.classList.toggle('gm-lod-in', w / view.w > LOD_PX);
+    svg.classList.toggle('gm-narrow', w < 500);
+    const sc = view.w / w * REF_W / S;
+    if (Math.abs(sc - lastPoiK) < 0.0005) return; // only rescale when it changed
+    lastPoiK = sc;
+    const kk = sc.toFixed(4);
     for (const g of marks.querySelectorAll('.gm-poi-g')) {
       g.setAttribute('transform', `translate(${g.getAttribute('data-sx')} ${g.getAttribute('data-sy')}) scale(${kk})`);
     }
@@ -6555,8 +7322,17 @@ function buildGameMap(map, opts = {}) {
     view.y = Math.min(S - view.h, Math.max(0, view.y));
     svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
     svg.classList.toggle('gm-zoomed', view.w < S - 0.5);
-    updatePois(view.w / S);
+    updatePois();
     if (gm.onView) gm.onView(view.w / S);
+  }
+  // The on-screen width drives marker and label sizes: re-plot when it changes.
+  if (typeof ResizeObserver === 'function') {
+    const ro = new ResizeObserver(() => {
+      if (!svg.isConnected) { ro.disconnect(); return; }
+      const w = svg.getBoundingClientRect().width;
+      if (w > 0 && Math.abs(w - widthPx) > 0.5) { widthPx = w; applyView(); }
+    });
+    ro.observe(svg);
   }
   function zoomTo(ux, uy, factor) {
     const newW = Math.min(S, Math.max(MINW, view.w * factor));
@@ -6567,6 +7343,15 @@ function buildGameMap(map, opts = {}) {
     applyView();
   }
   gm.resetView = () => { view.x = 0; view.y = 0; view.w = S; view.h = S; applyView(); };
+  // Centre on a world point, zooming in to width w (user units) if wider.
+  gm.focus = (x, z, w = S / 6) => {
+    const [sx, sy] = w2s(x, z);
+    view.w = Math.min(view.w, w);
+    view.h = view.w;
+    view.x = sx - view.w / 2;
+    view.y = sy - view.h / 2;
+    applyView();
+  };
 
   svg.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -6574,32 +7359,99 @@ function buildGameMap(map, opts = {}) {
     zoomTo(ux, uy, e.deltaY < 0 ? 0.83 : 1 / 0.83);
   }, { passive: false });
 
-  // Drag-pan: middle button always; left button too when opts.panLeft. Listeners
-  // are added on grab and removed on release, so nothing leaks across views.
-  let pan = null;
-  const panMove = (e) => {
-    if (!pan) return;
+  // Drag to pan, two fingers to pinch — Pointer Events, so mouse, pen and touch
+  // all work. The middle button pans at once, the left one too on read-only
+  // maps (opts.panLeft); on editor maps a left/touch drag turns into a pan once
+  // it has moved a few pixels, and the click that ends it is swallowed so it
+  // adds no point. Editor points stop pointerdown to run their own drag.
+  const ptrs = new Map(); // active pointerId → { x, y }
+  let pan = null;         // { id, ux, uy, x0, y0, live (moves the view), moved (past the slop) }
+  let pinch = null;       // { d0, w0, ux, uy } at the pinch start
+  let swallowUntil = 0;
+  // swallowClick drops the click (and context menu) that follows a pan, a
+  // point drag or a long press within ms.
+  gm.swallowClick = (ms = 400) => { swallowUntil = performance.now() + ms; };
+  const swallow = (e) => {
+    if (performance.now() >= swallowUntil) return false;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    return true;
+  };
+  svg.addEventListener('click', (e) => { if (swallow(e)) swallowUntil = 0; }, true);
+  svg.addEventListener('contextmenu', (e) => {
+    // No browser menu over an editor map: right-click is "delete point" there.
+    if (!swallow(e) && svg.classList.contains('gm-edit')) e.preventDefault();
+  }, true);
+  const startPan = (id, cx, cy, live) => {
+    const [ux, uy] = gm.userAt(cx, cy);
+    pan = { id, ux, uy, x0: cx, y0: cy, live, moved: false };
+    svg.classList.toggle('gm-panning', live);
+  };
+  // Capture only once a drag is real: a capture set at pointerdown would make
+  // the browser send the click to the map instead of the dot under it.
+  const capture = (id) => { try { svg.setPointerCapture(id); } catch {} };
+  svg.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      const [ux, uy] = gm.userAt((a.x + b.x) / 2, (a.y + b.y) / 2);
+      pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, w0: view.w, ux, uy };
+      pan = null;
+      svg.classList.remove('gm-panning');
+      return;
+    }
+    if (ptrs.size > 2) return;
+    if (e.button === 1) { e.preventDefault(); capture(e.pointerId); } // no autoscroll cursor
+    startPan(e.pointerId, e.clientX, e.clientY, e.button === 1 || !!opts.panLeft);
+  });
+  svg.addEventListener('pointermove', (e) => {
+    const p = ptrs.get(e.pointerId);
+    if (!p) return;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pinch) {
+      if (ptrs.size < 2) return;
+      const [a, b] = [...ptrs.values()];
+      const r = svg.getBoundingClientRect();
+      view.w = Math.min(S, Math.max(MINW, pinch.w0 * pinch.d0 / (Math.hypot(a.x - b.x, a.y - b.y) || 1)));
+      view.h = view.w;
+      // The pinched spot stays under the fingers' midpoint.
+      view.x = pinch.ux - ((a.x + b.x) / 2 - r.left) / r.width * view.w;
+      view.y = pinch.uy - ((a.y + b.y) / 2 - r.top) / r.height * view.h;
+      applyView();
+      return;
+    }
+    if (!pan || pan.id !== e.pointerId) return;
+    if (!pan.moved && Math.hypot(e.clientX - pan.x0, e.clientY - pan.y0) >= (e.pointerType === 'mouse' ? 4 : 8)) {
+      pan.moved = true;
+      capture(e.pointerId); // keep panning when the pointer leaves the map
+      if (!pan.live) { pan.live = true; svg.classList.add('gm-panning'); }
+    }
+    if (!pan.live) return;
     const [ux, uy] = gm.userAt(e.clientX, e.clientY);
-    view.x += pan.ux - ux; // shift so the grabbed point stays under the cursor
+    view.x += pan.ux - ux; // shift so the grabbed point stays under the pointer
     view.y += pan.uy - uy;
     applyView();
-  };
-  const panUp = () => {
-    pan = null;
-    svg.classList.remove('gm-panning');
-    window.removeEventListener('mousemove', panMove);
-    window.removeEventListener('mouseup', panUp);
-  };
-  svg.addEventListener('mousedown', (e) => {
-    const wantsPan = e.button === 1 || (e.button === 0 && opts.panLeft);
-    if (!wantsPan) return;
-    e.preventDefault();
-    const [ux, uy] = gm.userAt(e.clientX, e.clientY);
-    pan = { ux, uy };
-    svg.classList.add('gm-panning');
-    window.addEventListener('mousemove', panMove);
-    window.addEventListener('mouseup', panUp);
   });
+  const endPointer = (e) => {
+    if (!ptrs.delete(e.pointerId)) return;
+    if (pinch) {
+      if (ptrs.size >= 2) return;
+      pinch = null;
+      gm.swallowClick();
+      // One finger still down: carry on panning with it.
+      const rest = [...ptrs.entries()][0];
+      if (rest) startPan(rest[0], rest[1].x, rest[1].y, true);
+      return;
+    }
+    if (pan && pan.id === e.pointerId) {
+      if (pan.moved) gm.swallowClick();
+      pan = null;
+      svg.classList.remove('gm-panning');
+    }
+  };
+  svg.addEventListener('pointerup', endPointer);
+  svg.addEventListener('pointercancel', endPointer);
 
   // On-screen controls (zoom in / out / reset) for discoverability.
   const zbtn = (sym, key, fn) => h('button', { class: 'gm-zbtn', type: 'button',
@@ -6610,8 +7462,89 @@ function buildGameMap(map, opts = {}) {
     zbtn('－', 'map.zoomOut', () => zoomTo(view.x + view.w / 2, view.y + view.h / 2, 1 / 0.7)),
     zbtn('⟲', 'map.zoomReset', () => gm.resetView()),
   ]);
+  if (typeof attachMapLayers === 'function') attachMapLayers(gm, map, opts);
 
   return gm;
+}
+
+// mapPointDrag makes an editor point draggable with any pointer (mouse, pen,
+// touch). A press-and-release selects it, a drag moves it; right-click — or a
+// long press on touch, a phone's right-click — deletes it. The point stops the
+// map's own pan. cb: { onMove(wx, wz), onEnd(moved), onDelete(), locked() }.
+function mapPointDrag(gm, el, cb) {
+  let lpTimer = 0, lpFired = false;
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.stopPropagation(); // a drag of the point, not of the map
+    if (cb.locked && cb.locked()) return;
+    const id = e.pointerId, x0 = e.clientX, y0 = e.clientY;
+    let moved = false;
+    lpFired = false;
+    try { el.setPointerCapture(id); } catch {}
+    const done = () => {
+      clearTimeout(lpTimer);
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+    };
+    const move = (ev) => {
+      if (ev.pointerId !== id) return;
+      if (!moved) {
+        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < (ev.pointerType === 'mouse' ? 3 : 6)) return;
+        moved = true;
+        clearTimeout(lpTimer);
+      }
+      const [wx, wz] = clientToWorld(gm, ev);
+      cb.onMove(wx, wz);
+    };
+    const up = (ev) => {
+      if (ev.pointerId !== id) return;
+      done();
+      if (moved) gm.swallowClick();
+      cb.onEnd(moved);
+    };
+    clearTimeout(lpTimer);
+    if (e.pointerType !== 'mouse' && cb.onDelete) {
+      lpTimer = setTimeout(() => {
+        if (moved) return;
+        lpFired = true;
+        done();
+        gm.swallowClick(800); // the lift and Android's own long-press menu
+        cb.onDelete();
+      }, 550);
+    }
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  });
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearTimeout(lpTimer);
+    if (lpFired || !cb.onDelete || (cb.locked && cb.locked())) return;
+    gm.swallowClick();
+    cb.onDelete();
+  });
+}
+
+// coarsePointer: the main input is a finger, so editor points get a larger
+// invisible hit area around their small dot.
+function coarsePointer() {
+  return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+}
+
+// scrollBoxTo brings a row into view inside its own scroll box only —
+// scrollIntoView also scrolled the page, pushing the map out of view.
+function scrollBoxTo(box, row) {
+  const b = box.getBoundingClientRect(), r = row.getBoundingClientRect();
+  if (r.top < b.top || r.bottom > b.bottom) box.scrollTop += r.top - b.top - (box.clientHeight - r.height) / 2;
+}
+
+// scrollToCard scrolls the page so el starts just below the sticky topbar.
+function scrollToCard(el) {
+  const bar = document.querySelector('.topbar');
+  const top = el.getBoundingClientRect().top + window.scrollY - ((bar ? bar.offsetHeight : 0) + 12);
+  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
 }
 
 // mapCoordReadout wires a hover readout showing the world X/Z under the cursor.
@@ -6626,7 +7559,8 @@ function mapCoordReadout(gm, readoutEl) {
 }
 
 // mapImageControls returns an upload/remove control for a map's background
-// image. onDone re-renders the host view so the new (or removed) image shows.
+// image (shown in the map's layers panel). onDone re-renders the host view so
+// the new (or removed) image shows.
 function mapImageControls(map, onDone) {
   const key = (map && map.key) || 'unknown';
   const fileInput = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', style: { display: 'none' }, 'aria-label': t('map.image.upload') });
@@ -6636,7 +7570,7 @@ function mapImageControls(map, onDone) {
     const fd = new FormData();
     fd.append('image', f);
     try {
-      const r = await fetch('/api/map/image?map=' + encodeURIComponent(key), { method: 'POST', body: fd });
+      const r = await fetch('/api/map/image?map=' + encodeURIComponent(key), { method: 'POST', body: fd, headers: srvHeaders() });
       if (!r.ok) throw new Error(await r.text());
       toast(t('map.image.uploaded'), 'ok');
       onDone && onDone();
@@ -6656,14 +7590,15 @@ function mapImageControls(map, onDone) {
     } catch (e) { handleErr(e); }
   }
   const wrap = h('div', { class: 'map-img-ctl' }, [
-    h('button', { class: 'secondary', i18n: 'map.image.upload', title: t('map.image.hint'),
+    h('button', { type: 'button', class: 'secondary small', i18n: 'map.bg.upload', title: t('map.image.hint'),
       onclick: () => fileInput.click() }),
-    h('button', { class: 'secondary', i18n: 'map.image.fromUrl', title: t('map.image.urlHint'),
+    h('button', { type: 'button', class: 'secondary small', i18n: 'map.image.fromUrl', title: t('map.image.urlHint'),
       onclick: fromUrl }),
     fileInput,
   ]);
   if (map && map.hasImage) {
-    wrap.append(h('button', { class: 'secondary', i18n: 'map.image.remove', onclick: async () => {
+    wrap.append(h('button', { type: 'button', class: 'secondary small', i18n: 'map.image.remove', onclick: async () => {
+      if (!(await confirmModal(t('map.image.removeConfirm'), { danger: true, okText: t('map.image.remove') }))) return;
       try {
         await api.post('/api/map/image/delete?map=' + encodeURIComponent(key), {});
         toast(t('map.image.removed'), 'ok');
@@ -6673,12 +7608,15 @@ function mapImageControls(map, onDone) {
   }
   // Modded/custom worlds: let the admin set the real edge length so the grid and
   // plotted points line up. Official worlds have a known size, so no field.
-  if (map && !map.official) {
+  if (map && !map.official && map.sizeFromMission) {
+    // areaflags.map told us the real size — nothing for the admin to type.
+    wrap.append(h('span', { class: 'badge info', text: t('map.sizeDetected').replace('{n}', map.size) }));
+  } else if (map && !map.official) {
     const sizeInp = h('input', { type: 'number', value: map.size || 15360, min: '1000', style: { width: '110px' } });
     wrap.append(
-      h('label', { class: 'map-size-lbl', i18n: 'map.size' }),
+      h('label', { class: 'map-size-lbl', i18n: 'map.size', for: assocId(sizeInp) }),
       sizeInp,
-      h('button', { class: 'secondary', i18n: 'action.save', title: t('map.size.hint'), onclick: async () => {
+      h('button', { type: 'button', class: 'secondary small', i18n: 'action.save', title: t('map.size.hint'), onclick: async () => {
         const v = parseInt(sizeInp.value, 10);
         if (!(v >= 1000 && v <= 65536)) { toast(t('map.size.range'), 'warn'); return; }
         try { await api.post('/api/map/size', { map: key, size: v }); toast(t('msg.saved'), 'ok'); onDone && onDone(); }
@@ -6689,65 +7627,127 @@ function mapImageControls(map, onDone) {
   return wrap;
 }
 
+// heatDeathText is one death for a heatmap dot's tooltip:
+// "Miller ← Rook, SVD 167 m · 12.10 18:30".
+function heatDeathText(p) {
+  const by = p.kind === 'pvp' ? p.killer : (p.kind === 'env' ? p.source : '');
+  let s = p.victim || '—';
+  if (by) s += ' ← ' + by;
+  else if (p.kind === 'suicide') s += ' · ' + t('heatmap.tip.suicide');
+  const dist = parseFloat(p.distance);
+  const how = [p.weapon, Number.isFinite(dist) && dist > 0 ? Math.round(dist) + ' ' + t('unit.m') : ''].filter(Boolean).join(' ');
+  if (how) s += (by ? ', ' : ' · ') + how;
+  if (p.at) s += ' · ' + fmtWhen(p.at);
+  return s;
+}
+
 Views.heatmap = async (root) => {
   const myNav = _navSeq;
   root.append(pageHeader('nav.heatmap', 'heatmap.subtitle'));
+  // Built from the admin log: with -adminlog off it would stay empty forever.
+  { const w = adminLogWarning(); if (w) root.append(w); }
   let d;
   try { d = await api.get('/api/map/heat'); }
   catch (e) { handleErr(e); return; }
   if (myNav !== _navSeq) return;
 
   const points = d.points || [];
-  const counts = d.counts || {};
   const card = h('div', { class: 'card' });
   root.append(card);
 
   if (d.map && d.map.key === 'unknown') {
     card.append(h('p', { class: 'hint', i18n: 'map.genericGrid' }));
   }
-  // Filters + legend + map-image controls. The map shows even with no deaths
-  // yet, so the background image can be set on a fresh server.
+  // The map shows even with no deaths yet, so the background picture (layers
+  // panel) can be set up on a fresh server.
+  if (!points.length) {
+    card.append(h('div', { class: 'empty-state map-empty' }, [
+      h('div', { class: 'es-icon', html: svgIcon('i-heatmap', 34) }),
+      h('div', { class: 'es-title', i18n: 'heatmap.empty.title' }),
+      h('div', { class: 'es-hint', i18n: 'heatmap.none' }),
+    ]));
+  }
+
+  // Period + kind filters; the counts follow the period.
+  const PERIODS = [['24h', 86400], ['7d', 7 * 86400], ['30d', 30 * 86400]];
+  const lastWipe = d.lastWipe ? Date.parse(d.lastWipe) : NaN;
+  let period = 'all';
+  try { period = localStorage.getItem('heatPeriod') || 'all'; } catch {}
+  if (period === 'wipe' ? !Number.isFinite(lastWipe) : (period !== 'all' && !PERIODS.some(p => p[0] === period))) period = 'all';
+  const periodSel = h('select', { class: 'heat-period', 'aria-label': t('heatmap.period') }, [
+    ...PERIODS.map(([k]) => h('option', { value: k, i18n: 'heatmap.period.' + k })),
+    Number.isFinite(lastWipe) ? h('option', { value: 'wipe', text: t('heatmap.period.wipe').replace('{date}', fmtWhen(d.lastWipe)) }) : null,
+    h('option', { value: 'all', i18n: 'heatmap.period.all' }),
+  ].filter(Boolean));
+  periodSel.value = period;
+  periodSel.addEventListener('change', () => {
+    period = periodSel.value;
+    try { localStorage.setItem('heatPeriod', period); } catch {}
+    draw();
+  });
+  const since = () => {
+    if (period === 'wipe') return lastWipe;
+    const p = PERIODS.find(x => x[0] === period);
+    return p ? Date.now() - p[1] * 1000 : -Infinity;
+  };
+
   const show = { pvp: true, env: true, suicide: true };
   const legend = h('div', { class: 'map-legend' });
   const readout = h('div', { class: 'map-readout' });
+  const countEls = {};
   const kinds = [
     ['pvp', 'heatmap.pvp'],
-    ['env', 'heatmap.env'],
+    ['env', 'heatmap.env', 'heatmap.env.hint'],
     ['suicide', 'heatmap.suicide'],
   ];
-  for (const [k, key] of kinds) {
+  for (const [k, key, tip] of kinds) {
     const cb = h('input', { type: 'checkbox' });
     cb.checked = true;
     cb.addEventListener('change', () => { show[k] = cb.checked; draw(); });
-    legend.append(h('label', { class: 'map-leg map-leg-' + k }, [
+    countEls[k] = h('span', { class: 'hint' });
+    legend.append(h('label', { class: 'map-leg map-leg-' + k, title: tip ? t(tip) : null }, [
       cb, h('span', { class: 'map-dot map-dot-' + k }),
-      h('span', { i18n: key }), h('span', { class: 'hint', text: '(' + (counts[k] || 0) + ')' }),
+      h('span', { i18n: key }), countEls[k],
     ]));
   }
-  card.append(h('div', { class: 'map-toolbar' }, [
-    legend, mapImageControls(d.map, () => navigate('heatmap')),
-    h('div', { class: 'grow' }), readout,
-  ]));
+  if (points.length) {
+    card.append(h('div', { class: 'map-toolbar' }, [
+      h('label', { i18n: 'heatmap.period', for: assocId(periodSel) }), periodSel, legend,
+      h('div', { class: 'grow' }), readout,
+    ]));
+  }
 
-  const gm = buildGameMap(d.map, { panLeft: true });
+  const gm = buildGameMap(d.map, { panLeft: true, onImageChange: () => navigate('heatmap') });
   mapCoordReadout(gm, readout);
   card.append(h('div', { class: 'map-wrap' }, [gm.svg, gm.controls]));
-  if (!points.length) {
-    card.append(h('p', { class: 'hint', i18n: 'heatmap.none' }));
-  } else {
-    card.append(h('p', { class: 'hint', text: (d.map ? d.map.name + ' · ' : '') + t('heatmap.points').replace('{n}', d.total || 0) }));
-  }
+  const foot = h('p', { class: 'hint' });
+  if (points.length) card.append(foot);
 
+  // Dots are rebuilt when a filter changes; zoom and pan only resize them.
+  let dots = [];
   function draw() {
     gm.layer.innerHTML = '';
+    dots = [];
+    const from = since();
+    const counts = { pvp: 0, env: 0, suicide: 0 };
     const r = gm.ptR(4);
     for (const p of points) {
+      const at = p.at ? Date.parse(p.at) : NaN;
+      if (from > -Infinity && !(at >= from)) continue;
+      counts[p.kind in counts ? p.kind : 'env']++;
       if (!show[p.kind]) continue;
       const [sx, sy] = gm.w2s(p.x, p.z);
-      svgEl('circle', { cx: sx, cy: sy, r, class: 'heat heat-' + p.kind }, gm.layer);
+      const c = svgEl('circle', { cx: sx, cy: sy, r, class: 'heat heat-' + p.kind }, gm.layer);
+      const text = heatDeathText(p);
+      svgEl('title', {}, c).textContent = text;
+      c.addEventListener('click', () => toast(text)); // touch screens have no hover
+      dots.push(c);
     }
+    for (const k of Object.keys(countEls)) countEls[k].textContent = '(' + counts[k] + ')';
+    const n = counts.pvp + counts.env + counts.suicide;
+    foot.textContent = (d.map ? d.map.name + ' · ' : '') + (n ? tn('heatmap.points', { n }) : t('heatmap.nonePeriod'));
   }
-  gm.onView = draw; // re-plot at the new scale on zoom/pan
+  gm.onView = () => { const r = gm.ptR(4); for (const c of dots) c.setAttribute('r', r); };
   draw();
   applyI18n();
 };
@@ -6759,190 +7759,23 @@ function clientToWorld(gm, e) {
   return gm.s2w(ux, uy);
 }
 
-Views.eventmap = async (root) => {
-  const myNav = _navSeq;
-  root.append(pageHeader('nav.eventmap', 'eventmap.subtitle'));
-  const running = !!State.serverStatus.running;
-  if (running) root.append(runningBanner());
-
-  let d;
-  try { d = await api.get('/api/eventspawns'); }
-  catch (e) { handleErr(e); return; }
-  if (myNav !== _navSeq) return;
-
-  // Name -> positions map, seeded from cfgeventspawns and extended with any
-  // events that are defined in events.xml but have no points yet.
-  const byName = new Map();
-  for (const e of (d.events || [])) byName.set(e.name, (e.pos || []).map(p => ({ ...p })));
-  for (const name of (d.defined || [])) if (!byName.has(name)) byName.set(name, []);
-  const names = [...byName.keys()].sort();
-
-  let cur = (d.events && d.events.length) ? d.events[0].name : (names[0] || '');
-  let pos = [];   // working copy for the selected event
-  let dirty = false;
-  let justDragged = false;
-
-  const gm = buildGameMap(d.map);
-  gm.svg.classList.add('gm-edit');
-  const circles = [];
-
-  // Controls.
-  const sel = h('select', {});
-  function rebuildSelect() {
-    sel.innerHTML = '';
-    for (const name of names) {
-      const n = (byName.get(name) || []).length;
-      const o = h('option', { value: name, text: name + '  (' + n + ')' });
-      if (name === cur) o.selected = true;
-      sel.append(o);
-    }
-  }
-  const readout = h('div', { class: 'map-readout' });
-  const countLbl = h('span', { class: 'hint' });
-  const saveBtn = h('button', { class: 'primary', i18n: 'eventmap.save', disabled: running,
-    onclick: (e) => save(e.currentTarget) });
-
-  sel.addEventListener('change', async () => {
-    if (dirty && !(await confirmModal(t('eventmap.discard').replace('{name}', cur)))) {
-      rebuildSelect(); return; // revert selection
-    }
-    cur = sel.value;
-    loadCur();
-  });
-
-  const card = h('div', { class: 'card' }, [
-    h('div', { class: 'map-toolbar' }, [
-      h('label', { i18n: 'eventmap.event' }), sel,
-      mapImageControls(d.map, () => { if (dirty) toast(t('map.image.savedReload'), 'ok'); else navigate('eventmap'); }),
-      h('div', { class: 'grow' }), countLbl, readout,
-    ]),
-    h('p', { class: 'hint', i18n: 'eventmap.help' }),
-    h('div', { class: 'map-wrap' }, [gm.svg, gm.controls]),
-    h('div', { class: 'actions' }, [saveBtn]),
-  ]);
-  root.append(card);
-  mapCoordReadout(gm, readout);
-  gm.onView = render; // re-plot points at the new scale on zoom/pan
-
-  // Validation panel.
-  const noPos = d.noPositions || [];
-  const orphans = d.orphans || [];
-  if (noPos.length || orphans.length) {
-    const vc = h('div', { class: 'card' }, [h('h3', { i18n: 'eventmap.checks' })]);
-    if (noPos.length) {
-      vc.append(h('p', { class: 'hint', i18n: 'eventmap.noPositions' }),
-        h('div', { class: 'chip-list' }, noPos.map(n => h('span', { class: 'badge warn', text: n }))));
-    }
-    if (orphans.length) {
-      vc.append(h('p', { class: 'hint', i18n: 'eventmap.orphans' }),
-        h('div', { class: 'chip-list' }, orphans.map(n => h('span', { class: 'badge mute', text: n }))));
-    }
-    root.append(vc);
-  }
-
-  function loadCur() {
-    pos = (byName.get(cur) || []).map(p => ({ ...p }));
-    dirty = false;
-    render();
-  }
-
-  function render() {
-    gm.layer.innerHTML = '';
-    circles.length = 0;
-    countLbl.textContent = t('eventmap.points').replace('{n}', pos.length);
-    const r = gm.ptR(5);
-    pos.forEach((p, i) => {
-      const [sx, sy] = gm.w2s(p.x, p.z);
-      const c = svgEl('circle', { cx: sx, cy: sy, r, class: 'ev-pt' }, gm.layer);
-      c.addEventListener('mousedown', (e) => startDrag(i, e));
-      c.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        pos.splice(i, 1); dirty = true; render();
-      });
-      circles[i] = c;
-    });
-  }
-
-  let drag = null;
-  function startDrag(idx, e) {
-    if (e.button !== 0) return;
-    e.stopPropagation();
-    drag = { idx, moved: false };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }
-  function onMove(e) {
-    if (!drag) return;
-    drag.moved = true;
-    const [wx, wz] = clientToWorld(gm, e);
-    pos[drag.idx].x = Math.round(wx * 100) / 100;
-    pos[drag.idx].z = Math.round(wz * 100) / 100;
-    const [sx, sy] = gm.w2s(pos[drag.idx].x, pos[drag.idx].z);
-    circles[drag.idx].setAttribute('cx', sx);
-    circles[drag.idx].setAttribute('cy', sy);
-    readout.textContent = 'X ' + Math.round(wx) + ' · Z ' + Math.round(wz);
-  }
-  function onUp() {
-    if (drag && drag.moved) { dirty = true; justDragged = true; setTimeout(() => { justDragged = false; }, 0); }
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onUp);
-    drag = null;
-  }
-
-  // Click empty map to add a point.
-  gm.svg.addEventListener('click', (e) => {
-    if (justDragged) return;
-    if (e.target && e.target.classList && e.target.classList.contains('ev-pt')) return;
-    if (!cur) return;
-    const [wx, wz] = clientToWorld(gm, e);
-    pos.push({ x: Math.round(wx * 100) / 100, z: Math.round(wz * 100) / 100, a: 0 });
-    dirty = true; render();
-  });
-
-  async function save(btn) {
-    if (!cur) return;
-    await withBusy(btn, async () => {
-      try {
-        const r = await api.post('/api/eventspawns/save', { name: cur, pos });
-        byName.set(cur, pos.map(p => ({ ...p })));
-        rebuildSelect();
-        dirty = false;
-        toast(t('eventmap.saved').replace('{n}', r.count || 0), 'ok');
-      } catch (e) { handleErr(e); }
-    });
-  }
-
-  rebuildSelect();
-  loadCur();
-  applyI18n();
-};
+// Views.eventmap lives in features.js (v1.0.0 editor with manual X/Y/Z editing
+// and coordinate-list import).
 
 // --------------------------------------------------------- player spawn points
 
-// PS_PARAM_INFO gives each cfgplayerspawnpoints param a readable label + a
-// one-line tooltip. Unknown keys fall back to the raw XML name (which DayZ
-// admins recognise anyway), so a modded field still round-trips and shows.
-const PS_PARAM_INFO = {
-  min_dist_infected: { label: 'Min distance to infected', tip: 'Do not spawn closer than this (m) to a zombie.' },
-  max_dist_infected: { label: 'Max distance to infected', tip: 'Preferred maximum distance (m) to zombies.' },
-  min_dist_player: { label: 'Min distance to players', tip: 'Do not spawn closer than this (m) to another player.' },
-  max_dist_player: { label: 'Max distance to players', tip: 'Preferred maximum distance (m) to other players.' },
-  min_dist_static: { label: 'Min distance to static', tip: 'Min distance (m) to static objects / loot.' },
-  max_dist_static: { label: 'Max distance to static', tip: 'Max distance (m) to static objects / loot.' },
-  grid_density: { label: 'Grid density', tip: 'Generator grid density.' },
-  grid_width: { label: 'Grid width', tip: 'Generator grid cell width (m).' },
-  grid_height: { label: 'Grid height', tip: 'Generator grid cell height (m).' },
-  min_steepness: { label: 'Min steepness', tip: 'Reject spawns on terrain flatter than this (deg).' },
-  max_steepness: { label: 'Max steepness', tip: 'Reject spawns on terrain steeper than this (deg).' },
-  enablegroups: { label: 'Enable groups', tip: 'Use the named position groups (true/false).' },
-  groups_as_regular: { label: 'Groups as regular', tip: 'Treat groups as regular spawn points (true/false).' },
-  lifetime: { label: 'Lifetime', tip: 'How long a generated bubble lives (s).' },
-  counter: { label: 'Counter', tip: 'Group counter.' },
+// PS_PARAM_UNIT is the unit shown after a cfgplayerspawnpoints value. Labels
+// and tooltips are i18n keys (spawnpoints.param.<key> and .tip); an unknown
+// (modded) key shows its raw XML name and still round-trips.
+const PS_PARAM_UNIT = {
+  min_dist_infected: 'm', max_dist_infected: 'm', min_dist_player: 'm', max_dist_player: 'm',
+  min_dist_static: 'm', max_dist_static: 'm', grid_width: 'm', grid_height: 'm',
+  min_steepness: 'deg', max_steepness: 'deg', lifetime: 's',
 };
 
 Views.spawnpoints = async (root) => {
   const myNav = _navSeq;
-  root.append(pageHeader('nav.spawnpoints', 'spawnpoints.subtitle'));
+  root.append(pageHeader('nav.spawnpoints', 'spawnpoints.subtitle', [revealBtn({ kind: 'missionfile', path: 'cfgplayerspawnpoints.xml' })]));
   const running = !!State.serverStatus.running;
   if (running) root.append(runningBanner());
 
@@ -6959,21 +7792,91 @@ Views.spawnpoints = async (root) => {
     doc[s].spawnParams = doc[s].spawnParams || [];
     doc[s].genParams = doc[s].genParams || [];
     doc[s].groupParams = doc[s].groupParams || [];
+    for (const g of doc[s].groups) g.pos = g.pos || [];
   }
   let curSection = SECTIONS.find(s => doc[s].present) || 'fresh';
   doc[curSection].present = true;
   let curGroup = 0;
-  let dirty = false;
-  const PALETTE = ['#ff7a2b', '#4da3ff', '#4dd08a', '#e05c8a', '#b98cff', '#f2c14e', '#3fb9bd', '#f07b54', '#8fca4d', '#ff6b6b'];
-  const colorFor = (i) => PALETTE[i % PALETTE.length];
+  let selPt = -1;    // selected point of the active group
+  // Unsaved = the document differs from the one loaded or last saved; every
+  // change before that is an undo step (Ctrl+Z).
+  let saved = JSON.stringify(doc);
+  let last = saved;
+  let undo = [];
+  let lastKey = '', lastAt = 0;
+  const isDirty = () => JSON.stringify(doc) !== saved;
+  root._isDirty = isDirty;
+  // 16 clearly different colours; more groups go on around the colour wheel.
+  const PALETTE = ['#ff7a2b', '#4da3ff', '#4dd08a', '#e05c8a', '#b98cff', '#f2c14e', '#3fb9bd', '#ff4d4d',
+    '#8fca4d', '#2457c5', '#d65db1', '#a8743a', '#7cf2e1', '#7a4fd1', '#2e9e4f', '#ffb3c7'];
+  const colorFor = (i) => (i < PALETTE.length ? PALETTE[i] : `hsl(${Math.round(i * 137.5) % 360} 75% 58%)`);
   const sec = () => doc[curSection];
+  const group = () => sec().groups[curGroup] || null;
 
-  const gm = buildGameMap(d.map);
+  const gm = buildGameMap(d.map, {
+    onImageChange: () => { if (isDirty()) toast(t('map.image.savedReload'), 'ok'); else navigate('spawnpoints'); },
+  });
   gm.svg.classList.add('gm-edit');
+  const coarse = coarsePointer();
 
-  const saveBtn = h('button', { class: 'primary', i18n: 'action.save', disabled: true });
-  const markDirty = () => { dirty = true; saveBtn.disabled = running; };
-  saveBtn.addEventListener('click', () => save(saveBtn));
+  // ---- saving: bottom button + a sticky bar while anything is unsaved
+  const saveBtn = h('button', { type: 'button', class: 'primary', i18n: 'action.save', disabled: true, onclick: (e) => save(e.currentTarget) });
+  const barSave = h('button', { type: 'button', class: 'primary small', i18n: 'action.save', disabled: running, onclick: (e) => save(e.currentTarget) });
+  const undoBtn = h('button', { type: 'button', class: 'secondary small', i18n: 'map.undo', title: t('map.undo.hint'), onclick: () => undoStep() });
+  const bar = h('div', { class: 'sticky-save', hidden: true }, [
+    h('span', { i18n: 'map.unsaved' }), h('span', { class: 'grow' }), undoBtn,
+    // navigate() asks before throwing the edits away.
+    h('button', { type: 'button', class: 'secondary small', i18n: 'action.discard', onclick: () => navigate('spawnpoints') }),
+    barSave,
+  ]);
+  function updateBar() {
+    const dirty = isDirty();
+    bar.hidden = !dirty;
+    saveBtn.disabled = running || !dirty;
+    undoBtn.disabled = !undo.length;
+  }
+  // markDirty records a change. Typing into one field (same key, within a
+  // moment) is one undo step, not one per keystroke.
+  function markDirty(key) {
+    const now = JSON.stringify(doc);
+    if (now !== last) {
+      if (!(key && key === lastKey && Date.now() - lastAt < 1500)) {
+        undo.push(last);
+        if (undo.length > 100) undo.shift();
+      }
+      last = now;
+    }
+    lastKey = key || '';
+    lastAt = Date.now();
+    updateBar();
+  }
+  function undoStep() {
+    if (!undo.length) return;
+    last = undo.pop();
+    lastKey = '';
+    const prev = JSON.parse(last);
+    for (const s of SECTIONS) doc[s] = prev[s];
+    selPt = -1;
+    renderAll();
+    updateBar();
+  }
+  root._save = () => (isDirty() ? save(barSave) : undefined);
+  // Ctrl+Z undoes, Delete removes the selected point — except while typing in
+  // a field, where both keep their usual meaning.
+  const onKey = (e) => {
+    if (myNav !== _navSeq || document.querySelector('.modal-overlay')) return;
+    const el = e.target;
+    if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.code === 'KeyZ' || e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      undoStep();
+    } else if (e.key === 'Delete' && selPt >= 0 && !running) {
+      e.preventDefault();
+      removePt(selPt);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  root._teardown = () => document.removeEventListener('keydown', onKey);
 
   const readout = h('div', { class: 'map-readout' });
   const countLbl = h('span', { class: 'hint' });
@@ -6985,12 +7888,13 @@ Views.spawnpoints = async (root) => {
     for (const s of SECTIONS) {
       const present = !!doc[s].present;
       const tab = h('button', {
+        type: 'button',
         class: 'sp-tab' + (s === curSection ? ' active' : '') + (present ? '' : ' sp-absent'),
         text: t('spawnpoints.section.' + s) + (present ? '' : ' +'),
         title: present ? '' : t('spawnpoints.addSection'),
         onclick: () => {
           if (!doc[s].present) { doc[s].present = true; markDirty(); }
-          curSection = s; curGroup = 0; renderAll();
+          curSection = s; curGroup = 0; selPt = -1; renderAll();
         },
       });
       tabsHost.append(tab);
@@ -7005,18 +7909,20 @@ Views.spawnpoints = async (root) => {
     if (curGroup >= gs.length) curGroup = Math.max(0, gs.length - 1);
     gs.forEach((g, i) => {
       groupHost.append(h('button', {
+        type: 'button',
         class: 'sp-group-chip' + (i === curGroup ? ' active' : ''),
-        onclick: () => { curGroup = i; renderMap(); renderGroups(); renderGroupEdit(); },
+        onclick: () => { curGroup = i; selPt = -1; renderMap(); renderGroups(); renderGroupEdit(); renderList(); },
       }, [
         h('span', { class: 'sp-dot', style: { background: colorFor(i) } }),
         h('span', { class: 'sp-gname', text: g.name || '—' }),
-        h('span', { class: 'sp-gcount', text: String((g.pos || []).length) }),
+        h('span', { class: 'sp-gcount', text: String(g.pos.length) }),
       ]));
     });
-    groupHost.append(h('button', { class: 'secondary small', i18n: 'spawnpoints.addGroup', disabled: running,
+    groupHost.append(h('button', { type: 'button', class: 'secondary small', i18n: 'spawnpoints.addGroup', disabled: running,
       onclick: () => {
         sec().groups.push({ name: 'group' + (sec().groups.length + 1), block: 0, pos: [] });
-        curGroup = sec().groups.length - 1; markDirty(); renderGroups(); renderGroupEdit(); renderMap();
+        curGroup = sec().groups.length - 1; selPt = -1;
+        markDirty(); renderGroups(); renderGroupEdit(); renderMap(); renderList();
       } }));
   }
 
@@ -7024,15 +7930,15 @@ Views.spawnpoints = async (root) => {
   const groupEdit = h('div', { class: 'sp-group-edit' });
   function renderGroupEdit() {
     groupEdit.innerHTML = '';
-    const g = sec().groups[curGroup];
+    const g = group();
     if (!g) { groupEdit.append(h('p', { class: 'hint', i18n: 'spawnpoints.noGroup' })); applyI18n(); return; }
-    const nameInp = h('input', { type: 'text', value: g.name, placeholder: t('spawnpoints.groupName'), disabled: running });
-    nameInp.addEventListener('input', () => { g.name = nameInp.value; markDirty(); });
-    nameInp.addEventListener('change', renderGroups);
-    const del = h('button', { class: 'danger small', i18n: 'spawnpoints.delGroup', disabled: running,
+    const nameInp = h('input', { type: 'text', value: g.name, placeholder: t('spawnpoints.groupName'), 'aria-label': t('spawnpoints.groupName'), disabled: running });
+    nameInp.addEventListener('input', () => { g.name = nameInp.value; markDirty('name:' + curSection + curGroup); });
+    nameInp.addEventListener('change', () => { renderGroups(); renderList(); });
+    const del = h('button', { type: 'button', class: 'danger small', i18n: 'spawnpoints.delGroup', disabled: running,
       onclick: async () => {
         if (!(await confirmModal(t('spawnpoints.delGroupConfirm').replace('{name}', g.name || '—')))) return;
-        sec().groups.splice(curGroup, 1); curGroup = Math.max(0, curGroup - 1); markDirty(); renderAll();
+        sec().groups.splice(curGroup, 1); curGroup = Math.max(0, curGroup - 1); selPt = -1; markDirty(); renderAll();
       } });
     groupEdit.append(
       h('span', { class: 'sp-active-lbl' }, [h('span', { class: 'sp-dot', style: { background: colorFor(curGroup) } }), h('span', { i18n: 'spawnpoints.activeGroup' })]),
@@ -7040,81 +7946,205 @@ Views.spawnpoints = async (root) => {
   }
 
   // ---- map points ----
-  const circles = [];
+  // Other groups: plain dots under the active group's. Active group: draggable
+  // (any pointer), right-click / long-press / Delete removes, a press selects.
+  let act = [];   // per active point: { c, hit }
+  const selInfo = h('span', { class: 'hint sp-sel-info' });
+  const delPtBtn = h('button', { type: 'button', class: 'danger small', i18n: 'spawnpoints.delPoint', disabled: running,
+    onclick: () => { if (selPt >= 0) removePt(selPt); } });
+  delPtBtn.hidden = true;
+  function renderSel() {
+    const g = group();
+    const p = g && selPt >= 0 ? g.pos[selPt] : null;
+    selInfo.textContent = p ? '#' + (selPt + 1) + ' · X ' + p.x + ' · Z ' + p.z : '';
+    delPtBtn.hidden = !p;
+  }
   function renderMap() {
     gm.layer.innerHTML = '';
-    circles.length = 0;
+    act = [];
     const gs = sec().groups;
-    const rA = gm.ptR(5), rI = gm.ptR(3.5);
+    const rI = gm.px(3.5), rA = gm.px(5);
     gs.forEach((g, gi) => {
-      const active = gi === curGroup;
-      (g.pos || []).forEach((p, j) => {
+      if (gi === curGroup) return;
+      for (const p of g.pos) {
         const [sx, sy] = gm.w2s(p.x, p.z);
-        const c = svgEl('circle', { cx: sx, cy: sy, r: active ? rA : rI,
-          class: 'sp-pt' + (active ? ' sp-pt-active' : ''), fill: colorFor(gi) }, gm.layer);
-        if (active) {
-          c.style.cursor = 'grab';
-          c.addEventListener('mousedown', (e) => startDrag(j, e));
-          c.addEventListener('contextmenu', (e) => { e.preventDefault(); g.pos.splice(j, 1); markDirty(); renderMap(); renderGroups(); });
-          circles[j] = c;
-        } else {
-          c.style.opacity = '.4';
-        }
+        svgEl('circle', { cx: sx, cy: sy, r: rI, class: 'sp-pt sp-pt-other', fill: colorFor(gi) }, gm.layer);
+      }
+    });
+    const g = group();
+    if (g) g.pos.forEach((p, j) => {
+      const [sx, sy] = gm.w2s(p.x, p.z);
+      const grp = svgEl('g', { class: 'sp-pt-g' }, gm.layer);
+      // Touch: a finger-sized invisible target around the dot.
+      const hit = coarse ? svgEl('circle', { cx: sx, cy: sy, r: gm.px(14), class: 'map-hit' }, grp) : null;
+      const c = svgEl('circle', { cx: sx, cy: sy, r: j === selPt ? rA * 1.4 : rA,
+        class: 'sp-pt sp-pt-active' + (j === selPt ? ' sel' : ''), fill: colorFor(curGroup) }, grp);
+      act[j] = { c, hit };
+      if (running) return;
+      mapPointDrag(gm, grp, {
+        onMove: (wx, wz) => {
+          p.x = round2(wx);
+          p.z = round2(wz);
+          const [nx, ny] = gm.w2s(p.x, p.z);
+          for (const el of grp.children) { el.setAttribute('cx', nx); el.setAttribute('cy', ny); }
+          readout.textContent = 'X ' + Math.round(wx) + ' · Z ' + Math.round(wz);
+        },
+        onEnd: (moved) => {
+          if (moved) { markDirty(); renderList(); }
+          // After the click this press makes, so that click still lands on
+          // the point (and adds nothing to the map).
+          setTimeout(() => selectPt(j, true), 0);
+        },
+        onDelete: () => removePt(j),
       });
     });
-    const g = gs[curGroup];
-    countLbl.textContent = t('spawnpoints.points').replace('{n}', (g && g.pos.length) || 0);
+    countLbl.textContent = tn('spawnpoints.points', { n: g ? g.pos.length : 0 });
+    renderSel();
   }
-
-  let drag = null, justDragged = false;
-  function startDrag(j, e) {
-    if (e.button !== 0 || running) return;
-    e.stopPropagation();
-    drag = { j, moved: false };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+  // Zoom and pan only resize the dots.
+  gm.onView = () => {
+    const rI = gm.px(3.5), rA = gm.px(5), hr = gm.px(14);
+    for (const c of gm.layer.querySelectorAll('.sp-pt-other')) c.setAttribute('r', rI);
+    act.forEach((e, j) => {
+      e.c.setAttribute('r', j === selPt ? rA * 1.4 : rA);
+      if (e.hit) e.hit.setAttribute('r', hr);
+    });
+  };
+  function selectPt(j, scroll) {
+    selPt = j;
+    renderMap();
+    listHost.querySelectorAll('tr.sel').forEach(tr => tr.classList.remove('sel'));
+    const tr = j >= 0 ? listHost.querySelector(`tr[data-j="${j}"]`) : null;
+    if (!tr) return;
+    tr.classList.add('sel');
+    if (scroll) scrollBoxTo(listHost, tr);
   }
-  function onMove(e) {
-    if (!drag) return;
-    drag.moved = true;
-    const g = sec().groups[curGroup]; if (!g) return;
-    const [wx, wz] = clientToWorld(gm, e);
-    g.pos[drag.j].x = Math.round(wx * 100) / 100;
-    g.pos[drag.j].z = Math.round(wz * 100) / 100;
-    const [sx, sy] = gm.w2s(g.pos[drag.j].x, g.pos[drag.j].z);
-    if (circles[drag.j]) { circles[drag.j].setAttribute('cx', sx); circles[drag.j].setAttribute('cy', sy); }
-    readout.textContent = 'X ' + Math.round(wx) + ' · Z ' + Math.round(wz);
+  function removePt(j) {
+    const g = group();
+    if (!g || j < 0 || j >= g.pos.length) return;
+    g.pos.splice(j, 1);
+    if (selPt === j) selPt = -1; else if (selPt > j) selPt--;
+    markDirty(); renderMap(); renderGroups(); renderList();
   }
-  function onUp() {
-    if (drag && drag.moved) { markDirty(); justDragged = true; setTimeout(() => { justDragged = false; }, 0); }
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onUp);
-    drag = null;
-  }
+  // A click on empty map adds a point to the active group. A drag that panned
+  // the map, or a point's own press, never gets here (see buildGameMap).
   gm.svg.addEventListener('click', (e) => {
-    if (justDragged || running) return;
-    if (e.target && e.target.classList && e.target.classList.contains('sp-pt')) return;
-    const g = sec().groups[curGroup]; if (!g) return;
+    if (running) return;
+    if (e.target && e.target.closest && e.target.closest('.sp-pt-g')) return;
+    const g = group();
+    if (!g) return;
     const [wx, wz] = clientToWorld(gm, e);
-    g.pos.push({ x: Math.round(wx * 100) / 100, z: Math.round(wz * 100) / 100 });
-    markDirty(); renderMap(); renderGroups();
+    g.pos.push({ x: round2(wx), z: round2(wz) });
+    markDirty(); renderGroups(); renderList();
+    selectPt(g.pos.length - 1, true);
   });
 
-  // ---- params (spawn / generator / group) ----
+  // ---- the active group's points as a list: exact X / Z, paste, export ----
+  const listTitle = h('h3');
+  const listHost = h('div', { class: 'sp-list-wrap' });
+  const showOnMap = () => {
+    const r = gm.svg.getBoundingClientRect();
+    if (r.bottom < 80 || r.top > window.innerHeight - 80) scrollToCard(mapCard);
+  };
+  function renderList() {
+    listHost.innerHTML = '';
+    const g = group();
+    listTitle.textContent = g ? t('spawnpoints.list.title').replace('{name}', g.name || '—') : t('spawnpoints.list.titleNone');
+    if (!g || !g.pos.length) {
+      listHost.append(h('p', { class: 'hint', i18n: g ? 'spawnpoints.list.empty' : 'spawnpoints.noGroup' }));
+      applyI18n();
+      return;
+    }
+    const tbl = h('table', { class: 'sp-list' });
+    tbl.append(h('thead', {}, h('tr', {}, [
+      h('th', { text: '#' }), h('th', { class: 'num', text: 'X' }), h('th', { class: 'num', text: 'Z' }), h('th', { text: '' }),
+    ])));
+    const tb = h('tbody');
+    g.pos.forEach((p, j) => {
+      const cell = (f, label) => {
+        const inp = h('input', { type: 'number', step: 'any', class: 'inline-cell', value: String(round2(p[f])), disabled: running, 'aria-label': `#${j + 1} ${label}` });
+        inp.addEventListener('focus', () => { if (selPt !== j) selectPt(j, false); });
+        inp.addEventListener('change', () => {
+          const n = parseFloat(inp.value);
+          if (!Number.isFinite(n)) { inp.value = String(round2(p[f])); return; }
+          p[f] = round2(n);
+          markDirty(); renderMap();
+        });
+        return h('td', { class: 'num' }, inp);
+      };
+      tb.append(h('tr', { 'data-j': String(j), class: j === selPt ? 'sel' : '' }, [
+        h('td', { class: 'hint', text: String(j + 1) }), cell('x', 'X'), cell('z', 'Z'),
+        h('td', {}, h('div', { class: 'row', style: { gap: '4px', flexWrap: 'nowrap', justifyContent: 'flex-end' } }, [
+          h('button', { type: 'button', class: 'secondary icon-only', title: t('eventmap.zoomTo'), 'aria-label': t('eventmap.zoomTo'), html: svgIcon('i-search', 14),
+            onclick: () => { selectPt(j, false); gm.focus(p.x, p.z); showOnMap(); } }),
+          h('button', { type: 'button', class: 'danger icon-only', title: t('action.delete'), 'aria-label': t('action.delete'), text: '×', disabled: running,
+            onclick: () => removePt(j) }),
+        ])),
+      ]));
+    });
+    tbl.append(tb);
+    listHost.append(tbl);
+  }
+
+  // Paste: X Z per line (iZurvive "x / z"), X Y Z (DayZ Editor) or <pos/> lines.
+  const pasteArea = h('textarea', { class: 'coord-paste sp-paste', placeholder: '7500.12 3200.40\n7512.5 / 3190.2\n<pos x="7486.2" z="3211.9" />' });
+  const pasteInfo = h('div', { class: 'hint' });
+  pasteArea.addEventListener('input', () => {
+    const r = parseCoordList(pasteArea.value, 'xyz');
+    pasteInfo.textContent = pasteArea.value.trim() ? tn('eventmap.paste.parsed', { n: r.points.length, bad: r.bad }) : '';
+  });
+  const pasteTo = async (replace) => {
+    const g = group();
+    if (!g) return;
+    const r = parseCoordList(pasteArea.value, 'xyz');
+    if (!r.points.length) { toast(t('eventmap.paste.none'), 'warn'); return; }
+    const pts = r.points.map(p => ({ x: round2(p.x), z: round2(p.z) }));
+    if (replace) {
+      if (!(await confirmModal(tn('spawnpoints.paste.replaceConfirm', { name: g.name || '—', n: pts.length }), { danger: true }))) return;
+      g.pos = pts;
+      selPt = -1;
+    } else g.pos.push(...pts);
+    markDirty(); renderMap(); renderGroups(); renderList();
+    toast(tn('eventmap.paste.added', { n: pts.length }), 'ok');
+    pasteArea.value = '';
+    pasteInfo.textContent = '';
+  };
+
+  // ---- params (spawn / generator / group) of the selected section ----
+  const UNIT = { m: () => t('unit.m'), deg: () => '°', s: () => t('unit.seconds') };
+  const paramsTitle = h('h3');
   const paramsHost = h('div', { class: 'sp-params' });
   function renderParams() {
     paramsHost.innerHTML = '';
+    paramsTitle.textContent = t('spawnpoints.paramsFor').replace('{section}', t('spawnpoints.section.' + curSection));
     const s = sec();
     const block = (titleKey, kvs, openIt) => {
       if (!kvs || !kvs.length) return null;
       const grid = h('div', { class: 'sp-param-grid' });
       kvs.forEach(kv => {
-        const info = PS_PARAM_INFO[kv.key] || {};
-        const inp = h('input', { type: 'text', value: kv.value, disabled: running });
-        const id = assocId(inp);
-        const label = h('label', { text: info.label || kv.key, for: id, title: info.tip ? info.tip + ' (' + kv.key + ')' : kv.key });
-        inp.addEventListener('input', () => { kv.value = inp.value; markDirty(); });
-        grid.append(h('div', { class: 'sp-param' }, [label, inp]));
+        const lk = 'spawnpoints.param.' + kv.key;
+        const known = t(lk) !== lk;
+        const tip = known && t(lk + '.tip') !== lk + '.tip' ? t(lk + '.tip') : '';
+        const text = known ? t(lk) : kv.key;
+        const key = known ? h('code', { class: 'cfg-key', text: kv.key }) : null;
+        const v = String(kv.value ?? '').trim();
+        // true/false values are a switch, numbers a number field with a unit.
+        if (/^(true|false)$/i.test(v)) {
+          const cb = h('input', { type: 'checkbox', class: 'switch', disabled: running });
+          cb.checked = v.toLowerCase() === 'true';
+          cb.addEventListener('change', () => { kv.value = cb.checked ? 'true' : 'false'; markDirty(); });
+          grid.append(h('label', { class: 'cfg-bool sp-param-bool', title: tip }, [cb, h('span', { class: 'cfg-bool-text' }, [
+            h('span', { class: 'cfg-bool-label', text }), key].filter(Boolean))]));
+          return;
+        }
+        const isNum = v !== '' && Number.isFinite(Number(v));
+        const inp = h('input', { type: isNum ? 'number' : 'text', step: isNum ? 'any' : null, value: kv.value ?? '', disabled: running });
+        inp.addEventListener('input', () => { kv.value = inp.value; markDirty('p:' + curSection + kv.key); });
+        const unit = UNIT[PS_PARAM_UNIT[kv.key]];
+        grid.append(h('div', { class: 'sp-param' }, [
+          h('div', { class: 'cfg-label' }, [h('label', { for: assocId(inp), text, title: tip }), key].filter(Boolean)),
+          unit ? h('div', { class: 'sp-unit-wrap' }, [inp, h('span', { class: 'sp-unit', text: unit() })]) : inp,
+        ]));
       });
       const det = h('details', { class: 'sp-param-block' }, [h('summary', { i18n: titleKey }), grid]);
       if (openIt) det.setAttribute('open', '');
@@ -7129,30 +8159,48 @@ Views.spawnpoints = async (root) => {
     else bs.forEach(b => paramsHost.append(b));
   }
 
-  root.append(h('div', { class: 'card' }, [
+  const mapCard = h('div', { class: 'card' }, [
     tabsHost,
     h('p', { class: 'hint', i18n: 'spawnpoints.help' }),
     groupHost,
     groupEdit,
-    h('div', { class: 'map-toolbar' }, [
-      mapImageControls(d.map, () => { if (dirty) toast(t('map.image.savedReload'), 'ok'); else navigate('spawnpoints'); }),
-      h('div', { class: 'grow' }), countLbl, readout,
-    ]),
+    h('div', { class: 'map-toolbar' }, [selInfo, delPtBtn, h('div', { class: 'grow' }), countLbl, readout]),
     h('div', { class: 'map-wrap' }, [gm.svg, gm.controls]),
-    h('h3', { i18n: 'spawnpoints.paramsTitle', style: { marginTop: '14px' } }),
-    paramsHost,
-    h('div', { class: 'actions' }, [saveBtn]),
-  ]));
+  ]);
+  root.append(
+    mapCard,
+    h('div', { class: 'card' }, [
+      listTitle,
+      h('div', { class: 'sp-list-cols' }, [
+        listHost,
+        h('div', { class: 'sp-paste-col' }, [
+          h('label', { i18n: 'eventmap.paste.title', for: assocId(pasteArea) }),
+          pasteArea,
+          h('small', { class: 'hint', i18n: 'spawnpoints.paste.hint' }),
+          pasteInfo,
+          h('div', { class: 'actions' }, [
+            h('button', { type: 'button', class: 'primary', i18n: 'spawnpoints.paste.add', disabled: running, onclick: () => pasteTo(false) }),
+            h('button', { type: 'button', i18n: 'eventmap.paste.replace', disabled: running, onclick: () => pasteTo(true) }),
+            h('button', { type: 'button', class: 'secondary', i18n: 'eventmap.export', onclick: () => {
+              const g = group();
+              if (g) copyText(g.pos.map(p => `<pos x="${p.x}" z="${p.z}" />`).join('\n'));
+            } }),
+          ]),
+        ]),
+      ]),
+    ]),
+    h('div', { class: 'card' }, [paramsTitle, paramsHost, h('div', { class: 'actions' }, [saveBtn])]),
+    bar,
+  );
   mapCoordReadout(gm, readout);
-  gm.onView = renderMap; // re-plot points at the new scale on zoom/pan
 
-  function renderAll() { renderTabs(); renderGroups(); renderGroupEdit(); renderMap(); renderParams(); applyI18n(); }
+  function renderAll() { renderTabs(); renderGroups(); renderGroupEdit(); renderMap(); renderList(); renderParams(); applyI18n(); }
 
   async function save(btn) {
     for (const s of SECTIONS) {
       if (doc[s].present) {
         for (const g of doc[s].groups) {
-          if (!(g.name || '').trim()) { toast(t('spawnpoints.needGroupName'), 'err'); return; }
+          if (!(g.name || '').trim()) { toast(t('spawnpoints.needGroupName'), 'error'); return; }
         }
       }
     }
@@ -7160,12 +8208,14 @@ Views.spawnpoints = async (root) => {
       try {
         await api.post('/api/spawnpoints', doc);
         toast(t('spawnpoints.saved'), 'ok');
-        dirty = false; saveBtn.disabled = true;
+        saved = JSON.stringify(doc);
+        updateBar();
       } catch (e) { handleErr(e); }
     });
   }
 
   renderAll();
+  updateBar();
 };
 
 // ---------------------------------------------------------------- live map
@@ -7174,34 +8224,82 @@ Views.livemap = async (root) => {
   const myNav = _navSeq;
   root.append(pageHeader('nav.livemap', 'livemap.subtitle'));
   { const w = adminLogWarning(); if (w) root.append(w); }
-  const status = h('p', { class: 'hint' });
-  const ctlHost = h('div', { class: 'map-toolbar' });
-  const mapHost = h('div');
+  const status = h('span', { class: 'hint' });
+  const rconLink = h('button', { type: 'button', class: 'link-btn', i18n: 'livemap.setupRcon', onclick: () => navigate('rcon') });
+  rconLink.hidden = true;
+  const updated = h('span', { class: 'hint live-updated' });
+  const stoppedHost = h('div');
+  const mapHost = h('div', { class: 'live-map-col' });
+  const listHost = h('div', { class: 'live-list' });
   root.append(h('div', { class: 'card' }, [
-    status, ctlHost, mapHost, h('p', { class: 'hint', i18n: 'livemap.note' }),
+    h('div', { class: 'map-toolbar' }, [status, rconLink, h('div', { class: 'grow' }), updated]),
+    stoppedHost,
+    h('div', { class: 'live-layout' }, [mapHost, listHost]),
+    h('p', { class: 'hint', i18n: 'livemap.note' }),
   ]));
 
-  let gm = null, timer = null, lastPlayers = [];
+  let gm = null, mapWrap = null, timer = null, lastPlayers = [], focusKey = '';
   root._teardown = () => { if (timer) clearInterval(timer); };
 
-  // Plot the current player set; also the gm.onView hook so zoom/pan re-plots at
-  // the new scale (markers keep a roughly constant on-screen size).
+  // Each player is a <g> at its point, scaled to screen pixels (gm.px), so the
+  // dot and the name keep one size at any zoom and on any screen. Also the
+  // gm.onView hook, so zoom/pan re-plots at the new scale.
   function plotPlayers() {
     if (!gm) return;
     gm.layer.innerHTML = '';
-    const r = gm.ptR(5);
+    const s = gm.px(1);
     for (const p of lastPlayers) {
       const [sx, sy] = gm.w2s(p.x, p.z);
       const stale = p.ageSec > 300;
       const offline = p.online === false; // last-known, not RCon-confirmed online
-      const cls = 'live-pt' + (offline ? ' offline' : (stale ? ' stale' : ''));
-      const c = svgEl('circle', { cx: sx, cy: sy, r, class: cls }, gm.layer);
-      c.append(svgEl('title', {}, null));
-      c.lastChild.textContent = p.name + ' · ' + fmtAge(p.ageSec) + (offline ? ' · ' + t('livemap.lastKnown') : '');
-      const label = svgEl('text', { x: sx + 7, y: sy + 3, class: 'live-label' + (stale || offline ? ' stale' : '') }, gm.layer);
-      label.textContent = p.name;
+      const g = svgEl('g', { class: 'live-g' + (p.key && p.key === focusKey ? ' focus' : ''), transform: `translate(${sx} ${sy}) scale(${s})` }, gm.layer);
+      const c = svgEl('circle', { cx: 0, cy: 0, r: 5, class: 'live-pt' + (offline ? ' offline' : (stale ? ' stale' : '')) }, g);
+      svgEl('title', {}, c).textContent = p.name + ' · ' + fmtAge(p.ageSec) + (offline ? ' · ' + t('livemap.lastKnown') : '');
+      svgEl('text', { x: 8, y: 4, class: 'live-label' + (stale || offline ? ' stale' : '') }, g).textContent = p.name;
+      // A click (not a pan) on a player opens the profile.
+      if (p.key) g.addEventListener('click', () => openPlayerProfile(p.key));
     }
   }
+
+  // The list next to the map: who is plotted, how old the position is, and a
+  // click that centres the map on them.
+  function renderList() {
+    listHost.innerHTML = '';
+    listHost.append(h('div', { class: 'live-list-head' }, [
+      h('span', { i18n: 'livemap.list.title' }), h('span', { class: 'pill-count', text: String(lastPlayers.length) }),
+    ]));
+    if (!lastPlayers.length) {
+      listHost.append(h('p', { class: 'hint', i18n: 'livemap.list.empty' }));
+      return;
+    }
+    const sorted = lastPlayers.slice().sort((a, b) => (b.online === true) - (a.online === true) || a.ageSec - b.ageSec);
+    for (const p of sorted) {
+      const offline = p.online === false;
+      const row = h('div', { class: 'live-row' + (p.key && p.key === focusKey ? ' active' : '') }, [
+        h('button', { type: 'button', class: 'live-row-main', title: t('livemap.list.focus'), onclick: () => {
+          focusKey = p.key || '';
+          if (gm) gm.focus(p.x, p.z);
+          plotPlayers();
+          renderList();
+        } }, [
+          h('span', { class: 'live-row-dot' + (offline ? ' offline' : (p.ageSec > 300 ? ' stale' : '')) }),
+          h('span', { class: 'live-row-name', text: p.name }),
+          // Second line: how old the position is, and whether RCon sees them online.
+          h('span', { class: 'live-row-sub' }, [
+            fmtAge(p.ageSec) + ' · ',
+            h('span', { class: offline ? 'is-last' : 'is-online', text: offline ? t('livemap.lastKnown') : t('players.onlineBadge') }),
+          ]),
+        ]),
+        p.key ? h('button', { type: 'button', class: 'icon-btn live-row-prof', title: t('livemap.openProfile'), 'aria-label': t('livemap.openProfile') + ' ' + p.name,
+          html: svgIcon('i-players', 15), onclick: () => openPlayerProfile(p.key) }) : null,
+      ]);
+      listHost.append(row);
+    }
+  }
+
+  const clock = () => {
+    try { return new Date().toLocaleTimeString(State.lang || undefined); } catch { return new Date().toLocaleTimeString(); }
+  };
 
   async function refresh() {
     let d;
@@ -7209,30 +8307,50 @@ Views.livemap = async (root) => {
     catch { return; } // stay quiet on background-poll failures
     if (myNav !== _navSeq) { if (timer) clearInterval(timer); return; }
 
-    if (!d.running) {
-      gm = null;
-      status.textContent = '';
-      mapHost.innerHTML = '';
-      mapHost.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'livemap.stopped' })));
-      applyI18n();
-      return;
-    }
+    // The map (with its real-data layers) shows even while the server is
+    // stopped; only the players are missing.
     if (!gm) {
       mapHost.innerHTML = '';
-      gm = buildGameMap(d.map, { panLeft: true });
+      gm = buildGameMap(d.map, { panLeft: true, onImageChange: () => { gm = null; refresh(); } });
       gm.onView = plotPlayers;
-      mapHost.append(h('div', { class: 'map-wrap' }, [gm.svg, gm.controls]));
-      ctlHost.innerHTML = '';
-      ctlHost.append(mapImageControls(d.map, () => { gm = null; refresh(); }));
+      mapWrap = h('div', { class: 'map-wrap' }, [gm.svg, gm.controls]);
+      mapHost.append(mapWrap);
     }
-    lastPlayers = d.players || [];
-    let statusTxt = t('livemap.count')
-      .replace('{online}', d.onlineCount || 0)
-      .replace('{shown}', lastPlayers.length);
-    // Honest state when RCon can't confirm who's online: points are last-known.
-    if (d.rconError) statusTxt += ' · ' + t('livemap.rconOffline');
-    status.textContent = statusTxt;
+    updated.textContent = t('livemap.updated').replace('{time}', clock());
+    mapWrap.classList.toggle('is-idle', !d.running);
+    stoppedHost.innerHTML = '';
+    rconLink.hidden = true;
+    if (!d.running) {
+      lastPlayers = [];
+      status.textContent = '';
+      stoppedHost.append(h('div', { class: 'empty-state live-stopped' }, [
+        h('div', { class: 'es-icon', html: svgIcon('i-livemap', 34) }),
+        h('div', { class: 'es-title', i18n: 'livemap.stopped.title' }),
+        h('div', { class: 'es-hint', i18n: 'livemap.stopped.hint' }),
+        h('div', { class: 'actions' }, [
+          h('button', { type: 'button', class: 'primary', i18n: 'action.start', onclick: (e) => withBusy(e.currentTarget, async () => {
+            try { await api.post('/api/server/start'); toast(t('msg.starting'), 'ok'); refreshStatus(); }
+            catch (err) { handleErr(err); }
+          }) }),
+        ]),
+      ]));
+    } else {
+      lastPlayers = d.players || [];
+      if (d.rconConfigured === false) {
+        // Without RCon nobody is known to be online: the points are last-known.
+        status.textContent = t('livemap.noRcon');
+        rconLink.hidden = false;
+      } else if (d.rconError) {
+        status.textContent = t('livemap.rconOffline');
+      } else {
+        status.textContent = t('livemap.count')
+          .replace('{online}', d.onlineCount || 0)
+          .replace('{shown}', lastPlayers.length);
+      }
+    }
+    if (focusKey && !lastPlayers.some(p => p.key === focusKey)) focusKey = '';
     plotPlayers();
+    renderList();
     applyI18n();
   }
 
@@ -7243,47 +8361,108 @@ Views.livemap = async (root) => {
 // --------------------------------------------------------- where does it spawn
 
 Views.lootwhere = async (root) => {
+  const myNav = _navSeq;
   root.append(pageHeader('nav.lootwhere', 'lootwhere.subtitle'));
-  const input = h('input', { type: 'search', placeholder: t('lootwhere.placeholder') });
+  const input = h('input', { type: 'search', placeholder: t('lootwhere.placeholder'), 'aria-label': t('lootwhere.placeholder'),
+    list: 'dz-loot-classes', spellcheck: 'false', autocomplete: 'off' });
+  input.value = _lastLoot;
+  const dl = h('datalist', { id: 'dz-loot-classes' });
   const results = h('div', { class: 'card' });
-  root.append(h('div', { class: 'card' }, h('div', { class: 'toolbar' }, [
+  root.append(dl, h('div', { class: 'card' }, h('div', { class: 'toolbar' }, [
     input, h('button', { class: 'primary', i18n: 'search.go', onclick: () => run() }),
   ])));
   root.append(results);
-  setTimeout(() => input.focus(), 0);
+  // No auto-focus on touch screens: it popped the keyboard over the page.
+  if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) setTimeout(() => input.focus(), 0);
 
   let timer = null, seq = 0;
   input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 350); });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(timer); run(); } });
 
+  // Before the first query: what the answer contains, plus examples.
+  function intro() {
+    results.innerHTML = '';
+    results.append(h('div', { class: 'empty-state' }, [
+      h('div', { class: 'es-icon', html: svgIcon('i-lootwhere', 34) }),
+      h('div', { class: 'es-title', i18n: 'lootwhere.intro.title' }),
+      h('div', { class: 'es-hint', i18n: 'lootwhere.intro.hint' }),
+      h('div', { class: 'actions' }, [
+        h('span', { class: 'hint', i18n: 'lootwhere.example' }),
+        ...['AKM', 'Mag_STANAG_30Rnd', 'Canteen'].map(ex => h('button', { type: 'button', class: 'pill', text: ex,
+          onclick: () => { input.value = ex; run(); } })),
+      ]),
+    ]));
+    applyI18n();
+  }
+
   const chips = (cls, arr) => (arr || []).map(x => h('span', { class: 'badge ' + cls, text: x }));
 
+  // One other way the item reaches the world, as a link to where it is set.
+  function refChip(r) {
+    const pct = r.chance > 0 ? ' · ' + fmtPct(r.chance) : '';
+    const label = tn('lootwhere.ref.' + r.kind, { parent: r.parent }) + pct;
+    let go = null;
+    if (r.kind === 'attachment' || r.kind === 'cargo') go = () => { _pageQuery = { route: 'attachments', q: r.parent }; navigate('attachments'); };
+    else if (r.kind === 'preset') go = () => { _pageQuery = { route: 'randompresets', q: r.parent }; navigate('randompresets'); };
+    else if (r.kind === 'event') go = () => navigate('events');
+    return go ? h('button', { type: 'button', class: 'pill loot-ref k-' + r.kind, text: label, onclick: go })
+      : h('span', { class: 'pill loot-ref', text: label });
+  }
+
   function renderHit(it) {
+    const also = it.alsoIn || [];
     const row = h('div', { class: 'loot-hit' }, [
       h('div', { class: 'loot-hit-head' }, [
         h('span', { class: 'loot-name', text: it.name }),
         h('span', { class: 'hint', text: it.file }),
-      ]),
+        it.registered === false ? h('span', { class: 'badge warn', i18n: 'lootwhere.unregBadge' }) : null,
+      ].filter(Boolean)),
       h('div', { class: 'hint', text:
         t('lootwhere.nominal') + ': ' + (it.nominal ?? '—') + ' · ' +
-        t('lootwhere.min') + ': ' + (it.min ?? '—') }),
+        t('lootwhere.min') + ': ' + (it.min ?? '—') +
+        (it.lifetime != null ? ' · ' + t('lootwhere.lifetime') + ': ' + fmtAge(it.lifetime) : '') }),
       h('div', { class: 'chip-list' }, [
-        it.category ? h('span', { class: 'badge info', text: it.category }) : null,
+        it.category ? h('span', { class: 'badge info', text: typeCategoryLabel(it.category), title: it.category }) : null,
         ...chips('ok', it.usages),
         ...chips('warn', it.values),
         ...chips('mute', it.tags),
-      ]),
+      ].filter(Boolean)),
     ]);
-    if (!(it.usages && it.usages.length)) {
-      row.append(h('p', { class: 'hint loot-warn', i18n: 'lootwhere.noUsage' }));
+    // Why an entry that looks fine may still never spawn.
+    if (it.registered === false) {
+      row.append(h('div', { class: 'loot-warn-row' }, [
+        h('p', { class: 'hint loot-warn', i18n: 'lootwhere.unregistered' }),
+        h('button', { type: 'button', class: 'secondary small', i18n: 'lootwhere.toModed', onclick: () => navigate('moded') }),
+      ]));
     }
+    const other = also.length ? ' ' + t('lootwhere.otherPaths') : '';
+    if (!it.nominal) {
+      row.append(h('p', { class: 'hint loot-warn', text: t('lootwhere.nominalZero') + other }));
+    } else if (!(it.usages && it.usages.length)) {
+      row.append(h('p', { class: 'hint loot-warn', text: t('lootwhere.noUsage') + other }));
+    }
+    if (also.length) {
+      row.append(h('div', { class: 'loot-also' }, [
+        h('span', { class: 'hint', i18n: 'lootwhere.alsoIn' }),
+        ...also.map(refChip),
+        it.alsoMore ? h('span', { class: 'hint', text: tn('lootwhere.more', { n: it.alsoMore }) }) : null,
+      ].filter(Boolean)));
+    }
+    row.append(h('div', { class: 'loot-actions' }, [
+      it.editable ? h('button', { type: 'button', class: 'secondary small', i18n: 'lootwhere.editInTypes',
+        onclick: () => { _typesTarget = { file: it.typesFile || '', q: it.name }; navigate('types'); } }) : null,
+      h('button', { type: 'button', class: 'secondary small', i18n: 'lootwhere.allMentions',
+        onclick: () => { _lastSearch = it.name; navigate('search'); } }),
+    ].filter(Boolean)));
     return row;
   }
 
   async function run() {
     const q = input.value.trim();
+    _lastLoot = q;
     const mine = ++seq;
     results.innerHTML = '';
+    if (!q) { intro(); return; }
     if (q.length < 2) { results.append(h('p', { class: 'hint', i18n: 'search.hintShort' })); applyI18n(); return; }
     let d;
     try { d = await api.get('/api/loot/where?q=' + encodeURIComponent(q)); }
@@ -7291,15 +8470,28 @@ Views.lootwhere = async (root) => {
     if (mine !== seq) return;
     const hits = d.hits || [];
     if (!hits.length) {
-      results.append(h('div', { class: 'empty-state' }, h('div', { class: 'es-hint', i18n: 'lootwhere.none' })));
+      results.append(h('div', { class: 'empty-state' }, [
+        h('div', { class: 'es-hint', i18n: 'lootwhere.none' }),
+        h('div', { class: 'actions' }, [h('button', { type: 'button', class: 'secondary small', i18n: 'lootwhere.allMentions',
+          onclick: () => { _lastSearch = q; navigate('search'); } })]),
+      ]));
       applyI18n();
       return;
     }
     results.append(h('p', { class: 'hint',
-      text: t('search.count').replace('{n}', d.total) + (d.truncated ? ' ' + t('search.truncated') : '') }));
+      text: tn('search.count', { n: d.total }) + (d.truncated ? ' ' + t('search.truncated') : '') }));
     for (const it of hits) results.append(renderHit(it));
     applyI18n();
   }
+
+  if (input.value.trim()) run(); else intro();
+  // Autocomplete from the class names the server really has, as on
+  // Attachments and Presets.
+  try {
+    const names = (await api.get('/api/spawnable/classnames')).names || [];
+    if (myNav !== _navSeq) return;
+    for (const n of names.slice(0, 5000)) dl.append(h('option', { value: n }));
+  } catch {}
 };
 
 // ----------------------------------------------------------------- globals
@@ -7311,7 +8503,7 @@ function prettifyVar(name) {
 }
 
 Views.globals = async (root) => {
-  root.append(pageHeader('nav.globals', 'globals.subtitle'));
+  root.append(pageHeader('nav.globals', 'globals.subtitle', [revealBtn({ kind: 'missionfile', path: 'db/globals.xml' })]));
   if (State.serverStatus.running) root.append(runningBanner());
   let d;
   try { d = await api.get('/api/globals'); }
@@ -7367,8 +8559,7 @@ Views.globals = async (root) => {
   }
 
   root.append(h('div', { class: 'card' }, [
-    h('h2', { i18n: 'nav.globals' }),
-    h('p', { class: 'hint', text: d.path }),
+    h('p', { class: 'hint mono', text: d.path }),
     h('div', { class: 'toolbar' }, [search]),
     grid,
     h('div', { class: 'actions' }, [
@@ -7443,49 +8634,113 @@ Views.moddrift = async (root) => {
 // ----------------------------------------------------------- random presets
 
 Views.randompresets = async (root) => {
-  root.append(pageHeader('nav.randompresets', 'randompresets.subtitle'));
-  const running = State.serverStatus.running;
+  const myNav = _navSeq;
+  const preQuery = takePageQuery('randompresets'); // a link from Where to find
+  root.append(pageHeader('nav.randompresets', 'randompresets.subtitle', [revealBtn({ kind: 'missionfile', path: 'cfgrandompresets.xml' })]));
+  const running = !!State.serverStatus.running;
   let d;
   try { d = await api.get('/api/randompresets'); }
   catch (e) { handleErr(e); return; }
+  if (myNav !== _navSeq) return;
+
+  // An unreadable file is not "no presets": adding one and saving would have
+  // replaced every preset the file really holds. Show the parse error instead
+  // of an editor.
+  if (d.error) {
+    const base = String((State.info && State.info.serverDir) || '').replace(/\\/g, '/').replace(/\/+$/, '');
+    const abs = String(d.path || '').replace(/\\/g, '/');
+    const rel = base && abs.toLowerCase().startsWith(base.toLowerCase() + '/') ? abs.slice(base.length + 1) : '';
+    root.append(h('div', { class: 'card' }, h('div', { class: 'empty-state' }, [
+      h('div', { class: 'es-title', i18n: 'randompresets.unreadable' }),
+      h('div', { class: 'es-hint mono', text: d.error }),
+      rel ? h('div', { class: 'actions' }, [h('button', { class: 'secondary', i18n: 'search.open',
+        onclick: () => { _filesTarget = { path: rel }; navigate('files'); } })]) : null,
+    ].filter(Boolean))));
+    applyI18n();
+    return;
+  }
 
   // Editable working copy. Chances are kept as strings while editing so a
   // locale keyboard's comma never corrupts the value; parseNum reads them.
   let presets = (d.presets || []).map(p => ({
-    kind: p.kind, name: p.name, chance: String(p.chance),
+    kind: p.kind, name: p.name, chance: String(p.chance), open: false,
     items: (p.items || []).map(it => ({ name: it.name, chance: String(it.chance) })),
   }));
   let dirty = false;
   const parseNum = (v) => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
 
   // Class-name autocomplete + unknown-class flagging, exactly like Attachments.
+  // Compared case-insensitively: vanilla's own files write AmmoBox_9x19_25Rnd
+  // where types.xml has AmmoBox_9x19_25rnd, and those spawn fine.
   let classNames = [];
   try { classNames = (await api.get('/api/spawnable/classnames')).names || []; } catch {}
-  const classSet = new Set(classNames);
+  // How many Attachments entries reference each preset (cargo and attachments
+  // presets are separate namespaces in the game).
+  const uses = {};
+  try {
+    const sp = await api.get('/api/spawnable');
+    for (const st of (sp.types || [])) {
+      const seen = new Set();
+      for (const [side, groups] of [['cargo', st.cargo], ['attachments', st.attachments]]) {
+        for (const g of (groups || [])) {
+          if (!g.preset) continue;
+          const k = side + '|' + g.preset.toLowerCase();
+          if (!seen.has(k)) { seen.add(k); uses[k] = (uses[k] || 0) + 1; }
+        }
+      }
+    }
+  } catch {}
+  if (myNav !== _navSeq) return;
+  const classLower = new Set(classNames.map(n => n.toLowerCase()));
+  const isUnknown = (name) => { const n = String(name || '').trim(); return !!n && classLower.size > 0 && !classLower.has(n.toLowerCase()); };
+  const unknownCount = (p) => p.items.filter(it => isUnknown(it.name)).length;
+  const usesOf = (p) => uses[p.kind + '|' + String(p.name || '').trim().toLowerCase()] || 0;
   const classDL = h('datalist', { id: 'dz-preset-classes' });
   for (const n of classNames.slice(0, 5000)) classDL.append(h('option', { value: n }));
   root.append(classDL);
 
-  const search = h('input', { type: 'search', placeholder: t('randompresets.search') });
-  const saveBtn = h('button', { class: 'primary', i18n: 'action.save', disabled: true });
-  const updateSave = () => { saveBtn.disabled = !dirty || running; };
-  const markDirty = () => { dirty = true; updateSave(); };
-  saveBtn.addEventListener('click', () => doSave(saveBtn));
+  const search = h('input', { type: 'search', placeholder: t('randompresets.search'), 'aria-label': t('randompresets.search') });
+  search.value = preQuery;
+  const countHint = h('span', { class: 'hint rp-count' });
+  let onlyUnknown = false;
+  const unknownBtn = h('button', { type: 'button', class: 'secondary small rp-unknown-btn', 'aria-pressed': 'false',
+    onclick: () => { onlyUnknown = !onlyUnknown; render(); } });
+  const saveBtn = h('button', { class: 'primary', i18n: 'action.save', title: 'Ctrl+S', disabled: true, onclick: (e) => doSave(e.currentTarget) });
   const addCargo = h('button', { class: 'secondary', i18n: 'randompresets.addCargo', disabled: running, onclick: () => addPreset('cargo') });
   const addAttach = h('button', { class: 'secondary', i18n: 'randompresets.addAttach', disabled: running, onclick: () => addPreset('attachments') });
+
+  // Sticky bar while something is unsaved — the list is long and the top
+  // toolbar scrolls away.
+  const barSave = h('button', { class: 'primary small', i18n: 'action.save', disabled: running, onclick: (e) => doSave(e.currentTarget) });
+  const bar = h('div', { class: 'sticky-save', hidden: true }, [
+    h('span', { i18n: 'gameplay.unsaved' }),
+    h('span', { class: 'grow' }),
+    h('button', { class: 'secondary small', i18n: 'action.discard', onclick: () => { dirty = false; navigate('randompresets'); } }),
+    barSave,
+  ]);
+  const updateSave = () => { saveBtn.disabled = !dirty || running; bar.hidden = !dirty; };
+  const markDirty = () => { if (!dirty) { dirty = true; updateSave(); } };
+  root._isDirty = () => dirty;
+  root._save = () => doSave(saveBtn);
 
   root.append(h('div', { class: 'card' }, [
     h('p', { class: 'hint', i18n: 'randompresets.editHint' }),
     running ? runningBanner() : null,
-    h('div', { class: 'toolbar' }, [search, h('span', { class: 'grow' }), addCargo, addAttach, saveBtn]),
-  ]));
+    // A missing file is fine — saving creates it — but say so.
+    d.exists ? null : h('div', { class: 'warning-bar', i18n: 'randompresets.missingCreate' }),
+    h('div', { class: 'toolbar' }, [search, countHint, unknownBtn, h('span', { class: 'grow' }), addCargo, addAttach, saveBtn]),
+  ].filter(Boolean)));
   const list = h('div');
-  root.append(list);
+  root.append(list, bar);
 
   function addPreset(kind) {
-    presets.unshift({ kind, name: '', chance: kind === 'attachments' ? '1' : '0.3', items: [] });
+    const p = { kind, name: '', chance: kind === 'attachments' ? '1' : '0.3', items: [], open: true };
+    presets.unshift(p);
+    search.value = ''; onlyUnknown = false;
     markDirty();
     render();
+    const inp = list.querySelector('.preset-name-inp');
+    if (inp) inp.focus();
   }
 
   function matches(p, q) {
@@ -7494,95 +8749,178 @@ Views.randompresets = async (root) => {
     return p.items.some(it => (it.name || '').toLowerCase().includes(q));
   }
 
-  function presetCard(p) {
-    const nameInp = h('input', { type: 'text', class: 'preset-name-inp', value: p.name, placeholder: t('randompresets.namePh'), disabled: running });
-    nameInp.addEventListener('input', () => { p.name = nameInp.value; markDirty(); });
-    const chanceInp = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: p.chance, disabled: running, 'aria-label': t('randompresets.groupChance') });
-    const del = h('button', { class: 'danger icon-btn', text: '×', title: t('action.delete'), disabled: running,
-      onclick: () => { presets = presets.filter(x => x !== p); markDirty(); render(); } });
-    const head = h('div', { class: 'preset-edit-head' }, [
-      h('span', { class: 'badge ' + (p.kind === 'cargo' ? 'info' : 'mute'), text: p.kind }),
-      nameInp,
-      h('label', { class: 'chance-lbl' }, [h('span', { class: 'hint', i18n: 'randompresets.groupChance' }), chanceInp]),
-      del,
-    ]);
-    const itemsHost = h('div', { class: 'preset-items' });
-    const card = h('div', { class: 'card preset-edit' }, [head, itemsHost]);
+  const kindLabel = (k) => t(k === 'cargo' ? 'randompresets.kind.cargo' : 'randompresets.kind.attachments');
 
-    function renderItems() {
-      itemsHost.innerHTML = '';
-      const rows = [];
-      const recompute = () => {
-        const gc = parseNum(chanceInp.value);
-        const sum = p.items.reduce((a, x) => a + parseNum(x.chance), 0);
-        for (const r of rows) {
-          r.real.textContent = (sum > 0 ? gc * parseNum(r.it.chance) / sum * 100 : 0).toFixed(1) + '%';
-        }
-      };
-      chanceInp.oninput = () => { p.chance = chanceInp.value; markDirty(); recompute(); };
-      if (p.items.length) {
-        itemsHost.append(h('div', { class: 'preset-item-head' }, [
-          h('span', { i18n: 'col.name' }),
-          h('span', { class: 'preset-col-wt', i18n: 'randompresets.weight' }),
-          h('span', { class: 'preset-col-real', i18n: 'randompresets.real' }),
-          h('span', { class: 'preset-col-x' }),
-        ]));
-      }
-      for (const it of p.items) {
-        const nm = h('input', { type: 'text', class: 'mono item-name-inp', value: it.name, list: 'dz-preset-classes', placeholder: t('randompresets.itemPh'), disabled: running });
-        const warn = h('span', { class: 'attach-warn', text: '!', title: t('attach.unknownClass'), style: { display: 'none' } });
-        const wt = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: it.chance, disabled: running, 'aria-label': t('randompresets.weight') });
-        wt.addEventListener('input', () => { it.chance = wt.value; markDirty(); recompute(); });
-        const real = h('span', { class: 'preset-real' });
-        const rm = h('button', { class: 'danger icon-btn', text: '×', title: t('action.delete'), disabled: running,
-          onclick: () => { p.items = p.items.filter(x => x !== it); markDirty(); renderItems(); } });
-        const row = h('div', { class: 'preset-item-row' }, [h('span', { class: 'preset-name-wrap' }, [nm, warn]), wt, real, rm]);
-        // A class absent from types.xml never spawns — flag it live as it is typed.
-        const checkName = () => {
-          const nmv = (it.name || '').trim();
-          const unknown = !!nmv && classNames.length > 0 && !classSet.has(nmv);
-          warn.style.display = unknown ? '' : 'none';
-          row.classList.toggle('unknown', unknown);
+  // One preset: a one-line summary that expands into the editor. All 78
+  // presets used to render fully expanded — some 600 inputs on one page.
+  function presetCard(p, autoOpen) {
+    const sumName = h('span', { class: 'rp-name' });
+    const sumMeta = h('span', { class: 'rp-meta' });
+    const sumBadges = h('span', { class: 'rp-badges' });
+    const summary = h('summary', { class: 'rp-summary' }, [
+      h('span', { class: 'badge ' + (p.kind === 'cargo' ? 'info' : 'mute'), text: kindLabel(p.kind), title: p.kind }),
+      sumName, sumMeta, sumBadges,
+    ]);
+    const body = h('div', { class: 'rp-body' });
+    const det = h('details', { class: 'card preset-edit rp-card' }, [summary, body]);
+    // Remember what the admin opened or closed (not what a search opened).
+    summary.addEventListener('click', () => { p.open = !det.open; });
+
+    function updateSummary() {
+      sumName.textContent = (p.name || '').trim() || t('randompresets.unnamed');
+      sumName.classList.toggle('rp-unnamed', !(p.name || '').trim());
+      sumMeta.textContent = tn('randompresets.group', { pct: Math.round(parseNum(p.chance) * 1000) / 10 }) + ' · ' + tn('economy.itemsN', { n: p.items.length });
+      sumBadges.innerHTML = '';
+      const unk = unknownCount(p);
+      if (unk) sumBadges.append(h('span', { class: 'badge warn', text: tn('randompresets.unknownN', { n: unk }) }));
+      const u = usesOf(p);
+      sumBadges.append(u
+        ? h('span', { class: 'badge ok', text: tn('randompresets.usedIn', { n: u }) })
+        : h('span', { class: 'badge mute', text: t('randompresets.unused'), title: t('randompresets.unused.hint') }));
+    }
+    updateSummary();
+
+    let built = false;
+    function build() {
+      if (built) return;
+      built = true;
+      const nameInp = h('input', { type: 'text', class: 'preset-name-inp', value: p.name, placeholder: t('randompresets.namePh'), disabled: running, 'aria-label': t('randompresets.namePh') });
+      nameInp.addEventListener('input', () => { p.name = nameInp.value; markDirty(); updateSummary(); });
+      const chanceInp = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: p.chance, disabled: running, 'aria-label': t('randompresets.groupChance') });
+      const del = h('button', { class: 'danger small rp-del', i18n: 'randompresets.delete', disabled: running, onclick: async () => {
+        // A whole preset (and every Attachments entry pointing at it) went with
+        // one unconfirmed click.
+        const u = usesOf(p);
+        const msg = tn('randompresets.deleteConfirm', { name: (p.name || '').trim() || t('randompresets.unnamed'), n: p.items.length }) +
+          (u ? ' ' + tn('randompresets.deleteUsed', { n: u }) : '');
+        if (!(await confirmModal(msg, { danger: true, okText: t('action.delete') }))) return;
+        presets = presets.filter(x => x !== p);
+        markDirty();
+        render();
+      } });
+      body.append(h('div', { class: 'preset-edit-head' }, [
+        nameInp,
+        h('label', { class: 'chance-lbl' }, [h('span', { class: 'hint', i18n: 'randompresets.groupChance' }), chanceInp]),
+        del,
+      ]));
+      const itemsHost = h('div', { class: 'preset-items' });
+      body.append(itemsHost);
+
+      function renderItems() {
+        itemsHost.innerHTML = '';
+        const rows = [];
+        const recompute = () => {
+          const gc = parseNum(chanceInp.value);
+          const sum = p.items.reduce((a, x) => a + parseNum(x.chance), 0);
+          for (const r of rows) {
+            r.real.textContent = (sum > 0 ? gc * parseNum(r.it.chance) / sum * 100 : 0).toFixed(1) + '%';
+          }
         };
-        nm.addEventListener('input', () => { it.name = nm.value; markDirty(); checkName(); });
-        checkName();
-        rows.push({ it, real });
-        itemsHost.append(row);
+        chanceInp.oninput = () => { p.chance = chanceInp.value; markDirty(); recompute(); updateSummary(); };
+        if (p.items.length) {
+          itemsHost.append(h('div', { class: 'preset-item-head' }, [
+            h('span', { i18n: 'col.name' }),
+            h('span', { class: 'preset-col-wt', i18n: 'randompresets.weight' }),
+            h('span', { class: 'preset-col-real', i18n: 'randompresets.real' }),
+            h('span', { class: 'preset-col-x' }),
+          ]));
+        }
+        for (const it of p.items) {
+          const nm = h('input', { type: 'text', class: 'mono item-name-inp', value: it.name, list: 'dz-preset-classes', placeholder: t('randompresets.itemPh'), disabled: running, 'aria-label': t('randompresets.itemPh') });
+          const warn = h('span', { class: 'attach-warn', text: '!', title: t('attach.unknownClass'), style: { display: 'none' } });
+          const wt = h('input', { type: 'text', inputmode: 'decimal', class: 'chance-inp', value: it.chance, disabled: running, 'aria-label': t('randompresets.weight') });
+          wt.addEventListener('input', () => { it.chance = wt.value; markDirty(); recompute(); });
+          const real = h('span', { class: 'preset-real' });
+          // Quiet ×, as in Attachments: removing one item must not look like
+          // deleting the preset.
+          const rm = h('button', { class: 'icon-x', text: '×', title: t('attach.removeItem'), 'aria-label': t('attach.removeItem'), disabled: running,
+            onclick: () => { p.items = p.items.filter(x => x !== it); markDirty(); renderItems(); updateSummary(); } });
+          const row = h('div', { class: 'preset-item-row' }, [
+            h('span', { class: 'preset-name-wrap' }, [nm, warn]),
+            h('span', { class: 'rp-wt-lbl hint', i18n: 'randompresets.weight' }),
+            wt, real, rm,
+          ]);
+          // A class absent from types.xml never spawns — flag it live as it is typed.
+          const checkName = () => {
+            const unknown = isUnknown(it.name);
+            warn.style.display = unknown ? '' : 'none';
+            row.classList.toggle('unknown', unknown);
+          };
+          nm.addEventListener('input', () => { it.name = nm.value; markDirty(); checkName(); updateSummary(); });
+          checkName();
+          rows.push({ it, real });
+          itemsHost.append(row);
+        }
+        const addItem = h('button', { class: 'secondary small', i18n: 'randompresets.addItem', disabled: running,
+          onclick: () => {
+            p.items.push({ name: '', chance: '1' });
+            markDirty(); renderItems(); updateSummary();
+            const inps = itemsHost.querySelectorAll('.item-name-inp');
+            if (inps.length) inps[inps.length - 1].focus();
+          } });
+        itemsHost.append(h('div', { class: 'preset-add-row' }, addItem));
+        recompute();
+        applyI18n();
       }
-      const addItem = h('button', { class: 'secondary small', i18n: 'randompresets.addItem', disabled: running,
-        onclick: () => { p.items.push({ name: '', chance: '1' }); markDirty(); renderItems(); } });
-      itemsHost.append(h('div', { class: 'preset-add-row' }, addItem));
-      recompute();
+      renderItems();
       applyI18n();
     }
-    renderItems();
-    return card;
+    // Built on first open, so a closed preset costs one line of DOM.
+    det.addEventListener('toggle', () => { if (det.open) build(); });
+    if (p.open || autoOpen) { build(); det.open = true; }
+    det._preset = p;
+    return det;
   }
 
   function render() {
     const q = search.value.trim().toLowerCase();
     list.innerHTML = '';
-    const shown = presets.filter(p => matches(p, q));
-    list.append(h('p', { class: 'hint', text: shown.length + ' / ' + presets.length }));
+    const totalUnknown = presets.reduce((a, p) => a + unknownCount(p), 0);
+    if (!totalUnknown) onlyUnknown = false;
+    unknownBtn.hidden = !totalUnknown;
+    unknownBtn.textContent = tn('randompresets.unknownTotal', { n: totalUnknown });
+    unknownBtn.classList.toggle('active', onlyUnknown);
+    unknownBtn.setAttribute('aria-pressed', onlyUnknown ? 'true' : 'false');
+    unknownBtn.title = t('randompresets.unknownFilter');
+    const shown = presets.filter(p => matches(p, q) && (!onlyUnknown || unknownCount(p) > 0));
+    countHint.textContent = tn('randompresets.count', { shown: shown.length, total: presets.length });
     if (!presets.length) {
       list.append(h('div', { class: 'card' }, h('div', { class: 'empty-state' },
         h('div', { class: 'es-hint', i18n: 'randompresets.empty' }))));
+    } else if (!shown.length) {
+      list.append(h('div', { class: 'card' }, h('div', { class: 'empty-state' }, [
+        h('div', { class: 'es-title', i18n: 'randompresets.none' }),
+        h('div', { class: 'actions' }, [h('button', { class: 'secondary', i18n: 'filter.reset',
+          onclick: () => { search.value = ''; onlyUnknown = false; render(); } })]),
+      ])));
     }
-    for (const p of shown) list.append(presetCard(p));
+    // A search that hits only a few presets opens them, so the matching item
+    // is in view; a broad one leaves the list folded.
+    const autoOpen = (!!q || onlyUnknown) && shown.length <= 12;
+    for (const p of shown) list.append(presetCard(p, autoOpen));
     updateSave();
     applyI18n();
   }
 
   async function doSave(btn) {
+    if (running) return;
     const payload = presets.map(p => ({
       kind: p.kind, name: (p.name || '').trim(), chance: parseNum(p.chance),
       items: p.items.map(it => ({ name: (it.name || '').trim(), chance: parseNum(it.chance) })).filter(it => it.name),
     }));
-    if (payload.some(p => !p.name)) { toast(t('randompresets.needName'), 'err'); return; }
+    const reveal = (p) => { search.value = ''; onlyUnknown = false; p.open = true; render(); };
+    const nameless = presets.find(p => !(p.name || '').trim());
+    if (nameless) {
+      toast(t('randompresets.needName'), 'error');
+      reveal(nameless);
+      const inp = [...list.children].find(c => c._preset === nameless);
+      if (inp && inp.querySelector('.preset-name-inp')) inp.querySelector('.preset-name-inp').focus();
+      return;
+    }
     const names = {};
     for (const p of payload) {
       const key = p.kind + '|' + p.name.toLowerCase();
-      if (names[key]) { toast(t('randompresets.dupName').replace('{name}', p.name), 'err'); return; }
+      if (names[key]) { toast(t('randompresets.dupName').replace('{name}', p.name), 'error'); return; }
       names[key] = true;
     }
     await withBusy(btn, async () => {
@@ -7594,7 +8932,8 @@ Views.randompresets = async (root) => {
     });
   }
 
-  search.addEventListener('input', render);
+  let _st = 0;
+  search.addEventListener('input', () => { clearTimeout(_st); _st = setTimeout(render, 150); });
   render();
 };
 
@@ -7603,6 +8942,12 @@ Views.randompresets = async (root) => {
 Views.chat = async (root) => {
   const myNav = _navSeq;
   root.append(pageHeader('nav.chat', 'chat.subtitle'));
+  let timer = null;
+  let lastSig = null; // avoid rebuilding the feed (and flickering) when nothing changed
+  root._teardown = () => { if (timer) clearInterval(timer); };
+  // Names in the feed open the player's profile (kick / message / ban there).
+  const playersP = api.get('/api/players').catch(() => null);
+  let keyOf = () => '';
 
   // Connection status badge — chat is captured live from the BattlEye RCon
   // stream, so the feed only fills while the server is running with RCon on.
@@ -7611,26 +8956,88 @@ Views.chat = async (root) => {
   const status = h('div', { class: 'chat-status' }, [dot, statusTxt]);
 
   const feed = h('div', { class: 'chat-feed' });
-  const input = h('input', { type: 'text', placeholder: t('chat.placeholder') });
-  root.append(h('div', { class: 'card' }, [
+  const input = h('input', { type: 'text', placeholder: t('chat.placeholder'), 'aria-label': t('chat.placeholder'), maxlength: '400' });
+  const sendBtn = h('button', { class: 'primary', i18n: 'chat.send', onclick: send });
+  // Quick messages — saved broadcasts in the manager config. Chat is the one
+  // place to write to players: a click sends one, ☆ keeps what is typed.
+  const presets = Array.isArray(State.config && State.config.broadcastPresets) ? State.config.broadcastPresets.slice() : [];
+  const presetsHost = h('div', { class: 'chat-presets' });
+  const liveCard = h('div', { class: 'card' }, [
     status,
     feed,
-    h('div', { class: 'row', style: { marginTop: '10px' } }, [
-      input, h('button', { class: 'primary', i18n: 'chat.send', onclick: send }),
-    ]),
-  ]));
+    h('div', { class: 'row', style: { marginTop: '10px' } }, [input, sendBtn]),
+    presetsHost,
+  ]);
 
-  let timer = null;
-  let lastSig = null; // avoid rebuilding the feed (and flickering) when nothing changed
-  root._teardown = () => { if (timer) clearInterval(timer); };
+  // Live / Archive tabs. The archive keeps every line (incl. what the panel
+  // sent) on disk, one file per day.
+  const archiveCard = h('div', { class: 'card hidden' });
+  const tabs = h('div', { class: 'section-tabs btn-tabs', role: 'tablist' });
+  const mkTab = (key, show) => h('button', { type: 'button', role: 'tab', class: 'section-tab', i18n: key, onclick: (e) => {
+    const me = e.currentTarget;
+    tabs.querySelectorAll('.section-tab').forEach(b => { b.classList.toggle('active', b === me); b.setAttribute('aria-selected', String(b === me)); });
+    show();
+  } });
+  const liveTab = mkTab('chat.tab.live', () => { liveCard.classList.remove('hidden'); archiveCard.classList.add('hidden'); });
+  const archTab = mkTab('chat.tab.archive', () => { liveCard.classList.add('hidden'); archiveCard.classList.remove('hidden'); loadArchive(); });
+  liveTab.classList.add('active');
+  liveTab.setAttribute('aria-selected', 'true');
+  archTab.setAttribute('aria-selected', 'false');
+  tabs.append(liveTab, archTab);
+  root.append(tabs, liveCard, archiveCard);
 
+  // canSend: a message can get through — a password is set, BattlEye took it,
+  // and the server runs (the panel connects on demand while it does).
+  let canSend = true;
+  function setSendable(configured, connected, errKey) {
+    canSend = configured && errKey !== 'rcon.err.auth' && (connected || !!State.serverStatus.running);
+    input.disabled = sendBtn.disabled = !canSend;
+    input.placeholder = canSend ? t('chat.placeholder')
+      : !configured ? t('chat.ph.needRcon') : errKey === 'rcon.err.auth' ? t('rcon.err.auth.short') : t('chat.ph.offline');
+    presetsHost.querySelectorAll('.chat-preset-send').forEach(b => { b.disabled = !canSend; });
+  }
+
+  async function say(text) {
+    await api.post('/api/rcon/say', { message: text });
+    lastSig = null;
+    await refresh(); // show the sent line right away
+  }
+  let sending = false;
   async function send() {
     const v = input.value.trim();
-    if (!v) return;
-    try { await api.post('/api/rcon/say', { message: v }); input.value = ''; toast(t('msg.sent'), 'ok'); }
+    if (!v || sending || !canSend) return;
+    sending = true;
+    sendBtn.disabled = true;
+    try { await say(v); input.value = ''; }
     catch (e) { handleErr(e); }
+    finally { sending = false; sendBtn.disabled = !canSend; input.focus(); }
   }
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+
+  function renderPresets() {
+    presetsHost.innerHTML = '';
+    presetsHost.append(h('span', { class: 'chat-presets-label', i18n: 'rcon.presets.title' }));
+    for (const [i, msg] of presets.entries()) {
+      presetsHost.append(h('span', { class: 'chat-preset' }, [
+        h('button', { type: 'button', class: 'chat-preset-send', text: msg, title: t('rcon.presets.sendHint'), disabled: !canSend,
+          onclick: (e) => withBusy(e.currentTarget, async () => { try { await say(msg); toast(t('msg.sent'), 'ok'); } catch (err) { handleErr(err); } }) }),
+        h('button', { type: 'button', class: 'chat-preset-x', text: '×', title: t('action.delete'), 'aria-label': t('action.delete') + ': ' + msg,
+          onclick: () => { presets.splice(i, 1); savePresets(); } }),
+      ]));
+    }
+    if (!presets.length) presetsHost.append(h('span', { class: 'hint', i18n: 'chat.presets.none' }));
+    presetsHost.append(h('button', { type: 'button', class: 'small secondary', text: '☆ ' + t('chat.presets.save'), title: t('rcon.presets.saveHint'),
+      onclick: () => {
+        const v = input.value.trim();
+        if (!v) { toast(t('rcon.presets.needText'), 'warn'); input.focus(); return; }
+        if (!presets.includes(v)) { presets.push(v); savePresets(); }
+      } }));
+  }
+  async function savePresets() {
+    renderPresets();
+    try { State.config = await api.post('/api/config', { broadcastPresets: presets }); toast(t('msg.saved'), 'ok'); }
+    catch (e) { handleErr(e); }
+  }
 
   const fmtTime = (ms) => {
     if (!ms) return '';
@@ -7638,17 +9045,107 @@ Views.chat = async (root) => {
     catch { return ''; }
   };
 
-  function setStatus(connected, configured) {
-    dot.className = 'chat-dot' + (connected ? ' on' : '');
+  // chatLine renders one message; lines sent from the panel (and scheduled
+  // announcements) are marked as the manager's, other RCon admins as admin.
+  // A player the database knows by that name links to the profile.
+  function chatLine(m) {
+    const mine = m.source === 'manager', admin = m.source === 'admin';
+    const who = mine ? t('chat.fromManager') + (m.to ? ' → ' + m.to : '') : (m.name || '');
+    const key = !mine && !admin && m.name ? keyOf(m.name) : '';
+    return h('div', { class: 'chat-line' + (mine ? ' mine' : '') + (admin ? ' admin' : '') }, [
+      h('span', { class: 'chat-time', text: fmtTime(m.at) }),
+      m.channel ? h('span', { class: 'chat-ch', text: m.channel }) : null,
+      key ? h('span', { class: 'chat-player player-link', text: who, title: t('chat.openProfile'), onclick: () => openPlayerProfile(key) })
+        : h('span', { class: 'chat-player', text: who }),
+      h('span', { class: 'chat-text', text: m.text || '' }),
+    ]);
+  }
+
+  // ---- archive
+  const daySel = h('select', { 'aria-label': t('chat.archive.day') });
+  const search = h('input', { type: 'search', placeholder: t('chat.archive.search'), 'aria-label': t('chat.archive.search') });
+  const exportLink = h('a', { class: 'btn-link', i18n: 'chat.archive.export', download: '' });
+  const keepInp = h('input', { type: 'number', min: '0', step: '1', style: { width: '90px' }, value: (State.config && State.config.chatKeepDays) ?? 90 });
+  const archInfo = h('div', { class: 'hint' });
+  const archFeed = h('div', { class: 'chat-feed archive' });
+  keepInp.addEventListener('change', async () => {
+    const n = parseInt(keepInp.value, 10);
+    if (!(n >= 0)) return;
+    try { State.config = await api.post('/api/config', { chatKeepDays: n }); toast(t('msg.saved'), 'ok'); }
+    catch (e) { handleErr(e); }
+  });
+  const archBar = h('div', { class: 'row chat-archive-bar' }, [daySel, search, exportLink]);
+  archiveCard.append(
+    archBar,
+    archInfo,
+    archFeed,
+    h('div', { class: 'row', style: { marginTop: '10px', gap: '8px', alignItems: 'center' } }, [
+      h('label', { i18n: 'chat.archive.keep', for: assocId(keepInp) }), keepInp,
+    ]),
+  );
+  let daysLoaded = false;
+  async function loadArchive() {
+    if (!daysLoaded) {
+      let d;
+      try { d = await api.get('/api/chat/days'); } catch (e) { handleErr(e); return; }
+      daySel.innerHTML = '';
+      const days = d.days || [];
+      archBar.classList.toggle('hidden', !days.length);
+      if (!days.length) {
+        archFeed.innerHTML = '';
+        archFeed.append(h('p', { class: 'hint', i18n: 'chat.archive.empty' }));
+        archInfo.textContent = '';
+        applyI18n();
+        return;
+      }
+      for (const day of days) {
+        daySel.append(h('option', { value: day.date, text: `${day.date} · ${t('chat.archive.count').replace('{n}', day.count)}` }));
+      }
+      daysLoaded = true;
+    }
+    await showDay();
+  }
+  let searchT = 0;
+  async function showDay() {
+    const day = daySel.value;
+    if (!day) return;
+    exportLink.classList.remove('hidden');
+    exportLink.href = srvUrl('/api/chat/export?date=' + encodeURIComponent(day));
+    let d;
+    try { d = await api.get('/api/chat/archive?date=' + encodeURIComponent(day) + '&q=' + encodeURIComponent(search.value.trim())); }
+    catch (e) { handleErr(e); return; }
+    if (myNav !== _navSeq) return;
+    const msgs = d.messages || [];
+    archFeed.innerHTML = '';
+    if (!msgs.length) archFeed.append(h('p', { class: 'hint', i18n: 'chat.archive.none' }));
+    for (const m of msgs) archFeed.append(chatLine(m));
+    archInfo.textContent = d.truncated ? tn('chat.archive.truncated', { n: msgs.length }) : '';
+    applyI18n();
+  }
+  daySel.addEventListener('change', showDay);
+  search.addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(showDay, 300); });
+
+  function setStatus(connected, configured, errKey) {
+    dot.className = 'chat-dot' + (connected ? ' on' : errKey === 'rcon.err.auth' ? ' bad' : '');
     statusTxt.textContent = connected ? t('chat.live')
+      : errKey === 'rcon.err.auth' ? t('rcon.err.auth.short')
       : configured ? t('chat.disc') : t('chat.needRcon.badge');
   }
 
-  function emptyHint(configured, connected) {
-    const key = !configured ? 'chat.needRcon' : !connected ? 'chat.offline' : 'chat.none';
+  // emptyHint says why the feed is empty — and offers the next step.
+  function emptyHint(configured, connected, errKey) {
+    const running = !!State.serverStatus.running;
     feed.innerHTML = '';
-    feed.append(h('p', { class: 'hint', i18n: key }));
-    applyI18n();
+    if (!configured) {
+      feed.append(h('p', { class: 'hint', i18n: 'chat.needRcon' }), h('div', { class: 'actions' }, [
+        h('button', { type: 'button', class: 'primary', i18n: 'online.setRcon', onclick: () => navigate('rcon') })]));
+    } else if (errKey === 'rcon.err.auth') {
+      feed.append(h('p', { class: 'hint', i18n: errKey }));
+    } else if (!connected && !running) {
+      feed.append(h('p', { class: 'hint', i18n: 'chat.offline' }), h('div', { class: 'actions' }, [startServerBtn()]));
+    } else {
+      feed.append(h('p', { class: 'hint', i18n: connected ? 'chat.none' : 'chat.connecting' }));
+    }
   }
 
   async function refresh() {
@@ -7657,11 +9154,12 @@ Views.chat = async (root) => {
     catch { return; }
     if (myNav !== _navSeq) { if (timer) clearInterval(timer); return; }
     const msgs = d.messages || [];
-    setStatus(!!d.connected, !!d.configured);
+    setStatus(!!d.connected, !!d.configured, d.errorKey);
+    setSendable(!!d.configured, !!d.connected, d.errorKey);
 
     if (!msgs.length) {
-      const sig = 'empty:' + d.configured + ':' + d.connected;
-      if (sig !== lastSig) { emptyHint(!!d.configured, !!d.connected); lastSig = sig; }
+      const sig = 'empty:' + d.configured + ':' + d.connected + ':' + (d.errorKey || '') + ':' + !!State.serverStatus.running;
+      if (sig !== lastSig) { emptyHint(!!d.configured, !!d.connected, d.errorKey); lastSig = sig; }
       return;
     }
     // Cheap signature so a steady feed isn't torn down and rebuilt every poll.
@@ -7672,16 +9170,13 @@ Views.chat = async (root) => {
 
     const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
     feed.innerHTML = '';
-    for (const m of msgs) {
-      feed.append(h('div', { class: 'chat-line' }, [
-        h('span', { class: 'chat-time', text: fmtTime(m.at) }),
-        m.channel ? h('span', { class: 'chat-ch', text: m.channel }) : null,
-        h('span', { class: 'chat-player', text: m.name || '' }),
-        h('span', { class: 'chat-text', text: m.text || '' }),
-      ]));
-    }
+    for (const m of msgs) feed.append(chatLine(m));
     if (atBottom) feed.scrollTop = feed.scrollHeight; // don't yank the view while reading up
   }
+  renderPresets();
+  const pl = await playersP;
+  if (myNav !== _navSeq) return;
+  if (pl) keyOf = playerKeyLookup(pl.players);
   await refresh();
   feed.scrollTop = feed.scrollHeight;
   timer = setInterval(refresh, 2500);
@@ -7690,151 +9185,366 @@ Views.chat = async (root) => {
 // --------------------------------------------------------------------- gameplay
 
 Views.gameplay = async (root) => {
-  root.append(pageHeader('nav.gameplay', 'gameplay.subtitle'));
-  if (State.serverStatus.running) root.append(runningBanner());
+  const myNav = _navSeq;
+  const running = !!State.serverStatus.running;
+  root.append(pageHeader('nav.gameplay', 'gameplay.subtitle', [revealBtn({ kind: 'missionfile', path: 'cfggameplay.json' })]));
+  if (running) root.append(runningBanner());
   let d;
   try { d = await api.get('/api/gameplay'); }
   catch (e) { handleErr(e); return; }
+  if (myNav !== _navSeq) return;
+  const defaults = d.defaults || {};
+  const sc = d.serverCfg || {};
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-  const card = h('div', { class: 'card' }, [h('h2', { i18n: 'nav.gameplay' }),
-    h('p', { class: 'hint', text: d.path })]);
-  root.append(card);
-
+  // No file: DayZ runs on its built-in values. Offer to create it.
   if (!d.exists) {
-    card.append(h('div', { class: 'empty-state' }, [
-      h('div', { class: 'es-hint', i18n: 'gameplay.missing' }),
-    ]));
+    root.append(h('div', { class: 'card' }, h('div', { class: 'empty-state' }, [
+      h('div', { class: 'es-icon', html: svgIcon('i-gameplay', 34) }),
+      h('div', { class: 'es-title', i18n: 'gameplay.missing.title' }),
+      h('div', { class: 'es-hint', i18n: 'gameplay.missing.hint' }),
+      h('div', { class: 'actions' }, [
+        h('button', { type: 'button', class: 'primary', i18n: 'gameplay.create', disabled: running,
+          onclick: (e) => withBusy(e.currentTarget, async () => {
+            try {
+              await api.post('/api/gameplay', { content: JSON.stringify(defaults, null, '\t') });
+              toast(t('gameplay.created'), 'ok');
+              await navigate('gameplay');
+            } catch (err) { handleErr(err); }
+          }) }),
+      ]),
+      h('p', { class: 'hint mono', text: d.path }),
+    ])));
     return;
   }
 
-  let obj;
-  try { obj = JSON.parse(d.content); }
-  catch (e) {
-    // The file on disk is broken JSON — offer the raw editor only.
-    card.append(h('p', { class: 'warning-bar', text: t('gameplay.invalid') + ' ' + e.message }));
-    obj = null;
+  let obj = null;
+  let parseErr = '';
+  try {
+    obj = JSON.parse(d.content);
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('not a JSON object');
+  } catch (e) { obj = null; parseErr = e.message; }
+  let baseline = obj ? JSON.stringify(obj) : null;
+  let rawMode = !obj;
+
+  const label = (k) => State.i18n['gp.' + k] ? t('gp.' + k) : k.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+  const helpText = (k) => (State.help && State.help['gp.' + k]) || '';
+  // A help marker inside a <label> must not flip its switch.
+  const gpHelp = (k) => {
+    if (!helpText(k)) return null;
+    const m = help('gp.' + k);
+    m.addEventListener('click', (e) => e.preventDefault());
+    return m;
+  };
+  const GROUP_ICON = { GeneralData: 'i-settings', PlayerData: 'i-players', WorldsData: 'i-weather', BaseBuildingData: 'i-missiondb',
+    UIData: 'i-dashboard', MapData: 'i-livemap', VehicleData: 'i-vehicles' };
+  // The file's keys in its own order, then the defaults it leaves out.
+  const keysOf = (f, def) => {
+    const out = (f && typeof f === 'object') ? Object.keys(f) : [];
+    if (def && typeof def === 'object') for (const k of Object.keys(def)) if (!out.includes(k)) out.push(k);
+    return out;
+  };
+  const get = (path) => { let o = obj; for (const p of path) { if (!o || typeof o !== 'object') return undefined; o = o[p]; } return o; };
+  const ensure = (path) => {
+    let o = obj;
+    for (const p of path) { if (!o[p] || typeof o[p] !== 'object' || Array.isArray(o[p])) o[p] = {}; o = o[p]; }
+    return o;
+  };
+  const has = (path, key) => { const p = get(path); return !!p && typeof p === 'object' && Object.prototype.hasOwnProperty.call(p, key); };
+  const monthNames = Array.from({ length: 12 }, (_, i) => {
+    try { return new Date(2024, i, 15).toLocaleString(State.lang || undefined, { month: 'short' }); } catch { return String(i + 1); }
+  });
+
+  const formHost = h('div', { class: 'gp2' });
+  const rawHost = h('textarea', { rows: 28, class: 'mono gp2-raw', spellcheck: 'false', 'aria-label': 'cfggameplay.json', hidden: !rawMode });
+  rawHost.value = d.content;
+  const search = h('input', { type: 'search', placeholder: t('gameplay.search'), 'aria-label': t('gameplay.search') });
+  const noMatch = h('p', { class: 'hint gp2-nomatch', i18n: 'gameplay.nothing', hidden: true });
+  const versionBadge = h('span', { class: 'badge mute mono' });
+
+  // A note under the two settings serverDZ.cfg also has.
+  const conflict = (key, cur) => {
+    const v = sc[key];
+    if (v === undefined || v === '') return null;
+    const scVal = key === 'disablePersonalLight' ? (v === '1' || String(v).toLowerCase() === 'true') : Number(v);
+    if (same(scVal, cur)) return null;
+    return h('div', { class: 'gp2-note warn-text', text: t('gameplay.overrides').replace('{v}', String(v)) });
+  };
+
+  function leaf(path, key, def) {
+    const inFile = has(path, key);
+    const val = inFile ? get(path)[key] : def;
+    const chip = h('span', { class: 'gp2-chip' });
+    const resetBtn = h('button', { type: 'button', class: 'gp2-reset', title: t('gameplay.field.reset'), 'aria-label': t('gameplay.field.reset'), text: '↺', hidden: true,
+      onclick: (e) => { e.preventDefault(); e.stopPropagation(); ensure(path)[key] = clone(def); changed(); renderForm(); } });
+    const paintState = () => {
+      const present = has(path, key);
+      const cur = present ? get(path)[key] : def;
+      const modified = def !== undefined && present && !same(cur, def);
+      chip.className = 'gp2-chip' + (!present ? ' def' : modified ? ' mod' : '');
+      chip.textContent = !present && def !== undefined ? t('gameplay.chip.default') : modified ? t('gameplay.chip.changed') : '';
+      resetBtn.hidden = !modified || running;
+    };
+    const write = (v) => { ensure(path)[key] = v; paintState(); changed(); };
+    const keyLine = h('span', { class: 'gp2-keyline' }, [h('code', { class: 'cfg-key', text: key }), chip, resetBtn]);
+    let block;
+
+    if (typeof val === 'boolean') {
+      const cb = h('input', { type: 'checkbox', class: 'switch', disabled: running });
+      cb.checked = val;
+      cb.onchange = () => write(cb.checked);
+      block = h('label', { class: 'cfg-bool gp2-bool' }, [cb, h('span', { class: 'cfg-bool-text' }, [
+        h('span', { class: 'cfg-bool-label' }, [h('span', { text: label(key) }), gpHelp(key)].filter(Boolean)), keyLine,
+        conflict(key, val)].filter(Boolean))]);
+    } else {
+      let control;
+      if (typeof val === 'number') {
+        control = h('input', { type: 'number', step: 'any', value: String(val), disabled: running });
+        control.oninput = () => { const n = Number(control.value); if (control.value.trim() !== '' && !Number.isNaN(n)) write(n); };
+      } else if (typeof val === 'string' && key === 'hitDirectionIndicatorColorStr') {
+        const sw = h('span', { class: 'gp2-swatch', 'aria-hidden': 'true' });
+        const paint = (s) => {
+          const m = /^0x([0-9a-f]{2})([0-9a-f]{6})$/i.exec(String(s).trim());
+          sw.style.background = m ? '#' + m[2] : 'transparent';
+          sw.style.opacity = m ? String(Math.max(0.15, parseInt(m[1], 16) / 255)) : '1';
+        };
+        const inp = h('input', { type: 'text', class: 'mono', value: val, spellcheck: 'false', disabled: running });
+        inp.oninput = () => { write(inp.value.trim()); paint(inp.value); };
+        paint(val);
+        control = h('div', { class: 'gp2-color' }, [sw, inp]);
+      } else if (typeof val === 'string') {
+        control = h('input', { type: 'text', value: val, disabled: running });
+        control.oninput = () => write(control.value);
+      } else if (key === 'spawnGearPresetFiles') {
+        const files = Array.isArray(val) ? val : [];
+        control = h('div', { class: 'gp2-chips' }, [
+          ...(files.length ? files.map(f => h('span', { class: 'badge mute mono', text: f })) : [h('span', { class: 'hint', i18n: 'gameplay.gear.none' })]),
+          h('button', { type: 'button', class: 'small secondary', i18n: 'gameplay.gear.manage', onclick: () => navigate('loadout') }),
+        ]);
+      } else if (/^environment(Min|Max)Temps$/.test(key)) {
+        if (!Array.isArray(val)) {
+          control = h('p', { class: 'hint', i18n: 'gameplay.temps.map' });
+        } else {
+          const arr = val.slice();
+          control = h('div', { class: 'gp2-months' }, monthNames.map((m, i) => {
+            const inp = h('input', { type: 'number', step: 'any', value: arr[i] ?? '', disabled: running, 'aria-label': label(key) + ' — ' + m });
+            inp.oninput = () => { const n = Number(inp.value); if (inp.value.trim() !== '' && !Number.isNaN(n)) { arr[i] = n; write(arr.slice()); } };
+            return h('label', { class: 'gp2-month' }, [h('span', { text: m }), inp]);
+          }));
+        }
+      } else if (Array.isArray(val) && val.every(x => typeof x === 'string' || typeof x === 'number')) {
+        const numeric = (Array.isArray(def) && def.length ? def : val).every(x => typeof x === 'number') && (val.length || (Array.isArray(def) && def.length));
+        control = h('input', { type: 'text', class: 'mono', value: val.join(', '), spellcheck: 'false', disabled: running,
+          placeholder: numeric ? '1, 1, 1.33' : 'a, b, c' });
+        control.oninput = () => {
+          const parts = control.value.split(',').map(s => s.trim()).filter(Boolean);
+          if (numeric) {
+            if (parts.some(p => Number.isNaN(Number(p)))) { control.classList.add('bad'); return; }
+            control.classList.remove('bad');
+            write(parts.map(Number));
+          } else write(parts);
+        };
+      } else {
+        control = h('input', { type: 'text', class: 'mono', value: JSON.stringify(val ?? null), spellcheck: 'false', disabled: running });
+        control.oninput = () => {
+          try { write(JSON.parse(control.value)); control.classList.remove('bad'); } catch { control.classList.add('bad'); }
+        };
+      }
+      const wide = Array.isArray(val) || key === 'spawnGearPresetFiles';
+      const lab = h('label', { text: label(key) });
+      if (control.tagName === 'INPUT') lab.setAttribute('for', assocId(control));
+      const hm = gpHelp(key);
+      block = h('div', { class: 'gp2-field' + (wide ? ' wide' : '') }, [
+        h('div', { class: 'cfg-label' }, [hm ? h('span', { class: 'with-help' }, [lab, hm]) : lab, keyLine]),
+        control,
+        conflict(key, val),
+      ].filter(Boolean));
+    }
+    block.dataset.search = (label(key) + ' ' + key + ' ' + helpText(key)).toLowerCase();
+    paintState();
+    return block;
   }
 
-  const formHost = h('div');
-  const rawHost = h('textarea', { rows: 26, style: { display: 'none', width: '100%' } });
-  rawHost.value = d.content;
-  let rawMode = !obj;
-  const modeBtn = h('button', {});
-
-  // Per-field explanation: the ⓘ marker, but only for keys we actually have a
-  // description for (an empty tooltip is worse than none). Descriptions arrive
-  // in State.help under the "gp." prefix; leaf keys are unique enough in
-  // cfggameplay that keying on the leaf name is reliable.
-  const gpHelp = (key) => (State.help && State.help['gp.' + key]) ? help('gp.' + key) : null;
-  const gpLabel = (txt, key) => h('label', { class: 'gp-flabel' }, [h('span', { text: txt }), gpHelp(key)]);
-
-  // Generic recursive form: booleans → switches, numbers → number inputs,
-  // strings → text, arrays → JSON one-liners, objects → collapsible groups.
-  // Schema-free, so every key of every DayZ version is editable.
-  function fieldFor(parent, key) {
-    const val = parent[key];
-    if (typeof val === 'boolean') {
-      const cb = h('input', { type: 'checkbox', class: 'switch' });
-      cb.checked = val;
-      cb.onchange = () => { parent[key] = cb.checked; };
-      const lbl = h('label', {}, [cb, h('span', { text: key })]);
-      const hm = gpHelp(key);
-      // Keep the marker OUTSIDE the <label> so clicking it doesn't toggle the switch.
-      return hm ? h('div', { class: 'gp-bool' }, [lbl, hm]) : lbl;
+  // A group of settings: top level = a collapsible card section, nested =
+  // a titled block inside it.
+  function group(path, key, def, depth) {
+    const here = [...path, key];
+    const fileObj = get(here);
+    const defObj = (def && typeof def === 'object' && !Array.isArray(def)) ? def : {};
+    const grid = h('div', { class: 'gp2-grid' });
+    const bools = h('div', { class: 'cfg-bools gp2-bools' });
+    const subs = [];
+    for (const k of keysOf(fileObj, defObj)) {
+      const v = (fileObj && typeof fileObj === 'object' && k in fileObj) ? fileObj[k] : defObj[k];
+      if (v && typeof v === 'object' && !Array.isArray(v)) subs.push(group(here, k, defObj[k], depth + 1));
+      else (typeof v === 'boolean' ? bools : grid).append(leaf(here, k, defObj[k]));
     }
-    if (typeof val === 'number') {
-      const inp = h('input', { type: 'number', step: 'any', value: String(val) });
-      inp.onchange = () => { const n = Number(inp.value); if (!Number.isNaN(n)) parent[key] = n; };
-      return h('div', {}, [gpLabel(key, key), inp]);
+    const body = [grid.childElementCount ? grid : null, bools.childElementCount ? bools : null, ...subs].filter(Boolean);
+    if (depth === 0) {
+      const count = h('span', { class: 'gp2-count' });
+      const sec = h('details', { class: 'gp2-group', open: true }, [
+        h('summary', {}, [
+          h('span', { class: 'card-title-icon', html: svgIcon(GROUP_ICON[key] || 'i-settings', 16) }),
+          h('span', { class: 'gp2-title', text: label(key) }),
+          h('code', { class: 'cfg-key', text: key }),
+          gpHelp(key),
+          h('span', { class: 'grow' }),
+          count,
+        ].filter(Boolean)),
+        h('div', { class: 'gp2-body' }, body),
+      ]);
+      sec._count = count;
+      return sec;
     }
-    if (typeof val === 'string') {
-      const inp = h('input', { type: 'text', value: val });
-      inp.onchange = () => { parent[key] = inp.value; };
-      return h('div', {}, [gpLabel(key, key), inp]);
-    }
-    if (Array.isArray(val)) {
-      const inp = h('input', { type: 'text', value: JSON.stringify(val), class: 'mono' });
-      inp.onchange = () => {
-        try { const v = JSON.parse(inp.value); if (Array.isArray(v)) { parent[key] = v; inp.style.borderColor = ''; return; } } catch {}
-        inp.style.borderColor = 'var(--error)';
-      };
-      return h('div', {}, [gpLabel(key + ' []', key), inp]);
-    }
-    if (val && typeof val === 'object') {
-      const det = h('details', { class: 'gp-group' }, [h('summary', {}, [h('span', { text: key }), gpHelp(key)])]);
-      const inner = h('div', { class: 'gp-grid' });
-      for (const k of Object.keys(val)) inner.append(fieldFor(val, k));
-      det.append(inner);
-      return det;
-    }
-    return h('div', { class: 'hint', text: key + ': null' });
+    return h('section', { class: 'gp2-sub' }, [
+      h('h4', { class: 'gp2-subtitle' }, [h('span', { text: label(key) }), h('code', { class: 'cfg-key', text: key }), gpHelp(key)].filter(Boolean)),
+      ...body,
+    ]);
   }
 
   function renderForm() {
     formHost.innerHTML = '';
     if (!obj) return;
-    for (const k of Object.keys(obj)) {
-      const f = fieldFor(obj, k);
-      if (f.tagName === 'DETAILS') formHost.append(f);
-      else formHost.append(h('div', { class: 'gp-grid', style: { marginBottom: '6px' } }, f));
+    const ver = has([], 'version') ? obj.version : defaults.version;
+    versionBadge.textContent = t('gp.version') + ': ' + (ver ?? '—');
+    const loose = h('div', { class: 'gp2-grid' });
+    for (const k of keysOf(obj, defaults)) {
+      if (k === 'version') continue;
+      const v = k in obj ? obj[k] : defaults[k];
+      if (v && typeof v === 'object' && !Array.isArray(v)) formHost.append(group([], k, defaults[k], 0));
+      else loose.append(leaf([], k, defaults[k]));
     }
+    if (loose.childElementCount) {
+      formHost.append(h('details', { class: 'gp2-group', open: true }, [
+        h('summary', {}, [h('span', { class: 'gp2-title', i18n: 'gameplay.group.other' })]),
+        h('div', { class: 'gp2-body' }, loose),
+      ]));
+    }
+    formHost.append(noMatch);
+    recount();
+    filter();
   }
-  renderForm();
 
+  function recount() {
+    formHost.querySelectorAll('details.gp2-group').forEach(sec => {
+      if (!sec._count) return;
+      const n = sec.querySelectorAll('.gp2-chip.mod').length;
+      sec._count.textContent = n ? t('gameplay.changedCount').replace('{n}', n) : '';
+      sec._count.hidden = !n;
+    });
+  }
+
+  function filter() {
+    const q = search.value.trim().toLowerCase();
+    let any = false;
+    formHost.querySelectorAll('[data-search]').forEach(el => {
+      const show = !q || el.dataset.search.includes(q);
+      el.hidden = !show;
+      any = any || show;
+    });
+    formHost.querySelectorAll('.gp2-sub, details.gp2-group').forEach(sec => {
+      const visible = [...sec.querySelectorAll('[data-search]')].some(el => !el.hidden);
+      sec.hidden = !visible;
+      if (q && visible && sec.tagName === 'DETAILS') sec.open = true;
+    });
+    noMatch.hidden = any || !q;
+  }
+  let _searchT = 0;
+  search.oninput = () => { clearTimeout(_searchT); _searchT = setTimeout(filter, 120); };
+
+  // Unsaved state: a sticky bar, and the page asks before leaving.
+  const isDirty = () => rawMode ? rawHost.value !== d.content : (!!obj && JSON.stringify(obj) !== baseline);
+  const barText = h('span', { i18n: 'gameplay.unsaved' });
+  const bar = h('div', { class: 'sticky-save', hidden: true }, [
+    barText, h('span', { class: 'grow' }),
+    h('button', { type: 'button', class: 'secondary small', i18n: 'action.discard', onclick: () => { root._isDirty = null; navigate('gameplay'); } }),
+    h('button', { type: 'button', class: 'primary small', i18n: 'action.save', disabled: running, onclick: (e) => withBusy(e.currentTarget, doSave) }),
+  ]);
+  function changed() { bar.hidden = !isDirty(); recount(); }
+  rawHost.addEventListener('input', changed);
+
+  const modeBtn = h('button', { type: 'button', class: 'secondary' });
   function setMode(raw) {
-    rawMode = raw;
-    formHost.style.display = raw ? 'none' : '';
-    rawHost.style.display = raw ? '' : 'none';
-    modeBtn.textContent = raw ? t('gameplay.form') : t('gameplay.raw');
-    if (raw && obj) rawHost.value = JSON.stringify(obj, null, 4);
     if (!raw) {
-      try { obj = JSON.parse(rawHost.value); renderForm(); }
-      catch (e) { toast(t('gameplay.invalid') + ' ' + e.message, 'error'); rawMode = true; formHost.style.display = 'none'; rawHost.style.display = ''; modeBtn.textContent = t('gameplay.form'); }
+      try {
+        const o = JSON.parse(rawHost.value);
+        if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('not a JSON object');
+        obj = o;
+        if (baseline === null) baseline = JSON.stringify(obj);
+      } catch (e) { toast(t('gameplay.invalid') + ' ' + e.message, 'error'); return; }
+      renderForm();
+    } else if (obj) {
+      rawHost.value = JSON.stringify(obj, null, '\t');
     }
+    rawMode = raw;
+    formHost.hidden = raw;
+    search.hidden = raw;
+    rawHost.hidden = !raw;
+    modeBtn.textContent = raw ? t('gameplay.form') : t('gameplay.raw');
+    changed();
   }
   modeBtn.onclick = () => setMode(!rawMode);
   modeBtn.textContent = rawMode ? t('gameplay.form') : t('gameplay.raw');
 
   async function doSave() {
-    const content = rawMode ? rawHost.value : JSON.stringify(obj, null, 4);
+    const content = rawMode ? rawHost.value : JSON.stringify(obj, null, '\t');
     try { JSON.parse(content); }
     catch (e) { toast(t('gameplay.invalid') + ' ' + e.message, 'error'); return; }
     try {
-      await api.post('/api/gameplay', { content });
-      toast(t('msg.saved'), 'ok');
+      const r = await api.post('/api/gameplay', { content });
+      d.content = content;
+      if (!rawMode) baseline = JSON.stringify(obj);
+      toast(t('msg.saved') + (r && r.enabledFlag ? ' · ' + t('gameplay.enabledNow') : ''), 'ok');
+      changed();
     } catch (e) { handleErr(e); }
   }
   root._save = doSave;
+  root._isDirty = isDirty;
 
-  // Reset to DayZ defaults: strip every override so the engine falls back to its
-  // own built-in values, but keep the fresh-spawn loadout registration so the
-  // Player-loadout page is not silently unwired. The change is only applied to
-  // the in-memory form — the admin still presses Save, so it stays reviewable
-  // and can be abandoned by leaving the page.
+  // Back to DayZ's values. Content the admin added (loadouts, object
+  // spawners) and the map's monthly temperatures stay; nothing is written
+  // until Save.
   async function doReset() {
     const ok = await confirmModal(t('gameplay.reset.confirm'), { title: t('gameplay.reset'), danger: true, okText: t('gameplay.reset') });
     if (!ok) return;
-    const preserved = (obj && obj.PlayerData && Array.isArray(obj.PlayerData.spawnGearPresetFiles))
-      ? obj.PlayerData.spawnGearPresetFiles : [];
-    const version = (obj && typeof obj.version === 'number') ? obj.version : 1;
-    obj = { version };
-    if (preserved.length) obj.PlayerData = { spawnGearPresetFiles: preserved };
-    rawHost.value = JSON.stringify(obj, null, 4);
-    renderForm();
+    const keep = obj ? {
+      version: obj.version,
+      gear: get(['PlayerData', 'spawnGearPresetFiles']),
+      spawners: get(['WorldsData', 'objectSpawnersArr']),
+      tmin: get(['WorldsData', 'environmentMinTemps']),
+      tmax: get(['WorldsData', 'environmentMaxTemps']),
+    } : {};
+    obj = clone(defaults);
+    if (keep.version !== undefined) obj.version = keep.version;
+    if (Array.isArray(keep.gear)) obj.PlayerData.spawnGearPresetFiles = keep.gear;
+    if (Array.isArray(keep.spawners)) obj.WorldsData.objectSpawnersArr = keep.spawners;
+    if (Array.isArray(keep.tmin)) obj.WorldsData.environmentMinTemps = keep.tmin;
+    if (Array.isArray(keep.tmax)) obj.WorldsData.environmentMaxTemps = keep.tmax;
+    if (rawMode) setMode(false); else renderForm();
+    changed();
     toast(t('gameplay.reset.done'), 'ok');
   }
 
-  card.append(
-    h('div', { class: 'toolbar' }, [
-      modeBtn,
-      h('button', { class: 'secondary', i18n: 'gameplay.reset', onclick: doReset }),
+  root.append(h('div', { class: 'card gp2-card' }, [
+    sc.enableCfgGameplayFile !== undefined && sc.enableCfgGameplayFile !== '1'
+      ? h('div', { class: 'warning-bar', i18n: 'gameplay.off' }) : null,
+    parseErr ? h('div', { class: 'warning-bar err-bar', text: t('gameplay.invalid') + ' ' + parseErr }) : null,
+    h('div', { class: 'players-toolbar gp2-toolbar' }, [
+      search,
       h('span', { class: 'grow' }),
-      h('button', { class: 'primary', i18n: 'action.save', title: 'Ctrl+S', onclick: (e) => withBusy(e.currentTarget, doSave) }),
+      versionBadge,
+      modeBtn,
+      h('button', { type: 'button', class: 'secondary', i18n: 'gameplay.reset', disabled: running, onclick: doReset }),
+      h('button', { type: 'button', class: 'primary', i18n: 'action.save', title: 'Ctrl+S', disabled: running, onclick: (e) => withBusy(e.currentTarget, doSave) }),
     ]),
     formHost,
     rawHost,
-    h('p', { class: 'hint', i18n: 'gameplay.enabledNote' }),
-  );
+    h('p', { class: 'hint mono gp2-path', text: d.path }),
+  ].filter(Boolean)), bar);
+  formHost.hidden = rawMode;
+  search.hidden = rawMode;
+  renderForm();
 };
 
 // --------------------------------------------------------------- history
@@ -7935,7 +9645,7 @@ Views.health = async (root) => {
   };
 
   const s = d.server || {};
-  if (s.running) tile('ok', 'health.server', t('health.server.up').replace('{up}', s.uptime || ''), 'dashboard');
+  if (s.running) tile('ok', 'health.server', t('health.server.up').replace('{up}', s.uptimeSec != null ? fmtAge(s.uptimeSec) : (s.uptime || '')), 'dashboard');
   else if (s.loopPaused) tile('error', 'health.server', t('health.server.crashloop'), 'dashboard');
   else tile('idle', 'health.server', t('health.server.stopped'), 'dashboard');
 
@@ -7953,8 +9663,8 @@ Views.health = async (root) => {
 
   const st = d.startup || {};
   if (s.running) tile('ok', 'health.start', t('health.start.running'), null);
-  else if ((st.fatal || 0) > 0) tile('error', 'health.start', t('health.start.issues').replace('{n}', st.fatal), null);
-  else if ((st.warnings || 0) > 0) tile('warn', 'health.start', t('health.start.issues').replace('{n}', st.warnings), null);
+  else if ((st.fatal || 0) > 0) tile('error', 'health.start', tn('health.start.issues', { n: st.fatal }), null);
+  else if ((st.warnings || 0) > 0) tile('warn', 'health.start', tn('health.start.issues', { n: st.warnings }), null);
   else tile('ok', 'health.start', t('health.start.ok'), null);
 
   root.append(h('div', { class: 'card' }, [tiles]));
@@ -7964,8 +9674,8 @@ Views.health = async (root) => {
     const iss = v.issues || [];
     const e = iss.filter((x) => x.severity === 'error').length;
     const wn = iss.filter((x) => x.severity === 'warning').length;
-    if (e > 0) setTile(cfgTile, 'error', 'health.config', t('health.config.issues').replace('{e}', e).replace('{w}', wn));
-    else if (wn > 0) setTile(cfgTile, 'warn', 'health.config', t('health.config.issues').replace('{e}', 0).replace('{w}', wn));
+    if (e > 0) setTile(cfgTile, 'error', 'health.config', tn('health.config.issues', { e, w: wn }));
+    else if (wn > 0) setTile(cfgTile, 'warn', 'health.config', tn('health.config.issues', { e: 0, w: wn }));
     else setTile(cfgTile, 'ok', 'health.config', t('health.config.ok'));
   }).catch(() => setTile(cfgTile, 'idle', 'health.config', '—'));
 
@@ -7985,12 +9695,12 @@ Views.health = async (root) => {
       const clear = h('button', { class: 'secondary', i18n: 'health.cleanup.clear', disabled: !info.count,
         onclick: async () => {
           const ok = await confirmModal(
-            t('health.cleanup.confirm.' + target).replace('{n}', info.count).replace('{size}', bytes(info.bytes)),
+            tn('health.cleanup.confirm.' + target, { n: info.count, size: bytes(info.bytes) }),
             { danger: true, okText: t('health.cleanup.clear') });
           if (!ok) return;
           try {
             const r = await api.post('/api/cleanup', { target });
-            toast(t('health.cleanup.done').replace('{n}', r.deleted).replace('{size}', bytes(r.freed)), 'ok');
+            toast(tn('health.cleanup.done', { n: r.deleted, size: bytes(r.freed) }), 'ok');
             await renderCleanup();
           } catch (e) { handleErr(e); }
         } });
@@ -8044,7 +9754,7 @@ Views.sponsors = async (root) => {
         s.date ? h('span', { class: 'sponsor-date', text: s.date }) : null,
       ]);
       const body = [head];
-      if (s.link) body.push(h('a', { class: 'sponsor-link', href: s.link, target: '_blank', rel: 'noopener', text: s.link }));
+      if (s.link) body.push(h('a', { class: 'sponsor-link', href: s.link, target: '_blank', rel: 'noopener', text: s.link.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') }));
       // Testimonials are shown in the UI language when a translation exists,
       // otherwise verbatim in the language the sponsor wrote them in.
       const lang = State.lang || 'en';
@@ -8067,6 +9777,7 @@ Views.sponsors = async (root) => {
   root.append(h('div', { class: 'card sponsors-cta' }, [
     h('h3', { i18n: 'sponsors.cta.title' }),
     h('p', { class: 'hint', i18n: 'sponsors.cta.hint' }),
+    h('div', { class: 'donate-buttons' }, donateLinks()),
   ]));
   applyI18n();
 };
@@ -8083,7 +9794,8 @@ Views.sponsors = async (root) => {
 
 Views.attachments = async (root) => {
   const myNav = _navSeq;
-  root.append(pageHeader('nav.attach', 'attach.subtitle'));
+  const preQuery = takePageQuery('attachments'); // a link from Where to find
+  root.append(pageHeader('nav.attach', 'attach.subtitle', [revealBtn({ kind: 'missionfile', path: 'cfgspawnabletypes.xml' })]));
   if (State.serverStatus.running) root.append(runningBanner());
 
   let d, presets = [], classNames = [];
@@ -8101,6 +9813,10 @@ Views.attachments = async (root) => {
     }
   } catch {}
   if (myNav !== _navSeq) return; // types.xml parsing is not instant
+  // Class names compare case-insensitively, like the backend does: Bohemia's
+  // own files write Mag_CZ550_10rnd where types.xml has Mag_CZ550_10Rnd, and
+  // those spawn fine — they must not be flagged as typos.
+  const classLower = new Set(classNames.map(n => n.toLowerCase()));
 
   // A shared <datalist> lets every class-name input autocomplete against the
   // types actually present on THIS server (vanilla + mods), so typos — the
@@ -8115,8 +9831,7 @@ Views.attachments = async (root) => {
   root.append(dlCargoP, dlAttachP);
 
   const card = h('div', { class: 'card' }, [
-    h('h2', { i18n: 'nav.attach' }),
-    h('p', { class: 'hint', text: d.path || '' }),
+    h('p', { class: 'hint mono', text: d.path || '' }),
   ]);
   root.append(card);
 
@@ -8125,7 +9840,8 @@ Views.attachments = async (root) => {
     return;
   }
 
-  const search = h('input', { type: 'search', placeholder: t('types.search') });
+  const search = h('input', { type: 'search', placeholder: t('types.search'), 'aria-label': t('types.search') });
+  search.value = preQuery;
   const listHost = h('div');
 
   // Filter by what an entry is. Counts come from the server so they describe
@@ -8140,7 +9856,7 @@ Views.attachments = async (root) => {
       const b = h('button', {
         class: 'kind-chip' + (kindFilter === id ? ' active' : ''),
         type: 'button',
-        onclick: () => { kindFilter = id; buildChips(); renderList(); },
+        onclick: () => { kindFilter = id; page = 1; buildChips(); renderList(); },
       }, [h('span', { text: label }), h('span', { class: 'kind-count', text: String(count) })]);
       return b;
     };
@@ -8181,6 +9897,10 @@ Views.attachments = async (root) => {
   );
 
   let all = d.types || [];
+  // A pager instead of a hard 400-row cap: the rest of a big file used to be
+  // reachable only through search.
+  const PAGE = 100;
+  let page = 1;
   function renderList() {
     listHost.innerHTML = '';
     const q = search.value.trim().toLowerCase();
@@ -8188,10 +9908,20 @@ Views.attachments = async (root) => {
     if (kindFilter) rows = rows.filter(x => (x.kind || 'other') === kindFilter);
     if (q) rows = rows.filter(x => x.name.toLowerCase().includes(q));
     if (!rows.length) {
-      listHost.append(h('div', { class: 'empty-state' }, [h('div', { class: 'es-hint', i18n: 'attach.none' })]));
+      // A search that matched nothing is not an empty file: "pick a template
+      // and press Add" made a 574-entry file look empty.
+      const filtering = !!(q || kindFilter);
+      listHost.append(h('div', { class: 'empty-state' }, filtering ? [
+        h('div', { class: 'es-title', i18n: 'filter.none' }),
+        h('div', { class: 'actions' }, [h('button', { class: 'secondary', i18n: 'filter.reset',
+          onclick: () => { search.value = ''; kindFilter = ''; page = 1; buildChips(); renderList(); } })]),
+      ] : [h('div', { class: 'es-hint', i18n: 'attach.none' })]));
       applyI18n();
       return;
     }
+    const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+    if (page > pages) page = pages;
+    const start = (page - 1) * PAGE;
     const tbl = h('table', { class: 'attach-table' });
     tbl.append(h('thead', {}, h('tr', {}, [
       h('th', { i18n: 'col.name' }),
@@ -8202,8 +9932,7 @@ Views.attachments = async (root) => {
       h('th', { text: '' }),
     ])));
     const tb = h('tbody');
-    // Cap the DOM at 400 rows; the file can hold thousands on a modded server.
-    for (const st of rows.slice(0, 400)) {
+    for (const st of rows.slice(start, start + PAGE)) {
       const att = st.attachments || [];
       const cargo = st.cargo || [];
       const kind = st.kind || 'other';
@@ -8220,7 +9949,8 @@ Views.attachments = async (root) => {
 
       const num = (v) => h('td', { class: 'num' + (v ? '' : ' zero'), text: v ? String(v) : '—' });
 
-      tb.append(h('tr', {}, [
+      // The whole row opens the editor — on a phone the Edit column does not fit.
+      const tr = h('tr', { class: 'attach-row', title: t('action.edit') }, [
         h('td', {}, [
           h('span', { class: 'attach-name-cell', text: st.name }),
           st.category ? h('span', { class: 'attach-cat', text: st.category }) : null,
@@ -8229,18 +9959,37 @@ Views.attachments = async (root) => {
         num(att.length),
         num(cargo.length),
         h('td', { class: 'attach-sum' }, [h('span', { class: 'attach-sum-in hint', text: summary })]),
-        h('td', {}, h('button', { i18n: 'action.edit', onclick: () => openAttachEditor(st, false) })),
-      ]));
+        h('td', {}, h('button', { class: 'small', i18n: 'action.edit', onclick: () => openAttachEditor(st, false) })),
+      ]);
+      tr.addEventListener('click', (e) => { if (!e.target.closest('button')) openAttachEditor(st, false); });
+      tb.append(tr);
     }
     tbl.append(tb);
-    listHost.append(h('div', { class: 'table-scroll' }, tbl));
-    if (rows.length > 400) {
-      listHost.append(h('p', { class: 'hint', text: t('attach.truncated').replace('{n}', rows.length) }));
+    // table-scroll-narrow: on desktop the header follows the page (a plain
+    // .table-scroll is a scroll box, so its sticky header stuck to nothing).
+    listHost.append(h('div', { class: 'table-scroll-narrow' }, tbl));
+    if (pages > 1) {
+      const go = (p) => {
+        page = p;
+        renderList();
+        window.scrollTo({ top: Math.max(0, listHost.getBoundingClientRect().top + window.scrollY - 80) });
+      };
+      const jump = h('input', { type: 'number', value: page, min: 1, max: pages, 'aria-label': t('pager.jump') });
+      jump.onchange = () => { const n = parseInt(jump.value, 10); if (n >= 1 && n <= pages) go(n); };
+      listHost.append(h('div', { class: 'pager' }, [
+        h('button', { text: '←', disabled: page <= 1, onclick: () => go(page - 1) }),
+        h('button', { text: '→', disabled: page >= pages, onclick: () => go(page + 1) }),
+        h('span', { class: 'pager-num', text: `${start + 1}–${Math.min(start + PAGE, rows.length)} / ${rows.length}` }),
+        h('span', { class: 'spacer' }),
+        h('span', { class: 'hint', text: t('pager.jump') }),
+        jump,
+        h('span', { class: 'hint', text: `/ ${pages}` }),
+      ]));
     }
     applyI18n();
   }
   let _t = 0;
-  search.oninput = () => { clearTimeout(_t); _t = setTimeout(renderList, 200); };
+  search.oninput = () => { clearTimeout(_t); _t = setTimeout(() => { page = 1; renderList(); }, 200); };
   renderList();
 
   async function reload() {
@@ -8263,7 +10012,11 @@ Views.attachments = async (root) => {
       damageMax: seed.damageMax || '',
       tags: (seed.tags || []).slice(),
     };
-    const m = openModal({ title: isNew ? t('attach.add') : model.name, wide: true });
+    // Esc, a stray backdrop click or × ask before throwing slot edits away.
+    let edited = false;
+    const m = openModal({ title: isNew ? t('attach.add') : model.name, wide: true, isDirty: () => edited });
+    m.body.addEventListener('input', () => { edited = true; });
+    m.body.addEventListener('change', () => { edited = true; });
 
     const nameInp = h('input', { type: 'text', value: model.name, list: 'dz-classnames',
       placeholder: 'AKM' });
@@ -8371,7 +10124,7 @@ Views.attachments = async (root) => {
           // A class absent from types.xml is the #1 reason an attachment
           // silently never spawns — flag it live as the name is typed.
           const checkName = () => {
-            const unknown = !!it.name && classNames.length > 0 && !classNames.includes(it.name);
+            const unknown = !!it.name && classLower.size > 0 && !classLower.has(it.name.toLowerCase());
             row.classList.toggle('unknown', unknown);
             warnBadge.style.display = unknown ? '' : 'none';
           };
@@ -8398,7 +10151,12 @@ Views.attachments = async (root) => {
     }
 
     const cargoHost = h('div');
+    // Every redraw after the first follows an add or a remove — that is an
+    // edit too, even though no input event fired.
+    let drawn = false;
     function renderAll() {
+      if (drawn) edited = true;
+      drawn = true;
       renderSlots(groupsHost, model.attachments, 'attachments');
       renderSlots(cargoHost, model.cargo, 'cargo');
       applyI18n();
@@ -8479,10 +10237,13 @@ Views.attachments = async (root) => {
         h('button', { class: 'primary', i18n: 'action.save', onclick: (e) => withBusy(e.currentTarget, doSave) }),
         !isNew ? h('button', { class: 'danger', i18n: 'action.delete', onclick: async (e) => {
           const btn = e.currentTarget; // capture BEFORE the await
-          if (!(await confirmModal(t('confirm.delete').replace('{name}', model.name), { danger: true, okText: t('action.delete') }))) return;
+          // The entry as it is in the file — the name field may hold a rename
+          // in progress.
+          const delName = seed.name || model.name;
+          if (!(await confirmModal(t('confirm.delete').replace('{name}', delName), { danger: true, okText: t('action.delete') }))) return;
           await withBusy(btn, async () => {
             try {
-              await api.del('/api/spawnable/item?name=' + encodeURIComponent(model.name));
+              await api.del('/api/spawnable/item?name=' + encodeURIComponent(delName));
               toast(t('msg.deleted'), 'ok');
               m.close();
               await reload();
@@ -8495,6 +10256,20 @@ Views.attachments = async (root) => {
 
     async function doSave() {
       if (!model.name) { toast(t('attach.needName'), 'error'); return; }
+      const origName = isNew ? '' : (seed.name || '');
+      const renamed = !isNew && model.name !== origName;
+      // Saving replaces the entry with exactly this name, and DayZ reads class
+      // names case-insensitively: another entry must never be overwritten (or
+      // shadowed by a case variant) without asking.
+      const lower = model.name.toLowerCase();
+      const clash = (isNew || renamed) ? all.find(x => x.name !== origName && x.name.toLowerCase() === lower) : null;
+      if (clash) {
+        if (!(await confirmModal(tn('attach.replaceConfirm', { name: clash.name }), { danger: true, okText: t('attach.replace') }))) return;
+        model.name = clash.name;
+      } else if (renamed) {
+        // A rename used to save a second entry and leave the old one behind.
+        if (!(await confirmModal(tn('attach.renameConfirm', { from: origName, to: model.name })))) return;
+      }
       // Drop preset-reference groups whose name was left blank — an empty
       // preset="" is meaningless and would clutter the file.
       const cleanGroups = (list) => list.filter(g => (typeof g.preset === 'string') ? g.preset.trim() !== '' : true);
@@ -8509,6 +10284,7 @@ Views.attachments = async (root) => {
       };
       try {
         await api.post('/api/spawnable/item', payload);
+        if (renamed && origName) await api.del('/api/spawnable/item?name=' + encodeURIComponent(origName));
         toast(t('msg.saved'), 'ok');
         m.close();
         await reload();
@@ -8532,4 +10308,7 @@ function fmtPct(v) {
   return (pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)) + '%';
 }
 
-main();
+// Start once every script has run (features.js registers more views after this
+// file), so the first navigation can never race a view that isn't defined yet.
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', main);
+else main();

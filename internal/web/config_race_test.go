@@ -77,3 +77,53 @@ func TestCfgSnapshotIsRaceFree(t *testing.T) {
 	close(stop)
 	wg.Wait()
 }
+
+// MapSizes used to be shared between the live config, Cfg() snapshots and the
+// working copy MutateConfig hands to the map-size handler — an in-place map
+// write next to a reader is a fatal runtime error, not a panic. Run with -race.
+func TestCfgMapSizesNotShared(t *testing.T) {
+	a := &app.App{Config: &config.Manager{MapSizes: map[string]int{"chernarusplus": 15360}}}
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			_ = a.MutateConfig(func(c *config.Manager) error {
+				c.MapSizes["custom"] = 10000 + i%7
+				return nil
+			})
+		}
+	}()
+	for r := 0; r < 4; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				snap := a.Cfg()
+				for k, v := range snap.MapSizes {
+					_, _ = k, v
+				}
+			}
+		}()
+	}
+	// A snapshot taken now must not change when the config changes later.
+	snap := a.Cfg()
+	before := snap.MapSizes["chernarusplus"]
+	_ = a.MutateConfig(func(c *config.Manager) error { c.MapSizes["chernarusplus"] = 1; return nil })
+	if snap.MapSizes["chernarusplus"] != before {
+		t.Fatal("Cfg() snapshot shares its map with the live config")
+	}
+	close(stop)
+	wg.Wait()
+}

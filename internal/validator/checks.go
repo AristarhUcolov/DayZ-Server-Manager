@@ -33,44 +33,50 @@ var ceFileTypes = map[string]bool{
 // the admin did not intend.
 func checkTypeSanity(path string, t *dztypes.Type) []Issue {
 	var out []Issue
-	add := func(sev Severity, format string, a ...interface{}) {
-		out = append(out, Issue{File: path, Severity: sev,
+	// args are the message's placeholders besides the type's name.
+	add := func(sev Severity, code, fix string, args map[string]string, format string, a ...interface{}) {
+		args["name"] = t.Name
+		out = append(out, Issue{File: path, Severity: sev, Code: code, Fix: fix, Args: args,
 			Message: fmt.Sprintf("type %q: "+format, append([]interface{}{t.Name}, a...)...)})
 	}
 
 	if strings.TrimSpace(t.Name) == "" {
-		return []Issue{{File: path, Severity: SevError,
+		return []Issue{{File: path, Severity: SevError, Code: "types.emptyName",
 			Message: "a <type> has an empty name attribute — DayZ ignores the whole entry"}}
 	}
 
 	// min > nominal. The `nominal > 0` guard is essential: hundreds of vanilla
 	// non-CE entries legitimately carry nominal=0 with min=1.
 	if t.Nominal != nil && *t.Nominal > 0 && t.Min != nil && *t.Min > *t.Nominal {
-		add(SevWarning, "min (%d) is greater than nominal (%d) — DayZ clamps to nominal and logs a CE warning", *t.Min, *t.Nominal)
+		add(SevWarning, "types.minNominal", "types.minNominal", A("min", *t.Min, "nominal", *t.Nominal),
+			"min (%d) is greater than nominal (%d) — DayZ clamps to nominal and logs a CE warning", *t.Min, *t.Nominal)
 	}
 
 	// lifetime 0 with a real nominal: the item despawns as it spawns. Without
 	// the nominal guard this fires on every static wreck in vanilla.
 	if t.Nominal != nil && *t.Nominal > 0 && t.Lifetime != nil && *t.Lifetime <= 0 {
-		add(SevError, "lifetime = %d with nominal = %d — the item despawns the instant it spawns", *t.Lifetime, *t.Nominal)
+		add(SevError, "types.lifetimeZero", "", A("lifetime", *t.Lifetime, "nominal", *t.Nominal),
+			"lifetime = %d with nominal = %d — the item despawns the instant it spawns", *t.Lifetime, *t.Nominal)
 	}
 
 	if t.Restock != nil && *t.Restock < 0 {
-		add(SevWarning, "restock = %d is negative", *t.Restock)
+		add(SevWarning, "types.restockNeg", "types.restockNeg", A("restock", *t.Restock), "restock = %d is negative", *t.Restock)
 	}
 
 	// quantmin/quantmax are percentages, or -1 to disable. Writing absolute
 	// round counts here is a very common mistake.
 	if t.QuantMin != nil && t.QuantMax != nil &&
 		*t.QuantMin != -1 && *t.QuantMax != -1 && *t.QuantMin > *t.QuantMax {
-		add(SevError, "quantmin (%d) is greater than quantmax (%d) — the item spawns with an undefined fill level", *t.QuantMin, *t.QuantMax)
+		add(SevError, "types.quantOrder", "types.quantOrder", A("min", *t.QuantMin, "max", *t.QuantMax),
+			"quantmin (%d) is greater than quantmax (%d) — the item spawns with an undefined fill level", *t.QuantMin, *t.QuantMax)
 	}
 	for _, q := range []struct {
 		name string
 		v    *int
 	}{{"quantmin", t.QuantMin}, {"quantmax", t.QuantMax}} {
 		if q.v != nil && *q.v != -1 && (*q.v < 0 || *q.v > 100) {
-			add(SevError, "%s = %d is out of range — it is a percentage: use -1 (disabled) or 0..100", q.name, *q.v)
+			add(SevError, "types.quantRange", "types.quantRange", A("field", q.name, "value", *q.v),
+				"%s = %d is out of range — it is a percentage: use -1 (disabled) or 0..100", q.name, *q.v)
 		}
 	}
 	return out
@@ -153,26 +159,100 @@ func (u *unknownAgg) issues() []Issue {
 				r := byName[k]
 				msg := fmt.Sprintf("unknown %s %q — not in cfglimitsdefinition.xml, so DayZ drops it (used by type %q)",
 					kind, r.orig, r.firstType)
+				key := ""
 				if r.count > 1 {
 					msg = fmt.Sprintf("unknown %s %q — not in cfglimitsdefinition.xml, so DayZ drops it (used by %d types, first: %q)",
 						kind, r.orig, r.count, r.firstType)
+					key = "types.unknownFlagMany"
 				}
-				out = append(out, Issue{File: f, Severity: SevWarning, Message: msg})
+				out = append(out, Issue{File: f, Severity: SevWarning, Code: "types.unknownFlag", Fix: "types.unknownFlag", Message: msg,
+					Key: key, Args: A("kind", kind, "name", r.orig, "type", r.firstType, "n", r.count)})
 			}
 		}
 	}
 	return out
 }
 
-// checkEvents validates events.xml and the spawn positions that reference it.
-func checkEvents(eventsPath, spawnsPath string) []Issue {
+// missionEventsFiles lists db/events.xml and every events file the mission
+// registers in cfgeconomycore.xml (mods keep their events there).
+func missionEventsFiles(missionDir string) []string {
+	out := []string{filepath.Join(missionDir, "db", "events.xml")}
+	refs, err := dztypes.ListEconomyCE(filepath.Join(missionDir, "cfgeconomycore.xml"))
+	if err != nil {
+		return out
+	}
+	seen := map[string]bool{strings.ToLower(out[0]): true}
+	for _, r := range refs {
+		if !strings.EqualFold(r.Type, "events") {
+			continue
+		}
+		p := filepath.Join(missionDir, filepath.FromSlash(r.Folder), r.Name)
+		if rel, err := filepath.Rel(missionDir, p); err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		if !seen[strings.ToLower(p)] {
+			seen[strings.ToLower(p)] = true
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// missionEventNames is every event the mission defines, in any events file.
+// ok is false when db/events.xml itself cannot be read — then nothing may be
+// judged an orphan.
+func missionEventNames(missionDir string) (map[string]bool, bool) {
+	names := map[string]bool{}
+	for i, p := range missionEventsFiles(missionDir) {
+		doc, err := dztypes.LoadEvents(p)
+		if err != nil {
+			// A registered file that exists but does not parse may define the
+			// events whose points look orphaned — judge nothing then.
+			if i == 0 || !os.IsNotExist(err) {
+				return nil, false
+			}
+			continue
+		}
+		for _, e := range doc.Events {
+			names[strings.ToLower(e.Name)] = true
+		}
+	}
+	return names, true
+}
+
+// checkEvents validates the mission's events files and the spawn positions
+// that reference them.
+func checkEvents(missionDir string) []Issue {
+	var out []Issue
+	for _, p := range missionEventsFiles(missionDir) {
+		out = append(out, checkEventsFile(p)...)
+	}
+	// Spawn positions for an event that no longer exists are dead config — the
+	// classic result of renaming an event and forgetting this file. Only this
+	// direction is checked: plenty of events legitimately have no positions.
+	// Events of every registered file count (mods define theirs there).
+	if known, ok := missionEventNames(missionDir); ok {
+		spawnsPath := filepath.Join(missionDir, "cfgeventspawns.xml")
+		for _, name := range eventSpawnNames(spawnsPath) {
+			if !known[strings.ToLower(name)] {
+				out = append(out, Issue{File: spawnsPath, Severity: SevWarning, Code: "eventspawns.orphan", Fix: "eventspawns.orphan",
+					Message: fmt.Sprintf("spawn positions are defined for event %q, which is not in any events file — they are ignored", name),
+					Args:    A("event", name)})
+			}
+		}
+	}
+	return out
+}
+
+// checkEventsFile validates one events file.
+func checkEventsFile(eventsPath string) []Issue {
 	doc, err := dztypes.LoadEvents(eventsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return []Issue{{File: eventsPath, Severity: SevError,
-			Message: fmt.Sprintf("cannot parse events.xml: %v", err)}}
+		return []Issue{{File: eventsPath, Severity: SevError, Code: "events.parse",
+			Message: fmt.Sprintf("cannot parse %s: %v", filepath.Base(eventsPath), err), Args: A("file", filepath.Base(eventsPath), "err", err)}}
 	}
 
 	var out []Issue
@@ -181,16 +261,17 @@ func checkEvents(eventsPath, spawnsPath string) []Issue {
 		e := &doc.Events[i]
 		key := strings.ToLower(e.Name)
 		if seen[key] {
-			out = append(out, Issue{File: eventsPath, Severity: SevError,
-				Message: fmt.Sprintf("duplicate event %q — DayZ keeps only one of them", e.Name)})
+			out = append(out, Issue{File: eventsPath, Severity: SevError, Code: "events.duplicate",
+				Message: fmt.Sprintf("duplicate event %q — DayZ keeps only one of them", e.Name), Args: A("event", e.Name)})
 		}
 		seen[key] = true
 
 		// max="0" means unlimited, which is why vanilla ambient events read
 		// min="100" max="0" — comparing without this guard is all noise.
 		if e.Min != nil && e.Max != nil && *e.Max > 0 && *e.Min > *e.Max {
-			out = append(out, Issue{File: eventsPath, Severity: SevWarning,
-				Message: fmt.Sprintf("event %q: min (%d) is greater than max (%d)", e.Name, *e.Min, *e.Max)})
+			out = append(out, Issue{File: eventsPath, Severity: SevWarning, Code: "events.minMax",
+				Message: fmt.Sprintf("event %q: min (%d) is greater than max (%d)", e.Name, *e.Min, *e.Max),
+				Args:    A("event", e.Name, "min", *e.Min, "max", *e.Max)})
 		}
 		// Deliberately NOT checked: active=0 with a nominal set. That fires 8
 		// to 16 times on every stock mission — BI keeps seasonal events
@@ -199,22 +280,14 @@ func checkEvents(eventsPath, spawnsPath string) []Issue {
 		if e.Children != nil {
 			for _, c := range e.Children.Child {
 				if c.Max > 0 && c.Min > c.Max {
-					out = append(out, Issue{File: eventsPath, Severity: SevWarning,
-						Message: fmt.Sprintf("event %q child %q: min (%d) is greater than max (%d)", e.Name, c.Type, c.Min, c.Max)})
+					out = append(out, Issue{File: eventsPath, Severity: SevWarning, Code: "events.minMax",
+						Message: fmt.Sprintf("event %q child %q: min (%d) is greater than max (%d)", e.Name, c.Type, c.Min, c.Max),
+						Key:     "events.minMaxChild", Args: A("event", e.Name, "child", c.Type, "min", c.Min, "max", c.Max)})
 				}
 			}
 		}
 	}
 
-	// Spawn positions for an event that no longer exists are dead config — the
-	// classic result of renaming an event and forgetting this file. Only this
-	// direction is checked: plenty of events legitimately have no positions.
-	for _, name := range eventSpawnNames(spawnsPath) {
-		if !seen[strings.ToLower(name)] {
-			out = append(out, Issue{File: spawnsPath, Severity: SevWarning,
-				Message: fmt.Sprintf("spawn positions are defined for event %q, which is not in events.xml — they are ignored", name)})
-		}
-	}
 	return out
 }
 
@@ -223,7 +296,7 @@ func checkEvents(eventsPath, spawnsPath string) []Issue {
 // world. Those are almost always a typo: DayZ clamps or ignores them, so the
 // event silently never spawns there. The 20000 ceiling clears every official
 // world (all ≤ 15360) with headroom, so this never fires on a stock mission.
-func checkEventSpawnBounds(spawnsPath string) []Issue {
+func checkEventSpawnBounds(spawnsPath string, worldSize float64) []Issue {
 	data, err := os.ReadFile(spawnsPath)
 	if err != nil {
 		return nil
@@ -240,7 +313,7 @@ func checkEventSpawnBounds(spawnsPath string) []Issue {
 	if xml.Unmarshal(data, &doc) != nil {
 		return nil
 	}
-	const maxCoord = 20000.0
+	maxCoord := boundsLimit(worldSize)
 	var out []Issue
 	for _, e := range doc.Events {
 		bad := 0
@@ -254,8 +327,9 @@ func checkEventSpawnBounds(spawnsPath string) []Issue {
 			if bad != 1 {
 				suffix = "s"
 			}
-			out = append(out, Issue{File: spawnsPath, Severity: SevWarning,
-				Message: fmt.Sprintf("event %q has %d spawn position%s out of range (x/z outside 0..20000) — likely a typo; DayZ ignores or clamps them", e.Name, bad, suffix)})
+			out = append(out, Issue{File: spawnsPath, Severity: SevWarning, Code: "eventspawns.bounds", Fix: "eventspawns.bounds",
+				Message: fmt.Sprintf("event %q has %d spawn position%s outside the map (x/z beyond 0..%.0f) — likely a typo; DayZ ignores or clamps them", e.Name, bad, suffix, maxCoord),
+				Args:    A("event", e.Name, "n", bad, "max", fmt.Sprintf("%.0f", maxCoord))})
 		}
 	}
 	return out
@@ -300,8 +374,8 @@ func checkSpawnable(missionDir string) []Issue {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return []Issue{{File: path, Severity: SevError,
-			Message: fmt.Sprintf("cannot parse cfgspawnabletypes.xml: %v", err)}}
+		return []Issue{{File: path, Severity: SevError, Code: "spawnable.parse",
+			Message: fmt.Sprintf("cannot parse cfgspawnabletypes.xml: %v", err), Args: A("err", err)}}
 	}
 
 	presets := presetNames(filepath.Join(missionDir, "cfgrandompresets.xml"))
@@ -311,8 +385,8 @@ func checkSpawnable(missionDir string) []Issue {
 		st := &sts[i]
 		key := strings.ToLower(st.Name)
 		if seen[key] {
-			out = append(out, Issue{File: path, Severity: SevWarning,
-				Message: fmt.Sprintf("duplicate entry for %q — DayZ keeps only one of them", st.Name)})
+			out = append(out, Issue{File: path, Severity: SevWarning, Code: "spawnable.duplicate",
+				Message: fmt.Sprintf("duplicate entry for %q — DayZ keeps only one of them", st.Name), Args: A("name", st.Name)})
 		}
 		seen[key] = true
 
@@ -321,8 +395,9 @@ func checkSpawnable(missionDir string) []Issue {
 		}
 		for _, g := range append(append([]dztypes.SpawnGroup{}, st.Attachments...), st.Cargo...) {
 			if g.Preset != "" && !presets[strings.ToLower(g.Preset)] {
-				out = append(out, Issue{File: path, Severity: SevError,
-					Message: fmt.Sprintf("%q references preset %q, which is not defined in cfgrandompresets.xml — the slot spawns nothing", st.Name, g.Preset)})
+				out = append(out, Issue{File: path, Severity: SevError, Code: "spawnable.preset", Fix: "spawnable.preset",
+					Message: fmt.Sprintf("%q references preset %q, which is not defined in cfgrandompresets.xml — the slot spawns nothing", st.Name, g.Preset),
+					Args:    A("name", st.Name, "preset", g.Preset)})
 			}
 		}
 	}
