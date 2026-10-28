@@ -401,6 +401,14 @@ func (g *Gateway) DeletePortMapping(ctx context.Context, proto string, port int)
 // MappedTo reports which internal client an external port currently forwards
 // to ("" when there is no such mapping).
 func (g *Gateway) MappedTo(ctx context.Context, proto string, port int) (string, error) {
+	client, _, err := g.MappingInfo(ctx, proto, port)
+	return client, err
+}
+
+// MappingInfo reports the internal client an external port forwards to and
+// the forward's description ("", "" when there is no such mapping). Some
+// routers leave the description empty.
+func (g *Gateway) MappingInfo(ctx context.Context, proto string, port int) (client, desc string, err error) {
 	v, err := g.soap(ctx, "GetSpecificPortMappingEntry", [][2]string{
 		{"NewRemoteHost", ""},
 		{"NewExternalPort", strconv.Itoa(port)},
@@ -408,12 +416,12 @@ func (g *Gateway) MappedTo(ctx context.Context, proto string, port int) (string,
 	})
 	var se *SOAPError
 	if errors.As(err, &se) && se.Code == 714 { // NoSuchEntryInArray
-		return "", nil
+		return "", "", nil
 	}
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return v["NewInternalClient"], nil
+	return v["NewInternalClient"], v["NewPortMappingDescription"], nil
 }
 
 // IsPublic reports whether ip is a public internet address (not private,

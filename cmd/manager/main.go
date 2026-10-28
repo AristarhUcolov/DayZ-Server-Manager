@@ -28,8 +28,19 @@ func main() {
 		exposure  = flag.String("exposure", "", "save the panel exposure before starting: local | lan | internet (internet needs a login)")
 		install   = flag.Bool("install", false, "add the manager to the Start menu / applications menu and the desktop, then exit")
 		uninstall = flag.Bool("uninstall", false, "remove what -install added, then exit")
+		autostart = flag.Bool("autostart", false, "started together with the computer: do not open the browser")
+		dir       = flag.String("dir", "", "the DayZ server folder (default: the working folder when it holds a server, else the program's folder)")
+		guard     = flag.Int("guard", 0, "internal: watch the manager with this process id and start it again if it stops unexpectedly")
 	)
 	flag.Parse()
+	launcher.SetServerDir(*dir)
+	if *guard > 0 {
+		launcher.RunGuardian(*guard, *webPort, *bindAddr)
+		return
+	}
+	if *autostart {
+		*noBrowser = true // at sign-in nobody asked for a browser tab
+	}
 
 	if *showVer {
 		fmt.Printf("%s v%s by %s\n", launcher.AppName, launcher.Version, launcher.AppAuthor)

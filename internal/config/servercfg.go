@@ -7,7 +7,9 @@ package config
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strconv"
@@ -30,16 +32,27 @@ type ServerCfgEntry struct {
 	Key     string
 	Value   string // raw value as written (may include surrounding quotes)
 	Comment string // trailing // comment
-	Raw     string // verbatim content for Class/Comment/Blank
+	// Raw is the verbatim line(s) as read. Save writes it back unchanged, so
+	// the admin's spacing, comment alignment and tabs survive an edit; a
+	// key=value line is only rewritten when its value changes, and then
+	// just the value inside it.
+	Raw   string
+	dirty bool // the value changed since the file was read (or the key is new)
 }
 
 type ServerCfg struct {
 	Entries []ServerCfgEntry
+	crlf    bool // the file uses Windows line endings; Save keeps them
+	noFinal bool // the last line has no line ending; Save keeps it that way
 }
 
 var (
-	reKV    = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*;\s*(?://\s*(.*))?\s*$`)
-	reClass = regexp.MustCompile(`^\s*class\s+[A-Za-z_][A-Za-z0-9_]*\b`)
+	// A quoted value may hold a ';' (or a doubled "" quote) — matching up to
+	// the first ';' cut `description = "PvE; no raids";` in half.
+	reKV = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*("(?:[^"]|"")*"|[^;]*?)\s*;\s*(?://\s*(.*))?\s*$`)
+	// The same line split around its value: prefix, value, the rest.
+	reKVSplit = regexp.MustCompile(`^(\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*)("(?:[^"]|"")*"|[^;]*?)(\s*;.*)$`)
+	reClass   = regexp.MustCompile(`^\s*class\s+[A-Za-z_][A-Za-z0-9_]*\b`)
 )
 
 func LoadServerCfg(path string) (*ServerCfg, error) {
@@ -50,6 +63,20 @@ func LoadServerCfg(path string) (*ServerCfg, error) {
 	defer f.Close()
 
 	cfg := &ServerCfg{}
+	// Keep the file's own line endings (Windows tools write CRLF).
+	head := make([]byte, 4096)
+	n, _ := f.Read(head)
+	cfg.crlf = bytes.Contains(head[:n], []byte("\r\n"))
+	// …and a last line without a line ending (DayZ's own file ends so).
+	if st, err := f.Stat(); err == nil && st.Size() > 0 {
+		last := make([]byte, 1)
+		if _, err := f.ReadAt(last, st.Size()-1); err == nil {
+			cfg.noFinal = last[0] != '\n'
+		}
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
 	scan := bufio.NewScanner(f)
 	scan.Buffer(make([]byte, 1<<20), 1<<20)
 
@@ -87,7 +114,7 @@ func LoadServerCfg(path string) (*ServerCfg, error) {
 
 		trim := strings.TrimSpace(line)
 		if trim == "" {
-			cfg.Entries = append(cfg.Entries, ServerCfgEntry{Kind: EntryBlank, Raw: ""})
+			cfg.Entries = append(cfg.Entries, ServerCfgEntry{Kind: EntryBlank, Raw: line})
 			continue
 		}
 		if strings.HasPrefix(trim, "//") {
@@ -114,7 +141,7 @@ func LoadServerCfg(path string) (*ServerCfg, error) {
 		}
 		if m := reKV.FindStringSubmatch(line); m != nil {
 			cfg.Entries = append(cfg.Entries, ServerCfgEntry{
-				Kind: EntryKV, Key: m[1], Value: strings.TrimSpace(m[2]), Comment: m[3],
+				Kind: EntryKV, Key: m[1], Value: strings.TrimSpace(m[2]), Comment: m[3], Raw: line,
 			})
 			continue
 		}
@@ -137,23 +164,41 @@ func (c *ServerCfg) Save(path string) error {
 	for _, e := range c.Entries {
 		switch e.Kind {
 		case EntryKV:
-			b.WriteString(e.Key)
-			b.WriteString(" = ")
-			b.WriteString(e.Value)
-			b.WriteByte(';')
-			if e.Comment != "" {
-				b.WriteString("  // ")
-				b.WriteString(e.Comment)
-			}
-			b.WriteByte('\n')
+			b.WriteString(e.render())
 		case EntryClass, EntryComment:
 			b.WriteString(strings.TrimRight(e.Raw, "\n"))
-			b.WriteByte('\n')
 		case EntryBlank:
-			b.WriteByte('\n')
+			b.WriteString(e.Raw)
+		}
+		b.WriteByte('\n')
+	}
+	out := b.String()
+	if c.noFinal {
+		out = strings.TrimSuffix(out, "\n")
+	}
+	if c.crlf {
+		out = strings.ReplaceAll(out, "\n", "\r\n")
+	}
+	return atomicWrite(path, []byte(out))
+}
+
+// render writes a key=value entry: the line as read when nothing changed, the
+// same line with only the value swapped when it did, and a fresh line for a
+// key the file did not have.
+func (e ServerCfgEntry) render() string {
+	if e.Raw != "" {
+		if !e.dirty {
+			return e.Raw
+		}
+		if m := reKVSplit.FindStringSubmatchIndex(e.Raw); m != nil {
+			return e.Raw[:m[4]] + e.Value + e.Raw[m[5]:]
 		}
 	}
-	return atomicWrite(path, []byte(b.String()))
+	line := e.Key + " = " + e.Value + ";"
+	if e.Comment != "" {
+		line += "  // " + e.Comment
+	}
+	return line
 }
 
 // Get returns the value (unquoted if it was quoted) and whether the key was found.
@@ -196,12 +241,15 @@ func (c *ServerCfg) setRendered(key, rendered string) {
 	found := false
 	for i := range c.Entries {
 		if c.Entries[i].Kind == EntryKV && strings.EqualFold(c.Entries[i].Key, key) {
-			c.Entries[i].Value = rendered
+			if c.Entries[i].Value != rendered {
+				c.Entries[i].Value = rendered
+				c.Entries[i].dirty = true
+			}
 			found = true
 		}
 	}
 	if !found {
-		c.Entries = append(c.Entries, ServerCfgEntry{Kind: EntryKV, Key: key, Value: rendered})
+		c.Entries = append(c.Entries, ServerCfgEntry{Kind: EntryKV, Key: key, Value: rendered, dirty: true})
 	}
 }
 

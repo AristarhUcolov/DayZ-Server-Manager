@@ -52,8 +52,8 @@ type GearAttributes struct {
 // GearItem is one item variant, in a slot or in cargo.
 type GearItem struct {
 	ItemType                 string          `json:"itemType,omitempty"`
-	Name                     string          `json:"name,omitempty"` // cargo sets carry a name instead
-	SpawnWeight              int             `json:"spawnWeight"`
+	Name                     string          `json:"name,omitempty"`        // cargo sets carry a name instead
+	SpawnWeight              int             `json:"spawnWeight,omitempty"` // 0 only on contents, which have none
 	Attributes               *GearAttributes `json:"attributes,omitempty"`
 	QuickBarSlot             *int            `json:"quickBarSlot,omitempty"`
 	SimpleChildrenTypes      []string        `json:"simpleChildrenTypes,omitempty"`
@@ -105,42 +105,147 @@ func LoadGearPreset(path string) (*GearPreset, error) {
 	return &p, nil
 }
 
-// Normalize makes the file spawn exactly what the editor shows. Every worn
-// item and every cargo set the UI displays as "pristine" must actually SAY so
-// in the JSON: an item with no attributes falls back to the engine's default
-// condition, which is not guaranteed pristine, so a fresh spawn could arrive in
-// worn or ruined gear even though the panel showed "new". So any item with no
-// health set gets pristine (1.0/1.0), and any set that carries loose children
-// (a rag, an apple) is made to hand them its own condition rather than let them
-// roll the engine default. Explicit conditions the user chose are never
-// touched — only the absent ones are filled.
+// Normalize makes the file spawn exactly what the editor shows. How DayZ
+// reads a preset (scripts/4_World/Classes/PlayerGearSpawn, 1.29):
+//
+//   - a worn item WITHOUT "attributes" is invalid and skipped, so its slot
+//     stays empty;
+//   - once "attributes" is there, health and quantity are drawn from
+//     healthMin..healthMax and quantityMin..quantityMax, and a missing bound
+//     reads as 0: no health means a RUINED item, no quantity an empty canteen
+//     or magazine;
+//   - a missing quickBarSlot reads as 0, binding the item to quick-bar slot 1;
+//   - simpleChildrenUseDefaultAttributes = true spawns the loose children as
+//     the game makes them (pristine, normal amount); false hands them the
+//     set's own attributes.
+//
+// So every gap is filled with what the editor displays: pristine, full, no
+// quick-bar slot, children as new. Values the user chose are never touched.
 func (p *GearPreset) Normalize() {
-	one := 1.0
-	fill := func(it *GearItem) {
-		if it.Attributes == nil {
+	full := func() *float64 { v := 1.0; return &v }
+	fillAttrs := func(a *GearAttributes) {
+		if a.HealthMin == nil && a.HealthMax == nil {
+			a.HealthMin, a.HealthMax = full(), full()
+		}
+		if a.QuantityMin == nil && a.QuantityMax == nil {
+			a.QuantityMin, a.QuantityMax = full(), full()
+		}
+	}
+	var fill func(it *GearItem, needAttrs, quickBar bool)
+	fill = func(it *GearItem, needAttrs, quickBar bool) {
+		if it.Attributes == nil && needAttrs {
 			it.Attributes = &GearAttributes{}
 		}
-		if it.Attributes.HealthMin == nil && it.Attributes.HealthMax == nil {
-			hMin, hMax := one, one
-			it.Attributes.HealthMin = &hMin
-			it.Attributes.HealthMax = &hMax
+		if it.Attributes != nil {
+			fillAttrs(it.Attributes)
 		}
-		// A set with loose children (simpleChildrenTypes) but no explicit
-		// inheritance flag would spawn those children at the engine default.
-		// Pin them to the set's own (now pristine) condition.
+		if quickBar && it.QuickBarSlot == nil {
+			none := -1
+			it.QuickBarSlot = &none
+		}
 		if len(it.SimpleChildrenTypes) > 0 && it.SimpleChildrenUseDefault == nil {
-			inherit := true
-			it.SimpleChildrenUseDefault = &inherit
+			asNew := true
+			it.SimpleChildrenUseDefault = &asNew
+		}
+		for i := range it.ComplexChildrenTypes {
+			// A child without attributes already spawns as new; one with
+			// attributes needs both ranges.
+			fill(&it.ComplexChildrenTypes[i], false, true)
 		}
 	}
 	for si := range p.AttachmentSlotItemSets {
 		for ii := range p.AttachmentSlotItemSets[si].DiscreteItemSets {
-			fill(&p.AttachmentSlotItemSets[si].DiscreteItemSets[ii])
+			fill(&p.AttachmentSlotItemSets[si].DiscreteItemSets[ii], true, true)
 		}
 	}
 	for i := range p.DiscreteUnsortedItemSets {
-		fill(&p.DiscreteUnsortedItemSets[i])
+		// Cargo sets have no quick-bar slot of their own.
+		fill(&p.DiscreteUnsortedItemSets[i], true, false)
 	}
+}
+
+// LooksLikeGearPreset reports whether JSON data is a spawn-gear preset rather
+// than one of the mission's other JSON files (cfggameplay.json,
+// cfgeffectarea.json, …).
+func LooksLikeGearPreset(data []byte) bool {
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) != nil {
+		return false
+	}
+	_, slots := raw["attachmentSlotItemSets"]
+	_, cargo := raw["discreteUnsortedItemSets"]
+	_, chars := raw["characterTypes"]
+	_, weight := raw["spawnWeight"]
+	return slots || cargo || (chars && weight)
+}
+
+// FindGearPresetFiles lists the preset files in a mission folder (the folder
+// itself and two levels below), as mission-relative slash paths. A preset
+// that is on disk but missing from cfggameplay.json — typically after a
+// server update replaced that file — is found this way.
+func FindGearPresetFiles(missionDir string) []string {
+	var out []string
+	var walk func(dir, rel string, depth int)
+	walk = func(dir, rel string, depth int) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() {
+				low := strings.ToLower(name)
+				// Persistence and the economy database are big and never
+				// hold presets.
+				if depth < 2 && !strings.HasPrefix(name, ".") &&
+					!strings.HasPrefix(low, "storage_") && low != "db" && low != "env" {
+					walk(filepath.Join(dir, name), rel+name+"/", depth+1)
+				}
+				continue
+			}
+			if !strings.EqualFold(filepath.Ext(name), ".json") {
+				continue
+			}
+			full := filepath.Join(dir, name)
+			if st, err := e.Info(); err != nil || st.Size() > 4<<20 {
+				continue
+			}
+			data, err := os.ReadFile(full)
+			if err != nil || !LooksLikeGearPreset(data) {
+				continue
+			}
+			out = append(out, rel+name)
+		}
+	}
+	walk(missionDir, "", 0)
+	sort.Strings(out)
+	return out
+}
+
+// SameGearPath compares two mission-relative preset paths the way the file
+// system would: separators and "./" ignored, case-insensitive (DayZ servers
+// run on Windows far more often than not).
+func SameGearPath(a, b string) bool {
+	norm := func(s string) string {
+		s = strings.TrimSpace(strings.ReplaceAll(s, `\`, "/"))
+		s = strings.TrimPrefix(filepath.ToSlash(filepath.Clean(filepath.FromSlash(s))), "./")
+		return strings.ToLower(s)
+	}
+	return norm(a) == norm(b)
+}
+
+// FreeGearFileName returns name, or name_2.json, name_3.json, … — the first
+// that does not exist in the mission folder.
+func FreeGearFileName(missionDir, name string) string {
+	base := strings.TrimSuffix(name, filepath.Ext(name))
+	cand := name
+	for i := 2; i < 1000; i++ {
+		if _, err := os.Stat(filepath.Join(missionDir, filepath.FromSlash(cand))); os.IsNotExist(err) {
+			return cand
+		}
+		cand = fmt.Sprintf("%s_%d.json", base, i)
+	}
+	return cand
 }
 
 // Save writes the preset as pretty JSON, folding the preserved extras back in.
@@ -174,11 +279,12 @@ func (p *GearPreset) Save(path string) error {
 }
 
 // StarterGearPreset returns a sensible, valid starting loadout: the vanilla
-// fresh-spawn clothes plus a rag and an apple, so enabling the system produces
-// something that visibly works rather than a naked spawn.
+// fresh-spawn clothes plus vanilla's bandage, chemlight and fruit on the
+// hotbar, so enabling the system produces something that visibly works rather
+// than a naked spawn.
 func StarterGearPreset() *GearPreset {
 	one := 1.0
-	inherit := true
+	asNew := true
 	// Pristine, not worn. healthMin/healthMax are HEALTH fractions (1.0 =
 	// pristine, 0.0 = ruined), so the old 0.45–0.7 default spawned players in
 	// worn/damaged clothes.
@@ -206,13 +312,23 @@ func StarterGearPreset() *GearPreset {
 					HealthMin: &pristine, HealthMax: &pristine,
 					QuantityMin: &one, QuantityMax: &one,
 				},
-				SimpleChildrenTypes: []string{"Rag", "Apple"},
-				// The rag and apple inherit the set's pristine condition rather
-				// than roll the engine default.
-				SimpleChildrenUseDefault: &inherit,
+				// What vanilla's init.c hands out, on the same hotbar keys:
+				// a bandage (key 3), a chemlight (key 2) and a fruit (key 4).
+				// Contents without attributes spawn as the game makes them.
+				ComplexChildrenTypes: []GearItem{
+					quick("BandageDressing", 2),
+					quick("Chemlight_White", 1),
+					quick("Apple", 3),
+				},
+				SimpleChildrenUseDefault: &asNew,
 			},
 		},
 	}
+}
+
+// quick is a carried item bound to a hotbar slot (0-based: 0 is key 1).
+func quick(cls string, slot int) GearItem {
+	return GearItem{ItemType: cls, QuickBarSlot: &slot}
 }
 
 // ---- cfggameplay.json registration ---------------------------------------

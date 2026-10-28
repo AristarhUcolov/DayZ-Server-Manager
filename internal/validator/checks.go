@@ -385,7 +385,7 @@ func checkSpawnable(missionDir string) []Issue {
 		st := &sts[i]
 		key := strings.ToLower(st.Name)
 		if seen[key] {
-			out = append(out, Issue{File: path, Severity: SevWarning, Code: "spawnable.duplicate",
+			out = append(out, Issue{File: path, Severity: SevWarning, Code: "spawnable.duplicate", Fix: "spawnable.duplicate",
 				Message: fmt.Sprintf("duplicate entry for %q — DayZ keeps only one of them", st.Name), Args: A("name", st.Name)})
 		}
 		seen[key] = true

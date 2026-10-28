@@ -338,7 +338,8 @@ Views.servers = async (root) => {
       let r;
       try { r = await api.post('/api/servers/inspect', { dir: v }); } catch (e) { host.textContent = e.message; return; }
       if (dirInp.value.trim() !== v) return;
-      const say = (cls, key, extra) => { host.classList.add(cls); host.append(h('span', { i18n: key }), extra ? h('span', { text: ' ' + extra }) : null); applyI18n(); };
+      // Element.append(null) would print "null" (the ".null" after the hint).
+      const say = (cls, key, extra) => { host.classList.add(cls); host.append(h('span', { i18n: key }), ...(extra ? [h('span', { text: ' ' + extra })] : [])); applyI18n(); };
       if (r.error) return say('bad', 'servers.inspect.problem', r.error);
       if (opts.forCopy) {
         if (!r.exists) return say('ok', 'servers.inspect.newFolder');
@@ -422,7 +423,7 @@ Views.servers = async (root) => {
       jobHost.append(
         h('div', { class: 'srv-job-line', text: t('servers.copy.progress').replace('{name}', j.name).replace('{done}', bytes(j.copied)).replace('{total}', bytes(j.total)).replace('{pct}', pct) }),
         h('div', { class: 'progress' }, h('div', { class: 'progress-bar', style: { width: pct + '%' } })),
-        j.current ? h('div', { class: 'hint mono srv-job-file', text: j.current }) : null,
+        h('div', { class: 'hint mono srv-job-file', text: j.current || '' }),
       );
     } else if (j.state === 'done') {
       jobHost.append(h('div', { class: 'info-bar' }, [

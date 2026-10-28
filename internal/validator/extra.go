@@ -182,8 +182,8 @@ func checkJSON(o Options) []Issue {
 	return out
 }
 
-func fixJSON(o Options) ([]string, error) {
-	var done []string
+func fixJSON(o Options) ([]Fixed, error) {
+	var done []Fixed
 	for _, p := range jsonFiles(o) {
 		data, err := os.ReadFile(p)
 		if err != nil || isUTF16(data) {
@@ -203,7 +203,7 @@ func fixJSON(o Options) ([]string, error) {
 		if err := writeAtomic(p, fixed); err != nil {
 			return done, err
 		}
-		done = append(done, "removed comments / trailing commas from "+filepath.Base(p))
+		done = append(done, F("jsonCleaned", "removed comments / trailing commas from "+filepath.Base(p), "file", filepath.Base(p)))
 	}
 	return done, nil
 }
@@ -270,8 +270,8 @@ func checkEncoding(o Options) []Issue {
 	return out
 }
 
-func fixEncoding(o Options) ([]string, error) {
-	var done []string
+func fixEncoding(o Options) ([]Fixed, error) {
+	var done []Fixed
 	for _, p := range configFiles(o) {
 		data, err := os.ReadFile(p)
 		if err != nil || !isUTF16(data) {
@@ -283,7 +283,7 @@ func fixEncoding(o Options) ([]string, error) {
 		if err := writeAtomic(p, toUTF8(data)); err != nil {
 			return done, err
 		}
-		done = append(done, "converted "+filepath.Base(p)+" from UTF-16 to UTF-8")
+		done = append(done, F("utf8", "converted "+filepath.Base(p)+" from UTF-16 to UTF-8", "file", filepath.Base(p)))
 	}
 	return done, nil
 }
@@ -331,8 +331,8 @@ func escapeBareAmps(s string) (string, int) {
 	return b.String(), n
 }
 
-func fixXMLAmps(files []string) ([]string, error) {
-	var done []string
+func fixXMLAmps(files []string) ([]Fixed, error) {
+	var done []Fixed
 	for _, p := range files {
 		data, err := os.ReadFile(p)
 		if err != nil {
@@ -348,7 +348,7 @@ func fixXMLAmps(files []string) ([]string, error) {
 		if err := writeAtomic(p, []byte(fixed)); err != nil {
 			return done, err
 		}
-		done = append(done, fmt.Sprintf("escaped %d bare '&' in %s", n, filepath.Base(p)))
+		done = append(done, F("amp", fmt.Sprintf("escaped %d bare '&' in %s", n, filepath.Base(p)), "n", n, "file", filepath.Base(p)))
 	}
 	return done, nil
 }
@@ -488,7 +488,7 @@ func checkPorts(o Options, cfg *config.ServerCfg, path string) []Issue {
 	return out
 }
 
-func fixServerCfgSemicolons(o Options) ([]string, error) {
+func fixServerCfgSemicolons(o Options) ([]Fixed, error) {
 	if o.ServerCfg == "" {
 		return nil, nil
 	}
@@ -521,7 +521,7 @@ func fixServerCfgSemicolons(o Options) ([]string, error) {
 	if err := writeAtomic(path, []byte(strings.Join(lines, "\n"))); err != nil {
 		return nil, err
 	}
-	return []string{fmt.Sprintf("added the missing ';' on %d line(s) of %s", len(bad), filepath.Base(path))}, nil
+	return []Fixed{F("semicolons", fmt.Sprintf("added the missing ';' on %d line(s) of %s", len(bad), filepath.Base(path)), "n", len(bad), "file", filepath.Base(path))}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -674,11 +674,26 @@ func modKeyNames(dir string) []string {
 	return out
 }
 
-func fixModKeys(o Options) ([]string, error) {
+func fixModKeys(o Options) ([]Fixed, error) {
+	have := map[string]bool{}
+	if entries, err := os.ReadDir(filepath.Join(o.ServerDir, "keys")); err == nil {
+		for _, e := range entries {
+			have[strings.ToLower(e.Name())] = true
+		}
+	}
+	// Only the mods whose key is missing: a report of "copied" for keys that
+	// were already there would be noise.
 	var names []string
 	for _, m := range o.activeMods() {
-		if st, err := os.Stat(o.modDir(m)); err == nil && st.IsDir() && !filepath.IsAbs(m) {
-			names = append(names, m)
+		dir := o.modDir(m)
+		if st, err := os.Stat(dir); err != nil || !st.IsDir() || filepath.IsAbs(m) {
+			continue
+		}
+		for _, key := range modKeyNames(dir) {
+			if !have[strings.ToLower(key)] {
+				names = append(names, m)
+				break
+			}
 		}
 	}
 	if len(names) == 0 {
@@ -687,11 +702,11 @@ func fixModKeys(o Options) ([]string, error) {
 	if err := mods.SyncKeys(o.ServerDir, names); err != nil {
 		return nil, err
 	}
-	return []string{fmt.Sprintf("copied the .bikey files of %d active mod(s) into keys/", len(names))}, nil
+	return []Fixed{F("bikeys", fmt.Sprintf("copied the .bikey files of %d active mod(s) into keys/", len(names)), "n", len(names))}, nil
 }
 
-func fixLinuxCase(o Options) ([]string, error) {
-	var done []string
+func fixLinuxCase(o Options) ([]Fixed, error) {
+	var done []Fixed
 	for _, m := range o.activeMods() {
 		dir := o.modDir(m)
 		if len(mods.CaseProblems(dir)) == 0 {
@@ -701,7 +716,7 @@ func fixLinuxCase(o Options) ([]string, error) {
 		if err != nil {
 			return done, fmt.Errorf("%s: %w", m, err)
 		}
-		done = append(done, fmt.Sprintf("lower-cased %d name(s) in %s for the Linux server", n, m))
+		done = append(done, F("lowercased", fmt.Sprintf("lower-cased %d name(s) in %s for the Linux server", n, m), "n", n, "mod", m))
 	}
 	return done, nil
 }
@@ -716,7 +731,7 @@ var (
 
 // fixCEMissing comments out <file> entries whose file does not exist, so the
 // economy stops failing on them (the line stays, so re-enabling is one edit).
-func fixCEMissing(o Options) ([]string, error) {
+func fixCEMissing(o Options) ([]Fixed, error) {
 	md := o.missionDir()
 	if md == "" {
 		return nil, nil
@@ -726,7 +741,7 @@ func fixCEMissing(o Options) ([]string, error) {
 	if err != nil {
 		return nil, nil
 	}
-	var done []string
+	var done []Fixed
 	masked := maskXMLComments(string(data))
 	src := string(data)
 	var b strings.Builder
@@ -745,7 +760,7 @@ func fixCEMissing(o Options) ([]string, error) {
 			if name != "" {
 				if _, err := os.Stat(filepath.Join(md, folder, name)); err != nil {
 					b.WriteString("<!-- missing file, disabled by DayZ Server Manager: " + tag + " -->")
-					done = append(done, fmt.Sprintf("disabled the reference to missing %s/%s in cfgeconomycore.xml", folder, name))
+					done = append(done, F("ceDisabled", fmt.Sprintf("disabled the reference to missing %s/%s in cfgeconomycore.xml", folder, name), "file", folder+"/"+name))
 					pos = fl[1]
 					continue
 				}
@@ -828,7 +843,7 @@ func min3(a, b, c int) int {
 	return a
 }
 
-func fixCETypes(o Options) ([]string, error) {
+func fixCETypes(o Options) ([]Fixed, error) {
 	md := o.missionDir()
 	if md == "" {
 		return nil, nil
@@ -839,14 +854,14 @@ func fixCETypes(o Options) ([]string, error) {
 		return nil, nil
 	}
 	src := string(data)
-	var done []string
+	var done []Fixed
 	src = reCEFile.ReplaceAllStringFunc(src, func(tag string) string {
 		_, typ := ceFileAttrs(tag)
 		if typ == "" || ceFileTypes[strings.ToLower(typ)] {
 			return tag
 		}
 		if fix := closestCEType(typ); fix != "" {
-			done = append(done, fmt.Sprintf("corrected type=%q to %q in cfgeconomycore.xml", typ, fix))
+			done = append(done, F("ceType", fmt.Sprintf("corrected type=%q to %q in cfgeconomycore.xml", typ, fix), "from", typ, "to", fix))
 			return strings.Replace(tag, `"`+typ+`"`, `"`+fix+`"`, 1)
 		}
 		return tag
@@ -918,7 +933,7 @@ func clampChance(s string) (string, bool) {
 	return s, false
 }
 
-func fixSpawnable(o Options, chances, presets bool) ([]string, error) {
+func fixSpawnable(o Options, chances, presets bool) ([]Fixed, error) {
 	md := o.missionDir()
 	if md == "" {
 		return nil, nil
@@ -929,7 +944,7 @@ func fixSpawnable(o Options, chances, presets bool) ([]string, error) {
 		return nil, nil
 	}
 	known := presetNames(filepath.Join(md, "cfgrandompresets.xml"))
-	var done []string
+	var done []Fixed
 	backedUp := false
 	for i := range sts {
 		st := &sts[i]
@@ -939,7 +954,7 @@ func fixSpawnable(o Options, chances, presets bool) ([]string, error) {
 			for _, g := range gs {
 				if presets && g.Preset != "" && len(known) > 0 && !known[strings.ToLower(g.Preset)] {
 					changed = true
-					done = append(done, fmt.Sprintf("removed %q's slot that referenced missing preset %q", st.Name, g.Preset))
+					done = append(done, F("presetSlot", fmt.Sprintf("removed %q's slot that referenced missing preset %q", st.Name, g.Preset), "name", st.Name, "preset", g.Preset))
 					continue
 				}
 				if chances {
@@ -963,7 +978,7 @@ func fixSpawnable(o Options, chances, presets bool) ([]string, error) {
 			continue
 		}
 		if clamped {
-			done = append(done, fmt.Sprintf("corrected %q's invalid chances (slots 0.0–1.0, no negative weights)", st.Name))
+			done = append(done, F("chances", fmt.Sprintf("corrected %q's invalid chances (slots 0.0–1.0, no negative weights)", st.Name), "name", st.Name))
 		}
 		if !backedUp {
 			if err := util.BackupBeforeWrite(path); err != nil {
@@ -1002,7 +1017,7 @@ func checkGlobals(missionDir string) []Issue {
 	return out
 }
 
-func fixGlobals(o Options) ([]string, error) {
+func fixGlobals(o Options) ([]Fixed, error) {
 	md := o.missionDir()
 	if md == "" {
 		return nil, nil
@@ -1034,13 +1049,21 @@ func fixGlobals(o Options) ([]string, error) {
 	if err := util.BackupBeforeWrite(path); err != nil {
 		return nil, err
 	}
-	return []string{fmt.Sprintf("removed %d duplicate variable(s) from globals.xml (kept the first)", removed)}, writeAtomic(path, []byte(b.String()))
+	return []Fixed{F("globalsDup", fmt.Sprintf("removed %d duplicate variable(s) from globals.xml (kept the first)", removed), "n", removed)}, writeAtomic(path, []byte(b.String()))
 }
 
 // ---------------------------------------------------------------------------
 // types.xml numeric fixes
 
-func fixTypeNumbers(o Options, only map[string]bool) ([]string, error) {
+// numFixWords are fixTypeNumbers' repairs in English, for the log.
+var numFixWords = map[string]string{
+	"minNominal": "min lowered to nominal",
+	"restockNeg": "negative restock set to 0",
+	"quantRange": "quantity clamped to 0–100",
+	"quantOrder": "quantmin/quantmax swapped",
+}
+
+func fixTypeNumbers(o Options, only map[string]bool) ([]Fixed, error) {
 	md := o.missionDir()
 	if md == "" {
 		return nil, nil
@@ -1054,7 +1077,7 @@ func fixTypeNumbers(o Options, only map[string]bool) ([]string, error) {
 		}
 	}
 	want := func(code string) bool { return len(only) == 0 || only[code] }
-	var done []string
+	var done []Fixed
 	for _, p := range files {
 		doc, err := dztypes.Load(p)
 		if err != nil {
@@ -1068,13 +1091,13 @@ func fixTypeNumbers(o Options, only map[string]bool) ([]string, error) {
 				v := *t.Nominal
 				t.Min = &v
 				changed = true
-				counts["min lowered to nominal"]++
+				counts["minNominal"]++
 			}
 			if want("types.restockNeg") && t.Restock != nil && *t.Restock < 0 {
 				v := 0
 				t.Restock = &v
 				changed = true
-				counts["negative restock set to 0"]++
+				counts["restockNeg"]++
 			}
 			if want("types.quantRange") {
 				for _, q := range []**int{&t.QuantMin, &t.QuantMax} {
@@ -1087,14 +1110,14 @@ func fixTypeNumbers(o Options, only map[string]bool) ([]string, error) {
 						}
 						*q = &v
 						changed = true
-						counts["quantity clamped to 0–100"]++
+						counts["quantRange"]++
 					}
 				}
 			}
 			if want("types.quantOrder") && t.QuantMin != nil && t.QuantMax != nil && *t.QuantMin != -1 && *t.QuantMax != -1 && *t.QuantMin > *t.QuantMax {
 				t.QuantMin, t.QuantMax = t.QuantMax, t.QuantMin
 				changed = true
-				counts["quantmin/quantmax swapped"]++
+				counts["quantOrder"]++
 			}
 			if changed {
 				doc.MarkDirty(t.Name)
@@ -1115,7 +1138,7 @@ func fixTypeNumbers(o Options, only map[string]bool) ([]string, error) {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			done = append(done, fmt.Sprintf("%s: %d × %s", filepath.Base(p), counts[k], k))
+			done = append(done, F("num."+k, fmt.Sprintf("%s: %d × %s", filepath.Base(p), counts[k], numFixWords[k]), "file", filepath.Base(p), "n", counts[k]))
 		}
 	}
 	return done, nil
@@ -1124,7 +1147,7 @@ func fixTypeNumbers(o Options, only map[string]bool) ([]string, error) {
 // ---------------------------------------------------------------------------
 // cfgeventspawns.xml bounds (by the real world size)
 
-func fixSpawnBounds(o Options) ([]string, error) {
+func fixSpawnBounds(o Options) ([]Fixed, error) {
 	md := o.missionDir()
 	if md == "" {
 		return nil, nil
@@ -1156,7 +1179,7 @@ func fixSpawnBounds(o Options) ([]string, error) {
 	if err := dztypes.SaveEventSpawns(path, doc); err != nil {
 		return nil, err
 	}
-	return []string{fmt.Sprintf("removed %d spawn position(s) outside the map from cfgeventspawns.xml", removed)}, nil
+	return []Fixed{F("bounds", fmt.Sprintf("removed %d spawn position(s) outside the map from cfgeventspawns.xml", removed), "n", removed)}, nil
 }
 
 // boundsLimit is the largest valid coordinate: the world edge (plus a small
@@ -1187,4 +1210,45 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// ---------------------------------------------------------------------------
+// cfgspawnabletypes.xml duplicates
+
+// fixSpawnableDup removes repeated <type> entries from cfgspawnabletypes.xml,
+// keeping the first of each name (DayZ keeps only one, and which is
+// undefined). Comments and everything else stay as they are.
+func fixSpawnableDup(o Options) ([]Fixed, error) {
+	md := o.missionDir()
+	if md == "" {
+		return nil, nil
+	}
+	path := filepath.Join(md, "cfgspawnabletypes.xml")
+	sts, err := dztypes.LoadSpawnable(path)
+	if err != nil {
+		return nil, nil // a parse failure is reported, not fixed
+	}
+	seen, dup := map[string]bool{}, false
+	for _, st := range sts {
+		k := strings.ToLower(st.Name)
+		if seen[k] {
+			dup = true
+			break
+		}
+		seen[k] = true
+	}
+	if !dup {
+		return nil, nil
+	}
+	if err := util.BackupBeforeWrite(path); err != nil {
+		return nil, err
+	}
+	removed, err := dztypes.DedupTypesFile(path)
+	if err != nil || len(removed) == 0 {
+		return nil, err
+	}
+	sort.Strings(removed)
+	names := strings.Join(removed, ", ")
+	return []Fixed{F("spawnableDedup", fmt.Sprintf("removed %d duplicate %s from cfgspawnabletypes.xml, kept the first (%s)",
+		len(removed), plural(len(removed), "entry", "entries"), names), "n", len(removed), "names", names)}, nil
 }

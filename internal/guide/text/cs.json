@@ -11,7 +11,7 @@
     },
     {
      "title": "Zvolte zdroj módů",
-     "body": "Při prvním spuštění zvolíte zdroj módů: *klienta* DayZ (jeho složku !Workshop, kam Steam stahuje módy), libovolnou složku s @módy nebo workshop/content/221100 ze SteamCMD, nebo „Jen server“ pro hosting bez hry — pak módy nahráváte sami a automatické aktualizace jsou vypnuté. Později to můžete změnit v Nastavení."
+     "body": "Při prvním spuštění vyberete zdroj módů: *klienta* DayZ (jeho složku !Workshop, kam Steam stahuje módy), libovolnou složku s @módy nebo workshop/content/221100 ze SteamCMD, Steam Workshop (přímé stahování) — panel pak módy sám stahuje a aktualizuje přes SteamCMD — nebo Pouze server pro hostingový stroj bez hry, kam módy nahráváte sami a automatická aktualizace je vypnutá. Později to můžete změnit v Nastavení."
     },
     {
      "title": "Spusťte server",
@@ -20,7 +20,8 @@
    ],
    "tips": [
     "Pokud panel používáte jen na tomto PC, heslo nepotřebujete. Chcete-li ho otevírat z telefonu nebo odjinud, nejdřív nastavte přihlášení do panelu — v prvotním nastavení nebo v Nastavení → Přihlášení do panelu.",
-    "Téměř každý editor souborů odmítne ukládat, když server běží — DayZ má vlastní soubory zamčené. Nejdřív server zastavte; panel vám řekne, když je důvodem právě tohle."
+    "Téměř každý editor souborů odmítne ukládat, když server běží — DayZ má vlastní soubory zamčené. Nejdřív server zastavte; panel vám řekne, když je důvodem právě tohle.",
+    "Když počítač usne, zastaví se s ním i server DayZ a panel — vypadá to, jako by se správce zavřel sám. Dokud běží server, správce udržuje počítač vzhůru (Nastavení → Obecné → Udržovat počítač vzhůru); na pronajatém serveru zavírejte okno vzdálené plochy místo odhlášení."
    ]
   },
   {
@@ -29,12 +30,12 @@
    "intro": "Server potřebuje vlastní kopii každého módu, soubor .bikey módu ve složce keys serveru a mód uvedený ve spouštěcím parametru -mod. Správce udělá všechny tři kroky a módy bere ze zvoleného zdroje: !Workshop klienta hry, složky módů či SteamCMD, nebo — v režimu „Jen server“ — módy, které jste nahráli sami.",
    "steps": [
     {
-     "title": "Nejdřív odebírejte ve Steamu",
-     "body": "Správce módy kopíruje, nestahuje je. Přihlaste se k odběru ve Steam Workshopu a nechte DayZ launcher stáhnout mód do !Workshop — nebo ho stáhněte přes SteamCMD do své složky módů."
+     "title": "Získejte módy",
+     "body": "Dvě cesty. Vložte odkazy z Workshopu do Přímého stahování na stránce Módy: vlastní SteamCMD panelu je stáhne přímo na server — přihlásíte se jen jednou účtem Steam, který vlastní DayZ. Nebo módy odebírejte ve Steam Workshopu a nechte launcher DayZ stáhnout mód do !Workshop (nebo ho stáhněte SteamCMD do své složky módů) a instalujte odtud."
     },
     {
      "title": "Nainstalujte na server",
-     "body": "Otevřete Módy — je tam vše z !Workshop. Nainstalovat zkopíruje mód do složky serveru a automaticky synchronizuje jeho .bikey. „Nainstalovat a aktualizovat módy“ zpracuje celý seznam jedním kliknutím."
+     "body": "Otevřete Módy — uvidíte vše, co je ve zdroji módů (se Steam Workshopem jako zdrojem: stažené módy). Nainstalovat zkopíruje mód do složky serveru a sám přenese jeho .bikey. „Nainstalovat a aktualizovat módy“ to udělá pro celý seznam jedním kliknutím."
     },
     {
      "title": "Zapněte ho pro spuštění",
@@ -49,7 +50,8 @@
     "Aktualizace zkopíruje novější soubory ze zdroje módů na server. Zapněte v Nastavení „Aktualizovat módy při každém restartu“, aby byly synchronizované automaticky.",
     "Odinstalace módu smaže jeho .bikey jen tehdy, když stejný klíč nepoužívá jiný nainstalovaný mód, takže sdílené klíče (Expansion) zůstanou.",
     "Pokud mód obsahuje loot, klikněte v jeho řádku na „Přidat loot módu“ — správce najde types.xml módu a zaregistruje ho za vás.",
-    "Na Linuxu server načte jen módy, jejichž složky a soubory jsou malými písmeny. Správce je při instalaci a aktualizaci přejmenuje a stránka Módy označí vše, co zůstalo se špatnou velikostí písmen."
+    "Na Linuxu server načte jen módy, jejichž složky a soubory jsou malými písmeny. Správce je při instalaci a aktualizaci přejmenuje a stránka Módy označí vše, co zůstalo se špatnou velikostí písmen.",
+    "Když je zdrojem Steam Workshop, seznam stahování je zpráva o posledním stahování: přečtené řádky odeberte a mod, který byl mezitím smazán ze serveru, nabídne Nainstalovat znovu."
    ]
   },
   {
@@ -99,7 +101,8 @@
    ],
    "tips": [
     "Jeden slot na díl: jeden na zásobníky, jeden na optiky, jeden na pažbu. Zásobník a optika ve stejném slotu znamenají, že zbraň dostane jedno nebo druhé, nikdy obojí.",
-    "Přepíše se jen záznam, který upravujete — vaše komentáře a formátování ve zbytku souboru zůstanou."
+    "Přepíše se jen záznam, který upravujete — vaše komentáře a formátování ve zbytku souboru zůstanou.",
+    "Předmět je nakreslen s dlaždicí pro každý slot, jako výbava hráče: klikněte na vyplněný slot pro změnu šance nebo dílů, na prázdný pro přidání dílu ze seznamu samotné hry. Bajonet a tlumič (nebo úsťová brzda) se na jedné zbrani nikdy neobjeví spolu — DayZ nasadí to, co je první."
    ]
   },
   {
@@ -109,11 +112,11 @@
    "steps": [
     {
      "title": "Zapněte systém",
-     "body": "Otevřete Výbavu hráče. Pokud mise stále vybavuje hráče přes init.c, stránka to řekne a nabídne jedno tlačítko, které vytvoří startovní preset, zaregistruje ho v cfggameplay.json a zapne enableCfgGameplayFile — vše najednou."
+     "body": "Otevřete Výbavu hráče. Pokud se hráči stále objevují podle init.c, stránka to řekne a nabídne jedno tlačítko, které systém zapne: použije soubory výbavy, které už jsou ve složce mise (nebo vytvoří startovní preset), zaregistruje je v cfggameplay.json a zapne enableCfgGameplayFile — všechno najednou."
     },
     {
      "title": "Upravte oblečení a vybavení",
-     "body": "Každý preset uvádí, co je oblečeno v jednotlivých slotech (Tělo, Nohy, Chodidla…) a co je volně v inventáři. Přidávejte předměty podle třídy, nastavte váhu, když má slot vybírat z více možností, a zvolte stav — nepoškozený, opotřebený, poškozený nebo vlastní rozsah."
+     "body": "Editor ukazuje přeživšího se všemi sloty. Klikněte na slot a vyberte předmět ze seznamu samotné hry — s názvy, kategoriemi a tím, co kam patří —, pak nastavte stav a množství a vložte ho do rukou nebo na rychlou lištu (klávesy 1–0). Každý předmět je nakreslen s dlaždicí pro každý svůj slot — optika, ústí hlavně, zásobník, sumky vesty — a nabízí jen díly, které pasují, plus to, co patří dovnitř (jídlo v batohu). Server může mít několik výbav; každá má svou váhu objevení."
     },
     {
      "title": "Zkušební losování a sdílení",
@@ -122,7 +125,10 @@
    ],
    "tips": [
     "healthMin/healthMax jsou zlomky zdraví: 1.0 je nepoškozený, 0.0 zničený. Nechte vše nepoškozené, aby čerstvé spawny nedostávaly obnošené oblečení.",
-    "Výbava se ukládá se zastaveným serverem jako každá změna konfigurace — potom server znovu spusťte."
+    "Výbava se ukládá se zastaveným serverem jako každá změna konfigurace — potom server znovu spusťte.",
+    "Aktualizace serveru DayZ nahradí cfggameplay.json a zapomene vaše výbavy. Správce je před dalším startem znovu zaregistruje a přepínač zase zapne — a stránka ukáže každý nepřipojený soubor.",
+    "Zbraň se zásobníkem se objeví nabitá, s nábojem v komoře — nikdo nemusí mačkat R; tlačítko Nabít to udělá jedním kliknutím. Bajonet a tlumič se vylučují a svítilna na zbraň potřebuje předpažbí s lištou: editor upozorní a nabídne opravu.",
+    "Nová postava, nahoře na stránce, určuje, jak začne každá nová postava — třeba najedená, bez žízně a zahřátá. Panel to provede vlastním serverovým modem; hráči nic nestahují."
    ]
   },
   {
@@ -147,7 +153,8 @@
     "Varování před restartem také jdou přes RCon. Bez hesla restart stejně proběhne — hráči jen neuvidí odpočet.",
     "Sekce Hráči sestavuje historii z admin logu: jména, ID hráčů, odehraný čas, zabití. Potřebuje spouštěcí parametr -adminlog (stránka Server → Spouštěcí parametry).",
     "Nastavení → Chování při restartu umí vyhodit všechny určitou dobu před restartem a uzamknout server, aby se v poslední minutě nikdo nepřipojil. Postavy se ukládají při odpojení, takže se nic neztratí.",
-    "Stránka Chat uchovává archiv každého dne — včetně zpráv odeslaných z panelu a plánovaných oznámení — s vyhledáváním a stažením do .txt. Jak dlouho se uchovává, nastavíte přímo tam."
+    "Stránka Chat uchovává archiv každého dne — včetně zpráv odeslaných z panelu a plánovaných oznámení — s vyhledáváním a stažením do .txt. Jak dlouho se uchovává, nastavíte přímo tam.",
+    "V Hráči → Nyní online můžete napsat všem, vyhodit všechny (třeba před údržbou) a zablokovat vstup do dalšího restartu. Profil hráče ukazuje jiné účty viděné ze stejné IP a co hráč postavil nebo zničil."
    ]
   },
   {
@@ -164,8 +171,8 @@
      "body": "Rychlost změny určuje, jak postupně se počasí mění: Plynule narůstá asi půl hodiny po malých krocích, jako ve vanille. Rychle projde celým rozsahem za dvě minuty — kvůli tomu pak počasí působí jako vypínač světla."
     },
     {
-     "title": "Nastavte délku dne",
-     "body": "Zrychlení dne a noci násobí plynutí herního času — 12 znamená, že celý den trvá dvě reálné hodiny. Zrychlení noci je samostatné, takže noci můžete mít krátké."
+     "title": "Nastavte délku dne a noci",
+     "body": "Den a noc ukazuje oblohu, východ a západ slunce pro vaši mapu a jak dlouho trvá den a noc ve skutečném čase — včetně toho, co s herními hodinami dělají restarty. Stiskem ▶ přehrajete herní den (a zase ho zastavíte), nebo přetáhněte bílou značku na libovolný okamžik. Vyberte hotový pocit nebo zadejte požadovanou délku dne a noci a panel spočítá zrychlení."
     }
    ],
    "tips": [
@@ -188,12 +195,13 @@
     },
     {
      "title": "Nalaďte vozidla",
-     "body": "Vozidla ukazují každou událost vozidel: kolik jich může existovat, kolik má bodů spawnu a jak kompletní jsou díly — a nastavují, s jakou pravděpodobností se každý díl na vozidle objeví."
+     "body": "Vozidla ukazují každou událost vozidla s obrázkem auta: kolik jich může být, kolik má spawnovacích bodů, jak kompletní jsou díly — a s kolika palivem a chladicí kapalinou se objeví (nastavuje to drobný serverový mód, který přidá panel; hráči nic nestahují)."
     }
    ],
    "tips": [
     "Žádný obrázek mapy není přibalen — vrstvy pocházejí z vašich souborů mise. Pro mapu jako z fotografie načtěte v nastavení mapy vlastní obrázek shora.",
-    "Stejně jako ostatní editory ukládají tyto stránky jen se zastaveným serverem."
+    "Stejně jako ostatní editory ukládají tyto stránky jen se zastaveným serverem.",
+    "Každá mapa má pravítko (měření vzdáleností, kopírování souřadnic) a značky adminů — poznámky jako základna klanu nebo obchodník, které vidí každý admin serveru na každé mapě. Tepelná mapa přidává stavby, raidy a skrýše z admin logu; živá mapa ukazuje, kudy který hráč chodil."
    ]
   },
   {
@@ -216,7 +224,9 @@
    ],
    "tips": [
     "Wipe smaže uložený stav světa — hráče, vozidla, základny. Vaše tabulky lootu a konfigurace zůstanou nedotčené. Složky se nejdřív odloží stranou, takže omylem provedený wipe lze ručně vrátit.",
-    "Hlídač pádů restartuje server, když se sám ukončí. Po třech pádech za pět minut se zastaví a zobrazí banner — smyčka pádů potřebuje člověka, ne další restart."
+    "Hlídač pádů restartuje server, když se sám ukončí. Po třech pádech za pět minut se zastaví a zobrazí banner — smyčka pádů potřebuje člověka, ne další restart.",
+    "Nastavení → Obecné → Automatické spuštění spouští správce spolu s počítačem a každý server se může spustit se správcem — po výpadku proudu se vše vrátí samo.",
+    "Když se správce nečekaně zavře, strážce ho znovu spustí v oznamovací oblasti (nejvýše třikrát za 15 minut) a přehled to oznámí — se záznamem pádu z Windows, pokud existuje. Vypíná se v Nastavení → Obecné."
    ]
   },
   {
@@ -253,7 +263,7 @@
     },
     {
      "title": "Otevřete panel do sítě",
-     "body": "Nastavení → Dostupnost panelu: „Místní síť“ pro telefony doma, „Internet“ pro přístup odkudkoli (jen s přihlášením). Potom restartujte správce."
+     "body": "Nastavení → Dostupnost panelu: Místní síť pro telefony doma, Internet pro přístup odkudkoli (jen s přihlášením). Změna platí hned — bez restartu."
     },
     {
      "title": "Povolte příchozí spojení",
@@ -407,7 +417,7 @@
   "loadout": "Co má hráč na sobě a u sebe po respawnu. Jde o presety spawn-gear DayZ zaregistrované v cfggameplay.json — změny platí po restartu serveru. Ve vanille je výbava místo toho v init.c, proto nová mise zde nic neukazuje, dokud systém nezapnete.",
   "loadout.carried": "Volné předměty vložené přímo do inventáře nového hráče místo do slotu oblečení — hadry, jídlo, startovní nástroj.",
   "loadout.characters": "Na které modely přeživších se preset vztahuje (SurvivorM_Mirek, SurvivorF_Eva, …). Nechte prázdné pro všechny; při každém spawnu se náhodně vybere jeden.",
-  "loadout.condition": "Stav, ve kterém se předmět objeví. V DayZ je 1.0 = nepoškozený a 0.0 = zničený, takže víc je lepší. Nepoškozený udrží startovní výbavu jako novou; zvolte Vlastní…, chcete-li přesný rozsah zdraví min–max, a předmět se objeví někde v něm.",
+  "loadout.condition": "Stav, ve kterém se předmět objeví. V DayZ je 1.0 = bezvadný a 0.0 = zničený, takže výš je lépe. Bezvadný udrží startovní výbavu jako novou; zvolte Vlastní pro přesný rozsah zdraví min–max a předmět se objeví někde v něm. U nesených předmětů je Bezvadný vytvoří přesně tak, jak je vyrábí hra (jeden hadr, celé jablko); jakýkoli jiný stav jim dá i plné množství, takže balík hadrů se objeví plný.",
   "loadout.weight": "Váha tohoto presetu vůči ostatním. DayZ vybere JEDEN preset na spawn, takže preset s váhou 3 je třikrát pravděpodobnější než preset s váhou 1.",
   "loadout.worn": "Předměty oblékané na tělo, vždy po jednom slotu těla. V rámci slotu DayZ vybere podle váhy JEDEN předmět, takže více variant dá rozmanitost mezi spawny.",
   "logs.adm": "Co dělali hráči: připojení, chat, zabití, pozice. Vyžaduje příznak -adminlog; je z něj postavena stránka Hráči.",
@@ -420,7 +430,7 @@
   "mods.scan": "Hledá v módu types.xml a registruje ho v cfgeconomycore.xml, aby se loot módu skutečně objevoval.",
   "mods.serverSide": "Načte mód přes -serverMod místo -mod: běží na serveru a klienti ho nepotřebují ani nedostanou. Jen pro admin nástroje — mód s lootem nebo obsahem nastavený jako serverový nebude fungovat.",
   "mods.uninstall": "Odstraní složku módu ze serveru. Jeho .bikey se smaže jen tehdy, když stejný klíč nepoužívá jiný nainstalovaný mód, takže sdílené klíče jako Expansion zůstanou.",
-  "mods.update": "Zkopíruje novější soubory z !Workshop klienta na server. Správce neumí módy stahovat — nejdřív je odebírejte ve Steamu.",
+  "mods.update": "Zkopíruje novější soubory ze zdroje módů na server. Je-li zdrojem Steam Workshop (přímé stahování), nejprve stáhne novější verze přes SteamCMD.",
   "rcon.password": "Zapisuje se do battleye/beserver_x64.cfg. BattlEye čte tento soubor jen při spuštění, takže nové heslo nic nedělá až do dalšího restartu.",
   "server.forceSameBuild": "Vyžadovat od klientů přesně stejné sestavení hry (1). Zabrání pádům kvůli rozdílu verzí.",
   "server.hostname": "Název serveru zobrazený v seznamu serverů DayZ. Ať je krátký a dobře vyhledatelný.",
@@ -443,7 +453,7 @@
   "settings.adminlog": "Zapne -adminlog, který zapisuje soubor .ADM. Je z něj postavena stránka Hráči i killfeed — bez něj zůstanou prázdné.",
   "settings.backup": "Podle plánu archivuje vaše konfigurace a soubory mise a ponechá N nejnovějších. Navíc každý soubor, který panel přepíše, dostane vedle sebe .bak s časovou značkou.",
   "settings.exposure": "„Jen tento počítač“ — panel otevře jen tento PC. „Místní síť“ — otevře ho i telefon a další zařízení doma. „Internet“ — panel je dostupný odkudkoli; vyžaduje přihlášení do panelu a zbytek (router, firewall, veřejnou IP) zkontroluje Nastavení → Vzdálený přístup.",
-  "settings.modSource": "Odkud správce módy kopíruje. Složka klienta: instalace hry DayZ s !Workshop (odebíráte ve Steamu, správce kopíruje a aktualizuje). Složka módů: libovolná složka s @módy nebo workshop/content/221100 ze SteamCMD — způsob, jak dostat módy z Workshopu na hosting bez nainstalované hry. Jen server: bez zdroje; ručně nahrané módy se stále spravují, ale automatická aktualizace je vypnutá.",
+  "settings.modSource": "Odkud správce bere módy. Složka klienta: instalace DayZ s !Workshop (odebíráte ve Steamu, správce kopíruje a aktualizuje). Složka s módy: libovolná složka s @módy nebo workshop/content/221100 ze SteamCMD. Steam Workshop (přímé stahování): panel módy sám stahuje, kontroluje a aktualizuje vlastním SteamCMD — hra není potřeba. Pouze server: žádný zdroj; ručně nahrané módy se dál spravují, ale automatická aktualizace je vypnutá.",
   "settings.perf": "Afinita CPU připne DayZServer na zaškrtnutá jádra (nezaškrtnutá zůstanou volná pro systém, druhý server nebo jiné programy). Priorita říká systému, jak ochotně ho plánovat — Nad normálem je bezpečné zrychlení; Vysoká může zpomalit zbytek počítače. Obojí se použije při každém startu. Na Linuxu vyžaduje zvýšení priority root.",
   "settings.restart": "Restartuje server podle plánu. Hráči předem dostanou varování přes RCon, což vyžaduje nastavené heslo RCon.",
   "settings.restartBehaviour": "Co hráči zažijí při každém automatickém restartu: text odpočtu (napište ho jejich jazykem), volitelné okno těsně před restartem, kdy je server uzamčen a všichni vyhozeni, aby se postavy čistě uložily, a šetrný #shutdown, který uloží svět před zastavením procesu. Časová osa níže ukazuje přesné pořadí.",
@@ -480,7 +490,14 @@
   "weather.transition": "Jak postupně se počasí mění. Plynule narůstá asi půl hodiny po malých krocích, jako ve vanilla DayZ. Rychle může projít celým rozsahem za dvě minuty — proto pak počasí působí jako vypínač.",
   "weather.wind": "Rychlost větru v m/s. Hýbe mraky a spolu s dynamickým režimem určuje, jak rychle se počasí mění.",
   "wipe": "Smaže uložený stav světa: hráče, vozidla, základny. Tabulky lootu a konfigurace zůstanou nedotčené. Složky se odkládají stranou, nemažou, takže chybu lze ručně vrátit.",
-  "wipe.undo": "Wipe přesune složky světa do .dayz-manager/wipes/<časová značka>/ místo smazání, takže ho lze vrátit — dokud server tento stav neobnoví; pak by vrácení starého světa pohřbilo ten nový."
+  "wipe.undo": "Wipe přesune složky světa do .dayz-manager/wipes/<časová značka>/ místo smazání, takže ho lze vrátit — dokud server tento stav neobnoví; pak by vrácení starého světa pohřbilo ten nový.",
+  "server.adminLogPlayerList": "Každých 5 minut zapíše pozici každého hráče do admin logu (.ADM). Používá ji živá mapa: bez ní se tečka hráče pohne jen při připojení, boji a v chatu.",
+  "server.adminLogPlayerHitsOnly": "Zapisuje jen zásahy hráčů a vynechává zásahy nakažených a zvířat, takže admin log zůstane mnohem menší.",
+  "server.adminLogPlacement": "Zapisuje do admin logu pokládání pastí, stanů a dalších pokládacích předmětů.",
+  "server.adminLogBuildActions": "Zapisuje do admin logu stavbu, rozebírání a ničení dílů základny.",
+  "wsdl": "SteamCMD je vlastní konzolový klient Steamu od Valve. Panel ho nainstaluje do své složky, jednou ho přihlásí vaším účtem Steam (soubory Workshopu pro DayZ se poskytují jen účtům, které hru vlastní) a pak stahuje vložené módy: každý skončí ve složce SteamCMD, zkopíruje se na server jako @Název i s klíči a zapne se. Aktualizace je totéž stažení znovu. Hráči módy pořád potřebují: odebírají je ve Workshopu jako obvykle.",
+  "veh.tweaks": "Palivo a chladič při objevení nevyžadují žádnou instalaci: při startu serveru panel vytvoří malinký serverový mód (@DZM_ServerTweaks) s těmito nastaveními a načte ho přes -serverMod. Hráči nic nestahují. Hodnoty platí pro vozidla, která ekonomika vytvoří po příštím startu; auta, která už na mapě jsou, si ponechají svoje.",
+  "loadout.stats": "Jídlo a voda jsou zásoby energie a vody postavy (v DayZ 0–5000; nová postava dostane od každého 600, proto se ikony hladu a žízně objeví brzy). Teplo je tepelná rezerva: zásoba tepla, kterou si postava nabere u ohně a která ji na čas chrání před prochladnutím. Hodnoty platí jen pro nové postavy — i po smrti —, ne pro hráče, kteří se vracejí ke své uložené postavě. Panel je zapíše do svého serverového modu před každým spuštěním serveru."
  },
  "gameplay": {
   "version": "Verze formátu souboru. Zapisuje ji DayZ — nechte ji, jak je.",
@@ -530,7 +547,7 @@
   "shockDepletionSpeed": "Šok přidaný za sekundu při tonutí.",
   "staticMode": "Proti zdem a statickým objektům: 0 = vyp., 1 = zap. (jako ve hře), 2 = vždy.",
   "dynamicMode": "Proti hráčům, vozidlům a dalším pohyblivým objektům: 0 = vyp., 1 = zap. (jako ve hře), 2 = vždy.",
-  "lightingConfig": "Tma v noci: 0 = světlejší noci (jako ve hře), 1 = tmavé noci. Přepíše stejné nastavení v serverDZ.cfg.",
+  "lightingConfig": "Noční osvětlení: 0 = světlejší noci (jako ve hře), 1 = tmavé noci, 2 = osvětlení Sakhalu, 3 = osvětlení Nasdary. Přepisuje stejné nastavení v serverDZ.cfg.",
   "objectSpawnersArr": "Soubory JSON (cesty uvnitř mise), které umisťují do světa další statické objekty.",
   "environmentMinTemps": "Nejnižší teplota vzduchu v každém měsíci, od ledna do prosince, °C. Vynechte, chcete-li použít hodnoty mapy.",
   "environmentMaxTemps": "Nejvyšší teplota vzduchu v každém měsíci, od ledna do prosince, °C. Vynechte, chcete-li použít hodnoty mapy.",
@@ -545,7 +562,7 @@
   "disableHeightPlacementCheck": "Objekty lze umístit výš nad nohama hráče, než je normálně dovoleno.",
   "disableIsUnderwaterCheck": "Objekty lze umístit pod vodu.",
   "disableIsInTerrainCheck": "Objekty lze zapustit do terénu.",
-  "disableColdAreaBuildingCheck": "Stavění je povoleno v chladných oblastech, kde ho hra normálně zakazuje (Sakhal).",
+  "disableColdAreaBuildingCheck": "Starý název disableColdAreaPlacementCheck. Současné DayZ ho už nečte — nastavte místo něj nový klíč.",
   "disallowedTypesInUnderground": "Sady, které nelze umístit v podzemí (bunkry, jeskyně).",
   "disablePerformRoofCheck": "Části základny lze stavět pod střechami a uvnitř budov.",
   "disableIsCollidingCheck": "Části základny lze stavět, i když něco překáží.",
@@ -563,33 +580,57 @@
   "ignoreNavItemsOwnership": "Mapa ukazuje údaje kompasu a GPS, i když hráč nemá kompas ani GPS.",
   "displayPlayerPosition": "Vlastní poloha hráče je vyznačena na mapě.",
   "displayNavInfo": "Mapa zobrazuje navigační údaje (mřížku a kompas).",
-  "boatDecayMultiplier": "Jak rychle lodě chátrají. 1 = jako ve hře, nižší = pomaleji."
+  "boatDecayMultiplier": "Jak rychle lodě chátrají. 1 = jako ve hře, nižší = pomaleji.",
+  "disableColdAreaPlacementCheck": "Stavění je povolené v chladných oblastech, kde hra normálně zakazuje cokoli pokládat (Sakhal).",
+  "disableItemFalling": "Předměty stojící na dílu základny zůstanou na místě, místo aby spadly, když se díl rozebere nebo zničí.",
+  "disableDropAttachmentsOnFall": "Zřícená stavba základny si ponechá doplňky a uložené předměty, místo aby je shodila na zem.",
+  "disableRefundMaterialsOnFall": "Zřícená stavba základny nevrátí materiály za postavené díly — prostě zmizí.",
+  "canDetachAttachedCarWheels": "Hráči mohou sundat kola z auta.",
+  "canDamageAttachedCarWheels": "Kola namontovaná na autě se mohou poškodit, například střelbou.",
+  "canDetachAttachedBikeWheels": "Hráči mohou sundat kola z jízdního kola.",
+  "canDamageAttachedBikeWheels": "Kola namontovaná na jízdním kole se mohou poškodit.",
+  "playerRestrictedAreaFiles": "Soubory JSON (cesty v misi) se zakázanými oblastmi pro hráče — zónami, kam hra hráče nepustí, například sklad hlavic na Sakhalu.",
+  "bunkerBroadcastEnabled": "Běží rádiové vysílání bunkrů: kódy bunkrů se vysílají Morseovou abecedou podle cfgbunkerbroadcast.json mise (Nasdara). Vypnuto = žádné vysílání.",
+  "ExternalLockData": "Ochrana kódových zámků proti hádání: po příliš mnoha špatných kódech zámek na chvíli nepřijímá zadání.",
+  "protectionCountStageOne": "Špatné kódy za sebou, než kódový zámek poprvé zablokuje zadávání.",
+  "protectionCountStageTwo": "Špatné kódy po prvním zablokování, než se zámek zablokuje znovu.",
+  "protectionTime": "Sekundy, po které kódový zámek odmítá zadání po příliš mnoha špatných kódech.",
+  "protectionResetTime": "Sekundy, po kterých kódový zámek zapomene špatné kódy a začne počítat od nuly.",
+  "SandstormData": "Písečné bouře (Nasdara).",
+  "sandstormFrequency": "Jak často přicházejí písečné bouře: 0 = nikdy, 1 = jako ve hře, 2 = dvakrát častěji."
  },
  "globals": {
-  "AnimalMaxCount": "Maximální počet zvířat živých na mapě najednou.",
-  "CleanupAvoidance": "Koeficient, který chrání čerstvě vytvořený loot před příliš brzkým úklidem.",
-  "CleanupLifetimeDeadAnimal": "Kolik sekund zůstane zdechlina mrtvého zvířete před odstraněním.",
-  "CleanupLifetimeDeadInfected": "Kolik sekund zůstane tělo mrtvého infikovaného před odstraněním.",
-  "CleanupLifetimeDeadPlayer": "Kolik sekund zůstane tělo mrtvého hráče i s výbavou před odstraněním.",
-  "CleanupLifetimeDefault": "Výchozí počet sekund, kolik odhozený předmět zůstane do úklidu, pokud jeho typ nenastavuje lifetime.",
-  "CleanupLifetimeLimit": "Spodní hranice (s), kterou úklid používá pro velmi krátké lifetime předmětů.",
-  "CleanupLifetimeRuined": "Kolik sekund zůstane zničený předmět na zemi do úklidu.",
-  "FlagRefreshFrequency": "Jak často (s) vztyčená vlajka teritoria obnovuje lifetime blízkých rozmístěných předmětů.",
-  "FlagRefreshMaxDuration": "Maximální lifetime (s), na který může vlajka předměty obnovit — limit rozpadu základny (vanilla ≈ 45 dní).",
-  "IdleModeCountdown": "Kolik sekund bez připojených hráčů, než ekonomika přejde do nečinnosti a přestane obnovovat loot.",
+  "AnimalMaxCount": "Nejvyšší počet zvířat živých na mapě současně.",
+  "CleanupAvoidance": "Vzdálenost (m) od hráče, ve které se nic neuklízí, aby předměty nemizely hráčům před očima.",
+  "CleanupLifetimeDeadAnimal": "Sekundy, které mršina mrtvého zvířete zůstane, než se odstraní.",
+  "CleanupLifetimeDeadInfected": "Sekundy, které tělo mrtvého nakaženého zůstane, než se odstraní.",
+  "CleanupLifetimeDeadPlayer": "Sekundy, které tělo mrtvého hráče i s výbavou zůstane, než se odstraní.",
+  "CleanupLifetimeDefault": "Výchozí sekundy, které upuštěný předmět zůstane do úklidu, když jeho typ nenastavuje životnost.",
+  "CleanupLifetimeLimit": "Spodní mez (s), kterou úklid používá pro velmi krátké životnosti.",
+  "CleanupLifetimeRuined": "Sekundy, které zničený předmět leží na zemi do úklidu.",
+  "FlagRefreshFrequency": "Jak často (s) vztyčená vlajka území obnoví životnost položených předmětů poblíž.",
+  "FlagRefreshMaxDuration": "Nejvyšší životnost (s), na kterou může vlajka předměty obnovit — strop chátrání základen (vanilla ≈ 45 dní).",
+  "FoodDecay": "Jídlo se časem kazí (1 = zapnuto).",
+  "IdleModeCountdown": "Sekundy bez připojených hráčů, než ekonomika přejde do nečinnosti a přestane obnovovat loot.",
   "IdleModeStartup": "Spustit ekonomiku v režimu nečinnosti, dokud se nepřipojí první hráč (1 = ano).",
-  "InitialSpawn": "Množství počátečního lootu vytvořeného při prvním spuštění ekonomiky.",
-  "LoginTimeMax": "Maximální doba (s) přihlašování, po které se pokus zruší.",
-  "LogoutTimeMax": "Maximální čekání na odhlášení (s).",
+  "InitialSpawn": "Kolik nominálního lootu se spawne, když ekonomika startuje s prázdným úložištěm, v procentech (100 = vše).",
+  "LoginTimeMax": "Nejdelší doba (s), kterou smí přihlášení trvat, než se pokus zahodí.",
+  "LogoutTimeMax": "Nejdelší čekání při odhlášení (s).",
+  "LootDamageMax": "Největší opotřebení čerstvě spawnutého lootu, 0–1 (vanilla 0.82). Méně = loot se objeví v lepším stavu.",
+  "LootDamageMin": "Nejmenší opotřebení čerstvě spawnutého lootu, 0–1 (0 = bezvadný).",
+  "LootProxyPlacement": "Loot se objevuje na policích, stolech a dalších místech v budovách (1 = zapnuto). Nechte zapnuté.",
+  "LootSpawnAvoidance": "Vzdálenost (m) od hráče, ve které se neobjeví nový loot, aby nikdy nevyskočil nikomu před očima.",
   "RespawnAttempt": "Kolikrát za cyklus engine zopakuje neúspěšný respawn lootu.",
+  "RespawnLimit": "Nejvíce předmětů jednoho typu obnovených za cyklus.",
   "RespawnTypes": "Kolik typů lootu se v každém cyklu zpracuje pro respawn.",
-  "SpawnInitial": "Množství počátečního lootu vytvořeného při prvním spuštění ekonomiky.",
-  "TimeHopping": "Dodatečné zpoždění přihlášení (s) pro hráče přeskakující mezi servery, aby se od toho odradili.",
-  "TimeLogin": "Kolik sekund hráč čeká na načítací obrazovce při přihlašování.",
-  "TimeLogout": "Kolik sekund musí hráč zůstat ve světě po zvolení odhlášení (ochrana proti úniku z boje).",
+  "RestartSpawn": "1 = veškerý loot se znovu spawne při každém startu serveru (reset lootu); 0 = uložený loot zůstane.",
+  "SpawnInitial": "Rozpočet spawnu prvního průchodu ekonomiky při startu (vanilla 1200).",
+  "TimeHopping": "Dodatečné zpoždění přihlášení (s) pro hráče, kteří přeskakují mezi servery, aby je to odradilo.",
+  "TimeLogin": "Sekundy, které hráč při přihlášení čeká na načítací obrazovce.",
+  "TimeLogout": "Sekundy, které hráč musí zůstat ve světě po volbě odhlášení (proti combat logu).",
   "TimePenalty": "Dodatečné čekání (s) při odhlášení krátce po boji.",
-  "WorldWetTempUpdate": "Jak často (s) se aktualizuje vlhkost a teplota předmětů ve světě.",
-  "ZombieMaxCount": "Maximální počet infikovaných živých na mapě najednou.",
-  "ZoneSpawnDist": "Vzdálenost (m) od hráče, ve které se spawnují dynamické zóny infikovaných/zvířat."
+  "WorldWetTempUpdate": "Vlhkost a teplota předmětů ležících ve světě se aktualizují (1 = zapnuto).",
+  "ZombieMaxCount": "Nejvyšší počet nakažených živých na mapě současně.",
+  "ZoneSpawnDist": "Vzdálenost (m) od hráče, na které se spawnují dynamické zóny nakažených a zvířat."
  }
 }

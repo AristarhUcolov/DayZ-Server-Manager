@@ -160,10 +160,20 @@ func spawnKind(st *dztypes.SpawnableType, category string) string {
 // the attachment inputs can autocomplete real (including modded) classes
 // instead of relying on the user typing them correctly.
 func (h *handlers) spawnableClassNames(w http.ResponseWriter, r *http.Request) {
-	mission, err := h.missionTemplate()
+	names, err := h.typesClassNames()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	writeJSON(w, map[string]interface{}{"names": names, "count": len(names)})
+}
+
+// typesClassNames lists every class name of the mission's types.xml and its
+// custom types files, sorted.
+func (h *handlers) typesClassNames() ([]string, error) {
+	mission, err := h.missionTemplate()
+	if err != nil {
+		return nil, err
 	}
 	seen := map[string]bool{}
 	var names []string
@@ -191,7 +201,7 @@ func (h *handlers) spawnableClassNames(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Strings(names)
-	writeJSON(w, map[string]interface{}{"names": names, "count": len(names)})
+	return names, nil
 }
 
 // spawnableItem is GET (one type) / POST (save) / DELETE (remove).

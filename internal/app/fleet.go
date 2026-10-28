@@ -73,7 +73,7 @@ type fleetFile struct {
 func OpenFleet(primary *App) *Fleet {
 	f := &Fleet{Primary: primary, path: filepath.Join(primary.ManagerDir, "servers.json")}
 	f.members = []*Member{{ID: PrimaryID, Name: primary.Label(), Dir: primary.ServerDir, App: primary}}
-	primary.Server.PreStart = func() error { return f.portClash(primary) }
+	primary.Server.PreStart = func() error { return f.beforeStart(primary) }
 
 	data, err := os.ReadFile(f.path)
 	if err != nil {
@@ -128,7 +128,7 @@ func (f *Fleet) open(m *Member) error {
 	if err != nil {
 		return err
 	}
-	a.Server.PreStart = func() error { return f.portClash(a) }
+	a.Server.PreStart = func() error { return f.beforeStart(a) }
 	m.App, m.Error = a, ""
 	return nil
 }

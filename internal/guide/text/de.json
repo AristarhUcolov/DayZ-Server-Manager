@@ -11,7 +11,7 @@
     },
     {
      "title": "Mod-Quelle wählen",
-     "body": "Beim ersten Start wählst du die Mod-Quelle: den DayZ-*Client* (seinen !Workshop-Ordner, in den Steam Mods lädt), einen beliebigen Ordner mit @Mods oder SteamCMDs workshop/content/221100, oder Nur Server für ein Hosting ohne das Spiel – dann lädst du Mods selbst hoch und Auto-Update ist aus. Später in den Einstellungen änderbar."
+     "body": "Beim ersten Start wählst du eine Mod-Quelle: den DayZ-*Client* (seinen !Workshop-Ordner, in den Steam Mods lädt), einen beliebigen Ordner mit @Mods oder workshop/content/221100 von SteamCMD, Steam Workshop (Direktdownload) — dann lädt und aktualisiert das Panel Mods selbst mit SteamCMD — oder Nur Server für einen Hosting-Rechner ohne das Spiel, wo du Mods selbst hochlädst und das Auto-Update aus ist. Du kannst das später in den Einstellungen ändern."
     },
     {
      "title": "Starte den Server",
@@ -20,7 +20,8 @@
    ],
    "tips": [
     "Nutzt du das Panel nur auf diesem PC, brauchst du kein Passwort. Um es vom Handy oder von woanders zu öffnen, richte zuerst eine Panel-Anmeldung ein — in der Ersteinrichtung oder unter Einstellungen → Panel-Anmeldung.",
-    "Fast jeder Datei-Editor verweigert das Speichern, solange der Server läuft — DayZ sperrt seine eigenen Dateien. Stoppe den Server; das Panel sagt dir, wenn das der Grund ist."
+    "Fast jeder Datei-Editor verweigert das Speichern, solange der Server läuft — DayZ sperrt seine eigenen Dateien. Stoppe den Server; das Panel sagt dir, wenn das der Grund ist.",
+    "Wenn der Computer einschläft, halten der DayZ-Server und das Panel mit an — es sieht aus, als hätte sich der Manager von selbst geschlossen. Solange ein Server läuft, hält der Manager den Computer wach (Einstellungen → Allgemein → Computer wach halten); schließe auf einem gemieteten Server das Remote-Fenster, statt dich abzumelden."
    ]
   },
   {
@@ -29,12 +30,12 @@
    "intro": "Ein Server braucht eine eigene Kopie jedes Mods, den .bikey des Mods im keys-Ordner des Servers und den Mod im Startparameter -mod. Der Manager erledigt alle drei und nimmt die Mods aus der gewählten Quelle: dem !Workshop des Spielclients, einem Mod- oder SteamCMD-Ordner oder – im Modus Nur Server – den Mods, die du selbst hochgeladen hast.",
    "steps": [
     {
-     "title": "Abonniere zuerst auf Steam",
-     "body": "Der Manager kopiert Mods, er lädt sie nicht herunter. Abonniere den Mod im Steam Workshop und lass den DayZ-Launcher ihn nach !Workshop laden – oder lade ihn mit SteamCMD in deinen Mod-Ordner."
+     "title": "Hol dir die Mods",
+     "body": "Zwei Wege. Füge Workshop-Links in den Direktdownload auf der Mods-Seite ein: Das eigene SteamCMD des Panels lädt sie direkt auf den Server — du meldest dich einmal mit einem Steam-Konto an, das DayZ besitzt. Oder abonniere im Steam Workshop und lass den DayZ-Launcher die Mod nach !Workshop holen (oder lade sie mit SteamCMD in deinen Mod-Ordner) und installiere von dort."
     },
     {
      "title": "Auf dem Server installieren",
-     "body": "Öffne Mods — dort steht alles, was in !Workshop liegt. Installieren kopiert den Mod in den Server-Ordner und überträgt den .bikey automatisch. Mods installieren & aktualisieren macht die ganze Liste auf einmal."
+     "body": "Öffne Mods — alles aus der Mod-Quelle wird aufgelistet (mit Steam Workshop als Quelle: die heruntergeladenen Mods). Installieren kopiert den Mod in den Serverordner und überträgt seinen .bikey automatisch. „Mods installieren & aktualisieren“ erledigt die ganze Liste mit einem Klick."
     },
     {
      "title": "Für den Start aktivieren",
@@ -49,7 +50,8 @@
     "Aktualisieren kopiert die neueren Dateien aus der Mod-Quelle auf den Server. Schalte in den Einstellungen Mods bei jedem Neustart aktualisieren ein, um sie automatisch synchron zu halten.",
     "Beim Deinstallieren wird der .bikey nur gelöscht, wenn kein anderer installierter Mod denselben Schlüssel nutzt — geteilte Schlüssel (Expansion) bleiben erhalten.",
     "Bringt ein Mod Loot mit, klicke in seiner Zeile auf Mod-Loot hinzufügen — der Manager findet die types.xml des Mods und registriert sie für dich.",
-    "Unter Linux lädt der Server nur Mods, deren Ordner und Dateien kleingeschrieben sind. Der Manager benennt sie beim Installieren und Aktualisieren um, und die Seite Mods markiert alles, was noch falsch geschrieben ist."
+    "Unter Linux lädt der Server nur Mods, deren Ordner und Dateien kleingeschrieben sind. Der Manager benennt sie beim Installieren und Aktualisieren um, und die Seite Mods markiert alles, was noch falsch geschrieben ist.",
+    "Mit Steam Workshop als Quelle ist die Download-Liste ein Bericht über den letzten Download: Entferne gelesene Zeilen, und eine seitdem vom Server gelöschte Mod bietet „Erneut installieren“."
    ]
   },
   {
@@ -99,7 +101,8 @@
    ],
    "tips": [
     "Ein Slot pro Teil: einer für Magazine, einer für Visiere, einer für den Schaft. Magazin und Visier im selben Slot heißt entweder-oder, niemals beides.",
-    "Nur der Eintrag, den du bearbeitest, wird neu geschrieben — deine Kommentare und Formatierung im Rest der Datei bleiben erhalten."
+    "Nur der Eintrag, den du bearbeitest, wird neu geschrieben — deine Kommentare und Formatierung im Rest der Datei bleiben erhalten.",
+    "Der Gegenstand ist mit einer Kachel pro Slot gezeichnet, wie die Spieler-Ausrüstung: Klicke auf einen gefüllten Slot, um Chance oder Teile zu ändern, auf einen leeren, um ein Teil aus der Liste des Spiels hinzuzufügen. Ein Bajonett und ein Schalldämpfer (oder eine Mündungsbremse) spawnen nie zusammen an einer Waffe — DayZ bringt an, was zuerst kommt."
    ]
   },
   {
@@ -109,11 +112,11 @@
    "steps": [
     {
      "title": "System aktivieren",
-     "body": "Öffne Spieler-Ausrüstung. Wenn die Mission Spieler noch aus der init.c spawnt, sagt die Seite das und bietet einen Knopf, der ein Starter-Preset erstellt, es in cfggameplay.json registriert und den Schalter enableCfgGameplayFile umlegt — alles auf einmal."
+     "body": "Öffne Spieler-Ausrüstung. Spawnen Spieler noch nach init.c, sagt die Seite das und bietet einen Knopf, der das System einschaltet: Er verwendet die Ausrüstungsdateien, die schon im Missionsordner liegen (oder legt ein Start-Preset an), trägt sie in cfggameplay.json ein und schaltet enableCfgGameplayFile ein — alles auf einmal."
     },
     {
      "title": "Kleidung und Ausrüstung bearbeiten",
-     "body": "Jedes Preset listet, was pro Slot getragen wird (Körper, Beine, Füße…) und was lose getragen wird. Füge Gegenstände per Klassenname hinzu, setze ein Spawn-Gewicht, wenn ein Slot zwischen mehreren wählen soll, und wähle einen Zustand — neuwertig, getragen, beschädigt oder einen eigenen Bereich."
+     "body": "Der Editor zeigt einen Überlebenden mit allen Slots. Klicke auf einen Slot, um einen Gegenstand aus der Liste des Spiels zu wählen — mit Namen, Kategorien und was wohin passt —, lege dann Zustand und Menge fest und gib ihn in die Hände oder auf die Schnellleiste (Tasten 1–0). Jeder Gegenstand wird mit einer Kachel für jeden seiner Slots gezeichnet — Optik, Mündung, Magazin, die Taschen einer Weste — und bietet nur passende Teile an, dazu alles, was hineinkommt (Essen im Rucksack). Ein Server kann mehrere Ausrüstungen haben; jede hat ein Spawn-Gewicht."
     },
     {
      "title": "Testwurf und Teilen",
@@ -122,7 +125,10 @@
    ],
    "tips": [
     "healthMin/healthMax sind Gesundheitsanteile: 1.0 ist neuwertig, 0.0 ist ruiniert. Lass alles neuwertig, damit frische Spawns nicht in abgetragener Kleidung erscheinen.",
-    "Die Ausrüstung wird bei gestopptem Server gespeichert, wie jede Konfig-Änderung — starte den Server danach wieder."
+    "Die Ausrüstung wird bei gestopptem Server gespeichert, wie jede Konfig-Änderung — starte den Server danach wieder.",
+    "Ein DayZ-Server-Update ersetzt cfggameplay.json und vergisst deine Ausrüstungen. Der Manager trägt sie vor dem nächsten Start wieder ein und schaltet den Schalter wieder ein — und die Seite zeigt jede nicht verbundene Datei.",
+    "Eine Waffe mit Magazin spawnt geladen, mit Patrone im Patronenlager — niemand muss R drücken; der Knopf „Laden“ erledigt das mit einem Klick. Bajonett und Schalldämpfer schließen sich aus, und eine Waffenlampe braucht einen Handschutz mit Schiene: Der Editor warnt und bietet die Korrektur an.",
+    "„Neuer Charakter“ oben auf der Seite legt fest, wie jeder neue Charakter startet — etwa satt, ohne Durst und aufgewärmt. Das Panel setzt das mit seiner eigenen serverseitigen Mod um; Spieler laden nichts herunter."
    ]
   },
   {
@@ -147,7 +153,8 @@
     "Neustart-Warnungen laufen ebenfalls über RCon. Ohne Passwort findet der Neustart trotzdem statt — die Spieler sehen nur keinen Countdown.",
     "Der Bereich Spieler baut einen Verlauf aus dem Admin-Log auf: Namen, Spieler-IDs, Spielzeit, Kills. Er braucht den Startparameter -adminlog (Seite Server → Startparameter).",
     "Einstellungen → Verhalten beim Neustart kann alle eine festgelegte Zeit vor dem Neustart kicken und den Server sperren, damit in der letzten Minute niemand mehr beitritt. Charaktere werden beim Trennen gespeichert, es geht nichts verloren.",
-    "Die Seite Chat führt für jeden Tag ein Archiv — inklusive der aus dem Panel gesendeten Nachrichten und der geplanten Ansagen — mit Suche und .txt-Download. Wie lange es aufbewahrt wird, stellst du direkt dort ein."
+    "Die Seite Chat führt für jeden Tag ein Archiv — inklusive der aus dem Panel gesendeten Nachrichten und der geplanten Ansagen — mit Suche und .txt-Download. Wie lange es aufbewahrt wird, stellst du direkt dort ein.",
+    "Unter Spieler → Jetzt online kannst du allen schreiben, alle kicken (etwa vor Wartungsarbeiten) und den Beitritt bis zum nächsten Neustart sperren. Das Profil eines Spielers zeigt andere Konten mit derselben IP und was der Spieler gebaut oder zerstört hat."
    ]
   },
   {
@@ -164,8 +171,8 @@
      "body": "Die Übergangsgeschwindigkeit bestimmt, wie allmählich sich das Wetter ändert: Sanft braucht rund eine halbe Stunde in kleinen Schritten, wie Vanilla. Schnell durchläuft den vollen Bereich in zwei Minuten — daher fühlt sich Wetter wie ein Lichtschalter an."
     },
     {
-     "title": "Stelle die Tageslänge ein",
-     "body": "Tag- und Nachtbeschleunigung multiplizieren den Lauf der Spielzeit — 12 heißt, ein voller Tag dauert zwei echte Stunden. Die Nacht ist getrennt einstellbar, damit du sie kurz halten kannst."
+     "title": "Lege die Länge von Tag und Nacht fest",
+     "body": "Tag & Nacht zeigt den Himmel, Sonnenauf- und -untergang für deine Karte und wie lange Tag und Nacht in Echtzeit dauern — samt dem, was deine Neustarts mit der Spieluhr machen. Drücke ▶, um den Spieltag abzuspielen (und wieder anzuhalten), oder ziehe die weiße Markierung zu einem beliebigen Moment. Wähle ein fertiges Gefühl oder gib die gewünschte Tag- und Nachtlänge ein, und das Panel berechnet die Beschleunigung."
     }
    ],
    "tips": [
@@ -188,12 +195,13 @@
     },
     {
      "title": "Fahrzeuge einstellen",
-     "body": "Fahrzeuge listet jedes Fahrzeug-Event: wie viele existieren dürfen, wie viele Spawnpunkte es hat und wie vollständig die Teile sind – und legt fest, wie wahrscheinlich jedes Teil am Fahrzeug erscheint."
+     "body": "Fahrzeuge zeigt jedes Fahrzeug-Event mit einer Zeichnung des Autos: wie viele es geben kann, wie viele Spawnpunkte es hat, wie vollständig die Teile sind — und mit wie viel Treibstoff und Kühlmittel es spawnt (gesetzt über eine winzige Server-Mod, die das Panel hinzufügt; Spieler laden nichts herunter)."
     }
    ],
    "tips": [
     "Es wird kein Kartenbild mitgeliefert – die Ebenen stammen aus deinen Missionsdateien. Für eine fotoähnliche Karte lade dein eigenes Draufsichtbild in den Karteneinstellungen.",
-    "Wie die anderen Editoren speichern diese Seiten nur bei gestopptem Server."
+    "Wie die anderen Editoren speichern diese Seiten nur bei gestopptem Server.",
+    "Jede Karte hat ein Lineal (Entfernungen messen, Koordinaten kopieren) und Admin-Markierungen — Notizen wie eine Clan-Basis oder ein Händler, die jeder Admin des Servers auf jeder Karte sieht. Die Heatmap zeigt zusätzlich Bauen, Raids und Verstecke aus dem Admin-Log; die Live-Karte zeigt, wo jeder Spieler war."
    ]
   },
   {
@@ -216,7 +224,9 @@
    ],
    "tips": [
     "Wipe löscht den gespeicherten Weltzustand: Spieler, Fahrzeuge, Basen. Loot-Tabellen und Configs bleiben unberührt. Ordner werden zur Seite geschoben, ein versehentlicher Wipe lässt sich also von Hand retten.",
-    "Der Absturz-Watchdog startet den Server neu, wenn er sich selbst beendet. Nach drei Abstürzen in fünf Minuten hält er an und zeigt ein Banner — eine Absturzschleife braucht einen Menschen, keinen weiteren Neustart."
+    "Der Absturz-Watchdog startet den Server neu, wenn er sich selbst beendet. Nach drei Abstürzen in fünf Minuten hält er an und zeigt ein Banner — eine Absturzschleife braucht einen Menschen, keinen weiteren Neustart.",
+    "Einstellungen → Allgemein → Autostart startet den Manager mit dem Computer, und jeder Server kann mit dem Manager starten — nach einem Stromausfall kommt alles von selbst wieder.",
+    "Schließt sich der Manager unerwartet, startet ihn sein Wächter im Infobereich neu (höchstens dreimal in 15 Minuten), und das Dashboard sagt es — mit dem Absturzbericht von Windows, falls vorhanden. Abschalten unter Einstellungen → Allgemein."
    ]
   },
   {
@@ -253,7 +263,7 @@
     },
     {
      "title": "Panel für das Netzwerk öffnen",
-     "body": "Einstellungen → Panel-Erreichbarkeit: „Lokales Netzwerk“ für Handys zu Hause, „Internet“ für den Zugriff von überall (nur mit Anmeldung möglich). Starte danach den Manager neu."
+     "body": "Einstellungen → Panel-Erreichbarkeit: Lokales Netzwerk für Handys zu Hause, Internet für den Zugriff von überall (nur mit Anmeldung). Die Änderung gilt sofort — ohne Neustart."
     },
     {
      "title": "Verbindungen durchlassen",
@@ -403,7 +413,7 @@
   "types.flags": "count_in_cargo / count_in_hoarder / count_in_map / count_in_player entscheiden, ob Items in Zelt, Auto oder Rucksack auf nominal angerechnet werden. Aus heißt: Der Server spawnt weiter nach, obwohl Spieler bereits gehortet haben.",
   "mods.serverSide": "Lädt den Mod mit -serverMod statt -mod: Er läuft auf dem Server, Clients brauchen und bekommen ihn nicht. Nur für Admin-Werkzeuge — ein Loot- oder Content-Mod funktioniert so nicht.",
   "mods.order": "DayZ lädt Mods von links nach rechts. Frameworks müssen zuerst kommen: @CF vor allem, was davon abhängt, Expansion Core vor seinen Addons. Falsche Reihenfolge ist ein häufiger Grund, warum ein Server nicht startet.",
-  "mods.update": "Kopiert neuere Dateien aus dem !Workshop des Clients auf den Server. Der Manager kann Mods nicht herunterladen — abonniere sie zuerst auf Steam.",
+  "mods.update": "Kopiert die neueren Dateien aus der Mod-Quelle in den Server. Ist Steam Workshop (Direktdownload) die Quelle, lädt es die neueren Versionen zuerst mit SteamCMD herunter.",
   "mods.scan": "Sucht im Mod nach einer types.xml und trägt sie in cfgeconomycore.xml ein, damit der Loot des Mods wirklich spawnt.",
   "mods.uninstall": "Entfernt den Mod-Ordner vom Server. Sein .bikey wird nur gelöscht, wenn kein anderer installierter Mod denselben Schlüssel nutzt — geteilte Schlüssel wie die von Expansion bleiben.",
   "mods.profiles": "Speichert den aktuellen Satz aktivierter Mods unter einem Namen, damit du zwischen gemoddeter und Vanilla-Aufstellung wechseln kannst, ohne alles neu zu schalten.",
@@ -471,8 +481,8 @@
   "loadout.characters": "Für welche Charaktermodelle dieses Preset gilt (SurvivorM_Mirek, SurvivorF_Eva, …). Leer = für alle; pro Spawn wird eines zufällig gewählt.",
   "loadout.worn": "Gegenstände, die an den Körper gelegt werden, Slot für Slot. Innerhalb eines Slots wählt DayZ EINEN Gegenstand nach Gewicht, mehrere Varianten sorgen also für Abwechslung.",
   "loadout.carried": "Lose Gegenstände, die direkt ins Inventar des neuen Spielers wandern statt in einen Kleidungsslot — Lumpen, Essen, ein Startwerkzeug.",
-  "loadout.condition": "Der Zustand, in dem ein Gegenstand spawnt. In DayZ ist 1.0 = neuwertig und 0.0 = zerstört, höher ist also besser. „Neuwertig“ hält die Startausrüstung neu; mit „Eigen“ legst du einen genauen Gesundheitsbereich min–max fest, und der Gegenstand spawnt irgendwo darin.",
-  "settings.modSource": "Woher der Manager Mods kopiert. Client-Ordner: die DayZ-Installation mit !Workshop (in Steam abonnieren, der Manager kopiert und aktualisiert). Mod-Ordner: jeder Ordner mit @Mods oder SteamCMDs workshop/content/221100 – so kommen Workshop-Mods auf einen Host ohne Spiel. Nur Server: keine Quelle; von Hand hochgeladene Mods werden weiter verwaltet, aber ohne Auto-Update.",
+  "loadout.condition": "Der Zustand, in dem ein Gegenstand spawnt. In DayZ ist 1.0 = makellos und 0.0 = zerstört, höher ist also besser. Makellos hält die Startausrüstung neu; wähle Benutzerdefiniert für einen genauen Gesundheitsbereich min.–max., der Gegenstand spawnt irgendwo darin. Bei mitgeführten Gegenständen spawnt Makellos sie genau so, wie das Spiel sie erzeugt (ein Lappen, ein ganzer Apfel); jeder andere Zustand gibt ihnen außerdem die volle Menge, ein Stapel Lappen spawnt also voll.",
+  "settings.modSource": "Woher der Manager Mods nimmt. Client-Ordner: die DayZ-Installation mit !Workshop (in Steam abonnieren, der Manager kopiert und aktualisiert). Mod-Ordner: ein beliebiger Ordner mit @Mods oder workshop/content/221100 von SteamCMD. Steam Workshop (Direktdownload): Das Panel lädt, prüft und aktualisiert Mods selbst mit seinem eigenen SteamCMD — kein Spiel nötig. Nur Server: keine Quelle; von Hand hochgeladene Mods werden weiter verwaltet, aber das Auto-Update ist aus.",
   "settings.restartBehaviour": "Was Spieler bei jedem automatischen Neustart erleben: den Countdown-Text (schreib ihn in ihrer Sprache), ein optionales Fenster kurz vor dem Neustart, in dem der Server gesperrt und alle gekickt werden, damit Charaktere sauber gespeichert werden, und ein sauberes #shutdown, das die Welt speichert, bevor der Prozess endet. Die Zeitleiste zeigt die genaue Reihenfolge.",
   "settings.perf": "CPU-Affinität bindet DayZServer an die angehakten Kerne (die übrigen bleiben frei für das System, einen zweiten Server oder andere Programme). Die Priorität sagt dem System, wie bevorzugt es ihn einplant – „Höher als normal“ ist ein sicherer Schub; „Hoch“ kann den Rest des Rechners träge machen. Beides wird bei jedem Start angewendet. Unter Linux braucht höhere Priorität root.",
   "vehicles.nominal": "Wie viele dieser Fahrzeuge die Economy gleichzeitig auf der Karte halten will (alle Farbvarianten zusammen).",
@@ -480,7 +490,14 @@
   "vehicles.max": "Harte Obergrenze für diesen Typ, inklusive von Spielern versteckter oder geparkter Fahrzeuge. Meist gleich nominal.",
   "vehicles.lifetime": "Die Lifetime, die die Central Economy für dieses Event nutzt (Vanilla-Fahrzeuge: 300). Sie lässt intakte Autos nicht verschwinden – Vanilla-Fahrzeuge bleiben, bis sie zerstört werden oder gewiped wird. Behalte den Vanilla-Wert, sofern die Anleitung eines Mods nichts anderes sagt.",
   "vehicles.restock": "Sekunden, die die Economy wartet, bevor sie ein zerstörtes oder verschwundenes Fahrzeug ersetzt. 0 = so bald wie möglich.",
-  "vehicles.loot": "lootmin / lootmax der Variante aus der events.xml, unverändert übernommen (Vanilla-Fahrzeuge nutzen 0). Die Fahrzeugteile – Räder, Türen, Batterie, Zündkerzen – kommen aus cfgspawnabletypes: nutze die Schaltflächen „Teile beim Spawn“ unten oder die Seite Anbauteile für einzelne Teile."
+  "vehicles.loot": "lootmin / lootmax der Variante aus der events.xml, unverändert übernommen (Vanilla-Fahrzeuge nutzen 0). Die Fahrzeugteile – Räder, Türen, Batterie, Zündkerzen – kommen aus cfgspawnabletypes: nutze die Schaltflächen „Teile beim Spawn“ unten oder die Seite Anbauteile für einzelne Teile.",
+  "server.adminLogPlayerList": "Schreibt alle 5 Minuten die Position jedes Spielers ins Admin-Log (.ADM). Die Live-Karte nutzt das: ohne es bewegt sich der Punkt eines Spielers nur bei Verbindung, Kampf und Chat.",
+  "server.adminLogPlayerHitsOnly": "Protokolliert nur Treffer auf Spieler und lässt Treffer auf Infizierte und Tiere weg — das Admin-Log bleibt viel kleiner.",
+  "server.adminLogPlacement": "Schreibt das Platzieren von Fallen, Zelten und anderen platzierbaren Gegenständen ins Admin-Log.",
+  "server.adminLogBuildActions": "Schreibt Bauen, Abbauen und Zerstören von Basisteilen ins Admin-Log.",
+  "wsdl": "SteamCMD ist Valves eigener Kommandozeilen-Steam-Client. Das Panel installiert ihn in seinem Ordner, meldet ihn einmal mit deinem Steam-Konto an (DayZ-Workshop-Dateien gibt es nur für Konten, die das Spiel besitzen) und lädt dann die eingefügten Mods herunter: Jede landet im Ordner von SteamCMD, wird als @Name samt Schlüsseln in den Server kopiert und eingeschaltet. Aktualisieren ist derselbe Download noch einmal. Die Spieler brauchen die Mods weiterhin: Sie abonnieren sie wie gewohnt im Workshop.",
+  "veh.tweaks": "Für Kraftstoff und Kühler beim Spawn musst du nichts installieren: Beim Serverstart baut das Panel einen winzigen serverseitigen Mod (@DZM_ServerTweaks) mit diesen Einstellungen und lädt ihn mit -serverMod. Spieler laden nichts herunter. Die Werte gelten für Fahrzeuge, die die Ökonomie nach dem nächsten Start spawnt; Autos, die schon auf der Karte stehen, behalten ihre.",
+  "loadout.stats": "Essen und Wasser sind die Energie- und Wasserreserven des Charakters (0–5000 in DayZ; ein neuer Charakter bekommt je 600, daher erscheinen die Hunger- und Durstsymbole bald). Wärme ist der Wärmepuffer: der Wärmevorrat, den ein Charakter am Feuer aufbaut und der ihn eine Weile vor Kälte schützt. Die Werte gelten nur für neue Charaktere — auch nach dem Tod —, nicht für Spieler, die zu ihrem gespeicherten Charakter zurückkehren. Das Panel schreibt sie vor jedem Serverstart in seine serverseitige Mod."
  },
  "gameplay": {
   "version": "Formatversion der Datei. DayZ schreibt sie — lass sie, wie sie ist.",
@@ -530,7 +547,7 @@
   "shockDepletionSpeed": "Schock, der pro Sekunde beim Ertrinken hinzukommt.",
   "staticMode": "Gegen Wände und statische Objekte: 0 = aus, 1 = an (wie im Spiel), 2 = immer.",
   "dynamicMode": "Gegen Spieler, Fahrzeuge und andere bewegliche Objekte: 0 = aus, 1 = an (wie im Spiel), 2 = immer.",
-  "lightingConfig": "Nachtdunkelheit: 0 = hellere Nächte (wie im Spiel), 1 = dunkle Nächte. Überschreibt dieselbe Einstellung in serverDZ.cfg.",
+  "lightingConfig": "Nachtbeleuchtung: 0 = hellere Nächte (wie im Spiel), 1 = dunkle Nächte, 2 = die Beleuchtung von Sakhal, 3 = die Beleuchtung von Nasdara. Überschreibt dieselbe Einstellung in serverDZ.cfg.",
   "objectSpawnersArr": "JSON-Dateien (Pfade innerhalb der Mission), die zusätzliche statische Objekte in der Welt platzieren.",
   "environmentMinTemps": "Niedrigste Lufttemperatur jedes Monats, Januar bis Dezember, °C. Weglassen, um die der Karte zu verwenden.",
   "environmentMaxTemps": "Höchste Lufttemperatur jedes Monats, Januar bis Dezember, °C. Weglassen, um die der Karte zu verwenden.",
@@ -545,7 +562,7 @@
   "disableHeightPlacementCheck": "Objekte dürfen höher über den Füßen des Spielers platziert werden als normalerweise erlaubt.",
   "disableIsUnderwaterCheck": "Objekte dürfen unter Wasser platziert werden.",
   "disableIsInTerrainCheck": "Objekte dürfen ins Gelände versenkt werden.",
-  "disableColdAreaBuildingCheck": "Bauen ist in den kalten Gebieten erlaubt, in denen das Spiel es normalerweise verbietet (Sakhal).",
+  "disableColdAreaBuildingCheck": "Der alte Name von disableColdAreaPlacementCheck. Das aktuelle DayZ liest ihn nicht mehr — setze stattdessen den neuen Schlüssel.",
   "disallowedTypesInUnderground": "Bausätze, die in unterirdischen Bereichen (Bunker, Höhlen) nicht platziert werden können.",
   "disablePerformRoofCheck": "Basisteile dürfen unter Dächern und in Innenräumen gebaut werden.",
   "disableIsCollidingCheck": "Basisteile dürfen gebaut werden, auch wenn etwas im Weg ist.",
@@ -563,6 +580,57 @@
   "ignoreNavItemsOwnership": "Die Karte zeigt Kompass- und GPS-Infos, ohne Kompass oder GPS bei sich zu haben.",
   "displayPlayerPosition": "Die eigene Position des Spielers wird auf der Karte markiert.",
   "displayNavInfo": "Die Karte zeigt die Navigationsinfos (Raster und Kompass).",
-  "boatDecayMultiplier": "Wie schnell Boote verfallen. 1 = wie im Spiel, weniger = langsamer."
+  "boatDecayMultiplier": "Wie schnell Boote verfallen. 1 = wie im Spiel, weniger = langsamer.",
+  "disableColdAreaPlacementCheck": "Bauen ist in den kalten Gebieten erlaubt, in denen das Spiel normalerweise kein Platzieren zulässt (Sakhal).",
+  "disableItemFalling": "Gegenstände auf einem Basisteil bleiben liegen, statt herunterzufallen, wenn das Teil abgebaut oder zerstört wird.",
+  "disableDropAttachmentsOnFall": "Ein eingestürzter Bau behält seine Anbauteile und den Inhalt, statt sie auf den Boden fallen zu lassen.",
+  "disableRefundMaterialsOnFall": "Ein eingestürzter Bau gibt für seine gebauten Teile keine Materialien zurück — er verschwindet einfach.",
+  "canDetachAttachedCarWheels": "Spieler können die Räder eines Autos abnehmen.",
+  "canDamageAttachedCarWheels": "Am Auto montierte Räder können beschädigt werden, zum Beispiel durch Beschuss.",
+  "canDetachAttachedBikeWheels": "Spieler können die Räder eines Fahrrads abnehmen.",
+  "canDamageAttachedBikeWheels": "Am Fahrrad montierte Räder können beschädigt werden.",
+  "playerRestrictedAreaFiles": "JSON-Dateien (Pfade in der Mission) mit Sperrgebieten — Zonen, von denen das Spiel Spieler fernhält, etwa das Sprengkopflager auf Sakhal.",
+  "bunkerBroadcastEnabled": "Die Funksendung der Bunker läuft: Die Bunkercodes werden gemäß cfgbunkerbroadcast.json der Mission (Nasdara) gemorst. Aus = keine Sendung.",
+  "ExternalLockData": "Schutz der Zahlenschlösser vor Durchprobieren: Nach zu vielen falschen Codes nimmt ein Schloss eine Weile keine Eingaben an.",
+  "protectionCountStageOne": "Falsche Codes in Folge, bevor ein Zahlenschloss die Eingabe zum ersten Mal sperrt.",
+  "protectionCountStageTwo": "Falsche Codes nach der ersten Sperre, bevor das Schloss erneut sperrt.",
+  "protectionTime": "Sekunden, die ein Zahlenschloss nach zu vielen falschen Codes keine Eingaben annimmt.",
+  "protectionResetTime": "Sekunden, nach denen ein Zahlenschloss die falschen Codes vergisst und wieder bei null zählt.",
+  "SandstormData": "Sandstürme (Nasdara).",
+  "sandstormFrequency": "Wie oft Sandstürme kommen: 0 = nie, 1 = wie im Spiel, 2 = doppelt so oft."
+ },
+ "globals": {
+  "AnimalMaxCount": "Höchstzahl gleichzeitig lebender Tiere auf der Karte.",
+  "CleanupAvoidance": "Abstand (m) zu einem Spieler, innerhalb dessen nichts aufgeräumt wird, damit Gegenstände nicht vor den Augen der Spieler verschwinden.",
+  "CleanupLifetimeDeadAnimal": "Sekunden, die ein toter Tierkörper bleibt, bevor er entfernt wird.",
+  "CleanupLifetimeDeadInfected": "Sekunden, die die Leiche eines Infizierten bleibt, bevor sie entfernt wird.",
+  "CleanupLifetimeDeadPlayer": "Sekunden, die die Leiche eines toten Spielers samt Ausrüstung bleibt, bevor sie entfernt wird.",
+  "CleanupLifetimeDefault": "Standard-Sekunden, die ein fallen gelassener Gegenstand bleibt, wenn sein Typ keine Lebensdauer setzt.",
+  "CleanupLifetimeLimit": "Untergrenze (s), die das Aufräumen für sehr kurze Lebensdauern verwendet.",
+  "CleanupLifetimeRuined": "Sekunden, die ein zerstörter Gegenstand am Boden liegt, bevor er aufgeräumt wird.",
+  "FlagRefreshFrequency": "Wie oft (s) eine gehisste Territoriumsflagge die Lebensdauer platzierter Gegenstände in der Nähe auffrischt.",
+  "FlagRefreshMaxDuration": "Höchste Lebensdauer (s), auf die eine Flagge Gegenstände auffrischen kann — die Obergrenze für den Basenverfall (Vanilla ≈ 45 Tage).",
+  "FoodDecay": "Essen verdirbt mit der Zeit (1 = an).",
+  "IdleModeCountdown": "Sekunden ohne verbundene Spieler, bevor die Wirtschaft ruht und keinen Loot mehr nachspawnt.",
+  "IdleModeStartup": "Die Wirtschaft im Ruhemodus starten, bis der erste Spieler beitritt (1 = ja).",
+  "InitialSpawn": "Wie viel des nominalen Loots spawnt, wenn die Wirtschaft mit leerem Speicher startet, in Prozent (100 = alles).",
+  "LoginTimeMax": "Höchstdauer (s) des Einloggens, bevor der Versuch verworfen wird.",
+  "LogoutTimeMax": "Höchste Wartezeit beim Ausloggen (s).",
+  "LootDamageMax": "Höchste Abnutzung von frisch gespawntem Loot, 0–1 (Vanilla 0.82). Weniger = Loot spawnt in besserem Zustand.",
+  "LootDamageMin": "Geringste Abnutzung von frisch gespawntem Loot, 0–1 (0 = makellos).",
+  "LootProxyPlacement": "Loot spawnt auf Regalen, Tischen und anderen Stellen in Gebäuden (1 = an). Lass es eingeschaltet.",
+  "LootSpawnAvoidance": "Abstand (m) zu einem Spieler, innerhalb dessen kein neuer Loot erscheint, damit er nie vor jemandes Augen auftaucht.",
+  "RespawnAttempt": "Wie oft die Engine einen fehlgeschlagenen Loot-Spawn pro Zyklus wiederholt.",
+  "RespawnLimit": "Höchstzahl an Gegenständen eines Typs, die pro Zyklus nachspawnen.",
+  "RespawnTypes": "Wie viele Loot-Typen pro Zyklus für den Respawn bearbeitet werden.",
+  "RestartSpawn": "1 = aller Loot spawnt bei jedem Serverstart neu (ein Loot-Reset); 0 = der gespeicherte Loot bleibt.",
+  "SpawnInitial": "Spawn-Budget des ersten Durchlaufs der Wirtschaft beim Start (Vanilla 1200).",
+  "TimeHopping": "Zusätzliche Einlogg-Verzögerung (s) für Spieler, die zwischen Servern springen, um das zu bremsen.",
+  "TimeLogin": "Sekunden, die ein Spieler beim Einloggen auf dem Ladebildschirm wartet.",
+  "TimeLogout": "Sekunden, die ein Spieler nach dem Ausloggen noch in der Welt bleiben muss (gegen Combat-Logging).",
+  "TimePenalty": "Zusätzliche Wartezeit (s) beim Ausloggen kurz nach einem Kampf.",
+  "WorldWetTempUpdate": "Nässe und Temperatur von Gegenständen, die in der Welt liegen, werden aktualisiert (1 = an).",
+  "ZombieMaxCount": "Höchstzahl gleichzeitig lebender Infizierter auf der Karte.",
+  "ZoneSpawnDist": "Abstand (m) zu einem Spieler, ab dem dynamische Zonen mit Infizierten und Tieren spawnen."
  }
 }

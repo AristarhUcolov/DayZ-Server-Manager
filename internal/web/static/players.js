@@ -159,6 +159,87 @@ function openMessageDialog(playerNo, name) {
   setTimeout(() => msg.focus(), 0);
 }
 
+// serverActions is the bar over the online list: a message to everyone,
+// kicking everyone, and locking joining (BattlEye #lock) — say, before
+// maintenance. reload re-reads the list.
+function serverActions(online, locked, reload) {
+  const bar = h('div', { class: 'online-actions' }, [
+    h('button', { type: 'button', class: 'small secondary', i18n: 'players.msgAll', disabled: !online,
+      onclick: () => openMessageDialog(undefined, t('players.everyone')) }),
+    h('button', { type: 'button', class: 'small secondary', i18n: 'players.kickAll', disabled: !online,
+      onclick: () => openKickAllDialog(online).then(ok => { if (ok) reload(); }) }),
+    h('button', { type: 'button', class: 'small ' + (locked ? 'primary' : 'secondary'), i18n: locked ? 'players.unlock' : 'players.lock',
+      title: t(locked ? 'players.unlock.hint' : 'players.lock.hint'),
+      onclick: (e) => withBusy(e.currentTarget, async () => {
+        if (!locked && !await confirmModal(t('players.lock.confirm'), { okText: t('players.lock') })) return;
+        try {
+          await api.post('/api/players/lock', { lock: !locked });
+          toast(t(locked ? 'players.unlocked' : 'players.locked'), 'ok');
+          reload();
+        } catch (err) { handleErr(err); }
+      }) }),
+  ]);
+  if (locked) bar.append(h('span', { class: 'badge warn online-lock', text: '🔒 ' + t('players.lockedBadge') }));
+  return bar;
+}
+
+// openKickAllDialog kicks every online player with one reason.
+function openKickAllDialog(online) {
+  return new Promise((resolve) => {
+    let done = false;
+    const m = openModal({ title: tn('players.kickAll.title', { n: online }), onClose: () => resolve(done) });
+    const reason = h('input', { type: 'text', maxlength: '120', placeholder: t('players.kickAll.ph'), 'aria-label': t('rcon.reason') });
+    const okBtn = h('button', { class: 'danger', i18n: 'players.kickAll' });
+    const go = () => withBusy(okBtn, async () => {
+      try {
+        const r = await api.post('/api/players/kickall', { reason: reason.value.trim() });
+        done = true;
+        toast(tn('players.kickAll.done', { n: r.kicked || 0 }), 'ok');
+        m.close();
+      } catch (e) { handleErr(e); }
+    });
+    okBtn.onclick = go;
+    reason.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    m.body.append(
+      h('p', { class: 'hint', i18n: 'players.kickAll.hint' }),
+      h('label', { i18n: 'rcon.reason' }), reason,
+      h('div', { class: 'actions' }, [okBtn, h('button', { i18n: 'action.cancel', onclick: () => m.close() })]),
+    );
+    applyI18n();
+    setTimeout(() => reason.focus(), 0);
+  });
+}
+
+// playersCSV is the players list as a spreadsheet file (UTF-8 with a BOM, so
+// Excel reads names in any alphabet).
+function playersCSV(items, bannedSet) {
+  const cols = ['name', 'id', 'beGuid', 'ip', 'firstSeen', 'lastSeen', 'sessions', 'playtimeMinutes', 'kills', 'deaths', 'online', 'watch', 'banned', 'aliases', 'note'];
+  const cell = (v) => {
+    const s = v == null ? '' : String(v);
+    return /[",;\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const rows = [cols.join(',')];
+  for (const p of items) {
+    const banned = bannedSet.has(p.key) || (p.id && bannedSet.has(p.id));
+    rows.push(cols.map(c => cell(c === 'aliases' ? (p.aliases || []).join(' | ')
+      : c === 'banned' ? (banned ? 'yes' : '')
+      : (c === 'online' || c === 'watch') ? (p[c] ? 'yes' : '')
+      : p[c])).join(','));
+  }
+  const blob = new Blob(['\ufeff' + rows.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+  const a = h('a', { href: URL.createObjectURL(blob), download: 'players-' + new Date().toISOString().slice(0, 10) + '.csv' });
+  document.body.append(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+// showOnLiveMap opens the live map centred on a player.
+function showOnLiveMap(key) {
+  try { sessionStorage.setItem('liveFocus', key); } catch {}
+  document.querySelectorAll('.modal-overlay').forEach(o => o.remove());
+  navigate('livemap');
+}
+
 // emptyBox is an .empty-state: icon, title, hint and the next step's buttons.
 function emptyBox(icon, titleKey, hintKey, buttons) {
   return h('div', { class: 'empty-state' }, [
@@ -225,6 +306,11 @@ async function openPlayerProfile(key, onChange) {
     idRow('profile.ip', d.onlineIp || p.ip),
     (p.aliases && p.aliases.length) ? h('div', { class: 'hint', text: t('players.aliases') + ': ' + p.aliases.join(', ') }) : null,
     h('div', { class: 'hint', text: fmtWhen(p.firstSeen) + ' → ' + fmtWhen(p.lastSeen) }),
+    (d.sameIp && d.sameIp.length) ? h('div', { class: 'profile-sameip', title: t('profile.sameIp.hint') }, [
+      h('span', { class: 'badge warn', i18n: 'profile.sameIp' }),
+      ...d.sameIp.map(o => h('button', { type: 'button', class: 'link-btn', text: o.name || o.key,
+        onclick: () => { m.close(); openPlayerProfile(o.key, onChange); } })),
+    ]) : null,
   ]);
 
   const kd = p.deaths ? ((p.kills || 0) / p.deaths) : (p.kills || 0);
@@ -283,6 +369,7 @@ async function openPlayerProfile(key, onChange) {
     actions.append(
       h('button', { class: 'secondary', i18n: 'profile.kick', onclick: async () => { if (await openKickDialog(d.onlineId, p.name, p.key)) reopen(); } }),
       h('button', { class: 'secondary', i18n: 'profile.message', onclick: () => openMessageDialog(d.onlineId, p.name) }),
+      h('button', { class: 'secondary', i18n: 'profile.showOnMap', onclick: () => showOnLiveMap(p.key) }),
     );
   }
   if (p.id && /^[A-Za-z0-9+/_-]{43}=$/.test(p.id)) {
@@ -323,11 +410,26 @@ async function openPlayerProfile(key, onChange) {
     for (const k of d.events) activity.append(killRow(k));
   }
 
+  // Base building: what they placed, built, destroyed or buried.
+  let basesBox = null;
+  if (d.bases && d.bases.length) {
+    basesBox = h('div', { class: 'profile-activity' });
+    for (const b of d.bases) {
+      basesBox.append(h('div', { class: 'adm-row' }, [
+        h('span', { class: 'adm-time', text: fmtWhen(b.at) }),
+        h('span', { class: 'adm-type adm-base-' + b.kind, i18n: 'profile.base.' + b.kind }),
+        h('span', { class: 'adm-meta', text: heatBaseText(Object.assign({}, b, { at: '' })) }),
+        b.pos ? h('span', { class: 'adm-meta mono', text: 'X ' + Math.round(b.pos[0]) + ' · Z ' + Math.round(b.pos[1]) }) : null,
+      ]));
+    }
+  }
+
   m.body.append(...[
     badges, identity, stats, banBox,
     h('h4', { i18n: 'profile.mod' }), noteRow, actions, noIds,
     h('h4', { i18n: 'profile.history' }), hist,
     h('h4', { i18n: 'profile.activity' }), activity,
+    basesBox ? h('h4', { i18n: 'profile.bases' }) : null, basesBox,
   ].filter(Boolean));
   applyI18n();
 }
@@ -568,6 +670,8 @@ Views.players = async (root) => {
         h('span', { class: 'grow' }),
         // Label and select wrap as one piece on a narrow screen.
         h('div', { class: 'players-sort' }, [h('label', { class: 'hint', for: assocId(sortSel), i18n: 'players.sort' }), sortSel]),
+        h('button', { type: 'button', class: 'small secondary', i18n: 'players.exportCsv', title: t('players.exportCsv.hint'),
+          onclick: () => playersCSV(sorted(list.filter(matches)), bannedIDs()) }),
       ]),
       tableHost,
     ]));
@@ -613,6 +717,7 @@ Views.players = async (root) => {
       }
       const ps = r.players || [];
       tiles.online.textContent = String(ps.length);
+      body.append(serverActions(ps.length, r.locked, load));
       if (!ps.length) { body.append(h('p', { class: 'hint', i18n: 'online.empty' })); applyI18n(); return; }
       // "In game": this session so far (a fresh join next to a fight reads
       // differently from a regular); the total playtime is in its tooltip.

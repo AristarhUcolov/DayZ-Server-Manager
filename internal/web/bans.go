@@ -1032,5 +1032,10 @@ func (h *handlers) playersOnline(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, row)
 	}
-	writeJSON(w, map[string]interface{}{"running": true, "rcon": "ok", "players": out})
+	locked, lockedAt := h.joinLocked()
+	res := map[string]interface{}{"running": true, "rcon": "ok", "players": out, "locked": locked}
+	if locked {
+		res["lockedAt"] = lockedAt.Format(time.RFC3339)
+	}
+	writeJSON(w, res)
 }

@@ -110,7 +110,7 @@ func TestAutoFixRegistersUnregisteredModedFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(fixed, "\n"), "custom.xml") {
+	if !strings.Contains(strings.Join(Texts(fixed), "\n"), "custom.xml") {
 		t.Errorf("custom.xml was not reported as registered: %v", fixed)
 	}
 	reg, err := dztypes.RegisteredInModed(eco)
@@ -128,7 +128,7 @@ func TestAutoFixRegistersUnregisteredModedFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range again {
+	for _, s := range Texts(again) {
 		if strings.Contains(s, "cfgeconomycore") {
 			t.Errorf("second AutoFix re-registered something: %q", s)
 		}

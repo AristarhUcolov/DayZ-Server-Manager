@@ -37,7 +37,13 @@ function configForm(onSaved) {
     if (!Object.keys(next).length) return;
     const langChanged = 'language' in next && next.language !== State.config.language;
     try {
-      State.config = await api.post('/api/config', next);
+      const r = await api.post('/api/config', next);
+      // Who may open the panel (and HTTPS) applies at once: the answer says
+      // whether the listener moved.
+      const access = r && r.accessChange;
+      if (access) delete r.accessChange;
+      State.config = r;
+      if (access) announceAccess(access);
       savedNote.classList.add('show');
       clearTimeout(save._t); save._t = setTimeout(() => savedNote.classList.remove('show'), 1500);
       if (langChanged) {
@@ -55,6 +61,20 @@ function configForm(onSaved) {
   });
   return { F, body, save, autoSave, savedNote };
 }
+
+// announceAccess tells the admin what an access change did: where other
+// devices open the panel now, or why the old address was kept.
+function announceAccess(a) {
+  if (a.error) { toast(t('settings.exposure.failed').replace('{error}', a.error), 'error'); return; }
+  if (a.bind !== '') { toast(t('settings.exposure.applied'), 'ok'); return; }
+  api.get('/api/network/addresses').then(d => {
+    let url = (d.urls || [])[0];
+    if (url && a.https) url = url.replace(/^http:/, 'https:');
+    toast(url ? t('settings.exposure.appliedLan').replace('{url}', url) : t('settings.exposure.applied'), 'ok');
+  }).catch(() => toast(t('settings.exposure.applied'), 'ok'));
+}
+
+const isLoopbackHost = (host) => ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(String(host || '').toLowerCase());
 
 // cardTitle: a card heading with an icon from the sprite, in the sidebar's style.
 function cardTitle(icon, key, helpKey) {
@@ -95,7 +115,7 @@ function mapThumb(key, size, name) {
   const pt = (p) => (p[0] / sz * S).toFixed(1) + ' ' + (S - p[1] / sz * S).toFixed(1);
   const poly = (pts) => pts.map((p, i) => (i ? 'L' : 'M') + pt(p)).join(' ') + ' Z';
   const line = (pts) => pts.map((p, i) => (i ? 'L' : 'M') + pt(p)).join(' ');
-  const svg = svgEl('svg', { viewBox: '0 0 100 100', preserveAspectRatio: 'xMidYMid slice', class: 'map-thumb-svg', 'aria-hidden': 'true', focusable: 'false' });
+  const svg = svgEl('svg', { viewBox: '0 0 100 100', preserveAspectRatio: 'xMidYMid slice', class: 'map-thumb-svg' + (shape.arid ? ' arid' : ''), 'aria-hidden': 'true', focusable: 'false' });
   const coast = shape.coast !== false;
   svgEl('rect', { x: 0, y: 0, width: S, height: S, class: coast ? 'mt-water' : 'mt-land' }, svg);
   if (shape.land) svgEl('path', { d: poly(shape.land), class: 'mt-land' }, svg);
@@ -229,7 +249,8 @@ const CFG_GROUPS = [
     { k: 'disable3rdPerson', kind: 'bool', help: 'server.thirdPerson' },
     { k: 'disableCrosshair', kind: 'bool' },
     { k: 'disablePersonalLight', kind: 'bool', gameplay: true },
-    { k: 'lightingConfig', kind: 'select', options: ['0', '1'], gameplay: true },
+    // 2 and 3 load the Sakhal and Nasdara lighting (WorldLighting.c).
+    { k: 'lightingConfig', kind: 'select', options: ['0', '1', '2', '3'], gameplay: true },
     { k: 'disableVoN', kind: 'bool', help: 'server.von' },
     { k: 'vonCodecQuality', kind: 'number', min: 0, max: 30 },
   ] },
@@ -252,6 +273,12 @@ const CFG_GROUPS = [
     { k: 'logAverageFps', kind: 'number', min: 0, ph: 'cfg.logs.ph' },
     { k: 'logMemory', kind: 'number', min: 0, ph: 'cfg.logs.ph' },
     { k: 'logPlayers', kind: 'number', min: 0, ph: 'cfg.logs.ph' },
+    // What goes into the admin log (.ADM). The player list is what keeps
+    // the live map current.
+    { k: 'adminLogPlayerList', kind: 'bool', help: 'server.adminLogPlayerList' },
+    { k: 'adminLogPlayerHitsOnly', kind: 'bool', help: 'server.adminLogPlayerHitsOnly' },
+    { k: 'adminLogPlacement', kind: 'bool', help: 'server.adminLogPlacement' },
+    { k: 'adminLogBuildActions', kind: 'bool', help: 'server.adminLogBuildActions' },
   ] },
 ];
 
@@ -276,16 +303,10 @@ function serverCfgCard(data) {
     onclick: (e) => { e.preventDefault(); e.stopPropagation(); navigate('gameplay'); } }) : null;
   for (const g of CFG_GROUPS) {
     if (g.link) {
-      // Summary + link (see CFG_GROUPS).
-      const v = (k, d) => (values[k] ?? '') !== '' ? String(values[k]).trim() : d;
-      const persistent = v('serverTimePersistent', '0') === '1';
+      // Summary + link (see CFG_GROUPS): the time settings drawn.
       card.append(h('section', { class: 'cfg-group' }, [
         h('h4', { class: 'cfg-group-title' }, [h('span', { class: 'card-title-icon', html: svgIcon(g.icon, 15) }), h('span', { i18n: 'server.group.' + g.id })]),
-        h('div', { class: 'cfg-summary' }, [
-          h('span', { text: t('server.time.summary').replace('{day}', v('serverTimeAcceleration', '1')).replace('{night}', v('serverNightTimeAcceleration', '1'))
-            .replace('{start}', v('serverTime', 'SystemTime')) + (persistent ? ' · ' + t('server.time.persistent') : '') }),
-          h('button', { class: 'small secondary', type: 'button', i18n: 'server.time.edit', onclick: () => navigate(g.link) }),
-        ]),
+        timeSummary(values, g.link),
       ]));
       continue;
     }
@@ -540,11 +561,21 @@ function generalTab(c, form) {
   const sw = (k) => { F[k] = h('input', { type: 'checkbox', class: 'switch' }); F[k].checked = !!c[k]; return F[k]; };
   F.autoUpdateCheckMinutes = h('input', { type: 'number', min: '0', value: c.autoUpdateCheckMinutes ?? 0 });
 
+  // The dashboard's "Getting started" list, once removed, comes back here.
+  const setupBack = c.setupDismissed ? h('div', { class: 'actions' }, h('button', { type: 'button', class: 'secondary small', i18n: 'setup.restore',
+    onclick: async (e) => {
+      try {
+        State.config = await api.post('/api/config', { setupDismissed: false });
+        e.currentTarget.closest('.actions').remove();
+        toast(t('setup.restored'), 'ok');
+      } catch (err) { handleErr(err); }
+    } })) : null;
   return [
     h('div', { class: 'card' }, [
       cardTitle('i-settings', 'settings.title'),
       h('div', { class: 'grid-2' }, [field('settings.language', F.language), field('settings.theme', themeSel)]),
-    ]),
+      setupBack,
+    ].filter(Boolean)),
     modSourceCard(c, F, detectBtn),
     h('div', { class: 'card' }, [
       cardTitle('i-mods', 'settings.autoupdate.title'),
@@ -556,8 +587,101 @@ function generalTab(c, form) {
       h('small', { class: 'hint', i18n: 'settings.autoModVehicles.hint' }),
       field('settings.autoupdate.check', F.autoUpdateCheckMinutes, 'settings.autoupdate.check.hint'),
     ]),
+    startupCard(c, F),
     managerCard(),
   ];
+}
+
+// startupCard: the manager starting together with the computer (an entry in
+// the operating system, for the whole panel) and this DayZ server starting
+// with the manager (its own setting) — together they bring a server back by
+// itself after the computer restarts.
+function startupCard(c, F) {
+  F.startServerOnLaunch = h('input', { type: 'checkbox', class: 'switch' });
+  F.startServerOnLaunch.checked = !!c.startServerOnLaunch;
+  const osSwitch = h('input', { type: 'checkbox', class: 'switch', disabled: true });
+  const osHint = h('small', { class: 'hint' });
+  const systemdHost = h('div');
+  async function load() {
+    let d;
+    try { d = await api.get('/api/app/autostart'); } catch { return; }
+    osSwitch.checked = !!d.enabled;
+    // A login entry never runs on a Linux machine without a desktop session.
+    const usable = !!d.supported && (d.desktop || d.enabled);
+    osSwitch.disabled = !usable;
+    osHint.textContent = !d.supported ? t('settings.startup.unsupported')
+      : !usable ? t('settings.startup.noDesktop')
+      : t(d.kind === 'registry' ? 'settings.startup.withSystem.win' : 'settings.startup.withSystem.linux');
+    systemdHost.innerHTML = '';
+    if (d.systemd) {
+      systemdHost.append(h('details', { class: 'startup-systemd', open: !d.desktop }, [
+        h('summary', { i18n: 'settings.startup.systemd' }),
+        h('p', { class: 'hint', i18n: 'settings.startup.systemd.hint' }),
+        h('pre', { class: 'mono startup-unit', text: d.systemd }),
+        h('pre', { class: 'mono startup-unit', text: 'sudo nano /etc/systemd/system/dayz-server-manager.service\nsudo systemctl daemon-reload\nsudo systemctl enable --now dayz-server-manager' }),
+      ]));
+    }
+    applyI18n();
+  }
+  // An operating-system entry, not manager.json: kept out of the auto-save.
+  osSwitch.addEventListener('change', async (e) => {
+    e.stopPropagation();
+    const on = osSwitch.checked;
+    osSwitch.disabled = true;
+    try {
+      await api.post('/api/app/autostart', { enabled: on });
+      toast(t(on ? 'settings.startup.on' : 'settings.startup.off'), 'ok');
+    } catch (err) { osSwitch.checked = !on; handleErr(err); }
+    await load();
+  });
+  load();
+  // Keep the computer awake: a panel-wide choice with its own endpoint, so
+  // it stays out of this server's auto-save too.
+  const awakeSel = h('select', { 'aria-label': t('settings.awake.title') }, [
+    h('option', { value: '', i18n: 'settings.awake.server' }),
+    h('option', { value: 'always', i18n: 'settings.awake.always' }),
+    h('option', { value: 'never', i18n: 'settings.awake.never' }),
+  ]);
+  const awakeNow = h('small', { class: 'hint' });
+  // The guardian starts the manager again if it ever stops unexpectedly.
+  const guardSwitch = h('input', { type: 'checkbox', class: 'switch' });
+  const showAwake = (d) => {
+    awakeSel.value = d.mode || '';
+    awakeNow.textContent = t(d.awake ? 'settings.awake.nowOn' : 'settings.awake.nowOff');
+    guardSwitch.checked = d.guardian !== false;
+  };
+  guardSwitch.addEventListener('change', async (e) => {
+    e.stopPropagation();
+    try {
+      showAwake(await api.post('/api/app/keepawake', { guardian: guardSwitch.checked }));
+      toast(t('msg.saved'), 'ok');
+    } catch (err) { guardSwitch.checked = !guardSwitch.checked; handleErr(err); }
+  });
+  api.get('/api/app/keepawake').then(showAwake).catch(() => {});
+  awakeSel.addEventListener('change', async (e) => {
+    e.stopPropagation();
+    try {
+      showAwake(await api.post('/api/app/keepawake', { mode: awakeSel.value }));
+      toast(t('msg.saved'), 'ok');
+      // The manager re-checks within 15 s.
+      setTimeout(() => api.get('/api/app/keepawake').then(showAwake).catch(() => {}), 16000);
+    } catch (err) { handleErr(err); }
+  });
+  return h('div', { class: 'card', id: 'settings-startup' }, [
+    cardTitle('i-refresh', 'settings.startup.title'),
+    switchRow(osSwitch, 'settings.startup.withSystem'),
+    osHint,
+    systemdHost,
+    switchRow(F.startServerOnLaunch, 'settings.startup.server'),
+    h('small', { class: 'hint', i18n: 'settings.startup.server.hint' }),
+    h('div', { class: 'awake-row' }, [
+      h('label', { for: assocId(awakeSel), i18n: 'settings.awake.title' }), awakeSel,
+    ]),
+    h('small', { class: 'hint', i18n: 'settings.awake.hint' }),
+    awakeNow,
+    switchRow(guardSwitch, 'settings.guardian'),
+    h('small', { class: 'hint', i18n: 'settings.guardian.hint' }),
+  ]);
 }
 
 // autoVehiclesSwitch: "add vehicles from mods automatically" — stored inverted
@@ -586,6 +710,17 @@ function accessTab(c, form) {
       toast(t('auth.err.internetNeedsLogin'), 'error');
       const card = document.getElementById('auth-card');
       if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.classList.add('flash-target'); setTimeout(() => card.classList.remove('flash-target'), 1600); }
+    } else if (F.exposure.value === 'local' && !isLoopbackHost(location.hostname)) {
+      // The change applies at once: from a phone, "Local only"
+      // would cut this very device off — ask first.
+      e.stopPropagation();
+      const want = F.exposure.value;
+      F.exposure.value = State.config.exposure || 'lan';
+      confirmModal(t('settings.exposure.leaveConfirm'), { danger: true, okText: t('action.continue') }).then(ok => {
+        if (!ok) return;
+        F.exposure.value = want;
+        form.save();
+      });
     }
   });
   const id = assocId(F.exposure);

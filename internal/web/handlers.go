@@ -46,6 +46,10 @@ type handlers struct {
 	panelPort int
 	upnp      *upnpState
 	upnpKick  chan struct{}
+	// remoteKick asks the public-address watcher for a check now; remoteMu
+	// serialises updates of remote-check.json.
+	remoteKick chan struct{}
+	remoteMu   sync.Mutex
 
 	// Per-server state.
 	playersOnce sync.Once
@@ -54,8 +58,11 @@ type handlers struct {
 		mu      sync.Mutex
 		samples []histSample
 	}
-	bansMu   sync.Mutex // bans.json and the game's ban files (bans.go)
-	dashMods struct {   // dashboard mod counts, refreshed at most every 15 s
+	bansMu sync.Mutex // bans.json and the game's ban files (bans.go)
+	// markersMu serialises edits of map-markers.json (mapmarkers.go).
+	markersMu sync.Mutex
+	lock      joinLock // joining locked from the Players page (players_admin.go)
+	dashMods  struct { // dashboard mod counts, refreshed at most every 15 s
 		mu         sync.Mutex
 		at         time.Time
 		val        map[string]interface{}
@@ -76,6 +83,8 @@ func (h *handlers) register(mux *http.ServeMux) {
 	h.registerServers(mux)
 	// Bans, kicks and the live player list (bans.go).
 	h.registerBans(mux)
+	h.registerPlayersAdmin(mux)
+	h.registerLifecycle(mux)
 	// DayZ's whitelist.txt (whitelist.go).
 	h.registerWhitelist(mux)
 
@@ -96,6 +105,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 
 	// Mods.
 	mux.HandleFunc("/api/mods", methods(h.modsList, http.MethodGet))
+	h.registerWorkshopDL(mux)
 	mux.HandleFunc("/api/mods/install", methods(h.modsInstall, http.MethodPost))
 	mux.HandleFunc("/api/mods/uninstall", methods(h.modsUninstall, http.MethodPost))
 	mux.HandleFunc("/api/mods/update", methods(h.modsUpdate, http.MethodPost))
@@ -231,6 +241,11 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/watchlist/activity", methods(h.watchlistActivity, http.MethodGet))
 	mux.HandleFunc("/api/map/heat", methods(h.mapHeat, http.MethodGet))
 	mux.HandleFunc("/api/map/live", methods(h.mapLive, http.MethodGet))
+	mux.HandleFunc("/api/map/live/playerlist", methods(h.mapLivePlayerList, http.MethodPost))
+	mux.HandleFunc("/api/map/bases/log", methods(h.mapBasesLog, http.MethodPost))
+	// Admin markers on the map (mapmarkers.go).
+	mux.HandleFunc("/api/map/markers", methods(h.mapMarkers, http.MethodGet))
+	mux.HandleFunc("/api/map/markers/edit", methods(h.mapMarkersEdit, http.MethodPost))
 	// Admin-supplied map background image (serve / upload / remove).
 	mux.HandleFunc("/api/map/image", methods(h.mapImage, http.MethodGet, http.MethodPost))
 	mux.HandleFunc("/api/map/image/fetch", methods(h.mapImageFetch, http.MethodPost))
@@ -242,6 +257,8 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/spawnable/item", methods(h.spawnableItem, http.MethodGet, http.MethodPost, http.MethodDelete))
 	mux.HandleFunc("/api/spawnable/presets", methods(h.spawnablePresets, http.MethodGet))
 	mux.HandleFunc("/api/spawnable/classnames", methods(h.spawnableClassNames, http.MethodGet))
+	mux.HandleFunc("/api/items/catalog", methods(h.itemsCatalog, http.MethodGet))
+	mux.HandleFunc("/api/items/detail", methods(h.itemsDetail, http.MethodGet))
 	mux.HandleFunc("/api/guide", methods(h.guideGet, http.MethodGet))
 	// v0.18.0: explain a failed start, diff a backup before restoring it, and
 	// undo a wipe (wipeApply already moves the folders aside for exactly this).
@@ -260,6 +277,8 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/spawngear/save", methods(h.spawnGearSave, http.MethodPost))
 	mux.HandleFunc("/api/spawngear/delete", methods(h.spawnGearDelete, http.MethodDelete, http.MethodPost))
 	mux.HandleFunc("/api/spawngear/enable", methods(h.spawnGearEnable, http.MethodPost))
+	mux.HandleFunc("/api/spawngear/register", methods(h.spawnGearRegister, http.MethodPost))
+	mux.HandleFunc("/api/spawngear/stats", methods(h.spawnStats, http.MethodGet, http.MethodPost))
 
 	// Dashboard live metrics.
 	mux.HandleFunc("/api/dashboard/metrics", methods(h.dashboardMetrics, http.MethodGet))
@@ -408,6 +427,8 @@ func (h *handlers) config(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), code)
 		return
 	}
+	// The Steam Workshop mod source reads from the panel's SteamCMD folder.
+	h.syncSteamCMDSource()
 	// Refresh the scheduler's snapshot so changed restart times / announcements
 	// take effect immediately and the supervisor loops never read torn config.
 	h.app.ScheduleSnapshotSync()
@@ -431,14 +452,34 @@ func (h *handlers) config(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = h.app.Server.ApplyTuning()
 	}
+	// Who may open the panel, and HTTPS: applied on the spot by moving the
+	// listener — the page learns whether it worked.
+	if h.server != nil && (after.Exposure != before.Exposure || after.PanelHTTPS != before.PanelHTTPS) {
+		writeJSON(w, withAccessChange(after, h.server.ApplyAccess()))
+		return
+	}
 	writeJSON(w, after)
+}
+
+// withAccessChange adds "accessChange" to a config answer.
+func withAccessChange(cfg interface{}, change AccessChange) interface{} {
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return cfg
+	}
+	m := map[string]interface{}{}
+	if json.Unmarshal(data, &m) != nil {
+		return cfg
+	}
+	m["accessChange"] = change
+	return m
 }
 
 // normalizeConfig validates and tidies fields a POST may set, so a bad value
 // is rejected with a clear message instead of silently breaking a feature.
 func normalizeConfig(c *config.Manager) error {
 	switch c.ModSource {
-	case "", config.ModSourceClient, config.ModSourceFolder, config.ModSourceServer:
+	case "", config.ModSourceClient, config.ModSourceFolder, config.ModSourceServer, config.ModSourceSteamCMD:
 	default:
 		return fmt.Errorf("unknown mod source %q", c.ModSource)
 	}
@@ -605,7 +646,7 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 		}
 		c.VanillaDayZPath = req.VanillaDayZPath
 		switch req.ModSource {
-		case config.ModSourceClient, config.ModSourceFolder, config.ModSourceServer:
+		case config.ModSourceClient, config.ModSourceFolder, config.ModSourceServer, config.ModSourceSteamCMD:
 			c.ModSource = req.ModSource
 		}
 		c.ModsFolderPath = req.ModsFolderPath
@@ -618,11 +659,17 @@ func (h *handlers) finishFirstRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.syncSteamCMDSource()
 	if req.Login != nil && !h.auth.enabled() {
 		if err := h.enableLogin(w, r, req.Login.User, req.Login.Password, true); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+	// The access chosen in the first-run wizard applies right away.
+	if h.server != nil && req.Exposure != "" {
+		writeJSON(w, withAccessChange(h.app.Cfg(), h.server.ApplyAccess()))
+		return
 	}
 	writeJSON(w, h.app.Cfg())
 }
@@ -935,6 +982,9 @@ func (h *handlers) modsList(w http.ResponseWriter, r *http.Request) {
 		"vanillaPath": cfg.VanillaDayZPath,
 		"modSource":   cfg.EffectiveModSource(),
 		"sourceDir":   cfg.ModSourceDir(),
+		// Mods the panel creates and connects itself (the vehicle fuel
+		// tweaks): shown, never to be toggled or uninstalled by hand.
+		"managed": []string{app.TweaksMod},
 	})
 }
 
@@ -1955,6 +2005,11 @@ func (h *handlers) logsStream(w http.ResponseWriter, r *http.Request) {
 		stop := make(chan struct{})
 		switched := make(chan string, 1)
 		go func(cur string) {
+			defer func() {
+				if r := recover(); r != nil {
+					h.app.Log.Printf("BUG: log follow panicked: %v", r)
+				}
+			}()
 			t := time.NewTicker(3 * time.Second)
 			defer t.Stop()
 			for {
@@ -2465,7 +2520,7 @@ func (h *handlers) validateFix(w http.ResponseWriter, r *http.Request) {
 	// Launch-list fixes live in manager.json, which only this layer owns:
 	// drop enabled mods whose folder is gone, and duplicate entries.
 	if all || want["mods.missing"] || want["mods.duplicate"] {
-		var removed []string
+		var removed []validator.Fixed
 		_ = h.app.MutateConfig(func(c *config.Manager) error {
 			clean := func(list []string) []string {
 				seen := map[string]bool{}
@@ -2473,7 +2528,7 @@ func (h *handlers) validateFix(w http.ResponseWriter, r *http.Request) {
 				for _, m := range list {
 					k := strings.ToLower(m)
 					if seen[k] && (all || want["mods.duplicate"]) {
-						removed = append(removed, m+" (duplicate)")
+						removed = append(removed, validator.F("modDuplicate", "removed "+m+" (duplicate) from the launch mod list", "mod", m))
 						continue
 					}
 					seen[k] = true
@@ -2482,7 +2537,7 @@ func (h *handlers) validateFix(w http.ResponseWriter, r *http.Request) {
 						dir = filepath.Join(h.app.ServerDir, m)
 					}
 					if st, err := os.Stat(dir); (err != nil || !st.IsDir()) && (all || want["mods.missing"]) {
-						removed = append(removed, m+" (folder missing)")
+						removed = append(removed, validator.F("modMissing", "removed "+m+" (folder missing) from the launch mod list", "mod", m))
 						continue
 					}
 					out = append(out, m)
@@ -2493,12 +2548,10 @@ func (h *handlers) validateFix(w http.ResponseWriter, r *http.Request) {
 			c.ServerMods = clean(c.ServerMods)
 			return nil
 		})
-		for _, m := range removed {
-			fixed = append(fixed, "removed "+m+" from the launch mod list")
-		}
+		fixed = append(fixed, removed...)
 	}
 	if fixed == nil {
-		fixed = []string{}
+		fixed = []validator.Fixed{}
 	}
 	writeJSON(w, map[string]interface{}{"fixed": fixed, "count": len(fixed)})
 }

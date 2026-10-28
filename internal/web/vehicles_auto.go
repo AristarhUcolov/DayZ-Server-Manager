@@ -19,9 +19,21 @@ import (
 	dztypes "dayzmanager/internal/types"
 )
 
-// vehicleSources remembers which mod each imported vehicle event came from.
+// vehicleSources remembers which mod each imported vehicle event came from,
+// and the vehicles the admin deleted (the automatic import skips those).
 type vehicleSources struct {
-	Events map[string]string `json:"events"` // event name → @Mod
+	Events  map[string]string `json:"events"`            // event name → @Mod
+	Removed map[string]string `json:"removed,omitempty"` // deleted event → @Mod
+}
+
+// removed reports whether the admin deleted this vehicle event.
+func (v vehicleSources) removed(event string) bool {
+	for k := range v.Removed {
+		if strings.EqualFold(k, event) {
+			return true
+		}
+	}
+	return false
 }
 
 func vehicleSourcesPath(missionDir string) string {
@@ -121,6 +133,7 @@ func (h *handlers) missingModVehicles(modDir, missionDir string) []string {
 	}
 	known := missionEventNames(missionDir)
 	missionSpawn := loadMissionSpawnable(missionDir)
+	sources := loadVehicleSources(missionDir)
 	spawnable := func(class string) *dztypes.SpawnableType {
 		if e, ok := files.spawnable[strings.ToLower(class)]; ok {
 			return e.st
@@ -133,7 +146,8 @@ func (h *handlers) missingModVehicles(modDir, missionDir string) []string {
 	var out []string
 	for k, e := range files.eventDefs {
 		e := e
-		if !known[k] && looksLikeVehicle(&e, spawnable) {
+		// A vehicle the admin deleted stays deleted.
+		if !known[k] && !sources.removed(e.Name) && looksLikeVehicle(&e, spawnable) {
 			out = append(out, e.Name)
 		}
 	}

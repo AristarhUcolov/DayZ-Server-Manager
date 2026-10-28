@@ -11,7 +11,7 @@
     },
     {
      "title": "Válaszd ki, honnan jönnek a modok",
-     "body": "Első indításkor kiválasztod a modforrást: a DayZ *klienst* (a !Workshop mappáját, ahová a Steam letölti a modokat), bármely @mod mappákat tartalmazó mappát vagy a SteamCMD workshop/content/221100 mappáját, illetve a Csak szerver módot játék nélküli gépekhez — ekkor a modokat magad töltöd fel, és az automatikus frissítés ki van kapcsolva. Később a Beállításokban módosíthatod."
+     "body": "Az első indításkor kiválasztod a modforrást: a DayZ *klienst* (a !Workshop mappáját, ahová a Steam a modokat tölti), bármely @modokat tartalmazó mappát vagy a SteamCMD workshop/content/221100 mappáját, a Steam Workshopot (közvetlen letöltés) — ekkor a panel maga tölti le és frissíti a modokat a SteamCMD-vel —, vagy a Csak szerver módot egy játék nélküli hosztgéphez, ahol a modokat magad töltöd fel, és az automatikus frissítés ki van kapcsolva. Később a Beállításokban módosíthatod."
     },
     {
      "title": "Indítsd el a szervert",
@@ -20,7 +20,8 @@
    ],
    "tips": [
     "Ha a panelt csak ezen a gépen használod, nem kell jelszó. Ha telefonról vagy máshonnan is meg akarod nyitni, előbb állíts be bejelentkezést — az első beállításkor vagy a Beállítások → Bejelentkezés a panelbe pontban.",
-    "Szinte minden fájlszerkesztő megtagadja a mentést, amíg a szerver fut — a DayZ zárolja a saját fájljait. Előbb állítsd le a szervert; a panel jelzi, ha ez az ok."
+    "Szinte minden fájlszerkesztő megtagadja a mentést, amíg a szerver fut — a DayZ zárolja a saját fájljait. Előbb állítsd le a szervert; a panel jelzi, ha ez az ok.",
+    "Amikor a számítógép elalszik, a DayZ szerver és a panel is leáll vele — úgy tűnik, mintha a kezelő magától bezáródott volna. Amíg szerver fut, a kezelő ébren tartja a számítógépet (Beállítások → Általános → A számítógép ébren tartása); bérelt szerveren a kijelentkezés helyett csak a távoli ablakot zárd be."
    ]
   },
   {
@@ -29,12 +30,12 @@
    "intro": "A szervernek minden modból saját példány kell, a mod .bikey fájlja a szerver keys mappájában, és a mod szerepeljen a -mod indítási paraméterben. A kezelő mindhármat elvégzi, a választott forrásból véve a modokat: a játékkliens !Workshopjából, egy mod- vagy SteamCMD-mappából, vagy — Csak szerver módban — a magad által feltöltött modokból.",
    "steps": [
     {
-     "title": "Előbb iratkozz fel a Steamen",
-     "body": "A kezelő másolja a modokat, nem tölti le őket. Iratkozz fel a Steam Workshopban, és hagyd, hogy a DayZ launcher letöltse a modot a !Workshopba — vagy töltsd le SteamCMD-vel a modmappádba."
+     "title": "Szerezd be a modokat",
+     "body": "Két út. Illessz be Workshop-linkeket a Modok oldal Közvetlen letöltés részébe: a panel saját SteamCMD-je egyenesen a szerverre tölti le őket — egyszer kell bejelentkezned egy olyan Steam-fiókkal, amelyiknek megvan a DayZ. Vagy iratkozz fel a Steam Workshopban, hagyd, hogy a DayZ indító letöltse a modot a !Workshop mappába (vagy töltsd le SteamCMD-vel a modmappádba), és onnan telepítsd."
     },
     {
      "title": "Telepítés a szerverre",
-     "body": "Nyisd meg a Modokat — a !Workshopban lévő összes mod listázva van. A Telepítés átmásolja a modot a szerver mappájába, és automatikusan szinkronizálja a .bikey-t. A Modok telepítése és frissítése egy kattintással az egész listát elvégzi."
+     "body": "Nyisd meg a Modok oldalt — minden látszik, ami a modforrásban van (ha a forrás a Steam Workshop: a letöltött modok). A Telepítés a szerver mappájába másolja a modot, és automatikusan átviszi a .bikey fájlját. A „Modok telepítése és frissítése” egy kattintással elvégzi az egész listára."
     },
     {
      "title": "Kapcsold be az indításhoz",
@@ -49,7 +50,8 @@
     "A Frissítés átmásolja az újabb fájlokat a modforrásból a szerverre. Kapcsold be a Beállításokban a Modok frissítése minden újraindításkor opciót, hogy automatikusan szinkronban maradjanak.",
     "Egy mod eltávolítása csak akkor törli a .bikey-t, ha más telepített mod nem használja ugyanazt a kulcsot, így a közös kulcsok (Expansion) érintetlenek maradnak.",
     "Ha egy mod saját lootot hoz, használd a sorában a Mod lootjának hozzáadása gombot — megtalálja a mod types.xml fájlját, és regisztrálja helyetted.",
-    "Linuxon a szerver csak azokat a modokat tölti be, amelyek mappái és fájljai kisbetűsek. A kezelő telepítéskor és frissítéskor átnevezi őket, a Modok oldal pedig jelzi, ha valami rossz kis-/nagybetűs maradt."
+    "Linuxon a szerver csak azokat a modokat tölti be, amelyek mappái és fájljai kisbetűsek. A kezelő telepítéskor és frissítéskor átnevezi őket, a Modok oldal pedig jelzi, ha valami rossz kis-/nagybetűs maradt.",
+    "Ha a forrás a Steam Workshop, a letöltési lista az utolsó letöltés jelentése: távolítsd el az elolvasott sorokat, és a szerverről azóta törölt modnál megjelenik az Újratelepítés."
    ]
   },
   {
@@ -99,7 +101,8 @@
    ],
    "tips": [
     "Alkatrészenként egy slot: egy a táraknak, egy az optikáknak, egy a tusnak. Ha tár és optika ugyanabban a slotban van, a fegyver vagy az egyiket, vagy a másikat kapja, sosem mindkettőt.",
-    "Csak a szerkesztett bejegyzés íródik újra — a fájl többi részében a megjegyzéseid és a formázásod megmarad."
+    "Csak a szerkesztett bejegyzés íródik újra — a fájl többi részében a megjegyzéseid és a formázásod megmarad.",
+    "A tárgy slotonként egy csempével van megrajzolva, mint a játékos felszerelése: kattints egy kitöltött slotra az esély vagy az alkatrészek módosításához, egy üresre a játék saját listájából való alkatrész hozzáadásához. Szurony és hangtompító (vagy csőszájfék) soha nem jelenik meg együtt egy fegyveren — a DayZ azt szereli fel, amelyik előbb jön."
    ]
   },
   {
@@ -109,11 +112,11 @@
    "steps": [
     {
      "title": "Kapcsold be a rendszert",
-     "body": "Nyisd meg a Játékos felszerelése oldalt. Ha a küldetés még az init.c-ből hozza létre a játékosokat, az oldal ezt jelzi, és felajánl egy gombot, amely létrehoz egy kezdő sablont, regisztrálja a cfggameplay.json-ban, és bekapcsolja az enableCfgGameplayFile kapcsolót — mindezt egyszerre."
+     "body": "Nyisd meg a Játékos felszerelése oldalt. Ha a játékosok még az init.c szerint születnek, az oldal ezt jelzi, és egyetlen gombot kínál, amely bekapcsolja a rendszert: újra felhasználja a küldetés mappájában már meglévő felszerelésfájlokat (vagy létrehoz egy kezdő sablont), regisztrálja őket a cfggameplay.json-ban, és bekapcsolja az enableCfgGameplayFile-t — mindezt egyszerre."
     },
     {
      "title": "Ruhák és felszerelés szerkesztése",
-     "body": "Minden sablon felsorolja, mit viselnek slotonként (Test, Láb, Lábfej…), és mit visznek magukkal lazán. Adj hozzá tárgyakat osztálynév alapján, állíts be megjelenési súlyt, ha egy slotnak többől kell választania, és válassz állapotot — hibátlan, kopott, sérült vagy egyéni tartomány."
+     "body": "A szerkesztő egy túlélőt mutat az összes helyével. Kattints egy helyre, és válassz tárgyat a játék saját listájából — névvel, kategóriával és azzal, mi hová illik —, majd állítsd be az állapotát és a mennyiségét, és tedd a kezébe vagy a gyorssávra (1–0 billentyűk). Minden tárgy ki van rajzolva, minden helyéhez egy csempével — optika, csőtorkolat, tár, a mellény zsebei —, amely csak az illeszkedő alkatrészeket kínálja, és azt, ami belekerül (étel a hátizsákba). Egy szervernek több felszerelése is lehet; mindegyiknek saját megjelenési súlya van."
     },
     {
      "title": "Próbasorsolás és megosztás",
@@ -122,7 +125,10 @@
    ],
    "tips": [
     "A healthMin/healthMax életerő-arányok: az 1.0 hibátlan, a 0.0 tönkrement. Tarts mindent hibátlanon, hogy a friss játékosok ne kopott ruhában érkezzenek.",
-    "A felszerelés leállított szervernél mentődik, mint minden konfigurációs módosítás — utána indítsd el újra a szervert."
+    "A felszerelés leállított szervernél mentődik, mint minden konfigurációs módosítás — utána indítsd el újra a szervert.",
+    "A DayZ-szerver frissítése lecseréli a cfggameplay.json-t, és elfelejti a felszereléseidet. A kezelő a következő indítás előtt újra felveszi őket, és visszakapcsolja a kapcsolót — az oldal pedig minden nem csatlakoztatott fájlt mutat.",
+    "A tárral ellátott fegyver töltve jelenik meg, lőszerrel a csőben — senkinek sem kell R-t nyomnia; a Töltés gomb egy kattintással megoldja. A szurony és a hangtompító kizárja egymást, a fegyverlámpához pedig sínes előagy kell: a szerkesztő figyelmeztet és felajánlja a javítást.",
+    "Az oldal tetején lévő Új karakter dönti el, hogyan kezd minden új karakter — például jóllakottan, szomjúság nélkül és átmelegedve. A panel ezt saját szerveroldali modjával alkalmazza; a játékosok semmit sem töltenek le."
    ]
   },
   {
@@ -147,7 +153,8 @@
     "Az újraindítási figyelmeztetések is RCon-t használnak. Jelszó nélkül az újraindítás megtörténik — csak a játékosok nem kapnak visszaszámlálást.",
     "A Játékosok rész az adminnaplóból építi fel az előzményeket: nevek, játékos-ID-k, játékidő, ölések. Ehhez a -adminlog indítási paraméter kell (Szerver oldal → Indítási paraméterek).",
     "A Beállítások → Viselkedés újraindításkor pontban mindenkit kirúghatsz egy megadott idővel az újraindítás előtt, és lezárhatod a szervert, hogy az utolsó percben senki se csatlakozzon vissza. A karakterek kilépéskor mentődnek, így semmi sem vész el.",
-    "A Chat oldal minden napról archívumot őriz — a panelből küldött üzenetekkel és az ütemezett közleményekkel együtt —, kereséssel és .txt letöltéssel. Hogy meddig őrizze meg, ugyanott állíthatod be."
+    "A Chat oldal minden napról archívumot őriz — a panelből küldött üzenetekkel és az ütemezett közleményekkel együtt —, kereséssel és .txt letöltéssel. Hogy meddig őrizze meg, ugyanott állíthatod be.",
+    "A Játékosok → Most online alatt írhatsz mindenkinek, kirúghatsz mindenkit (például karbantartás előtt), és a következő újraindításig lezárhatod a belépést. Egy játékos profilja mutatja az ugyanarról az IP-ről látott más fiókokat, és hogy mit épített vagy rombolt le."
    ]
   },
   {
@@ -164,8 +171,8 @@
      "body": "Az átmenet sebessége szabályozza, mennyire fokozatosan változik az időjárás: a Sima kb. fél óra alatt, kis lépésekben vált, mint a vanilla. A Gyors két perc alatt bejárja a teljes tartományt — ettől tűnik az időjárás villanykapcsolónak."
     },
     {
-     "title": "Állítsd be a nap hosszát",
-     "body": "A nappali és éjszakai gyorsítás megszorozza a játékbeli idő múlását — a 12 azt jelenti, hogy egy teljes nap két valós óra. Az éjszakai gyorsítás külön állítható, így rövidre veheted az éjszakákat."
+     "title": "Állítsd be a nappal és az éjszaka hosszát",
+     "body": "A Nappal és éjszaka megmutatja az eget, a napkeltét és a napnyugtát a térképedhez, és hogy valós időben meddig tart a nappal és az éjszaka — azzal együtt, mit tesznek az újraindítások a játék órájával. Nyomd meg a ▶ gombot a játéknap lejátszásához (és újra a leállításához), vagy húzd a fehér jelölőt bármelyik pillanatra. Válassz egy kész hangulatot, vagy írd be a kívánt nappali és éjszakai hosszt, és a panel kiszámolja a gyorsítást."
     }
    ],
    "tips": [
@@ -188,12 +195,13 @@
     },
     {
      "title": "Hangold a járműveket",
-     "body": "A Járművek oldal felsorolja az összes járműeseményt: hány létezhet, hány megjelenési pontja van és mennyire teljesek az alkatrészei — és beállítja, milyen eséllyel jelenik meg az egyes alkatrész a járművön."
+     "body": "A Járművek oldal minden járműeseményt az autó rajzával mutat: hány lehet belőle, hány spawnpontja van, mennyire teljesek az alkatrészei — és mennyi üzemanyaggal és hűtőfolyadékkal jelenik meg (ezt egy apró szerveroldali mod állítja be, amelyet a panel ad hozzá; a játékosok semmit sem töltenek le)."
     }
    ],
    "tips": [
     "Nincs mellékelt térképkép — a rétegek a küldetésfájljaidból származnak. Fotószerű térképhez tölts be saját felülnézeti képet a térkép beállításaiban.",
-    "A többi szerkesztőhöz hasonlóan ezek az oldalak is csak leállított szervernél mentenek."
+    "A többi szerkesztőhöz hasonlóan ezek az oldalak is csak leállított szervernél mentenek.",
+    "Minden térképen van vonalzó (távolságmérés, koordináták másolása) és adminjelölők — jegyzetek, például egy klán bázisa vagy egy kereskedő, amelyeket a szerver minden adminja minden térképen lát. A Hőtérkép az adminnaplóból hozzáadja az építkezést, a raideket és a rejtekhelyeket; az Élő térkép megmutatja, merre jártak a játékosok."
    ]
   },
   {
@@ -216,7 +224,9 @@
    ],
    "tips": [
     "A wipe törli a világ mentett állapotát — játékosokat, járműveket, bázisokat. A loot-táblák és konfigurációk érintetlenek maradnak. A mappák előbb félre kerülnek, így egy tévedésből indított wipe kézzel visszaállítható.",
-    "Az összeomlás-felügyelő újraindítja a szervert, ha magától kilép. Öt percen belüli három összeomlás után leáll, és helyette figyelmeztetést mutat — az összeomlási hurokhoz ember kell, nem újabb újraindítás."
+    "Az összeomlás-felügyelő újraindítja a szervert, ha magától kilép. Öt percen belüli három összeomlás után leáll, és helyette figyelmeztetést mutat — az összeomlási hurokhoz ember kell, nem újabb újraindítás.",
+    "A Beállítások → Általános → Automatikus indítás a számítógéppel együtt indítja a kezelőt, és minden szerver indulhat a kezelővel — áramszünet után minden magától visszajön.",
+    "Ha a kezelő váratlanul bezárul, az őr újraindítja a tálcán (legfeljebb háromszor 15 percen belül), és a vezérlőpult jelzi — a Windows összeomlási bejegyzésével, ha van ilyen. Kikapcsolható: Beállítások → Általános."
    ]
   },
   {
@@ -253,7 +263,7 @@
     },
     {
      "title": "Nyisd meg a panelt a hálózat felé",
-     "body": "Beállítások → Panel elérhetősége: Helyi hálózat az otthoni telefonokhoz, Internet a bárhonnan való eléréshez (csak bejelentkezéssel lehetséges). Utána indítsd újra a kezelőt."
+     "body": "Beállítások → Panel elérhetősége: Helyi hálózat az otthoni telefonokhoz, Internet a bárhonnan való eléréshez (csak bejelentkezéssel). A változás azonnal érvényes — újraindítás nélkül."
     },
     {
      "title": "Engedd be a kapcsolatokat",
@@ -407,7 +417,7 @@
   "loadout": "Mit visel és mit visz magánál a játékos, amikor újra megjelenik. Ezek a DayZ spawn-gear sablonjai, a cfggameplay.json-ban regisztrálva — a változások a szerver újraindítása után lépnek érvénybe. Vanillában a felszerelés az init.c-ben van, ezért egy friss küldetésnél itt semmi sem látszik, amíg be nem kapcsolod a rendszert.",
   "loadout.carried": "Laza tárgyak, amelyek közvetlenül az új játékos leltárába kerülnek, nem viselt slotba — rongyok, étel, egy kezdő szerszám.",
   "loadout.characters": "Mely túlélőmodellekre vonatkozik ez a sablon (SurvivorM_Mirek, SurvivorF_Eva, …). Hagyd üresen, hogy mindre vonatkozzon; megjelenésenként egy véletlenszerűen választódik.",
-  "loadout.condition": "Az állapot, amelyben a tárgy megjelenik. A DayZ-ben 1.0 = hibátlan és 0.0 = tönkrement, tehát a nagyobb a jobb. A Hibátlan újként tartja a friss felszerelést; válaszd az Egyénit egy pontos min–max életerő-tartományhoz, és a tárgy valahol azon belül jelenik meg.",
+  "loadout.condition": "Az állapot, amelyben egy tárgy megjelenik. A DayZ-ben 1.0 = hibátlan és 0.0 = tönkrement, tehát a magasabb a jobb. A Hibátlan újnak tartja a kezdőfelszerelést; válaszd az Egyénit, ha pontos min.–max. életerő-tartományt akarsz megadni, és a tárgy valahol azon belül jelenik meg. A vitt tárgyaknál a Hibátlan pontosan úgy hozza létre őket, ahogy a játék (egy rongy, egy egész alma); bármely más állapot teljes mennyiséget is ad nekik, így egy köteg rongy telve jelenik meg.",
   "loadout.weight": "A sablon súlya a többihez képest. A DayZ megjelenésenként EGY sablont választ, így a 3-as súlyú sablon háromszor valószínűbb, mint az 1-es súlyú.",
   "loadout.worn": "A testre helyezett tárgyak, testslotonként. Egy sloton belül a DayZ súly alapján EGY tárgyat választ, így több változat felsorolása változatosságot ad a megjelenések között.",
   "logs.adm": "Mit csináltak a játékosok: csatlakozások, chat, ölések, pozíciók. Az -adminlog kapcsoló kell hozzá; a Játékosok oldal ebből épül.",
@@ -420,7 +430,7 @@
   "mods.scan": "Types.xml-t keres a modban, és regisztrálja a cfgeconomycore.xml-ben, hogy a mod lootja ténylegesen megjelenjen.",
   "mods.serverSide": "A modot -serverMod-dal tölti be -mod helyett: a szerveren fut, a klienseknek nem kell és nem is kapják meg. Csak admin eszközökhöz — egy szerveroldalira állított loot- vagy tartalommod nem fog működni.",
   "mods.uninstall": "Eltávolítja a modmappát a szerverről. A .bikey csak akkor törlődik, ha más telepített mod nem használja ugyanazt a kulcsot, így a közös kulcsok, mint az Expansioné, megmaradnak.",
-  "mods.update": "Átmásolja az újabb fájlokat a kliens !Workshopjából a szerverre. A kezelő nem tud modokat letölteni — előbb iratkozz fel a Steamen.",
+  "mods.update": "Átmásolja a modforrás újabb fájljait a szerverre. Ha a forrás a Steam Workshop (közvetlen letöltés), előbb letölti az újabb verziókat a SteamCMD-vel.",
   "rcon.password": "A battleye/beserver_x64.cfg fájlba íródik. A BattlEye csak indításkor olvassa ezt a fájlt, így egy új jelszó a következő újraindításig semmit sem csinál.",
   "server.forceSameBuild": "Megköveteli, hogy a kliensek pontosan ugyanazt a játékbuildet futtassák (1). Megelőzi a verzióeltérésből adódó összeomlásokat.",
   "server.hostname": "A DayZ szerverböngészőben megjelenő szervernév. Legyen rövid és kereshető.",
@@ -443,7 +453,7 @@
   "settings.adminlog": "Bekapcsolja az -adminlog-ot, amely az .ADM fájlt írja. A Játékosok oldal és a killfeed ebből épül, és nélküle üres marad.",
   "settings.backup": "Ütemezetten zip-be menti a konfigurációkat és küldetésfájlokat, a legújabb N megtartásával. Emellett minden fájl mellé, amelyet a panel felülír, időbélyeges .bak kerül.",
   "settings.exposure": "„Csak ez a gép”: a panelt csak ez a számítógép nyithatja meg. „Helyi hálózat”: a telefonod és a többi otthoni eszköz is megnyithatja. „Internet”: bárhonnan elérhető — ehhez bejelentkezés kell, a többit (router, tűzfal, nyilvános IP) pedig a Beállítások → Távoli elérés ellenőrzi.",
-  "settings.modSource": "Honnan másolja a kezelő a modokat. Kliens mappa: a DayZ játéktelepítés a !Workshoppal (feliratkozol a Steamen, a kezelő másol és frissít). Modmappa: bármely @mod mappákat tartalmazó mappa vagy a SteamCMD workshop/content/221100 mappája — így juthatsz Workshop-modokhoz játék nélküli gépen. Csak szerver: nincs forrás; a kézzel feltöltött modokat továbbra is kezeli, de az automatikus frissítés ki van kapcsolva.",
+  "settings.modSource": "Honnan veszi a kezelő a modokat. Kliensmappa: a DayZ telepítése a !Workshop mappával (feliratkozol a Steamen, a kezelő másol és frissít). Modmappa: bármely @modokat tartalmazó mappa vagy a SteamCMD workshop/content/221100 mappája. Steam Workshop (közvetlen letöltés): a panel a saját SteamCMD-jével maga tölti le, ellenőrzi és frissíti a modokat — nem kell hozzá a játék. Csak szerver: nincs forrás; a kézzel feltöltött modokat továbbra is kezeli, de az automatikus frissítés ki van kapcsolva.",
   "settings.perf": "A CPU-affinitás a bejelölt magokhoz köti a DayZServert (a jelöletlen magok szabadon maradnak az OS, egy második szerver vagy más programok számára). A prioritás azt mondja meg az OS-nek, mennyire előnyben részesítse — a Normál feletti biztonságos gyorsítás; a Magas lelassíthatja a gép többi részét. Mindkettő minden indításkor érvényesül. Linuxon a prioritás emeléséhez root kell.",
   "settings.restart": "Ütemezetten újraindítja a szervert. A játékosok előtte RCon-figyelmeztetést kapnak, amihez RCon jelszót kell beállítani.",
   "settings.restartBehaviour": "Amit a játékosok minden automatikus újraindítás körül tapasztalnak: a visszaszámláló szöveg (írd az ő nyelvükön), egy opcionális időablak közvetlenül az újraindítás előtt, amikor a szerver lezárul és mindenkit kirúgunk, hogy a karakterek tisztán mentődjenek, valamint egy kíméletes #shutdown, amely a folyamat leállítása előtt elmenti a világot. Az alábbi idővonal a pontos sorrendet mutatja.",
@@ -480,7 +490,14 @@
   "weather.transition": "Mennyire fokozatosan változik az időjárás. A Sima kb. fél óra alatt, kis lépésekben vált, mint a vanilla DayZ. A Gyors két perc alatt bejárhatja a teljes tartományt — ettől tűnik az időjárás villanykapcsolónak.",
   "weather.wind": "Szélsebesség m/s-ban. A felhők mozgását hajtja, és a dinamikus kapcsolóval azt is, milyen gyorsan változik az időjárás.",
   "wipe": "Törli a világ mentett állapotát: játékosok, járművek, bázisok. A loot-táblák és konfigurációk érintetlenek maradnak. A mappák félre kerülnek, nem törlődnek, így egy tévedés kézzel visszacsinálható.",
-  "wipe.undo": "A wipe a világ mappáit a .dayz-manager/wipes/<timestamp>/ mappába helyezi, ahelyett hogy törölné őket, így visszafordítható marad — amíg a szerver újra fel nem építi azt az állapotot; onnantól a régi világ visszarakása eltemetné az újat."
+  "wipe.undo": "A wipe a világ mappáit a .dayz-manager/wipes/<timestamp>/ mappába helyezi, ahelyett hogy törölné őket, így visszafordítható marad — amíg a szerver újra fel nem építi azt az állapotot; onnantól a régi világ visszarakása eltemetné az újat.",
+  "server.adminLogPlayerList": "5 percenként beírja minden játékos pozícióját az adminnaplóba (.ADM). Az élő térkép ezt használja: nélküle egy játékos pontja csak csatlakozáskor, harcban és chatben mozdul.",
+  "server.adminLogPlayerHitsOnly": "Csak a játékosokat ért találatokat naplózza, a fertőzötteket és állatokat érteket kihagyja, így az adminnapló jóval kisebb marad.",
+  "server.adminLogPlacement": "Beírja az adminnaplóba a csapdák, sátrak és más lehelyezhető tárgyak lehelyezését.",
+  "server.adminLogBuildActions": "Beírja az adminnaplóba a bázisrészek építését, szétszedését és lerombolását.",
+  "wsdl": "A SteamCMD a Valve saját parancssori Steam-kliense. A panel a saját mappájába telepíti, egyszer bejelentkezteti a Steam-fiókoddal (a DayZ Workshop-fájljait csak a játékot birtokló fiókok kapják meg), majd letölti a beillesztett modokat: mindegyik a SteamCMD mappájába kerül, @Név néven a kulcsaival együtt a szerverre másolódik, és bekapcsol. A frissítés ugyanez a letöltés még egyszer. A játékosoknak továbbra is kellenek a modok: a szokásos módon feliratkoznak rájuk a Workshopban.",
+  "veh.tweaks": "Az üzemanyaghoz és a hűtőhöz megjelenéskor semmit sem kell telepíteni: a szerver indulásakor a panel ezekkel a beállításokkal épít egy apró szerveroldali modot (@DZM_ServerTweaks), és -serverMod kapcsolóval betölti. A játékosok semmit sem töltenek le. Az értékek a gazdaság által a következő indítás után létrehozott járművekre vonatkoznak; a térképen már álló autók megtartják a sajátjukat.",
+  "loadout.stats": "Az étel és a víz a karakter energia- és vízkészlete (a DayZ-ben 0–5000; az új karakter mindkettőből 600-at kap, ezért az éhség- és szomjúságikon hamar megjelenik). A meleg a hőpuffer: a hőtartalék, amelyet a karakter a tűz mellett gyűjt, és amely egy ideig megóvja a kihűléstől. Az értékek csak az új karakterekre vonatkoznak — halál után is —, a mentett karakterükhöz visszatérő játékosokra nem. A panel minden szerverindítás előtt beírja őket a szerveroldali modjába."
  },
  "gameplay": {
   "version": "A fájl formátumverziója. A DayZ írja — hagyd úgy, ahogy van.",
@@ -530,7 +547,7 @@
   "shockDepletionSpeed": "Fulladás közben másodpercenként hozzáadódó sokk.",
   "staticMode": "Falakkal és statikus tárgyakkal szemben: 0 = ki, 1 = be (mint a játékban), 2 = mindig.",
   "dynamicMode": "Játékosokkal, járművekkel és más mozgó tárgyakkal szemben: 0 = ki, 1 = be (mint a játékban), 2 = mindig.",
-  "lightingConfig": "Éjszakai sötétség: 0 = világosabb éjszakák (mint a játékban), 1 = sötét éjszakák. Felülírja a serverDZ.cfg azonos beállítását.",
+  "lightingConfig": "Éjszakai világítás: 0 = világosabb éjszakák (mint a játékban), 1 = sötét éjszakák, 2 = Sakhal világítása, 3 = Nasdara világítása. Felülírja a serverDZ.cfg azonos beállítását.",
   "objectSpawnersArr": "JSON fájlok (útvonalak a küldetésen belül), amelyek extra statikus tárgyakat helyeznek el a világban.",
   "environmentMinTemps": "Minden hónap legalacsonyabb léghőmérséklete januártól decemberig, °C. Hagyd ki, ha a térkép saját értékeit használnád.",
   "environmentMaxTemps": "Minden hónap legmagasabb léghőmérséklete januártól decemberig, °C. Hagyd ki, ha a térkép saját értékeit használnád.",
@@ -545,7 +562,7 @@
   "disableHeightPlacementCheck": "A tárgyak a játékos lábánál magasabbra is lerakhatók, mint egyébként megengedett.",
   "disableIsUnderwaterCheck": "A tárgyak víz alá is lerakhatók.",
   "disableIsInTerrainCheck": "A tárgyak a terepbe is süllyeszthetők.",
-  "disableColdAreaBuildingCheck": "Az építés engedélyezett azokon a hideg területeken, ahol a játék egyébként tiltja (Sakhal).",
+  "disableColdAreaBuildingCheck": "A disableColdAreaPlacementCheck régi neve. A mostani DayZ már nem olvassa — inkább az új kulcsot állítsd be.",
   "disallowedTypesInUnderground": "Készletek, amelyek nem rakhatók le föld alatti területeken (bunkerek, barlangok).",
   "disablePerformRoofCheck": "A bázisrészek tetők alatt és beltérben is építhetők.",
   "disableIsCollidingCheck": "A bázisrészek akkor is építhetők, ha valami útban van.",
@@ -563,33 +580,57 @@
   "ignoreNavItemsOwnership": "A térkép iránytű és GPS nélkül is mutatja az iránytű- és GPS-adatokat.",
   "displayPlayerPosition": "A játékos saját pozíciója meg van jelölve a térképen.",
   "displayNavInfo": "A térkép mutatja a navigációs adatokat (rács és iránytű).",
-  "boatDecayMultiplier": "Milyen gyorsan romlanak a csónakok. 1 = mint a játékban, kisebb = lassabban."
+  "boatDecayMultiplier": "Milyen gyorsan romlanak a csónakok. 1 = mint a játékban, kisebb = lassabban.",
+  "disableColdAreaPlacementCheck": "Építeni lehet azokon a hideg területeken, ahol a játék egyébként semmit sem enged lehelyezni (Sakhal).",
+  "disableItemFalling": "A bázisrészen álló tárgyak a helyükön maradnak, és nem esnek le, amikor a részt szétszedik vagy lerombolják.",
+  "disableDropAttachmentsOnFall": "Az összedőlő bázisépítmény megtartja a kiegészítőit és a tárolt tárgyait, ahelyett hogy a földre ejtené őket.",
+  "disableRefundMaterialsOnFall": "Az összedőlő bázisépítmény nem ad vissza anyagot a megépített részekért — egyszerűen eltűnik.",
+  "canDetachAttachedCarWheels": "A játékosok leszerelhetik egy autó kerekeit.",
+  "canDamageAttachedCarWheels": "Az autóra szerelt kerekek megsérülhetnek, például lövésektől.",
+  "canDetachAttachedBikeWheels": "A játékosok leszerelhetik egy kerékpár kerekeit.",
+  "canDamageAttachedBikeWheels": "A kerékpárra szerelt kerekek megsérülhetnek.",
+  "playerRestrictedAreaFiles": "JSON-fájlok (útvonalak a küldetésen belül) a játékosok elől elzárt területekkel — olyan zónákkal, ahonnan a játék távol tartja a játékosokat, például Sakhal robbanófej-raktára.",
+  "bunkerBroadcastEnabled": "Fut a bunkerek rádióadása: a bunkerkódokat morzejelekkel sugározza, ahogy a küldetés cfgbunkerbroadcast.json fájlja (Nasdara) beállítja. Ki = nincs adás.",
+  "ExternalLockData": "Számzárak védelme a próbálgatás ellen: túl sok hibás kód után a zár egy ideig nem fogad bevitelt.",
+  "protectionCountStageOne": "Egymás utáni hibás kódok, mielőtt a számzár először letiltja a bevitelt.",
+  "protectionCountStageTwo": "Hibás kódok az első tiltás után, mielőtt a zár újra letilt.",
+  "protectionTime": "Másodpercek, ameddig a számzár túl sok hibás kód után elutasítja a bevitelt.",
+  "protectionResetTime": "Másodpercek, amelyek után a számzár elfelejti a hibás kódokat, és újra nulláról számol.",
+  "SandstormData": "Homokviharok (Nasdara).",
+  "sandstormFrequency": "Milyen gyakran jönnek homokviharok: 0 = soha, 1 = mint a játékban, 2 = kétszer olyan gyakran."
  },
  "globals": {
-  "AnimalMaxCount": "Az egyszerre élő állatok maximális száma a térképen.",
-  "CleanupAvoidance": "Tényező, amely megakadályozza, hogy a frissen létrejött loot túl korán eltakarításra kerüljön.",
-  "CleanupLifetimeDeadAnimal": "Hány másodpercig marad egy elpusztult állat teteme az eltávolítás előtt.",
-  "CleanupLifetimeDeadInfected": "Hány másodpercig marad egy halott fertőzött teste az eltávolítás előtt.",
-  "CleanupLifetimeDeadPlayer": "Hány másodpercig marad egy halott játékos teste és felszerelése az eltávolítás előtt.",
-  "CleanupLifetimeDefault": "Alapértelmezett másodpercek, ameddig egy eldobott tárgy marad, ha a típusa nem ad meg élettartamot.",
-  "CleanupLifetimeLimit": "Alsó határ (mp), amelyet az eltakarítás a nagyon rövid élettartamú tárgyakhoz használ.",
-  "CleanupLifetimeRuined": "Hány másodpercig marad egy tönkrement tárgy a földön az eltakarítás előtt.",
-  "FlagRefreshFrequency": "Milyen gyakran (mp) frissíti egy felhúzott területzászló a közeli lerakott tárgyak élettartamát.",
-  "FlagRefreshMaxDuration": "A maximális élettartam (mp), ameddig egy zászló a tárgyakat frissítheti — a bázisbomlás felső határa (vanilla ≈ 45 nap).",
-  "IdleModeCountdown": "Hány másodperc csatlakozott játékos nélkül, mielőtt a gazdaság tétlen módba lép és leállítja a loot újramegjelenését.",
+  "AnimalMaxCount": "Az egyszerre élő állatok legnagyobb száma a térképen.",
+  "CleanupAvoidance": "Távolság (m) egy játékostól, amelyen belül semmi sem takarítódik el, hogy a tárgyak ne tűnjenek el a játékosok szeme előtt.",
+  "CleanupLifetimeDeadAnimal": "Másodpercek, ameddig egy halott állat teteme megmarad az eltávolításig.",
+  "CleanupLifetimeDeadInfected": "Másodpercek, ameddig egy halott fertőzött teste megmarad az eltávolításig.",
+  "CleanupLifetimeDeadPlayer": "Másodpercek, ameddig egy halott játékos teste a felszerelésével együtt megmarad az eltávolításig.",
+  "CleanupLifetimeDefault": "Alapértelmezett másodpercek, ameddig egy eldobott tárgy a takarításig marad, ha a típusa nem ad meg élettartamot.",
+  "CleanupLifetimeLimit": "Alsó határ (mp), amelyet a takarítás a nagyon rövid élettartamokhoz használ.",
+  "CleanupLifetimeRuined": "Másodpercek, ameddig egy tönkrement tárgy a földön marad a takarításig.",
+  "FlagRefreshFrequency": "Milyen gyakran (mp) frissíti egy felhúzott területzászló a közeli lehelyezett tárgyak élettartamát.",
+  "FlagRefreshMaxDuration": "A legnagyobb élettartam (mp), amelyre egy zászló a tárgyakat frissítheti — a bázisok pusztulásának plafonja (vanilla ≈ 45 nap).",
+  "FoodDecay": "Az étel idővel megromlik (1 = be).",
+  "IdleModeCountdown": "Ennyi másodperc csatlakozott játékos nélkül, mielőtt a gazdaság tétlen lesz, és leáll a zsákmány újratermelésével.",
   "IdleModeStartup": "A gazdaság tétlen módban indul, amíg az első játékos be nem lép (1 = igen).",
-  "InitialSpawn": "A gazdaság első indításakor létrehozott kezdeti loot mennyisége.",
-  "LoginTimeMax": "A bejelentkezés maximális ideje (mp), mielőtt a kísérlet megszakad.",
-  "LogoutTimeMax": "Maximális kijelentkezési várakozás (mp).",
-  "RespawnAttempt": "Hányszor próbálja újra a motor ciklusonként egy sikertelen loot-újramegjelenést.",
-  "RespawnTypes": "Hány loot-típust dolgoz fel ciklusonként újramegjelenéshez.",
-  "SpawnInitial": "A gazdaság első indításakor létrehozott kezdeti loot mennyisége.",
-  "TimeHopping": "Extra bejelentkezési késleltetés (mp) a szervert váltogató játékosoknak, hogy elvegye a kedvüket.",
-  "TimeLogin": "Hány másodpercet vár a játékos a betöltőképernyőn bejelentkezéskor.",
-  "TimeLogout": "Hány másodpercig kell a játékosnak a világban maradnia a kijelentkezés után (combat-log ellen).",
-  "TimePenalty": "További várakozás (mp) kijelentkezéskor, ha a játékos nemrég harcban volt.",
-  "WorldWetTempUpdate": "Milyen gyakran (mp) frissül a világban lévő tárgyak nedvessége és hőmérséklete.",
-  "ZombieMaxCount": "Az egyszerre élő fertőzöttek maximális száma a térképen.",
-  "ZoneSpawnDist": "Távolság (m) a játékostól, amelyen a dinamikus fertőzött-/állatzónák létrejönnek."
+  "InitialSpawn": "A névleges zsákmány hány százaléka jelenik meg, amikor a gazdaság üres tárolóval indul (100 = mind).",
+  "LoginTimeMax": "A belépés leghosszabb ideje (mp), mielőtt a próbálkozást eldobja.",
+  "LogoutTimeMax": "Leghosszabb várakozás kilépéskor (mp).",
+  "LootDamageMax": "Az újonnan megjelent zsákmány legnagyobb kopása, 0–1 (vanilla 0.82). Kisebb = jobb állapotban jelenik meg a zsákmány.",
+  "LootDamageMin": "Az újonnan megjelent zsákmány legkisebb kopása, 0–1 (0 = hibátlan).",
+  "LootProxyPlacement": "A zsákmány polcokon, asztalokon és más épületen belüli helyeken jelenik meg (1 = be). Hagyd bekapcsolva.",
+  "LootSpawnAvoidance": "Távolság (m) egy játékostól, amelyen belül nem jelenik meg új zsákmány, hogy soha ne bukkanjon fel senki szeme előtt.",
+  "RespawnAttempt": "Ciklusonként hányszor próbálja újra a motor a sikertelen zsákmány-újraszületést.",
+  "RespawnLimit": "Egy típusból ciklusonként legfeljebb ennyi tárgy születik újra.",
+  "RespawnTypes": "Hány zsákmánytípust dolgoz fel ciklusonként az újraszületéshez.",
+  "RestartSpawn": "1 = minden szerverindításkor az összes zsákmány újraszületik (zsákmány-visszaállítás); 0 = a tárolt zsákmány megmarad.",
+  "SpawnInitial": "A gazdaság első körének megjelenési kerete induláskor (vanilla 1200).",
+  "TimeHopping": "Plusz belépési késleltetés (mp) a szerverek között ugráló játékosoknak, hogy elvegye a kedvüket.",
+  "TimeLogin": "Másodpercek, amennyit a játékos belépéskor a betöltőképernyőn vár.",
+  "TimeLogout": "Másodpercek, amennyit a játékosnak a világban kell maradnia a kilépés kiválasztása után (combat log ellen).",
+  "TimePenalty": "További várakozás (mp) kilépéskor nem sokkal egy harc után.",
+  "WorldWetTempUpdate": "A világban heverő tárgyak nedvessége és hőmérséklete frissül (1 = be).",
+  "ZombieMaxCount": "Az egyszerre élő fertőzöttek legnagyobb száma a térképen.",
+  "ZoneSpawnDist": "Távolság (m) egy játékostól, amelynél a fertőzöttek és állatok dinamikus zónái megjelennek."
  }
 }

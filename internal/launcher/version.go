@@ -3,4 +3,4 @@ package launcher
 
 // Version is the manager version shared by both builds (web and panel). Keep
 // cmd/manager/versioninfo.json and cmd/panel/versioninfo.json in step.
-const Version = "1.0.0"
+const Version = "1.1.0"

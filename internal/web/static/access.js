@@ -219,6 +219,11 @@ function remoteAccessCard(c, F) {
 
   function render(d) {
     body.innerHTML = '';
+    // The last check survives restarts: the address for the phone is there
+    // at once, without clicking "Check" again after every reboot.
+    if (!checkResult && d.lastCheck) {
+      checkResult = Object.assign({ remembered: true, cgnatUnknown: d.lastCheck.cgnat == null }, d.lastCheck);
+    }
     const up = d.upnp || {};
     const port = d.panelPort;
     const panelPorts = (up.ports || []).filter(p => p.purpose === 'panel');
@@ -308,11 +313,33 @@ function remoteAccessCard(c, F) {
           h('span', { text: t('remote.check.open').split('{url}')[1] || '' }),
         ]));
       }
+      if (r.at) {
+        checkBox.append(h('div', { class: 'hint', text: t('remote.check.at').replace('{age}', fmtAge(Date.now() / 1000 - r.at)) }));
+      }
+      if (r.changed && r.previous) {
+        // A router restart usually brings a new public address: say so, or
+        // the phone keeps knocking on the old one.
+        checkBox.append(h('div', { class: 'hint warn-text', text: t('remote.check.changed')
+          .replace('{time}', fmtDateTime(r.changed)).replace('{ip}', r.previous) }));
+      }
       applyI18n();
     }
+    // Keep checking: the address is re-checked every 15 minutes (one request
+    // to a what-is-my-IP service each time), and a change is posted to Discord.
+    const watchSw = h('input', { type: 'checkbox', class: 'switch' });
+    watchSw.checked = !!d.watch;
+    watchSw.addEventListener('change', async (e) => {
+      e.stopPropagation(); // own endpoint, not the Settings auto-save
+      watchSw.disabled = true;
+      try { render(await api.post('/api/remote/watch', { on: watchSw.checked })); }
+      catch (err) { watchSw.checked = !watchSw.checked; handleErr(err); }
+      finally { watchSw.disabled = false; }
+    });
     body.append(stepRow(checkResult ? (checkResult.cgnat ? 'bad' : (checkResult.publicIp && !checkResult.cgnatUnknown ? 'ok' : 'warn')) : 'warn', 'remote.step.public', [
       h('button', { type: 'button', i18n: 'remote.check.button', onclick: runCheck }),
       checkBox,
+      h('label', { class: 'remote-watch' }, [watchSw, h('span', { i18n: 'remote.watch' })]),
+      h('small', { class: 'hint', i18n: 'remote.watch.hint' }),
     ]));
     showCheck();
 

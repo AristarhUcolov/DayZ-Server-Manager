@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strings"
 
+	"dayzmanager/internal/app"
+	"dayzmanager/internal/config"
 	dztypes "dayzmanager/internal/types"
 	"dayzmanager/internal/util"
 )
@@ -51,6 +53,10 @@ type vehicleRow struct {
 	// PartsChance is the slot chance every variant's parts share in
 	// cfgspawnabletypes (1 = complete cars); absent when they differ.
 	PartsChance *float64 `json:"partsChance,omitempty"`
+	// Fuel / Coolant: how full the tank and the radiator are at spawn, set by
+	// the panel's tweaks mod (absent = the game's default).
+	Fuel    *config.FluidRange `json:"fuel,omitempty"`
+	Coolant *config.FluidRange `json:"coolant,omitempty"`
 }
 
 // isVehicleEvent recognises vehicle events: vanilla names them Vehicle*, and
@@ -161,11 +167,76 @@ func (h *handlers) vehiclesList(w http.ResponseWriter, r *http.Request) {
 				on := modActive(cfg.Mods, cfg.ServerMods, m)
 				row.Mod, row.ModActive = m, &on
 			}
+			for _, vt := range cfg.VehicleTweaks {
+				if strings.EqualFold(vt.Event, e.Name) {
+					row.Fuel, row.Coolant = vt.Fuel, vt.Coolant
+				}
+			}
 			out = append(out, row)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	writeJSON(w, map[string]interface{}{"file": files[0].Path, "vehicles": out, "map": h.currentMap(), "problems": problems})
+	writeJSON(w, map[string]interface{}{"file": files[0].Path, "vehicles": out, "map": h.currentMap(), "problems": problems,
+		"tweaksMod": app.TweaksMod})
+}
+
+// vehiclesTweak saves one vehicle event's spawn condition: how full the tank
+// and the radiator are (nil = the game's default). The tweaks mod is written
+// at once when the server is stopped, otherwise before its next start.
+func (h *handlers) vehiclesTweak(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Event   string             `json:"event"`
+		Classes []string           `json:"classes"`
+		Fuel    *config.FluidRange `json:"fuel"`
+		Coolant *config.FluidRange `json:"coolant"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	req.Event = strings.TrimSpace(req.Event)
+	if req.Event == "" {
+		http.Error(w, "event required", http.StatusBadRequest)
+		return
+	}
+	for _, fr := range []*config.FluidRange{req.Fuel, req.Coolant} {
+		if fr != nil && (fr.Min < 0 || fr.Max > 1 || fr.Min > fr.Max) {
+			http.Error(w, "a fill level runs from 0 to 1, minimum first", http.StatusBadRequest)
+			return
+		}
+	}
+	var classes []string
+	for _, c := range req.Classes {
+		// A class name goes into the generated script: no quotes, no breaks.
+		if c = strings.TrimSpace(c); c != "" && !strings.ContainsAny(c, "\"\\\r\n") {
+			classes = append(classes, c)
+		}
+	}
+	if err := h.app.MutateConfig(func(c *config.Manager) error {
+		out := c.VehicleTweaks[:0:0]
+		for _, vt := range c.VehicleTweaks {
+			if !strings.EqualFold(vt.Event, req.Event) {
+				out = append(out, vt)
+			}
+		}
+		if req.Fuel != nil || req.Coolant != nil {
+			out = append(out, config.VehicleTweak{Event: req.Event, Classes: classes, Fuel: req.Fuel, Coolant: req.Coolant})
+		}
+		c.VehicleTweaks = out
+		return nil
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	applied := false
+	if !h.app.ServerIsRunning() {
+		if err := h.app.SyncServerTweaks(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		applied = true
+	}
+	writeJSON(w, map[string]interface{}{"ok": true, "applied": applied})
 }
 
 // partsComplete: every attachment slot is certain to spawn (slot chance 1,
@@ -296,4 +367,172 @@ func (h *handlers) vehiclesParts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]interface{}{"status": "saved", "variants": touched})
+}
+
+// vehicleVariant is one colour variant's parts as cfgspawnabletypes has them.
+type vehicleVariant struct {
+	Type  string                 `json:"type"`
+	File  string                 `json:"file"`            // where its entry is (or would go), relative to the mission
+	Entry *dztypes.SpawnableType `json:"entry,omitempty"` // absent: no entry yet
+}
+
+// findVehicleEvent returns the event (from any registered events file).
+func findVehicleEvent(missionDir, name string) *dztypes.Event {
+	for _, f := range missionEcoFiles(missionDir, "events") {
+		if doc, err := dztypes.LoadEvents(f.Path); err == nil {
+			if ev := doc.Find(name); ev != nil {
+				return ev
+			}
+		}
+	}
+	return nil
+}
+
+// vehiclesVariants is the Vehicles page's parts editor. GET ?event= answers
+// each colour variant's cfgspawnabletypes entry; POST {event, variants: [{type,
+// attachments, cargo}]} writes their attachment groups — and what is in the
+// trunk, when cargo is sent — each into the file that defines the variant (a
+// mod's registered spawnabletypes file, or cfgspawnabletypes.xml for a variant
+// without an entry yet). Everything else in an entry (damage, tags) is kept.
+// Backups first; server stopped.
+func (h *handlers) vehiclesVariants(w http.ResponseWriter, r *http.Request) {
+	mission, err := h.missionTemplate()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	missionDir := dztypes.MissionDir(h.app.ServerDir, mission)
+	mainPath := filepath.Join(missionDir, "cfgspawnabletypes.xml")
+	rel := func(p string) string {
+		if r, err := filepath.Rel(missionDir, p); err == nil {
+			return filepath.ToSlash(r)
+		}
+		return p
+	}
+	if r.Method == http.MethodGet {
+		ev := findVehicleEvent(missionDir, strings.TrimSpace(r.URL.Query().Get("event")))
+		if ev == nil {
+			http.Error(w, "vehicle not found", http.StatusNotFound)
+			return
+		}
+		byName := loadMissionSpawnable(missionDir)
+		out := []vehicleVariant{}
+		if ev.Children != nil {
+			for _, c := range ev.Children.Child {
+				vv := vehicleVariant{Type: c.Type, File: rel(mainPath)}
+				if e, ok := byName[strings.ToLower(c.Type)]; ok {
+					vv.Entry, vv.File = e.st, rel(e.path)
+				}
+				out = append(out, vv)
+			}
+		}
+		writeJSON(w, map[string]interface{}{"event": ev.Name, "variants": out})
+		return
+	}
+
+	unlock, ok := h.acquireWrite(w)
+	if !ok {
+		return
+	}
+	defer unlock()
+	var req struct {
+		Event    string `json:"event"`
+		Variants []struct {
+			Type        string                `json:"type"`
+			Attachments []dztypes.SpawnGroup  `json:"attachments"`
+			Cargo       *[]dztypes.SpawnGroup `json:"cargo"` // nil: left as it is
+		} `json:"variants"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ev := findVehicleEvent(missionDir, strings.TrimSpace(req.Event))
+	if ev == nil || ev.Children == nil {
+		http.Error(w, "vehicle not found", http.StatusNotFound)
+		return
+	}
+	// Only the event's own variants: the editor must not write other entries.
+	variant := map[string]string{}
+	for _, c := range ev.Children.Child {
+		variant[strings.ToLower(c.Type)] = c.Type
+	}
+	byName := loadMissionSpawnable(missionDir)
+	backedUp := map[string]bool{}
+	saved := 0
+	for _, v := range req.Variants {
+		name, ok := variant[strings.ToLower(strings.TrimSpace(v.Type))]
+		if !ok {
+			http.Error(w, v.Type+" is not a variant of "+ev.Name, http.StatusBadRequest)
+			return
+		}
+		groups, err := cleanSpawnGroups(v.Attachments)
+		if err != nil {
+			http.Error(w, name+": "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		var cargo []dztypes.SpawnGroup
+		if v.Cargo != nil {
+			if cargo, err = cleanSpawnGroups(*v.Cargo); err != nil {
+				http.Error(w, name+": "+err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+		st, path := &dztypes.SpawnableType{Name: name}, mainPath
+		if e, ok := byName[strings.ToLower(name)]; ok {
+			cp := *e.st
+			st, path = &cp, e.path
+		}
+		st.Attachments = groups
+		if v.Cargo != nil {
+			st.Cargo = cargo
+		}
+		if _, err := os.Stat(path); err != nil {
+			http.Error(w, rel(path)+" not found in the active mission", http.StatusBadRequest)
+			return
+		}
+		if !backedUp[path] {
+			_ = util.BackupBeforeWrite(path)
+			backedUp[path] = true
+		}
+		if err := dztypes.SaveSpawnableType(path, st); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		saved++
+	}
+	writeJSON(w, map[string]interface{}{"status": "saved", "variants": saved})
+}
+
+// cleanSpawnGroups drops parts without a name and groups left without parts,
+// and checks every chance the way DayZ reads them.
+func cleanSpawnGroups(in []dztypes.SpawnGroup) ([]dztypes.SpawnGroup, error) {
+	out := []dztypes.SpawnGroup{}
+	for _, g := range in {
+		if !dztypes.ValidChance(g.Chance) {
+			return nil, fmt.Errorf("invalid chance %q", g.Chance)
+		}
+		g.Preset = strings.TrimSpace(g.Preset)
+		if g.Preset != "" {
+			g.Items = nil
+			out = append(out, g)
+			continue
+		}
+		var items []dztypes.SpawnItem
+		for _, it := range g.Items {
+			it.Name = strings.TrimSpace(it.Name)
+			if it.Name == "" {
+				continue
+			}
+			if !dztypes.ValidChance(it.Chance) {
+				return nil, fmt.Errorf("invalid chance %q for %s", it.Chance, it.Name)
+			}
+			items = append(items, it)
+		}
+		if len(items) > 0 {
+			g.Items = items
+			out = append(out, g)
+		}
+	}
+	return out, nil
 }

@@ -141,8 +141,14 @@ func dial(addr, password string, onMessage func(string)) (*Conn, error) {
 	}
 
 	dbg("connected to %s, login ok", addr)
-	go c.readLoop()
-	go c.keepAlive()
+	go func() {
+		defer guard("reader", func() { _ = c.Close() })
+		c.readLoop()
+	}()
+	go func() {
+		defer guard("keep-alive", func() { _ = c.Close() })
+		c.keepAlive()
+	}()
 	return c, nil
 }
 

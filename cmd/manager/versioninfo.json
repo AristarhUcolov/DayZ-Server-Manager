@@ -2,13 +2,13 @@
   "FixedFileInfo": {
     "FileVersion": {
       "Major": 1,
-      "Minor": 0,
+      "Minor": 1,
       "Patch": 0,
       "Build": 0
     },
     "ProductVersion": {
       "Major": 1,
-      "Minor": 0,
+      "Minor": 1,
       "Patch": 0,
       "Build": 0
     },
@@ -24,8 +24,8 @@
     "FileDescription": "DayZ Server Manager (browser) — control panel for a DayZ dedicated server",
     "InternalName": "dayz-manager-web",
     "OriginalFilename": "dayz-manager-web.exe",
-    "FileVersion": "1.0.0",
-    "ProductVersion": "1.0.0",
+    "FileVersion": "1.1.0",
+    "ProductVersion": "1.1.0",
     "LegalCopyright": "Copyright (c) 2026 Aristarh Ucolov. All rights reserved."
   },
   "VarFileInfo": {

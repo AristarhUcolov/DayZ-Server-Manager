@@ -125,6 +125,11 @@ func (h *handlers) dashboardMetrics(w http.ResponseWriter, r *http.Request) {
 				active[name] = true
 			}
 			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						h.app.Log.Printf("BUG: dashboard mod count panicked: %v", r)
+					}
+				}()
 				var v map[string]interface{}
 				if list, err := mods.List(serverDir, vanilla); err == nil {
 					installed, enabled := 0, 0

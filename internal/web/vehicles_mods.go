@@ -306,10 +306,11 @@ func scanModServerFiles(dir string) modServerFiles {
 type modVehicle struct {
 	Event      string   `json:"event"`
 	Variants   []string `json:"variants"`
-	Positions  int      `json:"positions"`  // spawn points the mod ships
-	HasParts   bool     `json:"hasParts"`   // part lists the mod ships (or the mission already has)
-	InMission  bool     `json:"inMission"`  // already defined in the mission
-	MissionPos int      `json:"missionPos"` // positions the mission already has for it
+	Positions  int      `json:"positions"`         // spawn points the mod ships
+	HasParts   bool     `json:"hasParts"`          // part lists the mod ships (or the mission already has)
+	InMission  bool     `json:"inMission"`         // already defined in the mission
+	MissionPos int      `json:"missionPos"`        // positions the mission already has for it
+	Removed    bool     `json:"removed,omitempty"` // the admin deleted it (not added automatically)
 }
 
 type modVehicles struct {
@@ -374,6 +375,7 @@ func (h *handlers) vehiclesMods(w http.ResponseWriter, r *http.Request) {
 	sort.Strings(names)
 	byName, byMod := modClassIndex(dirs)
 	spawned := missionSpawnedTypes(missionDir)
+	sources := loadVehicleSources(missionDir)
 	cfg := h.app.Cfg()
 	for _, mod := range names {
 		files := scanModServerFiles(dirs[mod])
@@ -398,7 +400,7 @@ func (h *handlers) vehiclesMods(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			v := modVehicle{Event: e.Name, Positions: len(pickPositions(files.positions[k], aliases, worldSize)),
-				InMission: known[k], MissionPos: missionPos[k]}
+				InMission: known[k], MissionPos: missionPos[k], Removed: !known[k] && sources.removed(e.Name)}
 			if e.Children != nil {
 				for _, c := range e.Children.Child {
 					v.Variants = append(v.Variants, c.Type)
@@ -643,6 +645,12 @@ func (h *handlers) importModVehicles(mod string, events []string) (vehicleImport
 	src := loadVehicleSources(missionDir)
 	for _, name := range out.Imported {
 		src.Events[name] = mod
+		// Added again by hand: no longer a deleted vehicle.
+		for k := range src.Removed {
+			if strings.EqualFold(k, name) {
+				delete(src.Removed, k)
+			}
+		}
 	}
 	saveVehicleSources(missionDir, src)
 

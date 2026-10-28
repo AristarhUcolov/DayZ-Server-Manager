@@ -252,7 +252,9 @@ func TestLocalLoginToken(t *testing.T) {
 	}
 	tok := u[i+len("#autologin="):]
 	remote := func(r *http.Request) { r.RemoteAddr = "192.168.1.9:5000" }
-	if w := do(hd, "POST", "/api/auth/local", `{"token":"`+tok+`"}`, remote); w.Code != 401 {
+	// Refused either way: with "Local only" the guard already turns
+	// another machine away (403); the endpoint's own loopback check says 401.
+	if w := do(hd, "POST", "/api/auth/local", `{"token":"`+tok+`"}`, remote); w.Code != 401 && w.Code != 403 {
 		t.Fatalf("token accepted from another machine: %d", w.Code)
 	}
 	// The remote attempt must not have burned... it did consume nothing: the
@@ -298,5 +300,19 @@ func TestSessionsSurviveRestart(t *testing.T) {
 	}
 	if m3 := newAuthManager(s.app.ManagerDir, nil); m3.enabled() || m3.sessionFor(r) != nil {
 		t.Fatal("-reset-login did not turn the login off")
+	}
+}
+
+// "Local only" refuses other devices even on a connection that was
+// opened before the switch from Local network (the listener has moved, an
+// open keep-alive connection has not).
+func TestLocalOnlyRefusesOtherDevices(t *testing.T) {
+	_, hd := testServer(t, "local")
+	lan := func(r *http.Request) { r.RemoteAddr = "192.168.1.9:5000" }
+	if w := do(hd, "GET", "/api/secret", "", lan); w.Code != 403 || !strings.Contains(w.Body.String(), "guard.localOnly") {
+		t.Fatalf("LAN device on a local-only panel: %d %s", w.Code, w.Body)
+	}
+	if w := do(hd, "GET", "/api/secret", "", nil); w.Code != 200 {
+		t.Fatalf("this computer: %d", w.Code)
 	}
 }

@@ -23,7 +23,7 @@ import (
 )
 
 type mapInfo struct {
-	Key      string  `json:"key"`                // "chernarus" | "livonia" | "sakhal" | <world name>
+	Key      string  `json:"key"`                // "chernarus" | "livonia" | "sakhal" | "nasdara" | <world name>
 	Name     string  `json:"name"`               // display name
 	Size     float64 `json:"size"`               // world edge length in metres (maps are square)
 	Official bool    `json:"official"`           // one of the three shipped worlds (size is known)
@@ -76,7 +76,7 @@ type worldDef struct {
 // own slot via the fallback in worldFromTemplate — so every world is supported,
 // listed or not.
 //
-// Sizes: the three official worlds are authoritative (Sakhal is 15360 — an
+// Sizes: the official worlds are authoritative (Sakhal is 15360 — an
 // earlier 16384 here was wrong and mis-scaled points). Community sizes come from
 // a map-developer's compiled size list that
 // matched every value we could independently verify (Chernarus 15360, Livonia
@@ -93,6 +93,7 @@ var worldRegistry = []worldDef{
 	{Key: "chernarus", Name: "Chernarus", Size: 15360, Official: true, Aliases: []string{"chernarusplus", "chernarus"}},
 	{Key: "livonia", Name: "Livonia", Size: 12800, Official: true, Aliases: []string{"livonia", "enoch"}},
 	{Key: "sakhal", Name: "Sakhal", Size: 15360, Official: true, Aliases: []string{"sakhal"}},
+	{Key: "nasdara", Name: "Nasdara", Size: 16384, Official: true, Aliases: []string{"nasdara"}},
 	// Community worlds (alphabetical). Sizes from the verified developer list.
 	{Key: "alteria", Name: "Alteria", Size: 8192, Aliases: []string{"alteria"}},
 	{Key: "anastara", Name: "Anastara", Size: 10240, Aliases: []string{"anastara"}},
@@ -501,6 +502,13 @@ func (h *handlers) mapHeat(w http.ResponseWriter, r *http.Request) {
 		"points": points,
 		"total":  len(points),
 		"counts": map[string]int{"pvp": pvp, "env": env, "suicide": suicide},
+		// Base building and raids (placed, built, destroyed, stashes) — DayZ
+		// logs them only with adminLogPlacement / adminLogBuildActions = 1.
+		"bases": db.Bases(),
+		"baseLog": map[string]bool{
+			"placement": h.serverCfgFlag("adminLogPlacement"),
+			"build":     h.serverCfgFlag("adminLogBuildActions"),
+		},
 	}
 	if at := h.lastWipeAt(); !at.IsZero() {
 		out["lastWipe"] = at.Format(time.RFC3339) // offers "since the last wipe"
@@ -568,8 +576,13 @@ func (h *handlers) mapLive(w http.ResponseWriter, r *http.Request) {
 	if running {
 		for _, lp := range db.LivePositions() {
 			isOnline := rconOK && online[strings.ToLower(lp.Name)]
-			// Drop ancient last-known points; keep confirmed-online players at any age.
-			if !isOnline && lp.AgeSec > windowSec {
+			switch {
+			case rconOK && !isOnline:
+				// RCon answered and this player is not in its list: they are
+				// offline, whatever the log last said.
+				continue
+			case !isOnline && lp.AgeSec > windowSec:
+				// No RCon to ask: drop ancient last-known points.
 				continue
 			}
 			plotted = append(plotted, livePlot{LivePos: lp, Online: isOnline})
@@ -582,9 +595,44 @@ func (h *handlers) mapLive(w http.ResponseWriter, r *http.Request) {
 		"running":        running,
 		"onlineCount":    len(online),
 		"rconConfigured": h.app.RCon.Configured(),
+		// adminLogPlayerList = 1 logs every player's position every five
+		// minutes; without it a dot only moves on connect, combat and chat.
+		"playerListLog": h.serverCfgFlag("adminLogPlayerList"),
 	}
 	if rconErr != "" {
 		out["rconError"] = rconErr
 	}
 	writeJSON(w, out)
+}
+
+// mapBasesLog turns on adminLogPlacement and adminLogBuildActions, the
+// serverDZ.cfg switches that make DayZ log placing, building, destroying and
+// stashes — the heatmap's bases and raids. Allowed while the server runs,
+// like mapLivePlayerList; it takes effect at the next start.
+func (h *handlers) mapBasesLog(w http.ResponseWriter, r *http.Request) {
+	h.app.WriteMu.Lock()
+	defer h.app.WriteMu.Unlock()
+	for _, k := range []string{"adminLogPlacement", "adminLogBuildActions"} {
+		if err := h.setServerCfgFlag(k); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	writeJSON(w, map[string]interface{}{"status": "ok", "restart": h.app.ServerIsRunning()})
+}
+
+// mapLivePlayerList turns on adminLogPlayerList, the serverDZ.cfg switch that
+// makes DayZ log every player's position every five minutes.
+//
+// Unlike other edits this one is allowed while the server runs: DayZ reads
+// serverDZ.cfg only at start and never writes it, and the live map is open
+// exactly while the server is up. The answer says a restart is due.
+func (h *handlers) mapLivePlayerList(w http.ResponseWriter, r *http.Request) {
+	h.app.WriteMu.Lock()
+	defer h.app.WriteMu.Unlock()
+	if err := h.setServerCfgFlag("adminLogPlayerList"); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"status": "ok", "restart": h.app.ServerIsRunning()})
 }

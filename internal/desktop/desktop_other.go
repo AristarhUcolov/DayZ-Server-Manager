@@ -20,6 +20,12 @@ func Run(inst *launcher.Instance, attachURL string) error {
 	if inst != nil {
 		url = inst.URL // printed — never with a sign-in token
 	}
+	if StartHidden && inst != nil {
+		// Started at login: no window now. Starting the manager again from
+		// the applications menu opens one attached to this instance.
+		<-inst.Context().Done()
+		return nil
+	}
 	if !launcher.HasDesktop() {
 		if inst == nil {
 			fmt.Println(text(inst, "desktop.headless") + " " + url)

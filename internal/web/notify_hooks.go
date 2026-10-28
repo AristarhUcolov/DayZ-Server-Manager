@@ -16,6 +16,7 @@ import (
 	"dayzmanager/internal/notify"
 	"dayzmanager/internal/players"
 	"dayzmanager/internal/rcon"
+	"dayzmanager/internal/util"
 )
 
 func (h *handlers) registerDiscord(mux *http.ServeMux) {
@@ -90,7 +91,9 @@ func (h *handlers) onRConEvent(ev rcon.ServerEvent) {
 		h.app.Notify("leave", ev.Name)
 	case "guid":
 		// Link the GUID early when the admin log already has the session.
-		go h.playersDB().LinkRCon([]players.OnlineRef{{Name: ev.Name, GUID: ev.GUID}})
+		go util.SafeGo(h.app.Log, "link GUID", func() {
+			h.playersDB().LinkRCon([]players.OnlineRef{{Name: ev.Name, GUID: ev.GUID}})
+		})
 	}
 }
 

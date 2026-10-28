@@ -9,9 +9,12 @@ package guide
 //
 // The monthly temperatures (WorldsData.environmentMinTemps/MaxTemps) are left
 // out on purpose: they differ per map, and without them DayZ uses the map's
-// own. "version" is the format version DayZ writes.
+// own. "version" is the format version DayZ writes. Defaults follow
+// scripts/3_Game/CfgGameplayDataJson.c of DayZ 1.29 (ExternalLockData,
+// SandstormData and bunkerBroadcastEnabled arrived with Nasdara;
+// disableColdAreaBuildingCheck became disableColdAreaPlacementCheck).
 const GameplayDefaults = `{
-	"version": 123,
+	"version": 130,
 	"GeneralData": {
 		"disableBaseDamage": false,
 		"disableContainerDamage": false,
@@ -40,7 +43,7 @@ const GameplayDefaults = `{
 		},
 		"MovementData": {
 			"timeToStrafeJog": 0.1,
-			"rotationSpeedJog": 0.3,
+			"rotationSpeedJog": 0.15,
 			"timeToSprint": 0.45,
 			"timeToStrafeSprint": 0.3,
 			"rotationSpeedSprint": 0.15,
@@ -60,7 +63,9 @@ const GameplayDefaults = `{
 	"WorldsData": {
 		"lightingConfig": 0,
 		"objectSpawnersArr": [],
-		"wetnessWeightModifiers": [1.0, 1.0, 1.33, 1.66, 2.0]
+		"wetnessWeightModifiers": [1.0, 1.0, 1.33, 1.66, 2.0],
+		"playerRestrictedAreaFiles": [],
+		"bunkerBroadcastEnabled": false
 	},
 	"BaseBuildingData": {
 		"HologramData": {
@@ -74,13 +79,16 @@ const GameplayDefaults = `{
 			"disableHeightPlacementCheck": false,
 			"disableIsUnderwaterCheck": false,
 			"disableIsInTerrainCheck": false,
-			"disableColdAreaBuildingCheck": false,
+			"disableColdAreaPlacementCheck": false,
 			"disallowedTypesInUnderground": ["FenceKit", "TerritoryFlagKit", "WatchtowerKit"]
 		},
 		"ConstructionData": {
 			"disablePerformRoofCheck": false,
 			"disableIsCollidingCheck": false,
-			"disableDistanceCheck": false
+			"disableDistanceCheck": false,
+			"disableItemFalling": false,
+			"disableDropAttachmentsOnFall": false,
+			"disableRefundMaterialsOnFall": false
 		}
 	},
 	"UIData": {
@@ -103,6 +111,19 @@ const GameplayDefaults = `{
 		"displayNavInfo": true
 	},
 	"VehicleData": {
-		"boatDecayMultiplier": 1
+		"boatDecayMultiplier": 1,
+		"canDetachAttachedCarWheels": true,
+		"canDamageAttachedCarWheels": true,
+		"canDetachAttachedBikeWheels": true,
+		"canDamageAttachedBikeWheels": true
+	},
+	"ExternalLockData": {
+		"protectionCountStageOne": 3,
+		"protectionCountStageTwo": 1,
+		"protectionTime": 30.0,
+		"protectionResetTime": 3600.0
+	},
+	"SandstormData": {
+		"sandstormFrequency": 1.0
 	}
 }`

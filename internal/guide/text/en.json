@@ -11,7 +11,7 @@
     },
     {
      "title": "Choose where mods come from",
-     "body": "On first run you pick a mod source: the DayZ *client* (its !Workshop folder, where Steam downloads mods), any folder with @mods or SteamCMD's workshop/content/221100, or Server only for a hosting machine without the game — then you upload mods yourself and auto-update is off. You can change it later in Settings."
+     "body": "On first run you pick a mod source: the DayZ *client* (its !Workshop folder, where Steam downloads mods), any folder with @mods or SteamCMD's workshop/content/221100, Steam Workshop (direct download) — the panel then downloads and updates mods itself with SteamCMD — or Server only for a hosting machine without the game, where you upload mods yourself and auto-update is off. You can change it later in Settings."
     },
     {
      "title": "Start the server",
@@ -20,7 +20,8 @@
    ],
    "tips": [
     "Using the panel only on this PC needs no password. To open it from a phone or from another place, set a panel login first — in the first-run setup or in Settings → Panel login.",
-    "Almost every file editor refuses to save while the server is running — DayZ holds locks on its own files. Stop the server first; the panel tells you when this is the reason."
+    "Almost every file editor refuses to save while the server is running — DayZ holds locks on its own files. Stop the server first; the panel tells you when this is the reason.",
+    "When the computer goes to sleep, the DayZ server and the panel stop with it — it looks as if the manager closed by itself. While a server runs, the manager keeps the computer awake (Settings → General → Keep the computer awake); on a rented server, close the remote window instead of signing out."
    ]
   },
   {
@@ -29,12 +30,12 @@
    "intro": "A server needs its own copy of each mod, plus the mod's .bikey in the server's keys folder, plus the mod listed in the -mod launch parameter. The manager does all three, taking mods from the source you chose: the game client's !Workshop, a mods or SteamCMD folder, or — in Server only mode — the mods you uploaded yourself.",
    "steps": [
     {
-     "title": "Subscribe in Steam first",
-     "body": "The manager copies mods, it does not download them. Subscribe in the Steam Workshop and let the DayZ launcher pull the mod into !Workshop — or download it with SteamCMD into your mods folder."
+     "title": "Get the mods",
+     "body": "Two ways. Paste Workshop links into Direct download on the Mods page: the panel's own SteamCMD downloads them straight onto the server — you sign in once with a Steam account that owns DayZ. Or subscribe in the Steam Workshop and let the DayZ launcher pull the mod into !Workshop (or download it with SteamCMD into your mods folder), then install from there."
     },
     {
      "title": "Install into the server",
-     "body": "Open Mods — everything in !Workshop is listed. Install copies the mod into the server folder and syncs its .bikey automatically. Install & update mods does the whole list in one click."
+     "body": "Open Mods — everything in the mod source is listed (with Steam Workshop as the source: the mods you downloaded). Install copies the mod into the server folder and syncs its .bikey automatically. Install & update mods does the whole list in one click."
     },
     {
      "title": "Enable it for launch",
@@ -49,7 +50,8 @@
     "Update copies the newer files from the mod source into the server. Turn on Update mods on every restart in Settings to keep them in sync automatically.",
     "Uninstalling a mod only deletes its .bikey if no other installed mod uses the same key, so shared keys (Expansion) stay intact.",
     "If a mod ships loot, use Add mod loot on its row — it finds the mod's types.xml and registers it for you.",
-    "On Linux the server only loads mods whose folders and files are in lowercase. The manager renames them on install and update, and the Mods page flags anything left in the wrong case."
+    "On Linux the server only loads mods whose folders and files are in lowercase. The manager renames them on install and update, and the Mods page flags anything left in the wrong case.",
+    "With Steam Workshop as the source, the download list is a report of the last download: remove the rows you have read, and a mod deleted from the server since offers Install again."
    ]
   },
   {
@@ -99,7 +101,8 @@
    ],
    "tips": [
     "One slot per part: one for magazines, one for optics, one for the stock. Putting a magazine and an optic in the same slot means the weapon gets one or the other, never both.",
-    "Only the entry you edit is rewritten — your comments and formatting in the rest of the file are preserved."
+    "Only the entry you edit is rewritten — your comments and formatting in the rest of the file are preserved.",
+    "The item is drawn with a tile per slot, like the player loadout: click a filled slot to change its chance or parts, an empty one to add a part from the game's own list. A bayonet and a suppressor (or a muzzle brake) never spawn together on one weapon — DayZ attaches whichever comes first."
    ]
   },
   {
@@ -109,11 +112,11 @@
    "steps": [
     {
      "title": "Enable the system",
-     "body": "Open Player loadout. If the mission still spawns players from init.c, the page says so and offers one button that creates a starter preset, registers it in cfggameplay.json and flips the enableCfgGameplayFile switch — all at once."
+     "body": "Open Player loadout. If players still spawn from init.c, the page says so and offers one button that switches the system on: it reuses the loadout files already in the mission folder (or creates a starter preset), registers them in cfggameplay.json and turns on enableCfgGameplayFile — all at once."
     },
     {
      "title": "Edit clothes and gear",
-     "body": "Each preset lists what is worn per slot (Body, Legs, Feet…) and what is carried loose. Add items by class name, set a spawn weight when a slot should pick between several, and choose a condition — pristine, worn, damaged or a custom range."
+     "body": "The editor shows a survivor with every slot. Click a slot to pick an item from the game's own list — names, categories and what fits — then set its condition and quantity and put it in the hands or on the hotbar (keys 1–0). Each item is drawn with a tile for every slot it has — optics, muzzle, magazine, a vest's pouches — offering only the parts that fit, plus whatever goes inside (food in the backpack). A server can have several kits; each has a spawn weight."
     },
     {
      "title": "Test roll and share",
@@ -122,7 +125,10 @@
    ],
    "tips": [
     "healthMin/healthMax are health fractions: 1.0 is pristine, 0.0 is ruined. Keep everything pristine so fresh spawns don't arrive in worn clothes.",
-    "The loadout is saved with the server stopped, like every config change — start the server again afterwards."
+    "The loadout is saved with the server stopped, like every config change — start the server again afterwards.",
+    "A DayZ server update replaces cfggameplay.json and forgets your loadouts. The manager lists them again and turns the switch back on before the next start — and the page shows any file that is not connected.",
+    "A weapon given a magazine spawns loaded, a round chambered — nobody has to press R; the Load button does it in one click. A bayonet and a suppressor exclude each other, and a weapon light needs a rail handguard: the editor warns and offers the fix.",
+    "Fresh character, at the top of the page, sets how every new character starts — fed, watered and warm if you like. The panel applies it with its own server-side mod; players download nothing."
    ]
   },
   {
@@ -147,7 +153,8 @@
     "Restart warnings use RCon too. Without a password the restart still happens — players just get no countdown.",
     "The Players section builds a history from the admin log: names, player IDs, playtime, kills. It needs the -adminlog launch flag (Server page → Launch parameters).",
     "Settings → Restart behaviour can kick everyone a set time before a restart and lock the server so nobody rejoins in the last minute. Characters are saved on disconnect, so nothing is lost.",
-    "The Chat page keeps an archive of every day — including messages sent from the panel and the scheduled announcements — with search and a .txt download. How long it is kept is set right there."
+    "The Chat page keeps an archive of every day — including messages sent from the panel and the scheduled announcements — with search and a .txt download. How long it is kept is set right there.",
+    "Players → Online now can message everyone, kick everyone (say, before maintenance) and lock joining until the next restart. A player's profile lists other accounts seen from the same IP and what the player built or destroyed."
    ]
   },
   {
@@ -164,8 +171,8 @@
      "body": "Transition speed controls how gradually weather moves: Smooth ramps over about half an hour in small steps, like vanilla. Fast swings the full range in two minutes, which is what makes weather feel like a light switch."
     },
     {
-     "title": "Set the day length",
-     "body": "Day and night acceleration multiply the passage of in-game time — 12 means a full day takes two real hours. Night acceleration is separate so you can keep nights short."
+     "title": "Set the day and night length",
+     "body": "Day & Night shows the sky, sunrise and sunset for your map and how long daylight and night last in real time — including what your restarts do to the in-game clock. Press ▶ to play the in-game day (and stop it again), or drag the white marker to any moment. Pick a ready-made feel or type the day and night length you want, and the panel works out the acceleration."
     }
    ],
    "tips": [
@@ -188,12 +195,13 @@
     },
     {
      "title": "Tune vehicles",
-     "body": "Vehicles lists every vehicle event: how many can exist, how many spawn points it has and how complete its parts are — and sets how likely each part is to spawn on the vehicle."
+     "body": "Vehicles lists every vehicle event with a drawing of the car: how many can exist, how many spawn points it has, how complete its parts are — and how much fuel and coolant it spawns with (set by a tiny server-side mod the panel adds; players download nothing)."
     }
    ],
    "tips": [
     "No map picture is bundled — the layers come from your mission files. For a photo-like map, load your own top-down image in the map settings.",
-    "Like the other editors, these pages save only while the server is stopped."
+    "Like the other editors, these pages save only while the server is stopped.",
+    "Every map has a ruler (measure distances, copy coordinates) and admin markers — notes such as a clan base or a trader that every admin of the server sees on every map. The Heatmap adds building, raids and stashes from the admin log; the Live map shows where each player went."
    ]
   },
   {
@@ -216,7 +224,9 @@
    ],
    "tips": [
     "Wipe deletes saved world state — players, vehicles, bases. Your loot tables and configs are untouched. Folders are moved aside first, so a mistaken wipe can be recovered by hand.",
-    "Crash watchdog restarts the server if it exits on its own. After three crashes in five minutes it stops and shows a banner instead — a crash loop needs a human, not another restart."
+    "Crash watchdog restarts the server if it exits on its own. After three crashes in five minutes it stops and shows a banner instead — a crash loop needs a human, not another restart.",
+    "Settings → General → Startup starts the manager together with the computer, and each server can start with the manager — after a power cut everything comes back by itself.",
+    "If the manager closes unexpectedly, its guardian starts it again in the tray (at most three times in 15 minutes) and the dashboard says so — with Windows' own crash record when there is one. Turn it off in Settings → General."
    ]
   },
   {
@@ -253,7 +263,7 @@
     },
     {
      "title": "Open the panel to the network",
-     "body": "Settings → Panel exposure: Local network for phones at home, Internet for access from anywhere (only possible with a login). Restart the manager afterwards."
+     "body": "Settings → Panel exposure: Local network for phones at home, Internet for access from anywhere (only possible with a login). The change applies at once — no restart."
     },
     {
      "title": "Let the connections in",
@@ -394,7 +404,7 @@
   "mods.order": "DayZ loads mods left to right. Frameworks must come first: @CF before anything depending on it, Expansion Core before its addons. Wrong order is a common reason a server refuses to boot.",
   "mods.scan": "Looks inside the mod for a types.xml and registers it in cfgeconomycore.xml, so the mod's loot actually spawns.",
   "mods.serverSide": "Loads the mod with -serverMod instead of -mod: it runs on the server and clients neither need nor get it. For admin tools only — a loot or content mod set server-side will not work.",
-  "mods.update": "Copies newer files from the client's !Workshop into the server. The manager cannot download mods — subscribe in Steam first.",
+  "mods.update": "Copies the newer files from the mod source into the server. With Steam Workshop (direct download) as the source it first downloads the newer versions with SteamCMD.",
   "rcon.password": "Written into battleye/beserver_x64.cfg. BattlEye reads that file only at launch, so a new password does nothing until the next restart.",
   "settings.adminlog": "Enables -adminlog, which writes the .ADM file. The Players page and the killfeed are built from it and stay empty without it.",
   "settings.backup": "Zips your configs and mission files on a schedule and keeps the newest N. Separately, every file the panel overwrites gets a timestamped .bak next to it.",
@@ -471,8 +481,8 @@
   "loadout.characters": "Which survivor models this preset applies to (SurvivorM_Mirek, SurvivorF_Eva, …). Leave empty to apply to all; one is chosen at random per spawn.",
   "loadout.worn": "Items placed onto the body, one body slot at a time. Within a slot DayZ picks ONE item by weight, so listing several variants gives spawn-to-spawn variety.",
   "loadout.carried": "Loose items dropped straight into the new player's inventory rather than a worn slot — rags, food, a starter tool.",
-  "loadout.condition": "The condition an item spawns in. In DayZ 1.0 = pristine and 0.0 = ruined, so higher is better. Pristine keeps fresh-spawn gear new; pick Custom to set an exact min–max health range, and the item spawns somewhere in it.",
-  "settings.modSource": "Where the manager copies mods from. Client folder: the DayZ game install with !Workshop (subscribe in Steam, the manager copies and updates). Mods folder: any folder with @mods, or SteamCMD's workshop/content/221100 — the way to get Workshop mods on a host with no game installed. Server only: no source; mods you upload by hand are still managed, but auto-update is off.",
+  "loadout.condition": "The condition an item spawns in. In DayZ 1.0 = pristine and 0.0 = ruined, so higher is better. Pristine keeps fresh-spawn gear new; pick Custom to set an exact min–max health range, and the item spawns somewhere in it. For carried items, Pristine spawns them exactly as the game makes them (one rag, a full apple); any other condition also gives them a full amount, so a stack of rags spawns full.",
+  "settings.modSource": "Where the manager takes mods from. Client folder: the DayZ game install with !Workshop (subscribe in Steam, the manager copies and updates). Mods folder: any folder with @mods, or SteamCMD's workshop/content/221100. Steam Workshop (direct download): the panel downloads, checks and updates mods itself with its own SteamCMD — no game needed. Server only: no source; mods you upload by hand are still managed, but auto-update is off.",
   "settings.restartBehaviour": "What players experience around every automatic restart: the countdown text they see (write it in their language), an optional window just before the restart where the server is locked and everyone is kicked so their characters save cleanly, and a graceful #shutdown that saves the world before the process is stopped. The timeline below shows the exact order.",
   "settings.perf": "CPU affinity pins DayZServer to the cores you tick (unticked cores stay free for the OS, a second server or other programs). Priority tells the OS how eagerly to schedule it — Above normal is a safe boost; High can make the rest of the machine sluggish. Both are applied on every start. On Linux, raising priority needs root.",
   "vehicles.nominal": "How many of this vehicle the economy tries to keep on the map at once (all colour variants together).",
@@ -480,6 +490,13 @@
   "vehicles.max": "Absolute cap for this vehicle type, counting ones players have hidden or parked. Usually equal to nominal.",
   "vehicles.lifetime": "The lifetime the Central Economy uses for this event (vanilla vehicles: 300). It does not make intact cars vanish — vanilla vehicles persist until they are destroyed or the world is wiped. Keep the vanilla value unless a mod's guide says otherwise.",
   "vehicles.restock": "Seconds the economy waits before replacing a destroyed or despawned vehicle. 0 = replace as soon as possible.",
-  "vehicles.loot": "The variant's lootmin / lootmax from events.xml, kept as-is (vanilla vehicles use 0). A vehicle's parts — wheels, doors, battery, plugs — come from cfgspawnabletypes: use the “Parts on spawn” buttons below, or the Attachments page for per-part chances."
+  "vehicles.loot": "The variant's lootmin / lootmax from events.xml, kept as-is (vanilla vehicles use 0). A vehicle's parts — wheels, doors, battery, plugs — come from cfgspawnabletypes: use the “Parts on spawn” buttons below, or the Attachments page for per-part chances.",
+  "server.adminLogPlayerList": "Writes every player's position into the admin log (.ADM) every 5 minutes. The live map uses it: without it a player's dot moves only on connect, combat and chat.",
+  "server.adminLogPlayerHitsOnly": "Logs only hits on players and leaves out hits on infected and animals, so the admin log stays much smaller.",
+  "server.adminLogPlacement": "Writes placing traps, tents and other placeable items into the admin log.",
+  "server.adminLogBuildActions": "Writes building, dismantling and destroying base parts into the admin log.",
+  "wsdl": "SteamCMD is Valve's own command-line Steam client. The panel installs it in its folder, signs it in once with your Steam account (DayZ's Workshop files are served only to accounts that own the game) and then downloads the mods you paste: each lands in SteamCMD's folder, is copied into the server as @Name with its keys, and is switched on. Updating is the same download again. Players still need the mods: they subscribe on the Workshop as usual.",
+  "veh.tweaks": "Fuel and radiator at spawn need nothing installed: when the server starts, the panel builds a tiny server-side mod (@DZM_ServerTweaks) with these settings and loads it with -serverMod. Players download nothing. The values apply to vehicles the economy spawns after the next start; cars already on the map keep theirs.",
+  "loadout.stats": "Food and water are the character's energy and water reserves (0–5000 in DayZ; a fresh character gets 600 of each, so the hunger and thirst icons show soon). Warmth is the heat buffer: the warmth reserve a character builds up at a fire, which keeps them from getting cold for a while. The values apply to new characters only — after a death too — not to players who come back to their saved character. The panel writes them into its server-side mod before every server start."
  }
 }

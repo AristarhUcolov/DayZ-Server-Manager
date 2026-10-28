@@ -9,3 +9,6 @@ import "os/exec"
 func HiddenCommand(name string, args ...string) *exec.Cmd {
 	return exec.Command(name, args...)
 }
+
+// HideWindow does nothing here (console windows are a Windows concern).
+func HideWindow(cmd *exec.Cmd) {}

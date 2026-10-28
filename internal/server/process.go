@@ -520,7 +520,7 @@ func (c *Controller) onExit(p *runningProc, err error) {
 	// grace period (lets BattlEye/locks settle). Crash-loop pause wins.
 	if !requested && !c.loopPaused.Load() && c.schedSnapshot().restartOnCrash {
 		c.log.Printf("watchdog: server exited unexpectedly — restarting in 10s")
-		go func() {
+		go util.SafeGo(c.log, "watchdog restart", func() {
 			time.Sleep(10 * time.Second)
 			unlock := c.lockWrites()
 			defer unlock()
@@ -533,7 +533,7 @@ func (c *Controller) onExit(p *runningProc, err error) {
 			if err := c.Start(); err != nil {
 				c.log.Printf("watchdog restart failed: %v", err)
 			}
-		}()
+		})
 	}
 }
 

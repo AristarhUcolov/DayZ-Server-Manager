@@ -1,6 +1,10 @@
 module dayzmanager
 
-go 1.22
+go 1.23
+
+// Go 1.23 reads Windows junctions as irregular files and stops resolving
+// them; DayZ Launcher links !Workshop mods that way. Keep the old behaviour.
+godebug winsymlink=0
 
 require (
 	github.com/ebitengine/purego v0.10.0

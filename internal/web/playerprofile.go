@@ -99,5 +99,38 @@ func (h *handlers) playerProfile(w http.ResponseWriter, r *http.Request) {
 	if online {
 		out["ping"], out["onlineIp"] = ping, ip
 	}
+	// Other players last seen from the same address: a second account, a
+	// family, a LAN party — for the admin to judge, e.g. after a ban.
+	if addr := firstNonEmpty(ip, pl.LastIP); addr != "" {
+		var same []map[string]interface{}
+		for _, o := range list {
+			if o.Key != pl.Key && o.LastIP == addr {
+				same = append(same, map[string]interface{}{"key": o.Key, "name": o.Name, "lastSeen": o.LastSeen})
+			}
+		}
+		if len(same) > 0 {
+			out["sameIp"] = same
+		}
+	}
+	// What they built, placed, destroyed or buried, newest first.
+	var built []players.BaseEvent
+	all := db.Bases()
+	for i := len(all) - 1; i >= 0 && len(built) < 40; i-- {
+		if all[i].Key == pl.Key {
+			built = append(built, all[i])
+		}
+	}
+	if len(built) > 0 {
+		out["bases"] = built
+	}
 	writeJSON(w, out)
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

@@ -60,3 +60,15 @@ func TestParseLineSkipsHeader(t *testing.T) {
 		t.Errorf("blank line should not parse")
 	}
 }
+
+// The 5-minute player list (adminLogPlayerList = 1) is a bare player line
+// with a position; it is its own type so the live map can use it.
+func TestPlayerListLineIsPosition(t *testing.T) {
+	ev, ok := ParseLine(`18:05:00 | Player "Anna" (id=AAA= pos=<1500.5, 2500.5, 51.0>)`)
+	if !ok || ev.Type != "position" || ev.Player != "Anna" || len(ev.Pos) != 3 || ev.Pos[0] != 1500.5 {
+		t.Fatalf("got %+v", ev)
+	}
+	if ev, _ := ParseLine(`18:05:00 | ##### PlayerList log: 2 players`); ev.Type != "other" {
+		t.Errorf("the list header parsed as %q", ev.Type)
+	}
+}

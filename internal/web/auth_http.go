@@ -576,6 +576,13 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			writeBlocked(w, r, http.StatusForbidden, key)
 			return
 		}
+		// "Local only": the listener moves to loopback when the
+		// setting changes, but a connection a phone already had open would
+		// still be served — refuse it here (unless -bind chose the address).
+		if (exposure == "local" || exposure == "") && !s.bindFixed && !isLoopback(r) {
+			writeBlocked(w, r, http.StatusForbidden, "guard.localOnly")
+			return
+		}
 		// Without a login, "internet" is local-network-only (above) — and the
 		// Host check must be the LAN one too, or a DNS-rebinding page opened
 		// on a LAN device could drive the panel through its browser.
@@ -593,7 +600,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 		}
 		// HTTPS on: send other devices to the encrypted address. Loopback keeps
 		// plain HTTP (the desktop window and local tools).
-		if s.httpsOn && r.TLS == nil && !isLoopback(r) {
+		if s.httpsOn.Load() && r.TLS == nil && !isLoopback(r) {
 			target := "https://" + r.Host + r.URL.RequestURI()
 			if r.Method == http.MethodGet || r.Method == http.MethodHead {
 				http.Redirect(w, r, target, http.StatusMovedPermanently)
@@ -614,6 +621,8 @@ func (s *Server) guard(next http.Handler) http.Handler {
 // so they cannot come from the i18n bundle); English + Russian, the key
 // travels along for the API.
 var guardMessages = map[string][2]string{
+	"guard.localOnly": {"This panel is set to be opened on the server computer only. To reach it from other devices, open Settings → Access & security on that computer and choose Local network.",
+		"Панель настроена на открытие только на компьютере с сервером. Чтобы открывать её с других устройств, на этом компьютере откройте Настройки → Доступ и безопасность и выберите «Локальная сеть»."},
 	"guard.lanOnly": {"This panel only accepts connections from the local network. To reach it from the internet, open Settings → Access & security on the server computer, set a login and choose Internet.",
 		"Панель принимает подключения только из локальной сети. Чтобы открыть её из интернета, на компьютере с сервером откройте Настройки → Доступ и безопасность, задайте вход по паролю и выберите «Интернет»."},
 	"guard.needLogin": {"This panel is set to be reachable from the internet but has no login, so only devices on the local network may open it. Set a login in Settings → Access & security on the server computer.",

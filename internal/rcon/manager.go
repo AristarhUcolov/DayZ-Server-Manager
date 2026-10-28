@@ -320,10 +320,13 @@ func (m *Manager) TouchConnect() {
 	m.touching = true
 	m.mu.Unlock()
 	go func() {
+		defer guard("connect", nil)
+		defer func() {
+			m.mu.Lock()
+			m.touching, m.touchAt = false, time.Now()
+			m.mu.Unlock()
+		}()
 		_ = m.Connect()
-		m.mu.Lock()
-		m.touching, m.touchAt = false, time.Now()
-		m.mu.Unlock()
 	}()
 }
 
@@ -392,6 +395,11 @@ func (m *Manager) PlayersFresh(maxAge time.Duration) []Player {
 
 	if start {
 		go func() {
+			defer guard("player list", func() {
+				m.cacheMu.Lock()
+				m.refreshing = false
+				m.cacheMu.Unlock()
+			})
 			p, err := m.Players()
 			m.cacheMu.Lock()
 			if err == nil {

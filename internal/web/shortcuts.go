@@ -2,7 +2,10 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
+
+	"dayzmanager/internal/app"
 )
 
 // appShortcuts reports (GET) or creates (POST) the manager's Start menu /
@@ -31,4 +34,32 @@ func (h *handlers) appShortcuts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]interface{}{"ok": true, "paths": paths})
+}
+
+// appAutostart reports (GET) or switches (POST {"enabled": bool}) starting
+// the manager together with the computer — a Windows sign-in entry or a Linux
+// desktop-login entry; a Linux server without a desktop gets a systemd unit
+// to install instead.
+func (h *handlers) appAutostart(w http.ResponseWriter, r *http.Request) {
+	a := h.app
+	if a.Autostart == nil || a.SetAutostart == nil {
+		writeJSON(w, app.AutostartInfo{})
+		return
+	}
+	if r.Method == http.MethodGet {
+		writeJSON(w, a.Autostart())
+		return
+	}
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := a.SetAutostart(req.Enabled); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, a.Autostart())
 }

@@ -54,6 +54,30 @@ type Issue struct {
 	Rel string `json:"rel,omitempty"`
 }
 
+// Fixed is one repair the auto-fix made. The UI shows it in the panel's
+// language — i18n key "vfix.<Key>" with Args in its {placeholders}; Text is
+// the English, for logs and as the fallback.
+type Fixed struct {
+	Key  string            `json:"key"`
+	Args map[string]string `json:"args,omitempty"`
+	Text string            `json:"text"`
+}
+
+// F builds a Fixed from its key, its English text and its args (alternating
+// names and values).
+func F(key, text string, kv ...interface{}) Fixed {
+	return Fixed{Key: key, Text: text, Args: A(kv...)}
+}
+
+// Texts is the English of each repair, for logs.
+func Texts(f []Fixed) []string {
+	out := make([]string, len(f))
+	for i, x := range f {
+		out[i] = x.Text
+	}
+	return out
+}
+
 // A is shorthand for an Issue's Args: alternating names and values.
 func A(kv ...interface{}) map[string]string {
 	m := make(map[string]string, len(kv)/2)
@@ -261,6 +285,8 @@ func ValidateWith(o Options) ([]Issue, error) {
 	issues = append(issues, checkEncoding(o)...)
 	issues = append(issues, checkServerCfg(o)...)
 	issues = append(issues, checkMods(o)...)
+	// What a server update replaced: the panel's mod vehicles, the loadouts.
+	issues = append(issues, checkAfterUpdate(o)...)
 
 	return issues, nil
 }
@@ -466,14 +492,14 @@ func mergeUserLimits(l *limits, userPath string) {
 //
 // A .bak is written before each file is touched. Server must be stopped (caller
 // enforces). A read failure on one file never blocks the other fix.
-func AutoFix(serverDir, missionTemplate string) ([]string, error) {
+func AutoFix(serverDir, missionTemplate string) ([]Fixed, error) {
 	return AutoFixWith(Options{ServerDir: serverDir, Mission: missionTemplate}, nil)
 }
 
 // AutoFixWith runs the fixes for the given issue codes (all of them when only
 // is empty). Mod-list fixes (mods.missing / mods.duplicate) change the manager
 // config and are applied by the caller, which owns it.
-func AutoFixWith(o Options, only []string) ([]string, error) {
+func AutoFixWith(o Options, only []string) ([]Fixed, error) {
 	serverDir, missionTemplate := o.ServerDir, o.Mission
 	if missionTemplate == "" {
 		return nil, errors.New("no mission configured")
@@ -485,7 +511,7 @@ func AutoFixWith(o Options, only []string) ([]string, error) {
 	do := func(code string) bool { return len(want) == 0 || want[code] }
 	missionDir := dztypes.MissionDir(serverDir, missionTemplate)
 	moded := dztypes.ModedDir(serverDir, missionTemplate)
-	var out []string
+	var out []Fixed
 
 	// ---- 1. whitelist unknown category/usage/value/tag ----
 	limitsPath := filepath.Join(missionDir, "cfglimitsdefinition.xml")
@@ -541,7 +567,7 @@ func AutoFixWith(o Options, only []string) ([]string, error) {
 			}
 			for _, kind := range []string{"category", "usage", "value", "tag"} {
 				for _, name := range written[kind] {
-					out = append(out, fmt.Sprintf("added %s %q to cfglimitsdefinition.xml", kind, name))
+					out = append(out, F("limitsAdded", fmt.Sprintf("added %s %q to cfglimitsdefinition.xml", kind, name), "kind", kind, "name", name))
 				}
 			}
 		}
@@ -576,7 +602,7 @@ func AutoFixWith(o Options, only []string) ([]string, error) {
 				if err := dztypes.RegisterModedFile(eco, e.Name(), "types"); err != nil {
 					return nil, fmt.Errorf("register %s: %w", e.Name(), err)
 				}
-				out = append(out, fmt.Sprintf("registered %s in cfgeconomycore.xml", e.Name()))
+				out = append(out, F("ceRegistered", fmt.Sprintf("registered %s in cfgeconomycore.xml", e.Name()), "file", e.Name()))
 			}
 		}
 	}
@@ -619,8 +645,9 @@ func AutoFixWith(o Options, only []string) ([]string, error) {
 			names = append(names, n)
 		}
 		sort.Strings(names)
-		out = append(out, fmt.Sprintf("removed %d duplicate <type> %s in %s (%s)",
-			len(removed), plural(len(removed), "entry", "entries"), filepath.Base(p), strings.Join(names, ", ")))
+		out = append(out, F("typesDedup", fmt.Sprintf("removed %d duplicate <type> %s in %s (%s)",
+			len(removed), plural(len(removed), "entry", "entries"), filepath.Base(p), strings.Join(names, ", ")),
+			"n", len(removed), "file", filepath.Base(p), "names", strings.Join(names, ", ")))
 		return nil
 	}
 	if do("types.duplicate") {
@@ -679,8 +706,9 @@ func AutoFixWith(o Options, only []string) ([]string, error) {
 				}
 				if len(removed) > 0 {
 					sort.Strings(removed)
-					out = append(out, fmt.Sprintf("removed %d type %s from %s that duplicate types.xml (%s)",
-						len(removed), plural(len(removed), "entry", "entries"), filepath.Base(p), strings.Join(removed, ", ")))
+					out = append(out, F("typesCrossdup", fmt.Sprintf("removed %d type %s from %s that duplicate types.xml (%s)",
+						len(removed), plural(len(removed), "entry", "entries"), filepath.Base(p), strings.Join(removed, ", ")),
+						"n", len(removed), "file", filepath.Base(p), "names", strings.Join(removed, ", ")))
 				}
 			}
 		}
@@ -714,8 +742,9 @@ func AutoFixWith(o Options, only []string) ([]string, error) {
 					return nil, err
 				}
 				sort.Strings(orphans)
-				out = append(out, fmt.Sprintf("removed spawn positions for %d orphan %s in cfgeventspawns.xml (%s)",
-					len(orphans), plural(len(orphans), "event", "events"), strings.Join(orphans, ", ")))
+				out = append(out, F("orphans", fmt.Sprintf("removed spawn positions for %d orphan %s in cfgeventspawns.xml (%s)",
+					len(orphans), plural(len(orphans), "event", "events"), strings.Join(orphans, ", ")),
+					"n", len(orphans), "names", strings.Join(orphans, ", ")))
 			}
 		}
 	}
@@ -723,16 +752,16 @@ func AutoFixWith(o Options, only []string) ([]string, error) {
 	// ---- v1.0.0 fixes ----
 	type step struct {
 		codes []string
-		run   func() ([]string, error)
+		run   func() ([]Fixed, error)
 	}
 	steps := []step{
-		{[]string{"encoding.utf16"}, func() ([]string, error) { return fixEncoding(o) }},
-		{[]string{"json.syntax"}, func() ([]string, error) { return fixJSON(o) }},
-		{[]string{"cfg.semicolon"}, func() ([]string, error) { return fixServerCfgSemicolons(o) }},
-		{[]string{"xml.amp"}, func() ([]string, error) { return fixXMLAmps(xmlFilesWithEntityErrors(serverDir)) }},
-		{[]string{"ce.missing"}, func() ([]string, error) { return fixCEMissing(o) }},
-		{[]string{"ce.type"}, func() ([]string, error) { return fixCETypes(o) }},
-		{[]string{"types.minNominal", "types.restockNeg", "types.quantRange", "types.quantOrder"}, func() ([]string, error) {
+		{[]string{"encoding.utf16"}, func() ([]Fixed, error) { return fixEncoding(o) }},
+		{[]string{"json.syntax"}, func() ([]Fixed, error) { return fixJSON(o) }},
+		{[]string{"cfg.semicolon"}, func() ([]Fixed, error) { return fixServerCfgSemicolons(o) }},
+		{[]string{"xml.amp"}, func() ([]Fixed, error) { return fixXMLAmps(xmlFilesWithEntityErrors(serverDir)) }},
+		{[]string{"ce.missing"}, func() ([]Fixed, error) { return fixCEMissing(o) }},
+		{[]string{"ce.type"}, func() ([]Fixed, error) { return fixCETypes(o) }},
+		{[]string{"types.minNominal", "types.restockNeg", "types.quantRange", "types.quantOrder"}, func() ([]Fixed, error) {
 			sub := map[string]bool{}
 			for _, c := range []string{"types.minNominal", "types.restockNeg", "types.quantRange", "types.quantOrder"} {
 				if do(c) {
@@ -741,13 +770,15 @@ func AutoFixWith(o Options, only []string) ([]string, error) {
 			}
 			return fixTypeNumbers(o, sub)
 		}},
-		{[]string{"spawnable.chance", "spawnable.preset"}, func() ([]string, error) {
+		{[]string{"spawnable.duplicate"}, func() ([]Fixed, error) { return fixSpawnableDup(o) }},
+		{[]string{"spawnable.chance", "spawnable.preset"}, func() ([]Fixed, error) {
 			return fixSpawnable(o, do("spawnable.chance"), do("spawnable.preset"))
 		}},
-		{[]string{"globals.duplicate"}, func() ([]string, error) { return fixGlobals(o) }},
-		{[]string{"eventspawns.bounds"}, func() ([]string, error) { return fixSpawnBounds(o) }},
-		{[]string{"mods.keys"}, func() ([]string, error) { return fixModKeys(o) }},
-		{[]string{"mods.linuxcase"}, func() ([]string, error) { return fixLinuxCase(o) }},
+		{[]string{"globals.duplicate"}, func() ([]Fixed, error) { return fixGlobals(o) }},
+		{[]string{"eventspawns.bounds"}, func() ([]Fixed, error) { return fixSpawnBounds(o) }},
+		{[]string{"mods.keys"}, func() ([]Fixed, error) { return fixModKeys(o) }},
+		{[]string{"mods.linuxcase"}, func() ([]Fixed, error) { return fixLinuxCase(o) }},
+		{[]string{"dzm.unregistered", "gear.broken", "gear.unlinked", "gear.flagOff"}, func() ([]Fixed, error) { return fixAfterUpdate(o, do) }},
 	}
 	for _, st := range steps {
 		run := false

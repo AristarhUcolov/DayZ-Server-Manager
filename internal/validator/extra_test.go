@@ -187,6 +187,42 @@ func TestSpawnableAndGlobalsFixes(t *testing.T) {
 	}
 }
 
+// A repeated cfgspawnabletypes.xml entry is reported with a fix, and the fix
+// keeps the first entry, the comments and the other entries.
+func TestSpawnableDuplicateFix(t *testing.T) {
+	dir := t.TempDir()
+	md := filepath.Join(dir, "mpmissions", "m.world")
+	write(t, filepath.Join(md, "cfgspawnabletypes.xml"), `<spawnabletypes>
+	<!-- hunting gear -->
+	<type name="HuntingVest">
+		<cargo chance="0.30"><item name="Apple" chance="1"/></cargo>
+	</type>
+	<type name="AKM">
+		<attachments chance="1.00"><item name="Mag_AKM_30Rnd" chance="1.00"/></attachments>
+	</type>
+	<type name="huntingvest">
+		<cargo chance="0.90"><item name="Pear" chance="1"/></cargo>
+	</type>
+</spawnabletypes>
+`)
+	is := checkSpawnable(md)
+	if codes(is)["spawnable.duplicate"] != 1 || is[0].Fix != "spawnable.duplicate" {
+		t.Fatalf("duplicate not reported with a fix: %+v", is)
+	}
+	done, err := AutoFixWith(Options{ServerDir: dir, Mission: "m.world"}, []string{"spawnable.duplicate"})
+	if err != nil || len(done) != 1 || done[0].Key != "spawnableDedup" || done[0].Args["n"] != "1" {
+		t.Fatalf("fix: %+v, %v", done, err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(md, "cfgspawnabletypes.xml"))
+	s := string(raw)
+	if strings.Contains(s, "Pear") || !strings.Contains(s, "Apple") || !strings.Contains(s, "AKM") || !strings.Contains(s, "<!-- hunting gear -->") {
+		t.Fatalf("wrong entry removed:\n%s", s)
+	}
+	if n := codes(checkSpawnable(md))["spawnable.duplicate"]; n != 0 {
+		t.Errorf("still %d duplicate(s) after the fix", n)
+	}
+}
+
 func TestInitCBraces(t *testing.T) {
 	dir := t.TempDir()
 	md := filepath.Join(dir, "mpmissions", "m.w")

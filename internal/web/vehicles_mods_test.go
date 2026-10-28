@@ -292,3 +292,57 @@ func TestEventsItemWritesToTheEventsFile(t *testing.T) {
 		t.Fatal("an unregistered file must be refused")
 	}
 }
+
+// Deleting a modded car removes its event, its spawn points and the part list
+// and type of its variant from dzm_vehicles — the vanilla sedan, the wheel type
+// and other spawn points stay — and the automatic import does not add it back.
+// Adding it again by hand clears the mark. Vanilla cars are refused.
+func TestVehiclesDeleteModCar(t *testing.T) {
+	h, dir, m := vehicleFixture(t)
+	if _, err := h.importModVehicles("@SuperCars", []string{"VehicleSuperCar"}); err != nil {
+		t.Fatal(err)
+	}
+	del := func(event string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.vehiclesDelete(rec, httptest.NewRequest("POST", "/api/vehicles/delete", strings.NewReader(`{"event":"`+event+`"}`)))
+		return rec
+	}
+	if rec := del("VehicleCivilianSedan"); rec.Code != 400 || !strings.Contains(rec.Body.String(), "vehicles.delete.vanilla") {
+		t.Fatalf("vanilla car: %d %s", rec.Code, rec.Body)
+	}
+	rec := del("VehicleSuperCar")
+	if rec.Code != 200 {
+		t.Fatalf("delete: %d %s", rec.Code, rec.Body)
+	}
+	var res vehicleDeleted
+	_ = json.Unmarshal(rec.Body.Bytes(), &res)
+	if res.Positions != 2 || res.Parts != 1 || res.Types != 1 {
+		t.Errorf("removed %+v, want 2 positions, 1 part list, 1 type", res)
+	}
+	ev, _ := os.ReadFile(filepath.Join(m, dzmFolder, "events.xml"))
+	if strings.Contains(string(ev), "VehicleSuperCar") {
+		t.Error("the event is still there")
+	}
+	sp, _ := dztypes.LoadEventSpawns(filepath.Join(m, "cfgeventspawns.xml"))
+	if sp.Find("VehicleSuperCar") != nil || sp.Find("VehicleCivilianSedan") == nil {
+		t.Errorf("spawn points: %+v", sp.Events)
+	}
+	types, _ := os.ReadFile(filepath.Join(m, dzmFolder, "types.xml"))
+	if strings.Contains(string(types), `"SuperCar_Blue"`) || !strings.Contains(string(types), `"SuperCarWheel"`) {
+		t.Errorf("types after delete:\n%s", types)
+	}
+	parts, _ := os.ReadFile(filepath.Join(m, dzmFolder, "spawnabletypes.xml"))
+	if strings.Contains(string(parts), "SuperCar_Blue") {
+		t.Error("the variant's part list is still there")
+	}
+	if missing := h.missingModVehicles(filepath.Join(dir, "@SuperCars"), m); len(missing) != 0 {
+		t.Errorf("the automatic import would add it back: %v", missing)
+	}
+	// Added again by hand.
+	if _, err := h.importModVehicles("@SuperCars", []string{"VehicleSuperCar"}); err != nil {
+		t.Fatal(err)
+	}
+	if loadVehicleSources(m).removed("VehicleSuperCar") {
+		t.Error("adding it again did not clear the deleted mark")
+	}
+}

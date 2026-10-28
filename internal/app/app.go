@@ -2,6 +2,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -47,6 +48,14 @@ type App struct {
 	// RequestExit asks the manager process to exit (set by the launcher);
 	// stopServer decides whether the DayZ server goes down with it.
 	RequestExit func(stopServer bool)
+	// workshop: the SteamCMD update hooks (exitinfo.go).
+	workshop WorkshopHooks
+	// LastExit is how the previous run of the manager ended when that was not
+	// a normal exit (set by the launcher on the primary; nil otherwise).
+	LastExit *ExitInfo
+	// KeepingAwake reports whether the manager currently holds the computer
+	// awake (set by the launcher).
+	KeepingAwake func() bool
 	// ShowWindow brings the desktop window to the front (panel mode only):
 	// a second launch of the panel asks the running one to show itself.
 	ShowWindow func() bool
@@ -54,6 +63,10 @@ type App struct {
 	// launcher; nil where it cannot make them).
 	ShortcutsInstalled func() bool
 	InstallShortcuts   func() ([]string, error)
+	// Starting the manager with the computer (Settings → General), set by
+	// the launcher; nil where it cannot.
+	Autostart    func() AutostartInfo
+	SetAutostart func(on bool) error
 
 	query queryState // Steam A2S view of the server (see query.go)
 
@@ -120,6 +133,11 @@ func newApp(serverDir string, o appOptions) (*App, error) {
 	var logger *log.Logger
 	if o.primary == nil {
 		logger = log.New(newTee(os.Stdout, logFile), "", log.LstdFlags)
+		// Libraries write to the standard logger (the desktop window's
+		// browser engine, say — and its log.Fatal ends the program): keep
+		// those lines in the manager log too, not on a console the windowed
+		// build does not have.
+		log.SetOutput(newTee(os.Stdout, logFile))
 		// Route the mods package's copy failures into the shared manager log.
 		mods.Logger = logger
 		// Route opt-in RCon protocol traces (DAYZ_RCON_DEBUG=1) into the same log.
@@ -159,10 +177,31 @@ func newApp(serverDir string, o appOptions) (*App, error) {
 	// import mods. They take the mod source dir from the controller's race-safe
 	// schedule snapshot, closing over only the constant server dir — never the
 	// shared *config.Manager.
+	var a *App // the hooks below run long after it is set
+	steamcmdMode := func() (WorkshopHooks, bool) {
+		if a == nil || a.Cfg().EffectiveModSource() != config.ModSourceSteamCMD {
+			return WorkshopHooks{}, false
+		}
+		hk := a.workshopHooks()
+		return hk, hk.Sync != nil && hk.Outdated != nil
+	}
 	ctrl.UpdateMods = func(sourceDir string) ([]string, error) {
+		if hk, ok := steamcmdMode(); ok {
+			// Steam Workshop source: download what is newer on the
+			// Workshop with SteamCMD, then install it.
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer cancel()
+			return hk.Sync(ctx)
+		}
 		return mods.UpdateAll(serverDir, sourceDir)
 	}
 	ctrl.ModUpdatesAvailable = func(sourceDir string) (bool, error) {
+		if hk, ok := steamcmdMode(); ok {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			n, err := hk.Outdated(ctx)
+			return n > 0, err
+		}
 		list, err := mods.List(serverDir, sourceDir)
 		if err != nil {
 			return false, err
@@ -175,7 +214,7 @@ func newApp(serverDir string, o appOptions) (*App, error) {
 		return false, nil
 	}
 
-	a := &App{
+	a = &App{
 		Name:       o.name,
 		Version:    o.version,
 		Author:     o.author,
@@ -431,20 +470,25 @@ func (a *App) Cfg() config.Manager {
 }
 
 // panelWide copies the settings that belong to the whole panel rather than to
-// one DayZ server — interface language, exposure, HTTPS, router forwards and
-// the first-run flag — from src into dst.
+// one DayZ server — interface language, exposure, HTTPS, router forwards, the
+// first-run flag and the dismissed checklist — from src into dst.
 func panelWide(dst, src *config.Manager) {
 	dst.FirstRunDone = src.FirstRunDone
+	dst.SetupDismissed = src.SetupDismissed
 	dst.Language = src.Language
 	dst.Exposure = src.Exposure
 	dst.PanelHTTPS = src.PanelHTTPS
 	dst.UPnPPanel = src.UPnPPanel
 	dst.UPnPGame = src.UPnPGame
+	dst.RemoteWatch = src.RemoteWatch
+	dst.SteamUser = src.SteamUser
+	dst.KeepAwake = src.KeepAwake
 }
 
 func panelWideEqual(a, b *config.Manager) bool {
-	return a.FirstRunDone == b.FirstRunDone && a.Language == b.Language && a.Exposure == b.Exposure &&
-		a.PanelHTTPS == b.PanelHTTPS && a.UPnPPanel == b.UPnPPanel && a.UPnPGame == b.UPnPGame
+	return a.FirstRunDone == b.FirstRunDone && a.SetupDismissed == b.SetupDismissed && a.Language == b.Language && a.Exposure == b.Exposure &&
+		a.PanelHTTPS == b.PanelHTTPS && a.UPnPPanel == b.UPnPPanel && a.UPnPGame == b.UPnPGame &&
+		a.RemoteWatch == b.RemoteWatch && a.SteamUser == b.SteamUser && a.KeepAwake == b.KeepAwake
 }
 
 // MutateConfig atomically applies fn to a working copy of the config under

@@ -452,13 +452,9 @@ func SyncKeys(serverDir string, names []string) error {
 // some use "key" (singular), other casings, or drop the .bikey in the mod root
 // — so we look everywhere rather than trusting one fixed folder name.
 func collectKeyFiles(modDir string) []string {
-	root := resolveSymlink(modDir) // !Workshop entries are junctions
 	var out []string
-	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
-		if err != nil || info == nil {
-			return nil
-		}
-		if !info.IsDir() && strings.EqualFold(filepath.Ext(info.Name()), ".bikey") {
+	_ = walkTree(modDir, func(p, _ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && strings.EqualFold(filepath.Ext(info.Name()), ".bikey") {
 			out = append(out, p)
 		}
 		return nil
@@ -480,11 +476,71 @@ func collectKeyNames(modDir string) []string {
 // junction/symlink, otherwise dir itself. filepath.Walk will not descend
 // into a symlink at its root, so we have to resolve before walking — DayZ
 // Launcher mounts !Workshop/@Mod entries as junctions.
+//
+// Since Go 1.23, EvalSymlinks leaves Windows junctions alone and Lstat reports
+// them as irregular files, not folders: a junction is then read by hand.
+// Walking one unresolved copied nothing and failed with "Incorrect function"
+// (a folder read as a file), and the mod showed 0 B.
 func resolveSymlink(dir string) string {
 	if r, err := filepath.EvalSymlinks(dir); err == nil && r != "" {
-		return r
+		dir = r
+	}
+	for i := 0; i < 8; i++ {
+		fi, err := os.Lstat(dir)
+		if err != nil || fi.Mode()&(os.ModeSymlink|os.ModeIrregular) == 0 {
+			break
+		}
+		target, err := os.Readlink(dir)
+		if err != nil || target == "" {
+			break
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(dir), target)
+		}
+		dir = filepath.Clean(target)
 	}
 	return dir
+}
+
+// isLink reports a symlink or a junction met inside a walk.
+func isLink(info os.FileInfo) bool {
+	return info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0
+}
+
+// walkTree walks root like filepath.Walk, root itself and any folder linked
+// inside it (a symlink or a junction) followed — a few levels deep at most,
+// so a link loop cannot run away. fn gets each folder and file with its path
+// relative to root; on a walk error info is nil and returning nil skips it.
+func walkTree(root string, fn func(path, rel string, info os.FileInfo, err error) error) error {
+	return walkLinked(resolveSymlink(root), "", fn, 0)
+}
+
+func walkLinked(root, prefix string, fn func(path, rel string, info os.FileInfo, err error) error, depth int) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		rel, _ := filepath.Rel(root, path)
+		rel = filepath.Join(prefix, rel)
+		if err != nil || info == nil {
+			return fn(path, rel, nil, err)
+		}
+		if path != root && isLink(info) {
+			real := resolveSymlink(path)
+			st, serr := os.Stat(real)
+			if serr != nil {
+				return fn(path, rel, nil, serr)
+			}
+			if st.IsDir() {
+				if depth >= 4 {
+					return nil
+				}
+				if err := fn(path, rel, st, nil); err != nil {
+					return err
+				}
+				return walkLinked(real, rel, fn, depth+1)
+			}
+			return fn(real, rel, st, nil)
+		}
+		return fn(path, rel, info, nil)
+	})
 }
 
 // scanTree walks dir once and returns the total file size, the number of
@@ -493,9 +549,8 @@ func resolveSymlink(dir string) string {
 // newestMTime) tripled the directory-scan cost on large modpacks, which is what
 // made the Mods page slow to open.
 func scanTree(dir string) (size int64, keyCount int, newest time.Time) {
-	dir = resolveSymlink(dir)
-	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
-		if err != nil || info == nil || info.IsDir() {
+	_ = walkTree(dir, func(_, _ string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
 			return nil
 		}
 		size += info.Size()
@@ -511,10 +566,9 @@ func scanTree(dir string) (size int64, keyCount int, newest time.Time) {
 }
 
 func dirSize(dir string) int64 {
-	dir = resolveSymlink(dir)
 	var total int64
-	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
-		if err == nil && info != nil && !info.IsDir() {
+	_ = walkTree(dir, func(_, _ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
 			total += info.Size()
 		}
 		return nil
@@ -523,10 +577,9 @@ func dirSize(dir string) int64 {
 }
 
 func newestMTime(dir string) time.Time {
-	dir = resolveSymlink(dir)
 	var newest time.Time
-	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
-		if err != nil || info == nil || info.IsDir() {
+	_ = walkTree(dir, func(_, _ string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
 			return nil
 		}
 		if info.ModTime().After(newest) {
@@ -538,15 +591,13 @@ func newestMTime(dir string) time.Time {
 }
 
 func copyTree(src, dst string) error {
-	src = resolveSymlink(src)
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+	return walkTree(src, func(path, rel string, info os.FileInfo, err error) error {
 		if err != nil {
 			if Logger != nil {
 				Logger.Printf("copyTree: walk %s: %v", path, err)
 			}
 			return err
 		}
-		rel, _ := filepath.Rel(src, path)
 		target := filepath.Join(dst, rel)
 		if info.IsDir() {
 			return os.MkdirAll(target, 0o755)

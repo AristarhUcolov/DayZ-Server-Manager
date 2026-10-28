@@ -20,6 +20,7 @@ import (
 	"dayzmanager/internal/config"
 	"dayzmanager/internal/i18n"
 	"dayzmanager/internal/notify"
+	"dayzmanager/internal/util"
 )
 
 // DiscordEvent describes one notification the panel can post.
@@ -44,6 +45,7 @@ var DiscordCatalog = []DiscordEvent{
 	{Key: "modupdate", Group: "server", Default: true},
 	{Key: "backup", Group: "server", Default: true},
 	{Key: "wipe", Group: "server", Default: true},
+	{Key: "address", Group: "server", Default: true},
 	{Key: "join", Group: "players", Players: true},
 	{Key: "leave", Group: "players", Players: true},
 	{Key: "watch", Group: "players", Default: true, Players: true},
@@ -101,7 +103,7 @@ type discordQueue struct {
 func (a *App) discordQ() *discordQueue {
 	a.dqOnce.Do(func() {
 		a.dq = &discordQueue{ch: make(chan discordJob, 300)}
-		go a.discordWorker(a.dq)
+		go util.SafeLoop(a.Log, "discord worker", func() { a.discordWorker(a.dq) })
 	})
 	return a.dq
 }
@@ -192,7 +194,7 @@ var eventColor = map[string]int{
 	"online": notify.ColorOK, "started": notify.ColorInfo, "stopped": notify.ColorMuted,
 	"restart": notify.ColorInfo, "restartplanned": notify.ColorWarn, "crashed": notify.ColorError,
 	"restartfailed": notify.ColorError, "crashloop": notify.ColorError, "modupdate": notify.ColorInfo,
-	"backup": notify.ColorMuted, "wipe": notify.ColorWarn, "join": notify.ColorOK, "leave": notify.ColorMuted,
+	"backup": notify.ColorMuted, "wipe": notify.ColorWarn, "address": notify.ColorWarn, "join": notify.ColorOK, "leave": notify.ColorMuted,
 	"watch": notify.ColorWarn, "kill": notify.ColorError, "chat": notify.ColorInfo,
 	"ban": notify.ColorAdmin, "unban": notify.ColorOK, "kick": notify.ColorAdmin, "test": notify.ColorOK,
 }

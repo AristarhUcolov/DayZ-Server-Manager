@@ -120,3 +120,76 @@ func TestSetIsCaseInsensitiveAndDoesNotDuplicate(t *testing.T) {
 		t.Errorf("key defined %d times after Set — must stay 1", n)
 	}
 }
+
+// A save must not reformat the admin's file: untouched lines come back byte
+// for byte (spacing, tab-aligned comments, whitespace-only lines), and a
+// changed value is swapped inside its own line.
+func TestSaveKeepsLinesAsWritten(t *testing.T) {
+	const src = "hostname = \"EXAMPLE NAME\";  // Server name\n" +
+		"password = \"\";              // Password to connect to the server\n" +
+		"description = \"PvE; no raids\";\t\t\t// Description\n" +
+		" \n" +
+		"thirdPersonView=1;          // 3rd person view\n" +
+		"maxPlayers = 60;            // Maximum amount of players\n"
+	dir := t.TempDir()
+	path := filepath.Join(dir, "serverDZ.cfg")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadServerCfg(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := cfg.Get("description"); got != "PvE; no raids" {
+		t.Errorf("description = %q — a ';' inside quotes cut the value", got)
+	}
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != src {
+		t.Fatalf("an unchanged file was rewritten:\n%s", data)
+	}
+
+	// A file whose last line has no line ending keeps it that way.
+	trimmed := strings.TrimSuffix(src, "\n")
+	os.WriteFile(path, []byte(trimmed), 0o644)
+	if c2, err := LoadServerCfg(path); err != nil || c2.Save(path) != nil {
+		t.Fatalf("round trip without a final newline: %v", err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != trimmed {
+		t.Fatalf("a final line ending was added: %q", data)
+	}
+	os.WriteFile(path, []byte(src), 0o644)
+	if cfg, err = LoadServerCfg(path); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg.Set("maxPlayers", 80)
+	cfg.Set("thirdPersonView", 1) // same value: the line stays as it was
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Replace(src, "maxPlayers = 60;", "maxPlayers = 80;", 1)
+	if data, _ := os.ReadFile(path); string(data) != want {
+		t.Fatalf("saving one change touched other lines:\n%s", data)
+	}
+}
+
+// A Windows file keeps its CRLF line endings, class block included.
+func TestSaveKeepsCRLF(t *testing.T) {
+	src := "hostname = \"x\";\r\nmaxPlayers = 60;\r\nclass Missions\r\n{\r\n\tclass DayZ\r\n\t{\r\n\t\ttemplate=\"dayzOffline.chernarusplus\";\r\n\t};\r\n};\r\n"
+	path := filepath.Join(t.TempDir(), "serverDZ.cfg")
+	os.WriteFile(path, []byte(src), 0o644)
+	cfg, err := LoadServerCfg(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Set("maxPlayers", 70)
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	if want := strings.Replace(src, "60", "70", 1); string(data) != want {
+		t.Fatalf("got %q\nwant %q", data, want)
+	}
+}

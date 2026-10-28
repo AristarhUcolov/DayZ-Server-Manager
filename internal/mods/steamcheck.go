@@ -26,6 +26,27 @@ type WorkshopRemote struct {
 	TimeUpdated time.Time `json:"timeUpdated"`
 	TimeCreated time.Time `json:"timeCreated"`
 	Result      int       `json:"result"` // 1 = OK; non-1 means the ID was not found / removed
+	FileSize    int64     `json:"fileSize,omitempty"`
+	AppID       int       `json:"appId,omitempty"` // the game it belongs to: 221100 for DayZ
+	Preview     string    `json:"preview,omitempty"`
+}
+
+// flexInt reads a number Steam sends either bare or as a string.
+type flexInt int64
+
+func (f *flexInt) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" {
+		*f = 0
+		return nil
+	}
+	var v int64
+	if _, err := fmt.Sscan(s, &v); err != nil {
+		*f = 0
+		return nil
+	}
+	*f = flexInt(v)
+	return nil
 }
 
 // FetchWorkshopMeta resolves Steam Workshop metadata for the given published
@@ -102,11 +123,14 @@ func fetchBatch(ctx context.Context, ids []string, out map[string]WorkshopRemote
 		Response struct {
 			ResultCount       int `json:"resultcount"`
 			PublishedFileDtls []struct {
-				PublishedFileID string `json:"publishedfileid"`
-				Result          int    `json:"result"`
-				Title           string `json:"title"`
-				TimeCreated     int64  `json:"time_created"`
-				TimeUpdated     int64  `json:"time_updated"`
+				PublishedFileID string  `json:"publishedfileid"`
+				Result          int     `json:"result"`
+				Title           string  `json:"title"`
+				TimeCreated     int64   `json:"time_created"`
+				TimeUpdated     int64   `json:"time_updated"`
+				FileSize        flexInt `json:"file_size"`
+				ConsumerAppID   flexInt `json:"consumer_app_id"`
+				PreviewURL      string  `json:"preview_url"`
 			} `json:"publishedfiledetails"`
 		} `json:"response"`
 	}
@@ -123,6 +147,9 @@ func fetchBatch(ctx context.Context, ids []string, out map[string]WorkshopRemote
 			TimeUpdated: timeFromUnix(d.TimeUpdated),
 			TimeCreated: timeFromUnix(d.TimeCreated),
 			Result:      d.Result,
+			FileSize:    int64(d.FileSize),
+			AppID:       int(d.ConsumerAppID),
+			Preview:     d.PreviewURL,
 		}
 	}
 	return nil

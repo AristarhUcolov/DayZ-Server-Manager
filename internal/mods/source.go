@@ -116,6 +116,17 @@ func scanSourceList(dir string) []sourceMod {
 	return out
 }
 
+// SourceName is the server folder name ("@Foo", from meta.cpp) the source
+// folder <srcDir>/<id> installs as; "" when that folder is not a mod.
+func SourceName(srcDir, id string) string {
+	for _, sm := range scanSourceList(srcDir) {
+		if filepath.Base(sm.path) == id {
+			return sm.name
+		}
+	}
+	return ""
+}
+
 func isNumeric(s string) bool {
 	if s == "" {
 		return false

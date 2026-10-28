@@ -11,6 +11,7 @@ import (
 
 	"dayzmanager/internal/a2s"
 	"dayzmanager/internal/config"
+	"dayzmanager/internal/util"
 )
 
 // QueryState is the latest Steam-query view of the server: whether it answers
@@ -78,7 +79,8 @@ func (a *App) queryLoop() {
 				a.query.st.FirstOK = now
 				// The mission has loaded and the server is listed: players
 				// can join now — the moment Discord's "online" means.
-				go a.Notify("online", fmt.Sprintf("%d\x1f%d\x1f%s", info.Players, info.MaxPlayers, info.Map))
+				detail := fmt.Sprintf("%d\x1f%d\x1f%s", info.Players, info.MaxPlayers, info.Map)
+				go util.SafeGo(a.Log, "online notice", func() { a.Notify("online", detail) })
 			}
 		}
 		a.query.mu.Unlock()

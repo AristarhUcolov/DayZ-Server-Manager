@@ -27,9 +27,12 @@ func (h *handlers) registerV100(mux *http.ServeMux) {
 	mux.HandleFunc("/api/fs/reveal", methods(h.fsReveal, http.MethodPost))
 	mux.HandleFunc("/api/vehicles", methods(h.vehiclesList, http.MethodGet))
 	mux.HandleFunc("/api/vehicles/parts", methods(h.vehiclesParts, http.MethodPost))
+	mux.HandleFunc("/api/vehicles/variants", methods(h.vehiclesVariants, http.MethodGet, http.MethodPost))
 	mux.HandleFunc("/api/vehicles/mods", methods(h.vehiclesMods, http.MethodGet))
 	mux.HandleFunc("/api/vehicles/import", methods(h.vehiclesImport, http.MethodPost))
 	mux.HandleFunc("/api/vehicles/setup", methods(h.vehiclesSetup, http.MethodPost))
+	mux.HandleFunc("/api/vehicles/delete", methods(h.vehiclesDelete, http.MethodPost))
+	mux.HandleFunc("/api/vehicles/tweak", methods(h.vehiclesTweak, http.MethodPost))
 	mux.HandleFunc("/api/missions/full", methods(h.missionsFull, http.MethodGet))
 	mux.HandleFunc("/api/missions/available", methods(h.missionsAvailable, http.MethodGet))
 	mux.HandleFunc("/api/missions/install", methods(h.missionsInstall, http.MethodPost))
@@ -48,6 +51,7 @@ func (h *handlers) registerV100(mux *http.ServeMux) {
 	mux.HandleFunc("/api/app/exit", methods(h.appExit, http.MethodPost))
 	mux.HandleFunc("/api/app/show", methods(h.appShow, http.MethodPost))
 	mux.HandleFunc("/api/app/shortcuts", methods(h.appShortcuts, http.MethodGet, http.MethodPost))
+	mux.HandleFunc("/api/app/autostart", methods(h.appAutostart, http.MethodGet, http.MethodPost))
 	mux.HandleFunc("/api/setup/checklist", methods(h.setupChecklist, http.MethodGet))
 }
 

@@ -11,7 +11,7 @@
     },
     {
      "title": "Modların nereden geleceğini seçin",
-     "body": "İlk çalıştırmada bir mod kaynağı seçersiniz: DayZ *istemcisi* (Steam'in modları indirdiği !Workshop klasörü), @mod içeren herhangi bir klasör veya SteamCMD'nin workshop/content/221100 klasörü ya da oyunu olmayan bir barındırma makinesi için Yalnızca sunucu — bu durumda modları kendiniz yüklersiniz ve otomatik güncelleme kapalıdır. Bunu daha sonra Ayarlar'dan değiştirebilirsiniz."
+     "body": "İlk çalıştırmada bir mod kaynağı seçersin: DayZ *istemcisi* (Steam'in modları indirdiği !Workshop klasörü), @mod içeren herhangi bir klasör veya SteamCMD'nin workshop/content/221100 klasörü, Steam Workshop (doğrudan indirme) — bu durumda panel modları SteamCMD ile kendisi indirir ve günceller — ya da oyunun kurulu olmadığı bir barındırma makinesi için Yalnızca sunucu; burada modları kendin yüklersin ve otomatik güncelleme kapalıdır. Bunu daha sonra Ayarlar'dan değiştirebilirsin."
     },
     {
      "title": "Sunucuyu başlatın",
@@ -20,7 +20,8 @@
    ],
    "tips": [
     "Paneli yalnızca bu PC'de kullanmak için parola gerekmez. Onu bir telefondan veya başka bir yerden açmak için önce bir panel girişi ayarlayın — ilk kurulumda veya Ayarlar → Panel girişi bölümünde.",
-    "Sunucu çalışırken neredeyse her dosya düzenleyici kaydetmeyi reddeder — DayZ kendi dosyalarını kilitli tutar. Önce sunucuyu durdurun; neden buysa panel size söyler."
+    "Sunucu çalışırken neredeyse her dosya düzenleyici kaydetmeyi reddeder — DayZ kendi dosyalarını kilitli tutar. Önce sunucuyu durdurun; neden buysa panel size söyler.",
+    "Bilgisayar uykuya geçince DayZ sunucusu ve panel de onunla birlikte durur — sanki yönetici kendiliğinden kapanmış gibi görünür. Bir sunucu çalıştığı sürece yönetici bilgisayarı uyanık tutar (Ayarlar → Genel → Bilgisayarı uyanık tut); kiralık bir sunucuda oturumu kapatmak yerine uzak pencereyi kapat."
    ]
   },
   {
@@ -29,12 +30,12 @@
    "intro": "Bir sunucunun her modun kendi kopyasına, modun .bikey dosyasının sunucunun keys klasöründe olmasına ve modun -mod başlatma parametresinde listelenmesine ihtiyacı vardır. Yönetici bu üçünü de yapar ve modları seçtiğiniz kaynaktan alır: oyun istemcisinin !Workshop'u, bir mod veya SteamCMD klasörü ya da — Yalnızca sunucu modunda — kendi yüklediğiniz modlar.",
    "steps": [
     {
-     "title": "Önce Steam'de abone olun",
-     "body": "Yönetici modları kopyalar, indirmez. Steam Workshop'ta abone olun ve DayZ başlatıcısının modu !Workshop'a indirmesine izin verin — ya da SteamCMD ile mod klasörünüze indirin."
+     "title": "Modları edin",
+     "body": "İki yol var. Workshop bağlantılarını Modlar sayfasındaki Doğrudan indirme bölümüne yapıştır: panelin kendi SteamCMD'si onları doğrudan sunucuya indirir — DayZ'ye sahip bir Steam hesabıyla yalnızca bir kez giriş yaparsın. Ya da Steam Workshop'ta abone ol, DayZ başlatıcısının modu !Workshop'a indirmesine izin ver (veya SteamCMD ile mod klasörüne indir) ve oradan kur."
     },
     {
      "title": "Sunucuya yükleyin",
-     "body": "Modlar'ı açın — !Workshop'taki her şey listelenir. Yükle, modu sunucu klasörüne kopyalar ve .bikey'ini otomatik eşitler. “Modları yükle ve güncelle” tüm listeyi tek tıkla halleder."
+     "body": "Modlar'ı aç — mod kaynağındaki her şey listelenir (kaynak Steam Workshop ise: indirdiğin modlar). Yükle, modu sunucu klasörüne kopyalar ve .bikey dosyasını otomatik eşitler. “Modları yükle ve güncelle” tüm listeyi tek tıkla yapar."
     },
     {
      "title": "Başlatma için etkinleştirin",
@@ -49,7 +50,8 @@
     "Güncelle, mod kaynağındaki daha yeni dosyaları sunucuya kopyalar. Otomatik eşitlemek için Ayarlar'da “Her yeniden başlatmada modları güncelle”yi açın.",
     "Bir modu kaldırmak, .bikey'ini yalnızca başka hiçbir yüklü mod aynı anahtarı kullanmıyorsa siler; böylece paylaşılan anahtarlar (Expansion) sağlam kalır.",
     "Bir mod loot içeriyorsa satırındaki “Mod loot'unu ekle”yi kullanın — modun types.xml dosyasını bulup sizin için kaydeder.",
-    "Linux'ta sunucu yalnızca klasör ve dosya adları küçük harfli modları yükler. Yönetici yükleme ve güncelleme sırasında onları yeniden adlandırır; Modlar sayfası yanlış harf büyüklüğünde kalan her şeyi işaretler."
+    "Linux'ta sunucu yalnızca klasör ve dosya adları küçük harfli modları yükler. Yönetici yükleme ve güncelleme sırasında onları yeniden adlandırır; Modlar sayfası yanlış harf büyüklüğünde kalan her şeyi işaretler.",
+    "Kaynak Steam Workshop olduğunda indirme listesi son indirmenin raporudur: okuduğunuz satırları kaldırın; o zamandan beri sunucudan silinen bir mod Yeniden yükle seçeneği sunar."
    ]
   },
   {
@@ -99,7 +101,8 @@
    ],
    "tips": [
     "Parça başına bir yuva: biri şarjörler, biri dürbünler, biri dipçik için. Şarjör ve dürbünü aynı yuvaya koymak, silahın ikisinden birini alacağı, asla ikisini birden almayacağı anlamına gelir.",
-    "Yalnızca düzenlediğiniz kayıt yeniden yazılır — dosyanın geri kalanındaki yorumlarınız ve biçimlendirmeniz korunur."
+    "Yalnızca düzenlediğiniz kayıt yeniden yazılır — dosyanın geri kalanındaki yorumlarınız ve biçimlendirmeniz korunur.",
+    "Eşya, oyuncu teçhizatında olduğu gibi her yuva için bir kutucukla çizilir: şansını veya parçalarını değiştirmek için dolu bir yuvaya, oyunun kendi listesinden parça eklemek için boş bir yuvaya tıklayın. Süngü ve susturucu (veya namlu freni) tek bir silahta asla birlikte çıkmaz — DayZ önce geleni takar."
    ]
   },
   {
@@ -109,11 +112,11 @@
    "steps": [
     {
      "title": "Sistemi etkinleştirin",
-     "body": "Oyuncu teçhizatı'nı açın. Misyon oyuncuları hâlâ init.c ile donatıyorsa sayfa bunu söyler ve tek bir düğme sunar: bir başlangıç ön ayarı oluşturur, onu cfggameplay.json'a kaydeder ve enableCfgGameplayFile anahtarını açar — hepsi bir arada."
+     "body": "Oyuncu teçhizatı'nı açın. Oyuncular hâlâ init.c'ye göre doğuyorsa sayfa bunu söyler ve sistemi açan tek bir düğme sunar: görev klasöründe zaten bulunan teçhizat dosyalarını yeniden kullanır (ya da bir başlangıç ön ayarı oluşturur), bunları cfggameplay.json'a kaydeder ve enableCfgGameplayFile'ı açar — hepsi tek seferde."
     },
     {
      "title": "Kıyafet ve teçhizatı düzenleyin",
-     "body": "Her ön ayar, her yuvada neyin giyildiğini (Gövde, Bacaklar, Ayaklar…) ve neyin serbestçe taşındığını listeler. Sınıf adıyla eşya ekleyin, bir yuvanın birkaçı arasından seçmesi gerektiğinde çıkış ağırlığı verin ve bir durum seçin — kusursuz, yıpranmış, hasarlı veya özel bir aralık."
+     "body": "Düzenleyici tüm yuvalarıyla bir hayatta kalanı gösterir. Bir yuvaya tıklayıp oyunun kendi listesinden bir eşya seç — adları, kategorileri ve neyin nereye uyduğuyla —, ardından durumunu ve miktarını ayarla, eline veya hızlı erişim çubuğuna (1–0 tuşları) koy. Her eşya, sahip olduğu her yuva için bir kutuyla çizilir — nişangah, namlu ağzı, şarjör, yeleğin cepleri — ve yalnızca uyan parçaları, ayrıca içine konacakları (sırt çantasında yiyecek) sunar. Bir sunucunun birden çok teçhizatı olabilir; her birinin bir doğma ağırlığı vardır."
     },
     {
      "title": "Deneme zarı ve paylaşma",
@@ -122,7 +125,10 @@
    ],
    "tips": [
     "healthMin/healthMax sağlık oranlarıdır: 1.0 kusursuz, 0.0 harap demektir. Yeni doğanlar yıpranmış kıyafetle gelmesin diye her şeyi kusursuz tutun.",
-    "Teçhizat, her yapılandırma değişikliği gibi sunucu durdurulmuşken kaydedilir — sonrasında sunucuyu yeniden başlatın."
+    "Teçhizat, her yapılandırma değişikliği gibi sunucu durdurulmuşken kaydedilir — sonrasında sunucuyu yeniden başlatın.",
+    "Bir DayZ sunucu güncellemesi cfggameplay.json'ı değiştirir ve teçhizatlarınızı unutur. Yönetici bir sonraki başlatmadan önce onları yeniden kaydeder ve anahtarı tekrar açar — sayfa da bağlı olmayan her dosyayı gösterir.",
+    "Şarjörlü bir silah dolu ve namlusunda mermiyle çıkar — kimsenin R'ye basması gerekmez; Doldur düğmesi bunu tek tıkla yapar. Süngü ve susturucu birbirini dışlar, silah feneri ise raylı el koruması ister: düzenleyici uyarır ve düzeltmeyi önerir.",
+    "Sayfanın üstündeki Yeni karakter, her yeni karakterin nasıl başlayacağını belirler — isterseniz tok, susuz değil ve ısınmış. Panel bunu kendi sunucu tarafı moduyla uygular; oyuncular hiçbir şey indirmez."
    ]
   },
   {
@@ -147,7 +153,8 @@
     "Yeniden başlatma uyarıları da RCon'u kullanır. Parola olmadan yeniden başlatma yine gerçekleşir — oyuncular sadece geri sayım görmez.",
     "Oyuncular bölümü yönetici günlüğünden bir geçmiş oluşturur: adlar, oyuncu kimlikleri, oynama süresi, öldürmeler. Bunun için -adminlog başlatma parametresi gerekir (Sunucu sayfası → Başlatma parametreleri).",
     "Ayarlar → Yeniden başlatma davranışı, yeniden başlatmadan belirli bir süre önce herkesi atıp sunucuyu kilitleyebilir, böylece son dakikada kimse tekrar giremez. Karakterler bağlantı kesilince kaydedilir, bu yüzden hiçbir şey kaybolmaz.",
-    "Sohbet sayfası her günün arşivini tutar — panelden gönderilen mesajlar ve zamanlanmış duyurular dâhil — arama ve .txt indirme seçeneğiyle birlikte. Ne kadar süre saklanacağı da orada ayarlanır."
+    "Sohbet sayfası her günün arşivini tutar — panelden gönderilen mesajlar ve zamanlanmış duyurular dâhil — arama ve .txt indirme seçeneğiyle birlikte. Ne kadar süre saklanacağı da orada ayarlanır.",
+    "Oyuncular → Şu an çevrimiçi bölümünden herkese yazabilir, herkesi atabilir (örneğin bakımdan önce) ve bir sonraki yeniden başlatmaya kadar girişi kilitleyebilirsin. Bir oyuncunun profili aynı IP'den görülen diğer hesapları ve oyuncunun neyi inşa ettiğini veya yıktığını gösterir."
    ]
   },
   {
@@ -164,8 +171,8 @@
      "body": "Geçiş hızı, havanın ne kadar kademeli değiştiğini belirler: Yumuşak, vanilla'daki gibi küçük adımlarla yaklaşık yarım saatte değişir. Hızlı tüm aralığı iki dakikada geçer — havanın bir ışık düğmesi gibi hissettirmesinin nedeni budur."
     },
     {
-     "title": "Gün uzunluğunu ayarlayın",
-     "body": "Gündüz ve gece hızlandırma, oyun içi zamanın akışını çarpar — 12, tam bir günün iki gerçek saat sürmesi demektir. Gece hızlandırma ayrıdır, böylece geceleri kısa tutabilirsiniz."
+     "title": "Gündüz ve gecenin uzunluğunu ayarla",
+     "body": "Gündüz ve gece; haritan için gökyüzünü, gün doğumunu ve batımını, gündüz ile gecenin gerçek zamanda ne kadar sürdüğünü gösterir — yeniden başlatmaların oyun saatine etkisi dahil. Oyun gününü oynatmak (ve yeniden durdurmak) için ▶ düğmesine bas ya da beyaz işaretçiyi istediğin ana sürükle. Hazır bir his seç veya istediğin gündüz ve gece uzunluğunu yaz; panel hızlandırmayı hesaplar."
     }
    ],
    "tips": [
@@ -188,12 +195,13 @@
     },
     {
      "title": "Araçları ayarlayın",
-     "body": "Araçlar her araç olayını listeler: kaç tane olabileceği, kaç çıkış noktası olduğu ve parçalarının ne kadar eksiksiz olduğu — ve her parçanın araçta çıkma olasılığını ayarlar."
+     "body": "Araçlar, her araç olayını aracın çizimiyle gösterir: kaç tane olabileceğini, kaç doğuş noktası olduğunu, parçalarının ne kadar eksiksiz olduğunu — ve ne kadar yakıt ve soğutma sıvısıyla doğduğunu (bunu panelin eklediği minik bir sunucu taraflı mod ayarlar; oyuncular hiçbir şey indirmez)."
     }
    ],
    "tips": [
     "Harita görseli eklenmemiştir — katmanlar misyon dosyalarınızdan gelir. Fotoğraf gibi bir harita için harita ayarlarında kendi yukarıdan görüntünüzü yükleyin.",
-    "Diğer düzenleyiciler gibi bu sayfalar da yalnızca sunucu durdurulmuşken kaydeder."
+    "Diğer düzenleyiciler gibi bu sayfalar da yalnızca sunucu durdurulmuşken kaydeder.",
+    "Her haritada bir cetvel (mesafe ölçme, koordinat kopyalama) ve yönetici işaretleri vardır — bir klan üssü veya tüccar gibi, sunucunun her yöneticisinin her haritada gördüğü notlar. Isı haritası yönetici günlüğünden inşaat, baskın ve zulaları ekler; Canlı harita her oyuncunun nerelere gittiğini gösterir."
    ]
   },
   {
@@ -216,7 +224,9 @@
    ],
    "tips": [
     "Wipe, kaydedilmiş dünya durumunu siler — oyuncular, araçlar, üsler. Loot tablolarınız ve yapılandırmalarınız dokunulmadan kalır. Klasörler önce kenara taşınır, böylece yanlışlıkla yapılan bir wipe elle kurtarılabilir.",
-    "Çökme bekçisi, sunucu kendi kendine kapanırsa onu yeniden başlatır. Beş dakikada üç çökmeden sonra durur ve bunun yerine bir uyarı gösterir — bir çökme döngüsünün yeni bir yeniden başlatmaya değil, bir insana ihtiyacı vardır."
+    "Çökme bekçisi, sunucu kendi kendine kapanırsa onu yeniden başlatır. Beş dakikada üç çökmeden sonra durur ve bunun yerine bir uyarı gösterir — bir çökme döngüsünün yeni bir yeniden başlatmaya değil, bir insana ihtiyacı vardır.",
+    "Ayarlar → Genel → Otomatik başlatma yöneticiyi bilgisayarla birlikte başlatır ve her sunucu yöneticiyle birlikte başlayabilir — elektrik kesintisinden sonra her şey kendiliğinden geri gelir.",
+    "Yönetici beklenmedik şekilde kapanırsa bekçi onu sistem tepsisinde yeniden başlatır (15 dakikada en fazla üç kez) ve gösterge paneli bunu bildirir — varsa Windows'un çökme kaydıyla birlikte. Ayarlar → Genel'den kapatılabilir."
    ]
   },
   {
@@ -253,7 +263,7 @@
     },
     {
      "title": "Paneli ağa açın",
-     "body": "Ayarlar → Panel erişimi: evdeki telefonlar için “Yerel ağ”, her yerden erişim için “İnternet” (yalnızca girişle mümkündür). Ardından yöneticiyi yeniden başlatın."
+     "body": "Ayarlar → Panel erişimi: evdeki telefonlar için Yerel ağ, her yerden erişim için İnternet (yalnızca girişle). Değişiklik hemen uygulanır — yeniden başlatma yok."
     },
     {
      "title": "Bağlantılara izin verin",
@@ -407,7 +417,7 @@
   "loadout": "Bir oyuncunun yeniden doğduğunda ne giydiği ve ne taşıdığı. Bunlar cfggameplay.json'da kayıtlı DayZ spawn-gear ön ayarlarıdır — değişiklikler sunucu yeniden başlatıldıktan sonra geçerli olur. Vanilla'da teçhizat bunun yerine init.c içindedir; bu yüzden yeni bir misyon sistemi açana kadar burada hiçbir şey göstermez.",
   "loadout.carried": "Giyilen bir yuva yerine doğrudan yeni oyuncunun envanterine konan serbest eşyalar — bez parçaları, yiyecek, bir başlangıç aleti.",
   "loadout.characters": "Bu ön ayarın hangi hayatta kalan modellerine uygulandığı (SurvivorM_Mirek, SurvivorF_Eva, …). Tümüne uygulamak için boş bırakın; her doğuşta biri rastgele seçilir.",
-  "loadout.condition": "Bir eşyanın çıktığı durum. DayZ'de 1.0 = kusursuz ve 0.0 = harap, yani yüksek olan daha iyidir. Kusursuz, yeni doğan teçhizatını yeni tutar; kesin bir min–max sağlık aralığı için Özel…'i seçin, eşya bu aralıkta bir yerde çıkar.",
+  "loadout.condition": "Bir eşyanın doğduğu durum. DayZ'de 1.0 = kusursuz, 0.0 = harap demektir, yani yüksek olan daha iyidir. Kusursuz, başlangıç teçhizatını yeni tutar; tam bir min–maks sağlık aralığı belirlemek için Özel'i seçin, eşya bu aralıkta bir yerde doğar. Taşınan eşyalarda Kusursuz, onları tam olarak oyunun ürettiği gibi doğurur (bir paçavra, bütün bir elma); başka herhangi bir durum onlara tam miktar da verir, yani bir paçavra yığını dolu doğar.",
   "loadout.weight": "Bu ön ayarın diğerlerine karşı ağırlığı. DayZ doğuş başına TEK bir ön ayar seçer, bu yüzden 3 ağırlıklı bir ön ayar 1 ağırlıklı olandan üç kat daha olasıdır.",
   "loadout.worn": "Vücuda, her seferinde bir vücut yuvasına giydirilen eşyalar. Bir yuvada DayZ ağırlığa göre TEK bir eşya seçer, bu yüzden birkaç varyant listelemek doğuştan doğuşa çeşitlilik sağlar.",
   "logs.adm": "Oyuncuların ne yaptığı: bağlanmalar, sohbet, öldürmeler, konumlar. -adminlog bayrağını gerektirir; Oyuncular sayfası bundan oluşturulur.",
@@ -420,7 +430,7 @@
   "mods.scan": "Modun içinde bir types.xml arar ve onu cfgeconomycore.xml'e kaydeder, böylece modun loot'u gerçekten çıkar.",
   "mods.serverSide": "Modu -mod yerine -serverMod ile yükler: sunucuda çalışır ve istemcilerin ne ihtiyacı olur ne de alırlar. Yalnızca yönetici araçları için — sunucu tarafına ayarlanmış bir loot veya içerik modu çalışmaz.",
   "mods.uninstall": "Mod klasörünü sunucudan kaldırır. .bikey'i yalnızca başka hiçbir yüklü mod aynı anahtarı kullanmıyorsa silinir, böylece Expansion'ınki gibi paylaşılan anahtarlar kalır.",
-  "mods.update": "İstemcinin !Workshop'undaki daha yeni dosyaları sunucuya kopyalar. Yönetici mod indiremez — önce Steam'de abone olun.",
+  "mods.update": "Mod kaynağındaki daha yeni dosyaları sunucuya kopyalar. Kaynak Steam Workshop (doğrudan indirme) ise önce yeni sürümleri SteamCMD ile indirir.",
   "rcon.password": "battleye/beserver_x64.cfg'ye yazılır. BattlEye bu dosyayı yalnızca başlatılırken okur, bu yüzden yeni bir parola bir sonraki yeniden başlatmaya kadar hiçbir şey yapmaz.",
   "server.forceSameBuild": "İstemcilerin tam olarak aynı oyun sürümünü çalıştırmasını zorunlu kıl (1). Sürüm uyuşmazlığı çökmelerini önler.",
   "server.hostname": "DayZ sunucu listesinde görünen sunucu adı. Kısa ve aranabilir tutun.",
@@ -443,7 +453,7 @@
   "settings.adminlog": ".ADM dosyasını yazan -adminlog'u etkinleştirir. Oyuncular sayfası ve öldürme akışı bundan oluşturulur ve onsuz boş kalır.",
   "settings.backup": "Yapılandırmalarınızı ve misyon dosyalarınızı zamanlanmış olarak zip'ler ve en yeni N tanesini tutar. Ayrıca, panelin üzerine yazdığı her dosya yanında zaman damgalı bir .bak alır.",
   "settings.exposure": "“Yalnızca bu bilgisayar”, paneli yalnızca bu PC'nin açabileceği anlamına gelir. “Yerel ağ”, telefonunuzun ve evdeki diğer cihazların onu açmasını sağlar. “İnternet” onu her yerden erişilebilir kılar — panel girişi gerektirir; gerisini (yönlendirici, güvenlik duvarı, genel IP) Ayarlar → Uzaktan erişim kontrol eder.",
-  "settings.modSource": "Yöneticinin modları nereden kopyaladığı. İstemci klasörü: !Workshop içeren DayZ oyun kurulumu (Steam'de abone olursunuz, yönetici kopyalar ve günceller). Mod klasörü: @mod içeren herhangi bir klasör veya SteamCMD'nin workshop/content/221100 klasörü — oyunun yüklü olmadığı bir sunucuda Workshop modlarını almanın yolu. Yalnızca sunucu: kaynak yok; elle yüklenen modlar yine yönetilir ama otomatik güncelleme kapalıdır.",
+  "settings.modSource": "Yöneticinin modları nereden aldığı. İstemci klasörü: !Workshop içeren DayZ kurulumu (Steam'de abone olursun, yönetici kopyalar ve günceller). Mod klasörü: @mod içeren herhangi bir klasör veya SteamCMD'nin workshop/content/221100 klasörü. Steam Workshop (doğrudan indirme): panel kendi SteamCMD'siyle modları kendisi indirir, denetler ve günceller — oyuna gerek yoktur. Yalnızca sunucu: kaynak yok; elle yüklenen modlar yine yönetilir ama otomatik güncelleme kapalıdır.",
   "settings.perf": "CPU benzeşimi DayZServer'ı işaretlediğiniz çekirdeklere sabitler (işaretlenmeyen çekirdekler işletim sistemi, ikinci bir sunucu veya diğer programlar için boş kalır). Öncelik, işletim sistemine onu ne kadar istekle zamanlayacağını söyler — Normalin üstü güvenli bir artıştır; Yüksek makinenin geri kalanını yavaşlatabilir. İkisi de her başlatmada uygulanır. Linux'ta önceliği yükseltmek root gerektirir.",
   "settings.restart": "Sunucuyu bir zamanlamaya göre yeniden başlatır. Oyuncular önceden RCon uyarıları alır; bunun için bir RCon parolası ayarlanmış olmalıdır.",
   "settings.restartBehaviour": "Oyuncuların her otomatik yeniden başlatma etrafında yaşadıkları: gördükleri geri sayım metni (onların dilinde yazın), karakterleri düzgün kaydedilsin diye sunucunun kilitlendiği ve herkesin atıldığı yeniden başlatma öncesi isteğe bağlı bir pencere ve işlem durdurulmadan önce dünyayı kaydeden düzgün bir #shutdown. Aşağıdaki zaman çizelgesi tam sırayı gösterir.",
@@ -480,7 +490,14 @@
   "weather.transition": "Havanın ne kadar kademeli değiştiği. Yumuşak, vanilla DayZ'deki gibi küçük adımlarla yaklaşık yarım saatte değişir. Hızlı tüm aralığı iki dakikada geçebilir — havanın bir ışık düğmesi gibi hissettirmesinin nedeni budur.",
   "weather.wind": "Rüzgâr hızı m/sn cinsinden. Bulutları hareket ettirir ve dinamik anahtarla birlikte havanın ne kadar hızlı değiştiğini belirler.",
   "wipe": "Kaydedilmiş dünya durumunu siler: oyuncular, araçlar, üsler. Loot tabloları ve yapılandırmalara dokunulmaz. Klasörler silinmek yerine kenara taşınır, böylece bir hata elle geri alınabilir.",
-  "wipe.undo": "Bir wipe, dünya klasörlerini silmek yerine .dayz-manager/wipes/<zaman damgası>/ içine taşır, böylece geri alınabilir kalır — ta ki sunucu o durumu yeniden oluşturana kadar; o noktada eski dünyayı geri koymak yenisini gömer."
+  "wipe.undo": "Bir wipe, dünya klasörlerini silmek yerine .dayz-manager/wipes/<zaman damgası>/ içine taşır, böylece geri alınabilir kalır — ta ki sunucu o durumu yeniden oluşturana kadar; o noktada eski dünyayı geri koymak yenisini gömer.",
+  "server.adminLogPlayerList": "Her 5 dakikada bir her oyuncunun konumunu yönetici günlüğüne (.ADM) yazar. Canlı harita bunu kullanır: bu olmadan bir oyuncunun noktası yalnızca bağlanma, çatışma ve sohbette hareket eder.",
+  "server.adminLogPlayerHitsOnly": "Yalnızca oyunculara isabetleri kaydeder, enfektelere ve hayvanlara isabetleri dışarıda bırakır; böylece yönetici günlüğü çok daha küçük kalır.",
+  "server.adminLogPlacement": "Tuzak, çadır ve diğer yerleştirilebilir eşyaların yerleştirilmesini yönetici günlüğüne yazar.",
+  "server.adminLogBuildActions": "Üs parçalarının inşasını, sökülmesini ve yok edilmesini yönetici günlüğüne yazar.",
+  "wsdl": "SteamCMD, Valve'ın kendi komut satırı Steam istemcisidir. Panel onu kendi klasörüne kurar, Steam hesabınla bir kez giriş yaptırır (DayZ Workshop dosyaları yalnızca oyuna sahip hesaplara verilir) ve sonra yapıştırdığın modları indirir: her biri SteamCMD'nin klasörüne iner, anahtarlarıyla birlikte sunucuya @Ad olarak kopyalanır ve açılır. Güncellemek aynı indirmeyi yeniden yapmaktır. Oyuncuların yine de modlara ihtiyacı var: her zamanki gibi Workshop'ta abone olurlar.",
+  "veh.tweaks": "Doğma anındaki yakıt ve radyatör için hiçbir şey kurman gerekmez: sunucu başlarken panel bu ayarlarla minik bir sunucu tarafı mod (@DZM_ServerTweaks) oluşturur ve -serverMod ile yükler. Oyuncular hiçbir şey indirmez. Değerler, ekonominin bir sonraki başlatmadan sonra doğurduğu araçlar için geçerlidir; haritada zaten duran arabalar kendi değerlerini korur.",
+  "loadout.stats": "Yiyecek ve su, karakterin enerji ve su yedekleridir (DayZ'de 0–5000; yeni karakter her birinden 600 alır, bu yüzden açlık ve susuzluk simgeleri kısa sürede görünür). Sıcaklık, ısı tamponudur: karakterin ateş başında biriktirdiği ve bir süre üşümesini önleyen ısı yedeği. Değerler yalnızca yeni karakterlere — ölümden sonra da — uygulanır, kayıtlı karakterine dönen oyunculara uygulanmaz. Panel bunları her sunucu başlatılışından önce kendi sunucu tarafı moduna yazar."
  },
  "gameplay": {
   "version": "Dosyanın biçim sürümü. DayZ yazar — olduğu gibi bırakın.",
@@ -530,7 +547,7 @@
   "shockDepletionSpeed": "Boğulurken saniyede eklenen şok.",
   "staticMode": "Duvarlara ve statik nesnelere karşı: 0 = kapalı, 1 = açık (oyundaki gibi), 2 = her zaman.",
   "dynamicMode": "Oyunculara, araçlara ve diğer hareketli nesnelere karşı: 0 = kapalı, 1 = açık (oyundaki gibi), 2 = her zaman.",
-  "lightingConfig": "Gece karanlığı: 0 = daha aydınlık geceler (oyundaki gibi), 1 = karanlık geceler. serverDZ.cfg'deki aynı ayarı geçersiz kılar.",
+  "lightingConfig": "Gece aydınlatması: 0 = daha aydınlık geceler (oyundaki gibi), 1 = karanlık geceler, 2 = Sakhal aydınlatması, 3 = Nasdara aydınlatması. serverDZ.cfg'deki aynı ayarı geçersiz kılar.",
   "objectSpawnersArr": "Dünyaya ek statik nesneler yerleştiren JSON dosyaları (misyon içindeki yollar).",
   "environmentMinTemps": "Ocaktan aralığa her ayın en düşük hava sıcaklığı, °C. Haritanın kendi değerlerini kullanmak için boş bırakın.",
   "environmentMaxTemps": "Ocaktan aralığa her ayın en yüksek hava sıcaklığı, °C. Haritanın kendi değerlerini kullanmak için boş bırakın.",
@@ -545,7 +562,7 @@
   "disableHeightPlacementCheck": "Nesneler oyuncunun ayaklarının normalde izin verilenden daha yukarısına yerleştirilebilir.",
   "disableIsUnderwaterCheck": "Nesneler su altına yerleştirilebilir.",
   "disableIsInTerrainCheck": "Nesneler araziye gömülebilir.",
-  "disableColdAreaBuildingCheck": "Oyunun normalde yasakladığı soğuk bölgelerde (Sakhal) inşaata izin verilir.",
+  "disableColdAreaBuildingCheck": "disableColdAreaPlacementCheck'in eski adı. Güncel DayZ bunu artık okumuyor — bunun yerine yeni anahtarı ayarlayın.",
   "disallowedTypesInUnderground": "Yeraltı alanlarına (sığınaklar, mağaralar) yerleştirilemeyen kitler.",
   "disablePerformRoofCheck": "Üs parçaları çatı altında ve kapalı alanlarda inşa edilebilir.",
   "disableIsCollidingCheck": "Üs parçaları önünde bir şey olsa bile inşa edilebilir.",
@@ -563,33 +580,57 @@
   "ignoreNavItemsOwnership": "Harita, yanınızda pusula veya GPS olmadan pusula ve GPS bilgisini gösterir.",
   "displayPlayerPosition": "Oyuncunun kendi konumu haritada işaretlenir.",
   "displayNavInfo": "Harita navigasyon bilgisini (ızgara ve pusula) gösterir.",
-  "boatDecayMultiplier": "Teknelerin ne kadar hızlı çürüdüğü. 1 = oyundaki gibi, daha düşük = daha yavaş."
+  "boatDecayMultiplier": "Teknelerin ne kadar hızlı çürüdüğü. 1 = oyundaki gibi, daha düşük = daha yavaş.",
+  "disableColdAreaPlacementCheck": "Oyunun normalde hiçbir şey yerleştirmeye izin vermediği soğuk bölgelerde (Sakhal) inşaata izin verilir.",
+  "disableItemFalling": "Bir üs parçası söküldüğünde veya yok edildiğinde üzerinde duran eşyalar düşmek yerine yerinde kalır.",
+  "disableDropAttachmentsOnFall": "Çöken bir üs yapısı eklentilerini ve sakladığı eşyaları yere düşürmek yerine korur.",
+  "disableRefundMaterialsOnFall": "Çöken bir üs yapısı, inşa edilmiş parçaları için malzeme iade etmez — sadece kaybolur.",
+  "canDetachAttachedCarWheels": "Oyuncular bir arabanın tekerleklerini sökebilir.",
+  "canDamageAttachedCarWheels": "Arabaya takılı tekerlekler hasar alabilir, örneğin silah ateşiyle.",
+  "canDetachAttachedBikeWheels": "Oyuncular bir bisikletin tekerleklerini sökebilir.",
+  "canDamageAttachedBikeWheels": "Bisiklete takılı tekerlekler hasar alabilir.",
+  "playerRestrictedAreaFiles": "Oyunculara yasak bölgeleri içeren JSON dosyaları (görev içindeki yollar) — Sakhal'daki savaş başlığı deposu gibi, oyunun oyuncuları uzak tuttuğu alanlar.",
+  "bunkerBroadcastEnabled": "Sığınak radyo yayını çalışır: sığınak kodları, görevin cfgbunkerbroadcast.json dosyasındaki (Nasdara) ayara göre Mors koduyla gönderilir. Kapalı = yayın yok.",
+  "ExternalLockData": "Şifreli kilitlerin kaba kuvvete karşı korunması: çok fazla yanlış koddan sonra kilit bir süre giriş kabul etmez.",
+  "protectionCountStageOne": "Şifreli kilit girişi ilk kez engellemeden önce art arda yanlış kod sayısı.",
+  "protectionCountStageTwo": "İlk engellemeden sonra, kilit yeniden engellemeden önceki yanlış kod sayısı.",
+  "protectionTime": "Çok fazla yanlış koddan sonra şifreli kilidin girişi reddettiği saniye.",
+  "protectionResetTime": "Şifreli kilidin yanlış kodları unutup sıfırdan saymaya başladığı saniye.",
+  "SandstormData": "Kum fırtınaları (Nasdara).",
+  "sandstormFrequency": "Kum fırtınalarının ne sıklıkla geldiği: 0 = hiç, 1 = oyundaki gibi, 2 = iki kat sık."
  },
  "globals": {
   "AnimalMaxCount": "Haritada aynı anda yaşayan en fazla hayvan sayısı.",
-  "CleanupAvoidance": "Yeni çıkmış loot'un çok erken temizlenmesini önleyen katsayı.",
+  "CleanupAvoidance": "Oyuncuya olan ve içinde hiçbir şeyin temizlenmediği mesafe (m); böylece eşyalar oyuncuların gözü önünde kaybolmaz.",
   "CleanupLifetimeDeadAnimal": "Ölü bir hayvan leşinin kaldırılmadan önce kaldığı saniye.",
-  "CleanupLifetimeDeadInfected": "Ölü bir enfektenin bedeninin kaldırılmadan önce kaldığı saniye.",
-  "CleanupLifetimeDeadPlayer": "Ölü bir oyuncunun bedeninin ve teçhizatının kaldırılmadan önce kaldığı saniye.",
-  "CleanupLifetimeDefault": "Türü bir lifetime belirlemediğinde, bırakılan bir eşyanın temizlenmeden önce kaldığı varsayılan saniye.",
-  "CleanupLifetimeLimit": "Temizleyicinin çok kısa eşya ömürleri için kullandığı alt sınır (sn).",
+  "CleanupLifetimeDeadInfected": "Ölü bir enfektenin cesedinin kaldırılmadan önce kaldığı saniye.",
+  "CleanupLifetimeDeadPlayer": "Ölü bir oyuncunun cesedinin teçhizatıyla birlikte kaldırılmadan önce kaldığı saniye.",
+  "CleanupLifetimeDefault": "Türü bir ömür belirtmediğinde, bırakılan bir eşyanın temizlenmeden önce kaldığı varsayılan saniye.",
+  "CleanupLifetimeLimit": "Temizliğin çok kısa ömürler için kullandığı alt sınır (sn).",
   "CleanupLifetimeRuined": "Harap bir eşyanın temizlenmeden önce yerde kaldığı saniye.",
-  "FlagRefreshFrequency": "Kaldırılmış bir bölge bayrağının yakındaki kurulu eşyaların ömrünü ne sıklıkla (sn) yenilediği.",
-  "FlagRefreshMaxDuration": "Bir bayrağın eşyaları yenileyebileceği en uzun ömür (sn) — üs çürüme sınırı (vanilla ≈ 45 gün).",
-  "IdleModeCountdown": "Bağlı oyuncu olmadan geçen saniye; sonrasında ekonomi boşta moduna geçer ve loot yenilemeyi durdurur.",
+  "FlagRefreshFrequency": "Göndere çekilmiş bir bölge bayrağının yakındaki yerleştirilmiş eşyaların ömrünü ne sıklıkla (sn) yenilediği.",
+  "FlagRefreshMaxDuration": "Bir bayrağın eşyaları yenileyebileceği en uzun ömür (sn) — üs çürümesinin üst sınırı (vanilla ≈ 45 gün).",
+  "FoodDecay": "Yiyecekler zamanla çürür (1 = açık).",
+  "IdleModeCountdown": "Ekonomi boşta kalıp ganimet yenilemeyi durdurmadan önce, bağlı oyuncu olmadan geçen saniye.",
   "IdleModeStartup": "İlk oyuncu katılana kadar ekonomiyi boşta modunda başlat (1 = evet).",
-  "InitialSpawn": "Ekonomi ilk başladığında çıkarılan başlangıç loot'u miktarı.",
-  "LoginTimeMax": "Girişin iptal edilmeden önce sürebileceği en uzun süre (sn).",
-  "LogoutTimeMax": "En uzun çıkış bekleme süresi (sn).",
-  "RespawnAttempt": "Motorun döngü başına başarısız bir loot yeniden çıkışını kaç kez yeniden denediği.",
-  "RespawnTypes": "Her döngüde yeniden çıkış için kaç loot türünün işlendiği.",
-  "SpawnInitial": "Ekonomi ilk başladığında çıkarılan başlangıç loot'u miktarı.",
-  "TimeHopping": "Sunucu değiştiren oyunculara, bunu caydırmak için uygulanan ek giriş gecikmesi (sn).",
-  "TimeLogin": "Bir oyuncunun giriş yaparken yükleme ekranında beklediği saniye.",
-  "TimeLogout": "Bir oyuncunun çıkışı seçtikten sonra dünyada kalması gereken saniye (çatışmadan kaçma önlemi).",
-  "TimePenalty": "Yakın zamanda çatışmaya girmişken çıkış yapmak için ek bekleme (sn).",
-  "WorldWetTempUpdate": "Dünya eşyalarının ıslaklık ve sıcaklığının ne sıklıkla (sn) güncellendiği.",
+  "InitialSpawn": "Ekonomi boş bir depoyla başladığında nominal ganimetin yüzde kaçının doğduğu (100 = tümü).",
+  "LoginTimeMax": "Deneme düşürülmeden önce girişin sürebileceği en uzun süre (sn).",
+  "LogoutTimeMax": "En uzun çıkış beklemesi (sn).",
+  "LootDamageMax": "Yeni doğan ganimetin en çok yıpranması, 0–1 (vanilla 0.82). Daha düşük = ganimet daha iyi durumda doğar.",
+  "LootDamageMin": "Yeni doğan ganimetin en az yıpranması, 0–1 (0 = kusursuz).",
+  "LootProxyPlacement": "Ganimet binaların içindeki raflarda, masalarda ve diğer noktalarda doğar (1 = açık). Açık bırakın.",
+  "LootSpawnAvoidance": "Oyuncuya olan ve içinde yeni ganimet çıkmayan mesafe (m); böylece ganimet asla kimsenin gözü önünde belirmez.",
+  "RespawnAttempt": "Motorun döngü başına başarısız bir ganimet yeniden doğuşunu kaç kez yeniden denediği.",
+  "RespawnLimit": "Döngü başına bir türden yeniden doğan en fazla eşya.",
+  "RespawnTypes": "Her döngüde yeniden doğuş için işlenen ganimet türü sayısı.",
+  "RestartSpawn": "1 = her sunucu başlatmasında tüm ganimet yeniden doğar (ganimet sıfırlama); 0 = kayıtlı ganimet korunur.",
+  "SpawnInitial": "Başlangıçta ekonominin ilk geçişinin doğuş bütçesi (vanilla 1200).",
+  "TimeHopping": "Sunucudan sunucuya atlayan oyunculara, bunu caydırmak için uygulanan ek giriş gecikmesi (sn).",
+  "TimeLogin": "Oyuncunun giriş yaparken yükleme ekranında beklediği saniye.",
+  "TimeLogout": "Çıkışı seçtikten sonra oyuncunun dünyada kalması gereken saniye (çatışmadan kaçışa karşı).",
+  "TimePenalty": "Çatışmadan kısa süre sonra çıkış için ek bekleme (sn).",
+  "WorldWetTempUpdate": "Dünyada duran eşyaların ıslaklığı ve sıcaklığı güncellenir (1 = açık).",
   "ZombieMaxCount": "Haritada aynı anda yaşayan en fazla enfekte sayısı.",
-  "ZoneSpawnDist": "Dinamik enfekte/hayvan bölgelerinin çıktığı, oyuncuya olan mesafe (m)."
+  "ZoneSpawnDist": "Dinamik enfekte/hayvan bölgelerinin doğduğu, oyuncuya olan mesafe (m)."
  }
 }

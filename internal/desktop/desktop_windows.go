@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -67,6 +68,7 @@ const webView2Download = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
 
 const (
 	wmClose       = 0x0010
+	wmEndSession  = 0x0016
 	wmNull        = 0x0000
 	wmApp         = 0x8000
 	wmTray        = wmApp + 7 // not WM_APP itself: go-webview2 uses that for Dispatch
@@ -200,6 +202,7 @@ type shell struct {
 	trayOn   bool
 	tipShown bool
 	quitOnce sync.Once
+	gone     atomic.Bool // the window's message loop has ended
 }
 
 var theShell *shell
@@ -249,7 +252,7 @@ func Run(inst *launcher.Instance, attachURL string) error {
 	w.SetSize(1000, 640, webview2.HintMin)
 	s.restorePlacement()
 	w.Navigate(url)
-	if inst != nil && !launcher.ShortcutsInstalled() && !s.flag("shortcuts-offered") {
+	if inst != nil && !StartHidden && !launcher.ShortcutsInstalled() && !s.flag("shortcuts-offered") {
 		// Once: put the panel in the Start menu and on the desktop, like an
 		// installed program. Asked after the page is up, not over a blank window.
 		go func() {
@@ -263,7 +266,17 @@ func Run(inst *launcher.Instance, attachURL string) error {
 
 	if inst != nil {
 		s.addTray()
+		if StartHidden {
+			// Started with Windows: only the tray icon, and one note where
+			// the manager went.
+			pShowWindow.Call(s.hwnd, swHide)
+			s.tipShown = true
+			s.balloon(text(inst, "desktop.tray.title"), text(inst, "desktop.tray.autostart"))
+		}
 		inst.App.ShowWindow = func() bool {
+			if s.gone.Load() {
+				return false // no window any more: the caller opens a new one
+			}
 			w.Dispatch(s.show)
 			return true
 		}
@@ -274,6 +287,7 @@ func Run(inst *launcher.Instance, attachURL string) error {
 		}()
 	}
 	w.Run()
+	s.gone.Store(true)
 	s.removeTray()
 	return nil
 }
@@ -420,6 +434,12 @@ func (s *shell) requestExit() {
 
 func mainWndProc(hwnd, m, wp, lp uintptr) uintptr {
 	s := theShell
+	if s != nil && s.inst != nil && m == wmEndSession && wp != 0 {
+		// Windows signs out or shuts down and ends this process when the
+		// message returns: note it, so the next start does not report it as
+		// a problem.
+		s.inst.MarkSessionEnd()
+	}
 	if s != nil && m == wmClose {
 		if s.inst == nil {
 			s.quit()
@@ -558,20 +578,25 @@ func runWithoutWebView(inst *launcher.Instance, url string) error {
 	s := &shell{inst: inst, url: url}
 	theShell = s
 	s.addTray()
-	s.balloon(text(inst, "desktop.tray.title"), text(inst, "desktop.noWebView"))
-	// The app window needs Microsoft's WebView2 runtime: offer it (once a
-	// "No" is said, the panel just keeps using the browser).
-	if !s.flag("webview2-declined") {
-		if messageBox(0, text(inst, "desktop.webview.offer"), launcher.AppName, mbYesNo|mbIconQ) == idYes {
-			_ = os.Remove(filepath.Join(inst.App.ManagerDir, "webview2-declined"))
-			launcher.OpenBrowser(webView2Download)
+	if StartHidden {
+		// Started with Windows: the tray icon only — no browser, no question.
+		s.balloon(text(inst, "desktop.tray.title"), text(inst, "desktop.tray.autostart"))
+	} else {
+		s.balloon(text(inst, "desktop.tray.title"), text(inst, "desktop.noWebView"))
+		// The app window needs Microsoft's WebView2 runtime: offer it (once a
+		// "No" is said, the panel just keeps using the browser).
+		if !s.flag("webview2-declined") {
+			if messageBox(0, text(inst, "desktop.webview.offer"), launcher.AppName, mbYesNo|mbIconQ) == idYes {
+				_ = os.Remove(filepath.Join(inst.App.ManagerDir, "webview2-declined"))
+				launcher.OpenBrowser(webView2Download)
+			}
 		}
+		go func() {
+			if !runAppBrowser(inst, url) {
+				launcher.OpenBrowser(url)
+			}
+		}()
 	}
-	go func() {
-		if !runAppBrowser(inst, url) {
-			launcher.OpenBrowser(url)
-		}
-	}()
 	inst.App.ShowWindow = func() bool { launcher.OpenBrowser(panelURL(inst, url)); return true }
 	// Tray message loop until the manager exits.
 	go func() {

@@ -136,7 +136,17 @@ type sniffListener struct {
 
 func newSniffListener(ln net.Listener, conf *tls.Config) net.Listener {
 	s := &sniffListener{Listener: ln, conf: conf, conns: make(chan net.Conn), errs: make(chan error, 1), done: make(chan struct{})}
-	go s.acceptLoop()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				select {
+				case s.errs <- fmt.Errorf("accept loop panicked: %v", r):
+				default:
+				}
+			}
+		}()
+		s.acceptLoop()
+	}()
 	return s
 }
 
@@ -173,7 +183,14 @@ func (s *sniffListener) acceptLoop() {
 			continue
 		}
 		delay = 0
-		go s.classify(c)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					_ = c.Close()
+				}
+			}()
+			s.classify(c)
+		}()
 	}
 }
 

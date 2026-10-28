@@ -71,10 +71,19 @@ type Manager struct {
 	// settings files (without the field) get the automatic behaviour.
 	AutoModVehiclesOff bool `json:"autoModVehiclesOff,omitempty"`
 
+	// StartServerOnLaunch starts this DayZ server when the manager starts
+	// (for instance after the computer restarted and the manager came up with
+	// it). A server that is already running is adopted, never started twice.
+	StartServerOnLaunch bool `json:"startServerOnLaunch,omitempty"`
+
+	// SetupDismissed hides the dashboard's "Getting started" checklist for
+	// good (Settings → General brings it back). Panel-wide.
+	SetupDismissed bool `json:"setupDismissed,omitempty"`
+
 	// Exposure mode: "local" (127.0.0.1 only) vs "lan"/"internet" (bind
 	// 0.0.0.0 so other devices on the network — e.g. a phone — can reach the
-	// panel). Applied via the bind address chosen on startup (see main.go), so
-	// a change here only takes effect after the manager is restarted.
+	// panel). Applied through the address the panel listens on; a change is
+	// applied at once (web.Server.ApplyAccess re-opens the listener).
 	Exposure string `json:"exposure"` // "local" | "lan" | "internet"
 
 	// BattlEye RCon settings. Port defaults to ServerPort+1 per DayZ
@@ -198,13 +207,80 @@ type Manager struct {
 	// PanelHTTPS serves the panel over HTTPS as well (same port; plain HTTP
 	// from other devices is redirected). Uses .dayz-manager/tls/cert.pem +
 	// key.pem when present, otherwise a generated self-signed certificate.
-	// Takes effect after the manager restarts, like Exposure.
+	// Applied at once, like Exposure: the panel re-opens its listener.
 	PanelHTTPS bool `json:"panelHTTPS"`
 
 	// UPnPPanel / UPnPGame ask the router (UPnP IGD) to forward the panel port
 	// (TCP) and the game ports (UDP game port..+3 and the Steam query port).
 	UPnPPanel bool `json:"upnpPanel"`
 	UPnPGame  bool `json:"upnpGame"`
+
+	// RemoteWatch re-checks the public (internet) address every 15 minutes —
+	// one request to a what-is-my-IP service each time, which is why it is a
+	// choice — so the panel always shows the current address for a phone and
+	// a change (a router restart often brings a new one) is noticed.
+	RemoteWatch bool `json:"remoteWatch,omitempty"`
+
+	// SteamUser is the Steam account SteamCMD downloads Workshop mods with
+	// (Mods → Direct download). Only the name: SteamCMD keeps its own login
+	// token, the panel never stores the password.
+	SteamUser string `json:"steamUser,omitempty"`
+
+	// KeepAwake keeps Windows (or a systemd Linux) from putting the computer
+	// to sleep: "" while a DayZ server runs (the default), "always" while the
+	// manager runs (for reaching the panel from a phone), "never" to leave
+	// the power plan alone. A sleeping PC takes the server and the panel
+	// with it — users saw that as the manager closing after 15-30 minutes.
+	KeepAwake string `json:"keepAwake,omitempty"`
+
+	// NoGuardian turns off the guardian: the small second copy of the
+	// program that starts the manager again when it ends in any way but a
+	// normal exit (a crash, the process killed from outside).
+	NoGuardian bool `json:"noGuardian,omitempty"`
+
+	// SteamCMDContent is the panel's SteamCMD download folder for DayZ
+	// (…/steamcmd/steamapps/workshop/content/221100) — the mod source while
+	// ModSource is "steamcmd". Kept up to date by the panel.
+	SteamCMDContent string `json:"steamcmdContent,omitempty"`
+
+	// VehicleTweaks set how full the tank (and the radiator) of vehicles the
+	// economy spawns is. Vanilla DayZ fills a random 0–35 % of the tank in
+	// script, so the panel applies these with a small server-side mod it
+	// generates before each server start (see app.SyncServerTweaks).
+	VehicleTweaks []VehicleTweak `json:"vehicleTweaks,omitempty"`
+
+	// SpawnStats set how fed, watered and warm a fresh character starts (the
+	// Player loadout page). Vanilla sets them in script too, so the same
+	// server-side mod applies them. nil: the game's own start values.
+	SpawnStats *SpawnStats `json:"spawnStats,omitempty"`
+}
+
+// SpawnStats is a fresh character's food, water and warmth, each a fraction
+// (0..1) of the most the game allows; nil keeps the game's start value.
+type SpawnStats struct {
+	Food   *float64 `json:"food,omitempty"`
+	Water  *float64 `json:"water,omitempty"`
+	Warmth *float64 `json:"warmth,omitempty"`
+}
+
+// Active reports whether any value is set.
+func (s *SpawnStats) Active() bool {
+	return s != nil && (s.Food != nil || s.Water != nil || s.Warmth != nil)
+}
+
+// FluidRange is a fill level range, 0..1 of the capacity.
+type FluidRange struct {
+	Min float64 `json:"min"`
+	Max float64 `json:"max"`
+}
+
+// VehicleTweak is the spawn condition of one vehicle event's classes; a nil
+// range keeps the game's default.
+type VehicleTweak struct {
+	Event   string      `json:"event"`
+	Classes []string    `json:"classes"`
+	Fuel    *FluidRange `json:"fuel,omitempty"`
+	Coolant *FluidRange `json:"coolant,omitempty"`
 }
 
 // ScheduledAnnouncement fires once a day at Time (HH:MM, local) when Enabled.
@@ -342,6 +418,31 @@ func (m Manager) Clone() Manager {
 	c.ScheduledProfiles = cloneSlice(m.ScheduledProfiles)
 	c.BroadcastPresets = cloneSlice(m.BroadcastPresets)
 	c.WorkshopCollections = cloneSlice(m.WorkshopCollections)
+	if m.VehicleTweaks != nil {
+		c.VehicleTweaks = make([]VehicleTweak, len(m.VehicleTweaks))
+		for i, vt := range m.VehicleTweaks {
+			vt.Classes = cloneSlice(vt.Classes)
+			if vt.Fuel != nil {
+				f := *vt.Fuel
+				vt.Fuel = &f
+			}
+			if vt.Coolant != nil {
+				f := *vt.Coolant
+				vt.Coolant = &f
+			}
+			c.VehicleTweaks[i] = vt
+		}
+	}
+	if m.SpawnStats != nil {
+		st := *m.SpawnStats
+		for _, f := range []**float64{&st.Food, &st.Water, &st.Warmth} {
+			if *f != nil {
+				v := **f
+				*f = &v
+			}
+		}
+		c.SpawnStats = &st
+	}
 	if m.MapSizes != nil {
 		c.MapSizes = make(map[string]int, len(m.MapSizes))
 		for k, v := range m.MapSizes {
@@ -369,13 +470,17 @@ const (
 	ModSourceClient = "client" // the DayZ client install's !Workshop folder
 	ModSourceFolder = "folder" // any folder holding @Mods or SteamCMD <id> folders
 	ModSourceServer = "server" // no source: mods are placed in the server dir by hand
+	// ModSourceSteamCMD: the panel's own SteamCMD downloads Workshop mods
+	// straight into the server (Mods → Direct download); its download folder
+	// is the source (SteamCMDContent).
+	ModSourceSteamCMD = "steamcmd"
 )
 
 // EffectiveModSource returns the configured mod source, defaulting to the
 // client !Workshop (the only mode that existed before v1.0.0).
 func (m Manager) EffectiveModSource() string {
 	switch m.ModSource {
-	case ModSourceFolder, ModSourceServer:
+	case ModSourceFolder, ModSourceServer, ModSourceSteamCMD:
 		return m.ModSource
 	}
 	return ModSourceClient
@@ -390,6 +495,8 @@ func (m Manager) ModSourceDir() string {
 		return m.ModsFolderPath
 	case ModSourceServer:
 		return ""
+	case ModSourceSteamCMD:
+		return m.SteamCMDContent
 	}
 	if m.VanillaDayZPath == "" {
 		return ""

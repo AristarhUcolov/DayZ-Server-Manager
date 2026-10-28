@@ -47,6 +47,21 @@ func TestStarterGearPresetIsValid(t *testing.T) {
 			}
 		}
 	}
+	// Like vanilla's init.c, the carried starter items sit on distinct hotbar
+	// keys.
+	keys := map[int]bool{}
+	for _, set := range back.DiscreteUnsortedItemSets {
+		for _, c := range set.ComplexChildrenTypes {
+			if c.QuickBarSlot == nil || *c.QuickBarSlot < 0 || keys[*c.QuickBarSlot] {
+				t.Errorf("%s: hotbar slot %v", c.ItemType, c.QuickBarSlot)
+				continue
+			}
+			keys[*c.QuickBarSlot] = true
+		}
+	}
+	if len(keys) == 0 {
+		t.Error("nothing on the hotbar")
+	}
 	// Round-trip must be byte-stable (no drift on a no-op edit).
 	raw1, _ := os.ReadFile(path)
 	if err := back.Save(path); err != nil {
@@ -188,8 +203,77 @@ func TestNormalizeFillsMissingConditionWithPristine(t *testing.T) {
 	if set.Attributes == nil || set.Attributes.HealthMin == nil || *set.Attributes.HealthMin != 1.0 {
 		t.Errorf("cargo set without attributes was not made pristine: %+v", set.Attributes)
 	}
+	// true = the rag and apple spawn as the game makes them (new, one rag);
+	// absent would hand them the set's attributes.
 	if set.SimpleChildrenUseDefault == nil || !*set.SimpleChildrenUseDefault {
-		t.Error("cargo children were not pinned to inherit the set's condition")
+		t.Error("cargo children were not set to spawn as new")
+	}
+	// DayZ reads a missing quickBarSlot as 0 (quick-bar slot 1) and a missing
+	// quantity as 0 (empty).
+	if it.QuickBarSlot == nil || *it.QuickBarSlot != -1 {
+		t.Errorf("worn item without quickBarSlot was not unbound: %v", it.QuickBarSlot)
+	}
+	if it.Attributes.QuantityMin == nil || *it.Attributes.QuantityMin != 1.0 {
+		t.Errorf("worn item without quantity would spawn empty: %+v", it.Attributes)
+	}
+}
+
+// Children inside an item (a magazine in a weapon) that carry attributes get
+// the missing bounds filled too; ones without attributes stay as they are
+// (DayZ then spawns them new).
+func TestNormalizeComplexChildren(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "p.json")
+	os.WriteFile(path, []byte(`{
+    "spawnWeight": 1, "name": "X", "characterTypes": [],
+    "attachmentSlotItemSets": [
+        { "slotName": "shoulderL", "discreteItemSets": [
+            { "itemType": "M4A1", "spawnWeight": 1, "attributes": { "healthMin": 0.5, "healthMax": 0.6 },
+              "complexChildrenTypes": [
+                { "itemType": "Mag_STANAG_30Rnd", "attributes": { "healthMin": 1, "healthMax": 1 } },
+                { "itemType": "M4_Suppressor" } ] } ] }
+    ],
+    "discreteUnsortedItemSets": []
+}`), 0o644)
+	p, _ := LoadGearPreset(path)
+	p.Normalize()
+	gun := p.AttachmentSlotItemSets[0].DiscreteItemSets[0]
+	if *gun.Attributes.HealthMin != 0.5 || gun.Attributes.QuantityMax == nil {
+		t.Errorf("weapon attributes: %+v", gun.Attributes)
+	}
+	mag := gun.ComplexChildrenTypes[0]
+	if mag.Attributes.QuantityMin == nil || *mag.Attributes.QuantityMin != 1 {
+		t.Error("a magazine with attributes but no quantity would spawn empty")
+	}
+	if mag.QuickBarSlot == nil || *mag.QuickBarSlot != -1 {
+		t.Error("a child without quickBarSlot was left bound to slot 1")
+	}
+	if gun.ComplexChildrenTypes[1].Attributes != nil {
+		t.Error("a child without attributes must stay that way (it spawns new)")
+	}
+}
+
+func TestFindGearPresetFiles(t *testing.T) {
+	m := t.TempDir()
+	write := func(rel, body string) {
+		p := filepath.Join(m, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(body), 0o644)
+	}
+	write("fresh_spawn.json", `{"spawnWeight":1,"name":"a","attachmentSlotItemSets":[]}`)
+	write("custom/pvp.json", `{"discreteUnsortedItemSets":[]}`)
+	write("cfggameplay.json", `{"version":130,"PlayerData":{"spawnGearPresetFiles":[]}}`)
+	write("cfgeffectarea.json", `{"Areas":[]}`)
+	write("storage_1/data/x.json", `{"attachmentSlotItemSets":[]}`)
+	got := FindGearPresetFiles(m)
+	if len(got) != 2 || got[0] != "custom/pvp.json" || got[1] != "fresh_spawn.json" {
+		t.Errorf("found %v", got)
+	}
+	if !SameGearPath(`custom\pvp.json`, "./Custom/PVP.json") {
+		t.Error("SameGearPath must ignore separators, ./ and case")
+	}
+	if FreeGearFileName(m, "fresh_spawn.json") != "fresh_spawn_2.json" || FreeGearFileName(m, "new.json") != "new.json" {
+		t.Error("FreeGearFileName")
 	}
 }
 

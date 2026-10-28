@@ -30,8 +30,16 @@ func main() {
 		expo    = flag.String("exposure", "", "save the panel exposure before starting: local | lan | internet (internet needs a login)")
 		install = flag.Bool("install", false, "add the manager to the Start menu / applications menu and the desktop, then exit")
 		uninst  = flag.Bool("uninstall", false, "remove what -install added, then exit")
+		autost  = flag.Bool("autostart", false, "started together with the computer: stay in the tray, no window")
+		dir     = flag.String("dir", "", "the DayZ server folder (default: the working folder when it holds a server, else the program's folder)")
+		guard   = flag.Int("guard", 0, "internal: watch the manager with this process id and start it again if it stops unexpectedly")
 	)
 	flag.Parse()
+	launcher.SetServerDir(*dir)
+	if *guard > 0 {
+		launcher.RunGuardian(*guard, *webPort, *bind)
+		return
+	}
 	if *showVer {
 		fmt.Printf("%s (desktop) v%s by %s\n", launcher.AppName, launcher.Version, launcher.AppAuthor)
 		return
@@ -90,6 +98,9 @@ func main() {
 	inst, err := launcher.Start(launcher.Options{Version: launcher.Version, Port: *webPort, Bind: *bind, Mode: "panel", Exposure: *expo})
 	var running *launcher.ErrAlreadyRunning
 	if errors.As(err, &running) {
+		if *autost {
+			return // started at sign-in while it already runs: nothing to show
+		}
 		// Already running: a panel just brings its window forward; a browser
 		// build gets a window attached to it.
 		if askToShow(running.URL) {
@@ -108,8 +119,17 @@ func main() {
 		// where the panel is, whatever happens with the window.
 		fmt.Print(inst.Banner(true))
 	}
+	desktop.StartHidden = *autost
 	if err := desktop.Run(inst, ""); err != nil {
 		inst.App.Log.Printf("desktop window: %v", err)
+	}
+	if inst.Context().Err() == nil && inst.AnyServerRunning() {
+		// The window went away without anyone asking the manager to exit
+		// (the browser engine failed): never take the DayZ server down with
+		// it. The manager keeps running — launching the panel again shows a
+		// new window, and Exit in Settings ends it.
+		inst.App.Log.Printf("the panel window closed unexpectedly — the manager keeps running for the DayZ server at %s", inst.URL)
+		<-inst.Context().Done()
 	}
 	inst.RequestExit(true) // no-op when an exit was already requested
 	inst.App.Log.Printf("shutting down...")

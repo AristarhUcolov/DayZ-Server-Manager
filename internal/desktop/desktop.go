@@ -21,6 +21,11 @@ import (
 	"dayzmanager/internal/launcher"
 )
 
+// StartHidden starts the panel without a window (-autostart: the manager came
+// up with the computer). Windows keeps the tray icon; elsewhere the window
+// opens when the manager is started again from the menu.
+var StartHidden bool
+
 // text returns a UI string for the desktop shell in the manager's language.
 // runningText is a close/exit question, in its several-servers form when more
 // than one DayZ server of the panel runs.

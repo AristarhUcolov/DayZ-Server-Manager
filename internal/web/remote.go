@@ -32,7 +32,34 @@ import (
 	"dayzmanager/internal/util"
 )
 
-const upnpDesc = "DayZ Server Manager"
+// upnpDescBase names the forwards this manager creates. Older versions used
+// it alone; the computer's name is now added (upnpOwnDesc), so a forward that
+// still points at the address this PC had before a restart is recognised as
+// its own and moved here instead of being reported as taken.
+const upnpDescBase = "DayZ Server Manager"
+
+// upnpOwnDesc is this computer's forward description.
+var upnpOwnDesc = func() string {
+	host, _ := os.Hostname()
+	host = strings.Map(func(r rune) rune {
+		if r < 0x20 || r > 0x7e {
+			return -1
+		}
+		return r
+	}, host)
+	if len(host) > 24 {
+		host = host[:24]
+	}
+	if host == "" {
+		return upnpDescBase
+	}
+	return upnpDescBase + " (" + host + ")"
+}()
+
+// upnpRetry is how soon a failed sync is tried again: at boot the network is
+// often not up yet when the manager starts, and waiting the full 20 minutes
+// left the panel unreachable from a phone for that long.
+var upnpRetry = []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute}
 
 type portState struct {
 	Proto   string `json:"proto"`
@@ -54,6 +81,7 @@ type upnpState struct {
 	Ports      []portState `json:"ports"`
 	again      bool        // a change arrived while a sync was running: run once more
 	synced     string      // portsKey of the forwards the last sync worked towards
+	failed     bool        // the last sync could not set every wanted forward
 }
 
 func (s *upnpState) view() map[string]interface{} {
@@ -69,6 +97,7 @@ func (h *handlers) registerRemote(mux *http.ServeMux) {
 	mux.HandleFunc("/api/remote/upnp", methods(h.remoteUPnP, http.MethodPost))
 	mux.HandleFunc("/api/remote/check", methods(h.remoteCheck, http.MethodPost))
 	mux.HandleFunc("/api/remote/firewall", methods(h.remoteFirewall, http.MethodPost))
+	mux.HandleFunc("/api/remote/watch", methods(h.remoteWatch, http.MethodPost))
 }
 
 // wantedPorts lists the forwards the current settings ask for.
@@ -151,6 +180,8 @@ func (h *handlers) upnpLoop(ctx context.Context) {
 	defer t.Stop()
 	poll := time.NewTicker(30 * time.Second)
 	defer poll.Stop()
+	lan := lanKey()
+	fails := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -158,20 +189,39 @@ func (h *handlers) upnpLoop(ctx context.Context) {
 		case <-t.C:
 		case <-h.upnpKick:
 		case <-poll.C:
-			if !h.upnpStale() {
+			// A new LAN address (DHCP after a restart, another network)
+			// moves every forward: sync now, not in up to 20 minutes.
+			moved := false
+			if k := lanKey(); k != lan {
+				lan, moved = k, true
+			}
+			if !moved && !h.upnpStale() {
 				continue
 			}
 		}
 		h.upnpSync(ctx)
+		next := 20 * time.Minute
+		h.upnp.mu.Lock()
+		failed := h.upnp.failed
+		h.upnp.mu.Unlock()
+		if failed {
+			next = upnpRetry[min(fails, len(upnpRetry)-1)]
+			fails++
+		} else {
+			fails = 0
+		}
 		if !t.Stop() {
 			select {
 			case <-t.C:
 			default:
 			}
 		}
-		t.Reset(20 * time.Minute)
+		t.Reset(next)
 	}
 }
+
+// lanKey identifies this computer's LAN addresses, to notice when they change.
+func lanKey() string { return strings.Join(util.LANAddresses(), ",") }
 
 // upnpStale reports whether the settings now ask for other forwards than the
 // last sync worked towards. It touches no network (only the config and
@@ -231,7 +281,7 @@ func (h *handlers) upnpSyncOnce(ctx context.Context) {
 	h.upnp.mu.Unlock()
 	if len(want) == 0 && len(prev) == 0 {
 		h.upnp.mu.Lock()
-		h.upnp.Ports, h.upnp.Error = nil, ""
+		h.upnp.Ports, h.upnp.Error, h.upnp.failed = nil, "", false
 		h.upnp.mu.Unlock()
 		return
 	}
@@ -242,6 +292,7 @@ func (h *handlers) upnpSyncOnce(ctx context.Context) {
 		h.upnp.Error = err.Error()
 		h.upnp.Router, h.upnp.LocalIP, h.upnp.ExternalIP, h.upnp.Public = "", "", "", nil
 		h.upnp.Ports = markAll(want, false, err.Error())
+		h.upnp.failed = len(want) > 0
 		h.upnp.mu.Unlock()
 		return
 	}
@@ -252,7 +303,7 @@ func (h *handlers) upnpSyncOnce(ctx context.Context) {
 		public = &p
 	}
 
-	results, still := reconcilePorts(ctx, gw, gw.LocalIP, want, prev)
+	results, still := reconcilePorts(ctx, gw, gw.LocalIP, upnpOwnDesc, want, prev)
 	h.saveMapped(still)
 
 	h.upnp.mu.Lock()
@@ -262,13 +313,14 @@ func (h *handlers) upnpSyncOnce(ctx context.Context) {
 		h.upnp.Error = extErr.Error()
 	}
 	h.upnp.Ports = results
-	h.upnp.mu.Unlock()
 	okN := 0
 	for _, r := range results {
 		if r.OK {
 			okN++
 		}
 	}
+	h.upnp.failed = okN < len(results)
+	h.upnp.mu.Unlock()
 	if len(results) > 0 {
 		h.app.Log.Printf("UPnP: %d of %d port forward(s) active on %s (external address %s)", okN, len(results), gw.Name, ext)
 	}
@@ -276,7 +328,7 @@ func (h *handlers) upnpSyncOnce(ctx context.Context) {
 
 // portMapper is the part of *upnp.Gateway reconcilePorts uses (a fake in tests).
 type portMapper interface {
-	MappedTo(ctx context.Context, proto string, port int) (string, error)
+	MappingInfo(ctx context.Context, proto string, port int) (client, desc string, err error)
 	AddPortMapping(ctx context.Context, proto string, port int, desc string) error
 	DeletePortMapping(ctx context.Context, proto string, port int) error
 }
@@ -287,7 +339,13 @@ type portMapper interface {
 // now owns (what upnp.json must remember). A forward whose state could not be
 // established is kept in that list: forgetting it would leave it open on the
 // router for good, with nothing ever trying to remove it again.
-func reconcilePorts(ctx context.Context, gw portMapper, localIP string, want, prev []portState) (results, still []portState) {
+//
+// A forward pointing at another address is ours when it carries this
+// computer's description, or the plain old one (or none, for routers that
+// keep no descriptions) on a forward upnp.json says this manager made: the
+// PC simply got a new LAN address after a restart. Such a forward is moved
+// here; one that really belongs to another device is left alone.
+func reconcilePorts(ctx context.Context, gw portMapper, localIP, ownDesc string, want, prev []portState) (results, still []portState) {
 	wanted := map[string]bool{}
 	for _, p := range want {
 		wanted[portKey(p)] = true
@@ -295,13 +353,15 @@ func reconcilePorts(ctx context.Context, gw portMapper, localIP string, want, pr
 	owned := map[string]bool{}
 	for _, p := range prev {
 		owned[portKey(p)] = true
+	}
+	for _, p := range prev {
 		if wanted[portKey(p)] {
 			continue
 		}
-		to, err := gw.MappedTo(ctx, p.Proto, p.Port)
+		to, desc, err := gw.MappingInfo(ctx, p.Proto, p.Port)
 		var se *upnp.SOAPError
 		switch {
-		case err == nil && to != "" && to != localIP:
+		case err == nil && to != "" && to != localIP && desc != ownDesc && desc != upnpDescBase:
 			// Someone re-pointed it elsewhere: not ours any more.
 		case err == nil:
 			if derr := gw.DeletePortMapping(ctx, p.Proto, p.Port); derr != nil && to != "" {
@@ -322,9 +382,16 @@ func reconcilePorts(ctx context.Context, gw portMapper, localIP string, want, pr
 	results = make([]portState, 0, len(want))
 	for _, p := range want {
 		r := p
-		if to, err := gw.MappedTo(ctx, p.Proto, p.Port); err == nil && to != "" && to != localIP {
+		to, desc, lerr := gw.MappingInfo(ctx, p.Proto, p.Port)
+		elsewhere := lerr == nil && to != "" && to != localIP
+		ours := desc == ownDesc || (owned[portKey(p)] && (desc == upnpDescBase || desc == ""))
+		if elsewhere && ours {
+			// Our own forward, still aimed at this PC's previous address.
+			_ = gw.DeletePortMapping(ctx, p.Proto, p.Port)
+		}
+		if elsewhere && !ours {
 			r.Error = fmt.Sprintf("the router already forwards this port to %s", to)
-		} else if err := gw.AddPortMapping(ctx, p.Proto, p.Port, upnpDesc); err != nil {
+		} else if err := gw.AddPortMapping(ctx, p.Proto, p.Port, ownDesc); err != nil {
 			r.Error = err.Error()
 			if owned[portKey(p)] {
 				// Created by an earlier sync and may well still be there.
@@ -415,7 +482,7 @@ func (h *handlers) remoteStatus(w http.ResponseWriter, r *http.Request) {
 	cfg := h.app.Cfg()
 	ips := util.LANAddresses()
 	scheme := "http"
-	if h.server != nil && h.server.httpsOn {
+	if h.server != nil && h.server.httpsOn.Load() {
 		scheme = "https"
 	}
 	lan := make([]string, 0, len(ips))
@@ -426,7 +493,7 @@ func (h *handlers) remoteStatus(w http.ResponseWriter, r *http.Request) {
 		"os":          runtime.GOOS,
 		"exposure":    cfg.Exposure,
 		"panelPort":   h.panelPort,
-		"https":       h.server != nil && h.server.httpsOn,
+		"https":       h.server != nil && h.server.httpsOn.Load(),
 		"httpsWanted": cfg.PanelHTTPS,
 		"authEnabled": h.auth.enabled(),
 		"lanUrls":     lan,
@@ -439,7 +506,9 @@ func (h *handlers) remoteStatus(w http.ResponseWriter, r *http.Request) {
 			"panel":     firewallRuleExists(fwPanelRule),
 			"game":      firewallRuleExists(fwGameRule),
 		},
-		"local": isLoopback(r),
+		"local":     isLoopback(r),
+		"lastCheck": h.loadLastCheck(),
+		"watch":     cfg.RemoteWatch,
 	})
 }
 
@@ -514,7 +583,141 @@ func (h *handlers) remoteCheck(w http.ResponseWriter, r *http.Request) {
 	if _, ok := out["cgnat"]; !ok {
 		out["cgnatUnknown"] = true
 	}
+	if ip, _ := out["publicIp"].(string); ip != "" {
+		lc := lastCheck{PublicIP: ip, At: time.Now().Unix()}
+		lc.ExternalIP, _ = out["externalIp"].(string)
+		lc.Router, _ = out["router"].(string)
+		if c, ok := out["cgnat"].(bool); ok {
+			lc.CGNAT = &c
+		}
+		h.rememberCheck(lc)
+	}
+	out["at"] = time.Now().Unix()
 	writeJSON(w, out)
+}
+
+// ---------------------------------------------------------------- remembered check
+
+// lastCheck is the last public-address check, kept in remote-check.json so the
+// Remote access card shows the address right after a restart instead of
+// asking for a click first — the click is what users had to repeat after
+// every reboot to find the address for their phone.
+type lastCheck struct {
+	PublicIP   string `json:"publicIp"`
+	ExternalIP string `json:"externalIp,omitempty"`
+	Router     string `json:"router,omitempty"`
+	CGNAT      *bool  `json:"cgnat,omitempty"`
+	At         int64  `json:"at"`
+	Changed    int64  `json:"changed,omitempty"`  // when the address last changed
+	Previous   string `json:"previous,omitempty"` // the address before that
+}
+
+func (h *handlers) lastCheckFile() string {
+	return filepath.Join(h.app.ManagerDir, "remote-check.json")
+}
+
+func (h *handlers) loadLastCheck() *lastCheck {
+	data, err := os.ReadFile(h.lastCheckFile())
+	if err != nil {
+		return nil
+	}
+	var lc lastCheck
+	if json.Unmarshal(data, &lc) != nil || lc.PublicIP == "" {
+		return nil
+	}
+	return &lc
+}
+
+// rememberCheck stores a fresh check. When the public address differs from
+// the one stored before, that is logged and posted to Discord with the new
+// panel address, so a phone user learns it without opening the panel at home.
+func (h *handlers) rememberCheck(lc lastCheck) {
+	h.remoteMu.Lock()
+	defer h.remoteMu.Unlock()
+	old := h.loadLastCheck()
+	if old != nil && old.PublicIP != lc.PublicIP {
+		lc.Changed, lc.Previous = lc.At, old.PublicIP
+		url := h.publicPanelURL(lc.PublicIP)
+		h.app.Log.Printf("public address changed: %s -> %s (panel: %s)", old.PublicIP, lc.PublicIP, url)
+		h.app.Notify("address", url)
+	} else if old != nil {
+		lc.Changed, lc.Previous = old.Changed, old.Previous
+	}
+	if data, err := json.MarshalIndent(lc, "", "  "); err == nil {
+		_ = os.WriteFile(h.lastCheckFile(), data, 0o644)
+	}
+}
+
+// publicPanelURL is the panel's address on the internet for ip.
+func (h *handlers) publicPanelURL(ip string) string {
+	scheme := "http"
+	if h.server != nil && h.server.httpsOn.Load() {
+		scheme = "https"
+	}
+	host := ip
+	if strings.Contains(ip, ":") {
+		host = "[" + ip + "]"
+	}
+	return fmt.Sprintf("%s://%s:%d/", scheme, host, h.panelPort)
+}
+
+// remoteWatch switches the periodic public-address check on or off.
+func (h *handlers) remoteWatch(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		On bool `json:"on"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := h.app.MutateConfig(func(c *config.Manager) error {
+		c.RemoteWatch = req.On
+		return nil
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if req.On {
+		select {
+		case h.remoteKick <- struct{}{}:
+		default:
+		}
+	}
+	h.remoteStatus(w, r)
+}
+
+// remoteWatchLoop re-checks the public address every 15 minutes while
+// RemoteWatch is on (shortly after start, too: a reboot is when it changes).
+func (h *handlers) remoteWatchLoop(ctx context.Context) {
+	t := time.NewTimer(45 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		case <-h.remoteKick:
+		}
+		if h.app.Cfg().RemoteWatch {
+			cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+			ip, err := publicIP(cctx)
+			cancel()
+			if err == nil {
+				lc := lastCheck{PublicIP: ip, At: time.Now().Unix()}
+				if old := h.loadLastCheck(); old != nil && old.PublicIP == ip {
+					lc.ExternalIP, lc.Router, lc.CGNAT = old.ExternalIP, old.Router, old.CGNAT
+				}
+				h.rememberCheck(lc)
+			}
+		}
+		if !t.Stop() {
+			select {
+			case <-t.C:
+			default:
+			}
+		}
+		t.Reset(15 * time.Minute)
+	}
 }
 
 func publicIP(ctx context.Context) (string, error) {

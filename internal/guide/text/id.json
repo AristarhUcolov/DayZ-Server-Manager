@@ -11,7 +11,7 @@
     },
     {
      "title": "Pilih sumber mod",
-     "body": "Saat pertama dijalankan, Anda memilih sumber mod: *klien* DayZ (folder !Workshop-nya, tempat Steam mengunduh mod), folder apa pun berisi @mod atau workshop/content/221100 milik SteamCMD, atau Hanya server untuk mesin hosting tanpa game — dalam mode ini Anda mengunggah mod sendiri dan pembaruan otomatis nonaktif. Anda dapat mengubahnya nanti di Pengaturan."
+     "body": "Saat pertama dijalankan kamu memilih sumber mod: *klien* DayZ (folder !Workshop-nya, tempat Steam mengunduh mod), folder mana pun berisi @mod atau workshop/content/221100 milik SteamCMD, Steam Workshop (unduh langsung) — lalu panel sendiri yang mengunduh dan memperbarui mod dengan SteamCMD — atau Hanya server untuk mesin hosting tanpa game, tempat kamu mengunggah mod sendiri dan pembaruan otomatis mati. Kamu bisa mengubahnya nanti di Pengaturan."
     },
     {
      "title": "Jalankan server",
@@ -20,7 +20,8 @@
    ],
    "tips": [
     "Jika panel hanya digunakan di PC ini, kata sandi tidak diperlukan. Untuk membukanya dari ponsel atau dari tempat lain, atur login panel terlebih dahulu — saat penyiapan awal atau di Pengaturan → Login panel.",
-    "Hampir semua editor file menolak menyimpan selama server berjalan — DayZ mengunci file-filenya sendiri. Hentikan server terlebih dahulu; panel akan memberi tahu jika inilah penyebabnya."
+    "Hampir semua editor file menolak menyimpan selama server berjalan — DayZ mengunci file-filenya sendiri. Hentikan server terlebih dahulu; panel akan memberi tahu jika inilah penyebabnya.",
+    "Saat komputer tidur, server DayZ dan panel ikut berhenti — seolah-olah manajer menutup sendiri. Selama server berjalan, manajer menjaga komputer tetap terjaga (Pengaturan → Umum → Jaga komputer tetap terjaga); di server sewaan, tutup jendela jarak jauh alih-alih keluar."
    ]
   },
   {
@@ -29,12 +30,12 @@
    "intro": "Server memerlukan salinan sendiri dari setiap mod, ditambah file .bikey mod tersebut di folder keys server, ditambah nama mod di parameter peluncuran -mod. Manager melakukan ketiganya, dengan mengambil mod dari sumber yang Anda pilih: !Workshop milik klien game, folder mod atau SteamCMD, atau — dalam mode Hanya server — mod yang Anda unggah sendiri.",
    "steps": [
     {
-     "title": "Subscribe di Steam terlebih dahulu",
-     "body": "Manager menyalin mod, bukan mengunduhnya. Subscribe di Steam Workshop dan biarkan launcher DayZ mengunduh mod ke !Workshop — atau unduh dengan SteamCMD ke folder mod Anda."
+     "title": "Dapatkan mod",
+     "body": "Dua cara. Tempel tautan Workshop ke Unduh langsung di halaman Mod: SteamCMD milik panel mengunduhnya langsung ke server — kamu cukup masuk sekali dengan akun Steam yang memiliki DayZ. Atau berlangganan di Steam Workshop dan biarkan launcher DayZ menarik mod ke !Workshop (atau unduh dengan SteamCMD ke folder mod-mu), lalu pasang dari sana."
     },
     {
      "title": "Instal ke server",
-     "body": "Buka Mod — semua isi !Workshop ditampilkan. Instal menyalin mod ke folder server dan menyinkronkan .bikey-nya secara otomatis. Instal & perbarui mod memproses seluruh daftar dengan satu klik."
+     "body": "Buka Mod — semua yang ada di sumber mod tercantum (dengan Steam Workshop sebagai sumber: mod yang kamu unduh). Instal menyalin mod ke folder server dan menyinkronkan .bikey-nya secara otomatis. “Instal & perbarui mod” mengerjakan seluruh daftar dengan satu klik."
     },
     {
      "title": "Aktifkan untuk peluncuran",
@@ -49,7 +50,8 @@
     "Perbarui menyalin file yang lebih baru dari sumber mod ke server. Aktifkan Perbarui mod setiap kali mulai ulang di Pengaturan agar mod tetap sinkron secara otomatis.",
     "Saat mod di-uninstal, .bikey-nya hanya dihapus jika tidak ada mod terinstal lain yang memakai kunci yang sama, sehingga kunci bersama (Expansion) tetap utuh.",
     "Jika sebuah mod membawa loot, gunakan Tambah loot mod pada barisnya — Manager menemukan types.xml milik mod tersebut dan mendaftarkannya untuk Anda.",
-    "Di Linux, server hanya memuat mod yang nama folder dan file-nya berhuruf kecil. Manager mengganti namanya saat instal dan pembaruan, dan halaman Mod menandai apa pun yang hurufnya masih salah."
+    "Di Linux, server hanya memuat mod yang nama folder dan file-nya berhuruf kecil. Manager mengganti namanya saat instal dan pembaruan, dan halaman Mod menandai apa pun yang hurufnya masih salah.",
+    "Dengan Steam Workshop sebagai sumber, daftar unduhan adalah laporan unduhan terakhir: hapus baris yang sudah dibaca, dan mod yang sejak itu dihapus dari server menawarkan Pasang lagi."
    ]
   },
   {
@@ -99,7 +101,8 @@
    ],
    "tips": [
     "Satu slot per bagian: satu untuk magasin, satu untuk optik, satu untuk popor. Jika magasin dan optik diletakkan di slot yang sama, senjata hanya mendapat salah satunya, tidak pernah keduanya.",
-    "Hanya entri yang Anda edit yang ditulis ulang — komentar dan format Anda di bagian lain file tetap dipertahankan."
+    "Hanya entri yang Anda edit yang ditulis ulang — komentar dan format Anda di bagian lain file tetap dipertahankan.",
+    "Item digambar dengan satu petak per slot, seperti loadout pemain: klik slot yang terisi untuk mengubah peluang atau bagiannya, slot kosong untuk menambah bagian dari daftar game itu sendiri. Bayonet dan peredam (atau muzzle brake) tidak pernah muncul bersama di satu senjata — DayZ memasang yang datang lebih dulu."
    ]
   },
   {
@@ -109,11 +112,11 @@
    "steps": [
     {
      "title": "Aktifkan sistemnya",
-     "body": "Buka Loadout pemain. Jika misi masih men-spawn pemain dari init.c, halaman akan memberitahukannya dan menawarkan satu tombol yang membuat preset awal, mendaftarkannya di cfggameplay.json, dan menyalakan enableCfgGameplayFile — semuanya sekaligus."
+     "body": "Buka Loadout pemain. Jika pemain masih spawn sesuai init.c, halaman memberi tahu hal itu dan menyediakan satu tombol yang menyalakan sistem: tombol itu memakai ulang file loadout yang sudah ada di folder misi (atau membuat preset awal), mendaftarkannya di cfggameplay.json, dan mengaktifkan enableCfgGameplayFile — sekaligus."
     },
     {
      "title": "Edit pakaian dan perlengkapan",
-     "body": "Setiap preset mencantumkan apa yang dikenakan per slot (Body, Legs, Feet…) dan apa yang dibawa lepas. Tambahkan item berdasarkan nama kelas, atur bobot spawn jika slot harus memilih di antara beberapa item, dan pilih kondisinya — prima, usang, rusak, atau rentang kustom."
+     "body": "Editor menampilkan seorang penyintas dengan semua slot. Klik slot untuk memilih item dari daftar game itu sendiri — nama, kategori, dan apa yang cocok di mana — lalu atur kondisi dan jumlahnya, dan taruh di tangan atau di hotbar (tombol 1–0). Setiap item digambar dengan satu petak untuk tiap slot yang dimilikinya — optik, moncong, magasin, kantong rompi — yang hanya menawarkan bagian yang cocok, ditambah apa yang masuk ke dalamnya (makanan di ransel). Satu server bisa punya beberapa loadout; masing-masing punya bobot kemunculan."
     },
     {
      "title": "Uji undian dan bagikan",
@@ -122,7 +125,10 @@
    ],
    "tips": [
     "healthMin/healthMax adalah pecahan kesehatan: 1.0 berarti prima, 0.0 berarti hancur. Biarkan semuanya prima agar pemain yang baru spawn tidak datang dengan pakaian usang.",
-    "Loadout disimpan saat server berhenti, seperti setiap perubahan konfigurasi — jalankan server lagi setelahnya."
+    "Loadout disimpan saat server berhenti, seperti setiap perubahan konfigurasi — jalankan server lagi setelahnya.",
+    "Pembaruan server DayZ mengganti cfggameplay.json dan melupakan loadout Anda. Manager mendaftarkannya lagi dan menyalakan kembali sakelarnya sebelum start berikutnya — dan halaman menampilkan setiap file yang belum tersambung.",
+    "Senjata dengan magasin muncul terisi, dengan peluru di kamar — tidak ada yang perlu menekan R; tombol Isi melakukannya dalam satu klik. Bayonet dan peredam saling meniadakan, dan lampu senjata butuh handguard berel: editor memperingatkan dan menawarkan perbaikan.",
+    "Karakter baru di bagian atas halaman menentukan bagaimana setiap karakter baru memulai — kenyang, tidak haus, dan hangat jika Anda mau. Panel menerapkannya dengan mod sisi servernya sendiri; pemain tidak mengunduh apa pun."
    ]
   },
   {
@@ -147,7 +153,8 @@
     "Peringatan mulai ulang juga memakai RCon. Tanpa kata sandi, mulai ulang tetap terjadi — hanya saja pemain tidak mendapat hitung mundur.",
     "Bagian Pemain membangun riwayat dari log admin: nama, ID pemain, waktu main, kill. Ini membutuhkan parameter peluncuran -adminlog (halaman Server → Parameter peluncuran).",
     "Pengaturan → Perilaku mulai ulang dapat meng-kick semua pemain beberapa saat sebelum mulai ulang dan mengunci server agar tidak ada yang masuk lagi di menit terakhir. Karakter disimpan saat pemain terputus, jadi tidak ada yang hilang.",
-    "Halaman Chat menyimpan arsip untuk setiap hari — termasuk pesan yang dikirim dari panel dan pengumuman terjadwal — lengkap dengan pencarian dan unduhan .txt. Lama penyimpanannya diatur di halaman itu juga."
+    "Halaman Chat menyimpan arsip untuk setiap hari — termasuk pesan yang dikirim dari panel dan pengumuman terjadwal — lengkap dengan pencarian dan unduhan .txt. Lama penyimpanannya diatur di halaman itu juga.",
+    "Di Pemain → Online sekarang kamu bisa mengirim pesan ke semua, menendang semua (misalnya sebelum pemeliharaan) dan mengunci akses masuk sampai restart berikutnya. Profil pemain menampilkan akun lain yang terlihat dari IP yang sama dan apa yang dibangun atau dihancurkannya."
    ]
   },
   {
@@ -164,8 +171,8 @@
      "body": "Kecepatan transisi mengatur seberapa bertahap cuaca berubah: Halus berubah selama sekitar setengah jam dalam langkah-langkah kecil, seperti vanilla. Cepat berpindah dari ujung ke ujung dalam dua menit — itulah yang membuat cuaca terasa seperti saklar lampu."
     },
     {
-     "title": "Atur panjang hari",
-     "body": "Percepatan siang dan malam mengalikan laju waktu dalam game — 12 berarti satu hari penuh berlangsung dua jam nyata. Percepatan malam diatur terpisah agar Anda bisa membuat malam tetap singkat."
+     "title": "Atur panjang siang dan malam",
+     "body": "Siang & Malam menampilkan langit, matahari terbit dan terbenam untuk peta kamu serta berapa lama siang dan malam dalam waktu nyata — termasuk pengaruh restart terhadap jam dalam game. Tekan ▶ untuk memutar hari dalam game (dan menghentikannya lagi), atau seret penanda putih ke momen mana pun. Pilih suasana yang sudah jadi atau ketik panjang siang dan malam yang diinginkan, lalu panel menghitung percepatannya."
     }
    ],
    "tips": [
@@ -188,12 +195,13 @@
     },
     {
      "title": "Atur kendaraan",
-     "body": "Kendaraan menampilkan setiap event kendaraan: berapa banyak yang boleh ada, berapa titik spawn yang dimiliki, dan seberapa lengkap suku cadangnya — serta mengatur seberapa besar peluang setiap suku cadang ikut spawn pada kendaraan."
+     "body": "Kendaraan menampilkan setiap event kendaraan dengan gambar mobilnya: berapa banyak yang bisa ada, berapa titik spawn yang dimiliki, seberapa lengkap komponennya — dan dengan berapa bahan bakar dan cairan pendingin ia muncul (diatur oleh mod server mungil yang ditambahkan panel; pemain tidak mengunduh apa pun)."
     }
    ],
    "tips": [
     "Tidak ada gambar peta yang disertakan — lapisannya berasal dari file misi Anda. Untuk peta seperti foto, muat gambar tampak atas milik Anda sendiri di pengaturan peta.",
-    "Seperti editor lainnya, halaman-halaman ini hanya menyimpan saat server dihentikan."
+    "Seperti editor lainnya, halaman-halaman ini hanya menyimpan saat server dihentikan.",
+    "Setiap peta punya penggaris (ukur jarak, salin koordinat) dan penanda admin — catatan seperti base klan atau pedagang yang dilihat setiap admin server di setiap peta. Heatmap menambahkan pembangunan, serbuan, dan persembunyian dari log admin; Peta live menunjukkan ke mana setiap pemain pergi."
    ]
   },
   {
@@ -216,7 +224,9 @@
    ],
    "tips": [
     "Wipe menghapus status dunia yang tersimpan — pemain, kendaraan, base. Tabel loot dan konfigurasi Anda tidak disentuh. Folder dipindahkan terlebih dahulu, sehingga wipe yang keliru dapat dipulihkan secara manual.",
-    "Mulai ulang saat crash (watchdog) menjalankan server lagi jika server tertutup dengan sendirinya. Setelah tiga crash dalam lima menit, watchdog berhenti dan menampilkan banner — crash berulang memerlukan manusia, bukan mulai ulang lagi."
+    "Mulai ulang saat crash (watchdog) menjalankan server lagi jika server tertutup dengan sendirinya. Setelah tiga crash dalam lima menit, watchdog berhenti dan menampilkan banner — crash berulang memerlukan manusia, bukan mulai ulang lagi.",
+    "Pengaturan → Umum → Mulai otomatis menjalankan Manager bersama komputer, dan setiap server bisa ikut mulai bersama Manager — setelah listrik padam semuanya kembali sendiri.",
+    "Jika manajer tertutup secara tak terduga, penjaganya menjalankannya lagi di baki sistem (paling banyak tiga kali dalam 15 menit) dan dasbor memberitahukannya — beserta catatan crash Windows jika ada. Matikan di Pengaturan → Umum."
    ]
   },
   {
@@ -253,7 +263,7 @@
     },
     {
      "title": "Buka panel ke jaringan",
-     "body": "Pengaturan → Jangkauan panel: “Jaringan lokal” untuk ponsel di rumah, “Internet” untuk akses dari mana saja (hanya bisa dengan login). Setelah itu, mulai ulang Manager."
+     "body": "Pengaturan → Jangkauan panel: Jaringan lokal untuk ponsel di rumah, Internet untuk akses dari mana saja (hanya dengan login). Perubahan langsung berlaku — tanpa restart."
     },
     {
      "title": "Izinkan koneksi masuk",
@@ -407,7 +417,7 @@
   "loadout": "Apa yang dikenakan dan dibawa pemain saat respawn. Ini adalah preset spawn-gear DayZ yang terdaftar di cfggameplay.json — perubahan berlaku setelah server dimulai ulang. Di vanilla, loadout ditulis di init.c, itulah sebabnya misi baru tidak menampilkan apa pun di sini sampai Anda mengaktifkan sistemnya.",
   "loadout.carried": "Item lepas yang langsung dimasukkan ke inventaris pemain baru, bukan ke slot yang dikenakan — kain perca, makanan, alat awal.",
   "loadout.characters": "Model survivor yang memakai preset ini (SurvivorM_Mirek, SurvivorF_Eva, …). Kosongkan agar berlaku untuk semua; satu model dipilih secara acak setiap spawn.",
-  "loadout.condition": "Kondisi item saat spawn. Di DayZ, 1.0 = prima dan 0.0 = hancur, jadi makin tinggi makin baik. Prima membuat perlengkapan spawn baru tetap baru; pilih Kustom… untuk mengatur rentang kesehatan min–max yang persis, dan item akan spawn dengan nilai di dalam rentang itu.",
+  "loadout.condition": "Kondisi saat item muncul. Di DayZ 1.0 = sempurna dan 0.0 = hancur, jadi lebih tinggi lebih baik. Sempurna menjaga loadout spawn baru tetap baru; pilih Kustom untuk mengatur rentang kesehatan min–maks yang tepat, dan item muncul di suatu titik di dalamnya. Untuk item bawaan, Sempurna memunculkannya persis seperti buatan game (satu kain lap, satu apel utuh); kondisi lain juga memberi jumlah penuh, jadi tumpukan kain lap muncul penuh.",
   "loadout.weight": "Bobot preset ini dibandingkan preset lainnya. DayZ memilih SATU preset per spawn, jadi preset dengan bobot 3 tiga kali lebih mungkin terpilih daripada preset dengan bobot 1.",
   "loadout.worn": "Item yang dikenakan di tubuh, masing-masing di satu slot tubuh. Di dalam satu slot, DayZ memilih SATU item berdasarkan bobot, jadi mencantumkan beberapa varian memberi variasi dari spawn ke spawn.",
   "logs.adm": "Apa yang dilakukan pemain: koneksi, chat, kill, posisi. Memerlukan flag -adminlog; halaman Pemain disusun dari log ini.",
@@ -420,7 +430,7 @@
   "mods.scan": "Mencari types.xml di dalam mod dan mendaftarkannya di cfgeconomycore.xml, sehingga loot mod tersebut benar-benar spawn.",
   "mods.serverSide": "Memuat mod dengan -serverMod alih-alih -mod: mod berjalan di server, dan klien tidak memerlukan maupun menerimanya. Hanya untuk alat admin — mod loot atau konten yang diatur sebagai sisi server tidak akan berfungsi.",
   "mods.uninstall": "Menghapus folder mod dari server. File .bikey-nya hanya dihapus jika tidak ada mod terinstal lain yang memakai kunci yang sama, sehingga kunci bersama seperti milik Expansion tetap ada.",
-  "mods.update": "Menyalin file yang lebih baru dari !Workshop milik klien ke server. Manager tidak dapat mengunduh mod — subscribe di Steam terlebih dahulu.",
+  "mods.update": "Menyalin berkas yang lebih baru dari sumber mod ke server. Jika sumbernya Steam Workshop (unduh langsung), ia lebih dulu mengunduh versi yang lebih baru dengan SteamCMD.",
   "rcon.password": "Ditulis ke battleye/beserver_x64.cfg. BattlEye hanya membaca file itu saat peluncuran, jadi kata sandi baru tidak berpengaruh sampai mulai ulang berikutnya.",
   "server.forceSameBuild": "Wajibkan klien menjalankan build game yang sama persis (1). Mencegah crash akibat versi yang tidak cocok.",
   "server.hostname": "Nama server yang ditampilkan di daftar server DayZ. Buat singkat dan mudah dicari.",
@@ -443,7 +453,7 @@
   "settings.adminlog": "Mengaktifkan -adminlog, yang menulis file .ADM. Halaman Pemain dan killfeed disusun dari file ini dan tetap kosong tanpanya.",
   "settings.backup": "Membuat zip berisi konfigurasi dan file misi Anda sesuai jadwal dan menyimpan N file terbaru. Selain itu, setiap file yang ditimpa panel mendapat salinan .bak dengan cap waktu di sampingnya.",
   "settings.exposure": "“Hanya lokal” berarti hanya PC ini yang dapat membuka panel. “Jaringan lokal” memungkinkan ponsel dan perangkat lain di rumah membukanya. “Internet” membuat panel dapat dijangkau dari mana saja — opsi ini memerlukan login panel, dan Pengaturan → Akses jarak jauh memeriksa sisanya (router, firewall, IP publik).",
-  "settings.modSource": "Dari mana Manager menyalin mod. Folder klien DayZ: instalasi game dengan !Workshop (subscribe di Steam, Manager menyalin dan memperbarui). Folder mod: folder apa pun berisi @mod, atau workshop/content/221100 milik SteamCMD — cara mendapatkan mod Workshop di host tanpa game terinstal. Hanya server: tanpa sumber; mod yang Anda unggah secara manual tetap dikelola, tetapi pembaruan otomatis nonaktif.",
+  "settings.modSource": "Dari mana manajer mengambil mod. Folder klien: instalasi DayZ dengan !Workshop (berlangganan di Steam, manajer menyalin dan memperbarui). Folder mod: folder mana pun berisi @mod, atau workshop/content/221100 milik SteamCMD. Steam Workshop (unduh langsung): panel sendiri yang mengunduh, memeriksa, dan memperbarui mod dengan SteamCMD miliknya — tidak perlu game. Hanya server: tanpa sumber; mod yang diunggah manual tetap dikelola, tetapi pembaruan otomatis mati.",
   "settings.perf": "Afinitas CPU mengikat DayZServer ke inti yang Anda centang (inti yang tidak dicentang tetap bebas untuk sistem operasi, server kedua, atau program lain). Prioritas memberi tahu sistem operasi seberapa diutamakan proses ini dijadwalkan — Di atas normal adalah peningkatan yang aman; Tinggi bisa membuat bagian lain mesin menjadi lambat. Keduanya diterapkan setiap kali server dijalankan. Di Linux, menaikkan prioritas memerlukan root.",
   "settings.restart": "Memulai ulang server sesuai jadwal. Pemain mendapat peringatan lewat RCon sebelumnya, yang memerlukan kata sandi RCon.",
   "settings.restartBehaviour": "Apa yang dialami pemain di sekitar setiap mulai ulang otomatis: teks hitung mundur yang mereka lihat (tulis dalam bahasa mereka), jeda opsional tepat sebelum mulai ulang saat server dikunci dan semua pemain di-kick agar karakter mereka tersimpan dengan rapi, dan #shutdown yang aman untuk menyimpan dunia sebelum proses dihentikan. Linimasa di bawah menunjukkan urutan persisnya.",
@@ -480,7 +490,14 @@
   "weather.transition": "Seberapa bertahap cuaca berubah. Halus berubah selama sekitar setengah jam dalam langkah-langkah kecil, seperti DayZ vanilla. Cepat bisa berpindah dari ujung ke ujung dalam dua menit — itulah yang membuat cuaca terasa seperti saklar lampu.",
   "weather.wind": "Kecepatan angin dalam m/s. Menggerakkan awan dan, jika cuaca dinamis aktif, menentukan seberapa cepat cuaca berubah.",
   "wipe": "Menghapus status dunia yang tersimpan: pemain, kendaraan, base. Tabel loot dan konfigurasi tidak disentuh. Folder dipindahkan, bukan dihapus, sehingga kesalahan dapat dibatalkan secara manual.",
-  "wipe.undo": "Wipe memindahkan folder dunia ke .dayz-manager/wipes/<timestamp>/ alih-alih menghapusnya, sehingga tetap bisa dibatalkan — sampai server membangun ulang status tersebut; setelah itu, mengembalikan dunia lama akan menimpa dunia yang baru."
+  "wipe.undo": "Wipe memindahkan folder dunia ke .dayz-manager/wipes/<timestamp>/ alih-alih menghapusnya, sehingga tetap bisa dibatalkan — sampai server membangun ulang status tersebut; setelah itu, mengembalikan dunia lama akan menimpa dunia yang baru.",
+  "server.adminLogPlayerList": "Menulis posisi setiap pemain ke log admin (.ADM) setiap 5 menit. Peta live memakainya: tanpa ini titik pemain hanya bergerak saat terhubung, bertarung, dan chat.",
+  "server.adminLogPlayerHitsOnly": "Hanya mencatat tembakan yang mengenai pemain dan melewatkan yang mengenai infected dan hewan, jadi log admin jauh lebih kecil.",
+  "server.adminLogPlacement": "Menulis penempatan jebakan, tenda, dan item lain yang bisa dipasang ke log admin.",
+  "server.adminLogBuildActions": "Menulis pembangunan, pembongkaran, dan penghancuran bagian base ke log admin.",
+  "wsdl": "SteamCMD adalah klien Steam baris perintah milik Valve sendiri. Panel memasangnya di foldernya, masuk sekali dengan akun Steam-mu (file Workshop DayZ hanya diberikan ke akun yang memiliki game) lalu mengunduh mod yang kamu tempel: masing-masing masuk ke folder SteamCMD, disalin ke server sebagai @Nama beserta kuncinya, dan diaktifkan. Memperbarui adalah unduhan yang sama sekali lagi. Pemain tetap butuh mod tersebut: mereka berlangganan di Workshop seperti biasa.",
+  "veh.tweaks": "Bahan bakar dan radiator saat muncul tidak perlu memasang apa pun: saat server dimulai, panel membuat mod sisi server yang sangat kecil (@DZM_ServerTweaks) dengan pengaturan ini dan memuatnya dengan -serverMod. Pemain tidak mengunduh apa pun. Nilainya berlaku untuk kendaraan yang dimunculkan ekonomi setelah start berikutnya; mobil yang sudah ada di peta mempertahankan nilainya sendiri.",
+  "loadout.stats": "Makanan dan air adalah cadangan energi dan air karakter (0–5000 di DayZ; karakter baru mendapat masing-masing 600, jadi ikon lapar dan haus segera muncul). Kehangatan adalah penyangga panas: cadangan panas yang dikumpulkan karakter di dekat api dan menjaganya dari kedinginan untuk sementara. Nilai ini hanya berlaku untuk karakter baru — juga setelah mati —, bukan untuk pemain yang kembali ke karakter tersimpannya. Panel menuliskannya ke mod sisi servernya sebelum setiap server dijalankan."
  },
  "gameplay": {
   "version": "Versi format file. DayZ yang menulisnya — biarkan seperti apa adanya.",
@@ -530,7 +547,7 @@
   "shockDepletionSpeed": "Syok yang bertambah per detik saat tenggelam.",
   "staticMode": "Terhadap dinding dan objek statis: 0 = mati, 1 = aktif (seperti di game), 2 = selalu.",
   "dynamicMode": "Terhadap pemain, kendaraan, dan objek bergerak lainnya: 0 = mati, 1 = aktif (seperti di game), 2 = selalu.",
-  "lightingConfig": "Kegelapan malam: 0 = malam lebih terang (seperti di game), 1 = malam gelap. Menimpa pengaturan yang sama di serverDZ.cfg.",
+  "lightingConfig": "Pencahayaan malam: 0 = malam lebih terang (seperti di game), 1 = malam gelap, 2 = pencahayaan Sakhal, 3 = pencahayaan Nasdara. Menimpa pengaturan yang sama di serverDZ.cfg.",
   "objectSpawnersArr": "File JSON (jalur di dalam misi) yang menempatkan objek statis tambahan di dunia.",
   "environmentMinTemps": "Suhu udara terendah setiap bulan, Januari sampai Desember, °C. Kosongkan untuk memakai suhu bawaan peta.",
   "environmentMaxTemps": "Suhu udara tertinggi setiap bulan, Januari sampai Desember, °C. Kosongkan untuk memakai suhu bawaan peta.",
@@ -545,7 +562,7 @@
   "disableHeightPlacementCheck": "Objek boleh ditempatkan lebih tinggi dari kaki pemain daripada yang biasanya diizinkan.",
   "disableIsUnderwaterCheck": "Objek boleh ditempatkan di bawah air.",
   "disableIsInTerrainCheck": "Objek boleh dibenamkan ke dalam tanah.",
-  "disableColdAreaBuildingCheck": "Membangun diizinkan di area dingin yang biasanya dilarang oleh game (Sakhal).",
+  "disableColdAreaBuildingCheck": "Nama lama disableColdAreaPlacementCheck. DayZ versi sekarang tidak lagi membacanya — atur kunci yang baru.",
   "disallowedTypesInUnderground": "Kit yang tidak dapat ditempatkan di area bawah tanah (bunker, gua).",
   "disablePerformRoofCheck": "Bagian markas boleh dibangun di bawah atap dan di dalam ruangan.",
   "disableIsCollidingCheck": "Bagian markas boleh dibangun meskipun ada yang menghalangi.",
@@ -563,33 +580,57 @@
   "ignoreNavItemsOwnership": "Peta menampilkan info kompas dan GPS tanpa membawa kompas atau GPS.",
   "displayPlayerPosition": "Posisi pemain sendiri ditandai di peta.",
   "displayNavInfo": "Peta menampilkan info navigasi (grid dan kompas).",
-  "boatDecayMultiplier": "Seberapa cepat perahu rusak. 1 = seperti di game, lebih rendah = lebih lambat."
+  "boatDecayMultiplier": "Seberapa cepat perahu rusak. 1 = seperti di game, lebih rendah = lebih lambat.",
+  "disableColdAreaPlacementCheck": "Membangun diizinkan di area dingin tempat game biasanya melarang menaruh apa pun (Sakhal).",
+  "disableItemFalling": "Item yang berada di atas bagian base tetap di tempatnya, tidak jatuh, saat bagian itu dibongkar atau dihancurkan.",
+  "disableDropAttachmentsOnFall": "Bangunan base yang runtuh tetap menyimpan attachment dan item di dalamnya, tidak menjatuhkannya ke tanah.",
+  "disableRefundMaterialsOnFall": "Bangunan base yang runtuh tidak mengembalikan material untuk bagian yang sudah dibangun — langsung hilang.",
+  "canDetachAttachedCarWheels": "Pemain bisa melepas roda mobil.",
+  "canDamageAttachedCarWheels": "Roda yang terpasang di mobil bisa rusak, misalnya karena tembakan.",
+  "canDetachAttachedBikeWheels": "Pemain bisa melepas roda sepeda.",
+  "canDamageAttachedBikeWheels": "Roda yang terpasang di sepeda bisa rusak.",
+  "playerRestrictedAreaFiles": "File JSON (path di dalam misi) berisi area terlarang bagi pemain — zona yang tidak boleh dimasuki pemain, seperti gudang hulu ledak di Sakhal.",
+  "bunkerBroadcastEnabled": "Siaran radio bunker berjalan: kode bunker dikirim dalam kode Morse, sesuai cfgbunkerbroadcast.json milik misi (Nasdara). Nonaktif = tidak ada siaran.",
+  "ExternalLockData": "Perlindungan gembok kode dari tebak paksa: setelah terlalu banyak kode salah, gembok berhenti menerima input untuk sementara.",
+  "protectionCountStageOne": "Jumlah kode salah berturut-turut sebelum gembok kode memblokir input untuk pertama kali.",
+  "protectionCountStageTwo": "Jumlah kode salah, setelah blokir pertama, sebelum gembok memblokir lagi.",
+  "protectionTime": "Detik gembok kode menolak input setelah terlalu banyak kode salah.",
+  "protectionResetTime": "Detik setelah gembok kode melupakan kode yang salah dan mulai menghitung dari nol.",
+  "SandstormData": "Badai pasir (Nasdara).",
+  "sandstormFrequency": "Seberapa sering badai pasir datang: 0 = tidak pernah, 1 = seperti di game, 2 = dua kali lebih sering."
  },
  "globals": {
-  "AnimalMaxCount": "Jumlah maksimum hewan hidup di peta pada saat yang sama.",
-  "CleanupAvoidance": "Faktor yang mencegah loot yang baru di-spawn dibersihkan terlalu cepat.",
-  "CleanupLifetimeDeadAnimal": "Berapa detik bangkai hewan bertahan sebelum dihapus.",
-  "CleanupLifetimeDeadInfected": "Berapa detik mayat zombie bertahan sebelum dihapus.",
-  "CleanupLifetimeDeadPlayer": "Berapa detik mayat pemain beserta perlengkapannya bertahan sebelum dihapus.",
-  "CleanupLifetimeDefault": "Lama default (detik) item yang dijatuhkan bertahan sebelum dibersihkan jika tipenya tidak mengatur lifetime.",
-  "CleanupLifetimeLimit": "Batas bawah (detik) yang dipakai pembersihan untuk lifetime item yang sangat singkat.",
-  "CleanupLifetimeRuined": "Berapa detik item yang hancur tetap di tanah sebelum dibersihkan.",
-  "FlagRefreshFrequency": "Seberapa sering (detik) bendera teritori yang dikibarkan memperbarui lifetime item terpasang di sekitarnya.",
-  "FlagRefreshMaxDuration": "Lifetime maksimum (detik) yang bisa diperbarui oleh bendera — batas peluruhan base (vanilla ≈ 45 hari).",
-  "IdleModeCountdown": "Berapa detik tanpa pemain terhubung sebelum ekonomi masuk mode diam dan berhenti me-respawn loot.",
-  "IdleModeStartup": "Mulai ekonomi dalam mode diam sampai pemain pertama bergabung (1 = ya).",
-  "InitialSpawn": "Jumlah loot awal yang di-spawn saat ekonomi pertama kali dimulai.",
-  "LoginTimeMax": "Waktu maksimum (detik) proses login sebelum percobaan dibatalkan.",
-  "LogoutTimeMax": "Waktu tunggu logout maksimum (detik).",
-  "RespawnAttempt": "Berapa kali engine mencoba ulang respawn loot yang gagal per siklus.",
-  "RespawnTypes": "Berapa banyak tipe loot yang diproses untuk respawn setiap siklus.",
-  "SpawnInitial": "Jumlah loot awal yang di-spawn saat ekonomi pertama kali dimulai.",
-  "TimeHopping": "Penundaan login tambahan (detik) bagi pemain yang berpindah-pindah server, untuk mencegahnya.",
-  "TimeLogin": "Berapa detik pemain menunggu di layar pemuatan saat login.",
-  "TimeLogout": "Berapa detik pemain harus tetap berada di dunia setelah memilih logout (anti-combat-log).",
-  "TimePenalty": "Waktu tunggu tambahan (detik) untuk logout jika baru saja bertarung.",
-  "WorldWetTempUpdate": "Seberapa sering (detik) tingkat basah dan suhu item di dunia diperbarui.",
-  "ZombieMaxCount": "Jumlah maksimum zombie hidup di peta pada saat yang sama.",
-  "ZoneSpawnDist": "Jarak (m) dari pemain tempat zona dinamis zombie/hewan di-spawn."
+  "AnimalMaxCount": "Jumlah maksimum hewan hidup di peta pada waktu bersamaan.",
+  "CleanupAvoidance": "Jarak (m) dari pemain yang di dalamnya tidak ada yang dibersihkan, agar item tidak hilang di depan mata pemain.",
+  "CleanupLifetimeDeadAnimal": "Detik bangkai hewan mati bertahan sebelum dihapus.",
+  "CleanupLifetimeDeadInfected": "Detik jasad infected yang mati bertahan sebelum dihapus.",
+  "CleanupLifetimeDeadPlayer": "Detik jasad pemain yang mati beserta perlengkapannya bertahan sebelum dihapus.",
+  "CleanupLifetimeDefault": "Detik bawaan item yang dijatuhkan bertahan sebelum dibersihkan bila tipenya tidak mengatur umur.",
+  "CleanupLifetimeLimit": "Batas bawah (dtk) yang dipakai pembersihan untuk umur item yang sangat pendek.",
+  "CleanupLifetimeRuined": "Detik item hancur tetap di tanah sebelum dibersihkan.",
+  "FlagRefreshFrequency": "Seberapa sering (dtk) bendera wilayah yang dikibarkan menyegarkan umur item terpasang di sekitarnya.",
+  "FlagRefreshMaxDuration": "Umur maksimum (dtk) yang bisa diberikan bendera saat menyegarkan item — batas atas kerusakan base (vanilla ≈ 45 hari).",
+  "FoodDecay": "Makanan membusuk seiring waktu (1 = aktif).",
+  "IdleModeCountdown": "Detik tanpa pemain terhubung sebelum ekonomi idle dan berhenti me-respawn loot.",
+  "IdleModeStartup": "Mulai ekonomi dalam mode idle sampai pemain pertama bergabung (1 = ya).",
+  "InitialSpawn": "Berapa persen loot nominal yang muncul saat ekonomi dimulai dengan penyimpanan kosong (100 = semua).",
+  "LoginTimeMax": "Waktu maksimum (dtk) login boleh berlangsung sebelum percobaan dibatalkan.",
+  "LogoutTimeMax": "Waktu tunggu logout maksimum (dtk).",
+  "LootDamageMax": "Kerusakan paling banyak pada loot yang baru muncul, 0–1 (vanilla 0.82). Lebih rendah = loot muncul dalam kondisi lebih baik.",
+  "LootDamageMin": "Kerusakan paling sedikit pada loot yang baru muncul, 0–1 (0 = sempurna).",
+  "LootProxyPlacement": "Loot muncul di rak, meja, dan tempat lain di dalam bangunan (1 = aktif). Biarkan aktif.",
+  "LootSpawnAvoidance": "Jarak (m) dari pemain yang di dalamnya tidak muncul loot baru, agar loot tidak pernah tiba-tiba muncul di depan siapa pun.",
+  "RespawnAttempt": "Berapa kali per siklus engine mencoba lagi respawn loot yang gagal.",
+  "RespawnLimit": "Jumlah terbanyak item satu tipe yang di-respawn per siklus.",
+  "RespawnTypes": "Berapa tipe loot yang diproses untuk respawn setiap siklus.",
+  "RestartSpawn": "1 = semua loot muncul ulang setiap server dimulai (reset loot); 0 = loot yang tersimpan dipertahankan.",
+  "SpawnInitial": "Anggaran spawn putaran pertama ekonomi saat startup (vanilla 1200).",
+  "TimeHopping": "Tambahan jeda login (dtk) bagi pemain yang berpindah-pindah server, untuk mencegahnya.",
+  "TimeLogin": "Detik pemain menunggu di layar loading saat login.",
+  "TimeLogout": "Detik pemain harus tetap di dunia setelah memilih logout (anti combat log).",
+  "TimePenalty": "Tambahan tunggu (dtk) untuk logout tak lama setelah bertarung.",
+  "WorldWetTempUpdate": "Kebasahan dan suhu item yang tergeletak di dunia diperbarui (1 = aktif).",
+  "ZombieMaxCount": "Jumlah maksimum infected hidup di peta pada waktu bersamaan.",
+  "ZoneSpawnDist": "Jarak (m) dari pemain tempat zona dinamis infected/hewan muncul."
  }
 }

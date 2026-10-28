@@ -1,11 +1,11 @@
 # Builds the four release binaries and checks that each one really is a
 # program for its system — a "-linux" file that is secretly a Windows .exe
 # (GOOS not applied by the shell) runs nowhere and only says "Exec format
-# error" on Linux. Then packs the Linux archive.
+# error" on Linux. Then packs the Linux and Windows archives.
 #
-#   python tools/build_release.py            # all four + dayz-manager-linux.tar.gz
+#   python tools/build_release.py            # all four + dayz-manager-linux.tar.gz + dayz-manager-windows.zip
 #   python tools/build_release.py linux      # only the Linux builds + archive
-#   python tools/build_release.py windows    # only the Windows builds
+#   python tools/build_release.py windows    # only the Windows builds + archive
 #
 # Works the same from cmd, PowerShell or bash: the target system is passed in
 # the environment of each go build, never through shell syntax.
@@ -51,6 +51,8 @@ def main():
         build(out, pkg, goos, ld)
     if only in ("", "linux"):
         subprocess.run([sys.executable, os.path.join(ROOT, "tools", "make_linux_tarball.py")], cwd=ROOT, check=True)
+    if only in ("", "windows"):
+        subprocess.run([sys.executable, os.path.join(ROOT, "tools", "make_windows_zip.py")], cwd=ROOT, check=True)
     print("Done.")
 
 

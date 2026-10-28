@@ -16,7 +16,7 @@
 // F.modSource so the Settings auto-save picks it up.
 function modSourceCard(c, F, detectBtn) {
   const cur = c.modSource || 'client';
-  const modes = ['client', 'folder', 'server'];
+  const modes = ['client', 'folder', 'server', 'steamcmd'];
   const radios = modes.map(v => {
     const r = h('input', { type: 'radio', name: 'mod-source', value: v });
     r.checked = v === cur;
@@ -47,13 +47,17 @@ function modSourceCard(c, F, detectBtn) {
     h('small', { class: 'hint', i18n: 'settings.modSource.folder.hint' }),
   ]);
   const serverRow = h('div', { class: 'warning-bar', i18n: 'settings.modSource.server.hint' });
+  const steamcmdRow = h('div', { class: 'info-bar source-ws' }, [
+    h('span', { class: 'grow', i18n: 'settings.modSource.steamcmd.hint' }),
+    h('button', { type: 'button', class: 'secondary small', i18n: 'nav.mods', onclick: () => navigate('mods') }),
+  ]);
 
   let seq = 0;
   async function inspect() {
     const mode = F.modSource.value;
     const my = ++seq;
     status.innerHTML = '';
-    if (mode === 'server') return;
+    if (mode === 'server' || mode === 'steamcmd') return;
     const path = (mode === 'client' ? F.vanillaDayZPath.value : F.modsFolderPath.value).trim();
     if (!path) { status.append(h('span', { class: 'badge warn', i18n: 'settings.modSource.empty' })); applyI18n(); return; }
     try {
@@ -72,6 +76,7 @@ function modSourceCard(c, F, detectBtn) {
     clientRow.hidden = v !== 'client';
     folderRow.hidden = v !== 'folder';
     serverRow.hidden = v !== 'server';
+    steamcmdRow.hidden = v !== 'steamcmd';
     inspect();
   };
   radios.forEach(r => r.addEventListener('change', sync));
@@ -89,8 +94,9 @@ function modSourceCard(c, F, detectBtn) {
       opt(0, 'settings.modSource.client'),
       opt(1, 'settings.modSource.folder'),
       opt(2, 'settings.modSource.server'),
+      opt(3, 'settings.modSource.steamcmd'),
     ]),
-    clientRow, folderRow, serverRow, status,
+    clientRow, folderRow, serverRow, steamcmdRow, status,
   ]);
 }
 
@@ -339,9 +345,16 @@ async function copyText(text, inp) {
     await navigator.clipboard.writeText(text);
     toast(t('msg.copied'), 'ok');
   } catch {
-    // Clipboard API is unavailable on plain-http LAN origins: select instead.
-    if (inp) { inp.focus(); inp.select(); }
-    try { document.execCommand('copy'); toast(t('msg.copied'), 'ok'); } catch {}
+    // Clipboard API is unavailable on plain-http LAN origins: copy from a
+    // selected field instead (a hidden one when the caller has none).
+    const tmp = inp ? null : h('textarea', { 'aria-hidden': 'true', style: { position: 'fixed', top: '-1000px', opacity: '0' } });
+    if (tmp) { tmp.value = text; document.body.appendChild(tmp); }
+    const el = inp || tmp;
+    el.focus(); el.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { /* not supported */ }
+    if (tmp) tmp.remove();
+    if (ok) toast(t('msg.copied'), 'ok');
   }
 }
 
@@ -923,8 +936,10 @@ function vehicleDisplayName(event) {
   return base.replace(/_/g, ' ').replace(/([a-z])([A-Z0-9])/g, '$1 $2').replace(/\s+/g, ' ').trim();
 }
 
-// Vehicles — one card per vehicle event: how many exist, how long they live,
-// their colour variants and how many parts they spawn with, and where they
+// Vehicles — laid out like the player loadout: a tab per vehicle event and
+// the chosen vehicle under them. Its parts are drawn on the car — each colour
+// variant's cfgspawnabletypes entry, edited in place (spawnedit.js) — beside
+// how many exist, how long they live, how full the tank is and where they
 // spawn. DayZ has no vanilla "spawn a car here" command; the Central Economy
 // spawns up to `nominal` vehicles at the event's spawn points.
 Views.vehicles = async (root) => {
@@ -954,7 +969,7 @@ Views.vehicles = async (root) => {
     return;
   }
 
-  // Problems a card can show — counted for the summary.
+  // Problems a vehicle can show — counted for the summary.
   const problemsOf = (v) => {
     const out = [];
     const nominal = Number(v.nominal) || 0;
@@ -975,20 +990,32 @@ Views.vehicles = async (root) => {
 
   let filter = 'all';
   try { filter = localStorage.getItem('vehiclesFilter') || 'all'; } catch {}
-  if (filter === 'mods' && !modCount) filter = 'all';
+  if ((filter === 'mods' && !modCount) || (filter === 'problems' && !withProblems)) filter = 'all';
   const tile = (key, value, kind, onClick) => h(onClick ? 'button' : 'div', {
     type: onClick ? 'button' : null, class: 'veh-tile' + (kind ? ' ' + kind : '') + (onClick ? ' clickable' : ''), onclick: onClick || null }, [
     h('div', { class: 'veh-tile-v', text: String(value) }), h('div', { class: 'veh-tile-k', i18n: key }),
   ]);
   const tabs = h('div', { class: 'section-tabs veh-tabs', role: 'tablist' });
+  // A tab per vehicle; the chosen one opens below. Its editor is kept while
+  // another is open, so switching keeps unsaved edits.
+  const strip = h('div', { class: 'veh-strip', role: 'tablist', 'aria-label': t('nav.vehicles') });
+  const host = h('div', { class: 'veh-host' });
+  const editors = new Map();
+  let current = null;
+  try { current = localStorage.getItem('vehiclesPick'); } catch {}
+  const shows = (v, f) => f === 'all' || (f === 'vanilla' && !isMod(v)) || (f === 'mods' && isMod(v)) || (f === 'problems' && problemsOf(v).length > 0);
   const setFilter = (f) => {
     filter = f;
     try { localStorage.setItem('vehiclesFilter', f); } catch {}
     tabs.querySelectorAll('button').forEach(b => { const on = b.dataset.f === f; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); });
-    grid.querySelectorAll('.veh-card').forEach(c => {
-      const v = c._vehicle;
-      c.hidden = !(f === 'all' || (f === 'vanilla' && !isMod(v)) || (f === 'mods' && isMod(v)) || (f === 'problems' && problemsOf(v).length));
-    });
+    let first = null, keep = false;
+    for (const b of strip.querySelectorAll('.veh-pick')) {
+      const on = shows(b._vehicle, f);
+      b.hidden = !on;
+      if (on && !first) first = b._vehicle.name;
+      if (on && b._vehicle.name === current) keep = true;
+    }
+    select(keep ? current : first);
   };
   const tab = (f, label, n) => h('button', { type: 'button', role: 'tab', class: 'section-tab', 'data-f': f, onclick: () => setFilter(f) },
     [h('span', { text: label }), n != null ? h('span', { class: 'pill-count', text: String(n) }) : null].filter(Boolean));
@@ -1004,10 +1031,12 @@ Views.vehicles = async (root) => {
     tile('vehicles.sum.onMap', onMap, 'accent'),
     tile('vehicles.sum.spots', spots),
     tile('vehicles.sum.problems', withProblems, withProblems ? 'warn' : 'ok', withProblems ? () => setFilter('problems') : null),
-  ]), h('p', { class: 'hint veh-intro', i18n: 'vehicles.intro' }), modsHost, tabs);
+  ]), h('p', { class: 'hint veh-intro', i18n: 'vehicles.intro' }),
+  // Once for the page, not in every card: fuel and radiator need nothing installed.
+  h('p', { class: 'hint veh-intro veh-tweaks-note' }, [h('span', { html: svgIcon('i-fuel', 13) }), h('span', { i18n: 'veh.cond.hint' })]), modsHost, tabs);
   vehiclesFromMods(modsHost, myNav, running, list);
 
-  // Unsaved cards: counted for the sticky bar, which saves them all.
+  // Unsaved vehicles: counted for the sticky bar, which saves them all.
   const dirtyCards = new Set();
   root._isDirty = () => dirtyCards.size > 0;
   const barText = h('span');
@@ -1021,15 +1050,52 @@ Views.vehicles = async (root) => {
   const updateBar = () => {
     bar.hidden = dirtyCards.size === 0;
     barText.textContent = t('vehicles.unsaved').replace('{n}', dirtyCards.size);
+    for (const b of strip.querySelectorAll('.veh-pick')) b.classList.toggle('dirty', dirtyCards.has(editors.get(b._vehicle.name)));
   };
 
-  const grid = h('div', { class: 'veh-grid' });
-  root.append(grid, bar);
-  for (const v of list) grid.append(vehicleCard(v));
+  for (const v of list) strip.append(pickTab(v));
+  root.append(strip, host, bar);
   setFilter(filter);
   applyI18n();
 
-  function vehicleCard(v) {
+  function pickTab(v) {
+    const kind = vehicleKind(v);
+    const kids = v.children || [];
+    const shown = kids.find(c => (Number(c.max) || 0) > 0) || kids[0];
+    const off = v.modActive === false || (v.active ?? 1) === 0;
+    const b = h('button', { type: 'button', role: 'tab', class: 'veh-pick' + (off ? ' off' : ''), title: v.name, onclick: () => select(v.name) }, [
+      h('span', { class: 'veh-pick-art', html: vehicleArtSVG(kind, variantColor(shown ? shown.type : '', kind)) }),
+      h('span', { class: 'veh-pick-txt' }, [
+        h('b', { text: vehicleDisplayName(v.name) }),
+        h('small', { text: off ? t('veh.pick.off') : t('veh.pick.count').replace('{n}', Number(v.nominal) || 0) }),
+      ]),
+      problemsOf(v).length ? h('span', { class: 'veh-pick-warn', title: t('vehicles.tab.problems') }) : null,
+    ]);
+    b._vehicle = v;
+    return b;
+  }
+
+  function select(name) {
+    const v = list.find(x => x.name === name);
+    for (const b of strip.querySelectorAll('.veh-pick')) {
+      const on = !!v && b._vehicle === v;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+    }
+    if (!v) {
+      host.replaceChildren(h('div', { class: 'card' }, h('p', { class: 'hint', i18n: 'veh.pick.none' })));
+      applyI18n();
+      return;
+    }
+    current = v.name;
+    try { localStorage.setItem('vehiclesPick', v.name); } catch {}
+    let ed = editors.get(v.name);
+    if (!ed) { ed = vehicleEditor(v); editors.set(v.name, ed); }
+    host.replaceChildren(ed);
+    applyI18n();
+  }
+
+  function vehicleEditor(v) {
     let card;
     const setDirty = () => { dirtyCards.add(card); saveBtn.classList.add('pulse'); updateBar(); };
     const clearDirty = () => { dirtyCards.delete(card); saveBtn.classList.remove('pulse'); updateBar(); };
@@ -1055,6 +1121,11 @@ Views.vehicles = async (root) => {
     F.lifetime.addEventListener('input', () => { lifeHint.textContent = fmtLifetime(F.lifetime.value); });
 
     const kids = (v.children || []).map(c => ({ ...c }));
+    const kind = vehicleKind(v);
+    const shown = kids.find(c => (Number(c.max) || 0) > 0) || kids[0];
+    const art = h('div', { class: 'veh-panel-art', html: vehicleArtSVG(kind, variantColor(shown ? shown.type : '', kind)) });
+
+    // The colours: how many of each, and a click opens its parts above.
     const kidRows = h('tbody');
     const partBadges = [];
     kids.forEach(c => {
@@ -1063,17 +1134,82 @@ Views.vehicles = async (root) => {
         inp.addEventListener('input', () => { c[field] = Number(inp.value) || 0; setDirty(); tr.classList.toggle('never', !c.max && !c.min); });
         return h('td', { class: 'num' + (cls ? ' ' + cls : '') }, inp);
       };
-      const badge = c.known
-        ? h('span', { class: 'badge ' + (c.complete ? 'ok' : 'mute'), text: c.complete ? t('vehicles.parts.complete') : String(c.parts) })
-        : h('span', { class: 'badge warn', i18n: 'vehicles.parts.unknown' });
-      if (c.known) partBadges.push({ el: badge, c });
+      const badge = h('span', { class: 'badge' });
+      partBadges.push({ el: badge, c });
       const tr = h('tr', { class: (!c.max && !c.min) ? 'never' : '' }, [
-        h('td', { class: 'mono veh-variant' }, [...breakAtUnderscores(c.type), h('span', { class: 'badge mute veh-never', i18n: 'vehicles.never' })]),
+        h('td', { class: 'mono veh-variant' }, h('button', { type: 'button', class: 'veh-variant-btn', title: t('veh.shop.show'),
+          onclick: () => { shop.select(c.type); shop.el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, [
+          h('span', { class: 'veh-dot', style: { background: variantColor(c.type, kind) } }),
+          ...breakAtUnderscores(c.type), h('span', { class: 'badge mute veh-never', i18n: 'vehicles.never' })])),
         cell('min'), cell('max'), cell('lootmin', 'veh-loot'), cell('lootmax', 'veh-loot'),
-        h('td', { class: 'num' }, badge),
+        h('td', { class: 'num veh-parts-cell' }, badge),
       ]);
+      tr._type = c.type;
       kidRows.append(tr);
     });
+
+    // The parts: a tab per colour, the chosen one drawn on the car.
+    const shop = vehicleWorkshop(v, kids, kind, {
+      root, setDirty,
+      onVariant: (type) => {
+        art.innerHTML = vehicleArtSVG(kind, variantColor(type, kind));
+        for (const r of kidRows.children) r.classList.toggle('on', r._type === type);
+      },
+      onParts: () => updateBadges(),
+    });
+    // The parts column counts what the editor holds once it has loaded,
+    // what the server said until then.
+    function updateBadges() {
+      for (const { el, c } of partBadges) {
+        const m = shop.model(c.type);
+        const known = m ? m.known || m.groups.length > 0 : c.known;
+        const full = m ? seComplete(m.groups) : c.complete;
+        el.className = 'badge ' + (!known ? 'warn' : full ? 'ok' : 'mute');
+        el.textContent = !known ? t('vehicles.parts.unknown') : full ? t('vehicles.parts.complete') : String(m ? m.groups.length : c.parts);
+      }
+    }
+    updateBadges();
+
+    // Spawn condition: how full the tank and the radiator are. Vanilla fills
+    // a random 0–35 % of the tank in script; the panel's server-side mod
+    // applies these (app.SyncServerTweaks).
+    const isCar = !['boat', 'moto'].includes(kind);
+    const fluidSel = (cur, opts, labelKey) => {
+      const sel = h('select', { class: 'veh-fluid-sel', disabled: running, 'aria-label': t(labelKey) },
+        opts.map(([id]) => h('option', { value: id, text: t('veh.fluid.' + (id === 'default' && labelKey === 'veh.fuel' ? 'defaultFuel' : id)) })));
+      const minIn = h('input', { type: 'number', min: '0', max: '100', step: '5', class: 'veh-fluid-num', disabled: running, 'aria-label': 'min %' });
+      const maxIn = h('input', { type: 'number', min: '0', max: '100', step: '5', class: 'veh-fluid-num', disabled: running, 'aria-label': 'max %' });
+      const custom = h('span', { class: 'veh-fluid-custom' }, [minIn, h('span', { text: '–' }), maxIn, h('span', { text: '%' })]);
+      let id = 'default';
+      if (cur) {
+        id = 'custom';
+        for (const [oid, r] of opts) if (Array.isArray(r) && Math.abs(r[0] - cur.min) < 0.001 && Math.abs(r[1] - cur.max) < 0.001) id = oid;
+        minIn.value = String(Math.round(cur.min * 100)); maxIn.value = String(Math.round(cur.max * 100));
+      } else { minIn.value = '0'; maxIn.value = '100'; }
+      sel.value = id;
+      custom.hidden = id !== 'custom';
+      const onAny = () => { custom.hidden = sel.value !== 'custom'; setDirty(); };
+      sel.addEventListener('change', onAny);
+      minIn.addEventListener('input', setDirty); maxIn.addEventListener('input', setDirty);
+      return {
+        el: h('span', { class: 'veh-fluid' }, [sel, custom]),
+        get() {
+          if (sel.value === 'default') return null;
+          if (sel.value === 'custom') {
+            const lo = Math.max(0, Math.min(100, Number(minIn.value) || 0)) / 100, hi = Math.max(0, Math.min(100, Number(maxIn.value) || 0)) / 100;
+            return { min: Math.min(lo, hi), max: Math.max(lo, hi) };
+          }
+          const r = opts.find(o => o[0] === sel.value)[1];
+          return { min: r[0], max: r[1] };
+        },
+      };
+    };
+    const FUEL = [['default'], ['empty', [0, 0]], ['quarter', [0.25, 0.25]], ['half', [0.5, 0.5]], ['full', [1, 1]], ['random', [0, 1]], ['custom']];
+    const COOL = [['default'], ['empty', [0, 0]], ['half', [0.5, 0.5]], ['full', [1, 1]], ['custom']];
+    const fuelCtl = fluidSel(v.fuel, FUEL, 'veh.fuel');
+    const coolCtl = isCar ? fluidSel(v.coolant, COOL, 'veh.coolant') : null;
+    const tweakKey = () => JSON.stringify([fuelCtl.get(), coolCtl ? coolCtl.get() : null]);
+    let tweakSaved = tweakKey();
 
     const warns = [];
     const nominal = Number(v.nominal) || 0;
@@ -1093,78 +1229,332 @@ Views.vehicles = async (root) => {
         // Modded vehicles live in their own registered events file.
         await api.post(`/api/events/item?name=${encodeURIComponent(v.name)}` +
           (v.file && v.file !== 'db/events.xml' ? `&file=${encodeURIComponent(v.file)}` : ''), body);
+        if (tweakKey() !== tweakSaved) {
+          const r = await api.post('/api/vehicles/tweak', { event: v.name, classes: kids.map(c => c.type),
+            fuel: fuelCtl.get(), coolant: coolCtl ? coolCtl.get() : null });
+          tweakSaved = tweakKey();
+          if (!r.applied) toast(t('veh.cond.nextStart'), 'ok');
+        }
+        await shop.save();
         clearDirty();
+        updateBadges();
         toast(t('msg.saved') + ' · ' + vehicleDisplayName(v.name), 'ok');
         return true;
       } catch (err) { handleErr(err); return false; }
     }
     const saveBtn = h('button', { class: 'primary', i18n: 'action.save', disabled: running, onclick: (e) => withBusy(e.currentTarget, save) });
-
-    // Parts: the pill matching the current chance is marked; a click writes
-    // cfgspawnabletypes at once and updates this card in place.
-    let partsChance = v.partsChance;
-    const PARTS = [[1, 'vehicles.parts.full'], [0.75, 'vehicles.parts.most'], [0.5, 'vehicles.parts.half'], [0.25, 'vehicles.parts.wreck']];
-    const markParts = () => partBtns.forEach((b, i) => b.classList.toggle('active', partsChance != null && Math.abs(partsChance - PARTS[i][0]) < 0.01));
-    const parts = (chance) => withBusyAll(async () => {
-      try {
-        const r = await api.post('/api/vehicles/parts', { event: v.name, chance });
-        toast(tn('vehicles.parts.done', { n: r.variants }), 'ok');
-        partsChance = chance;
-        markParts();
-        for (const { el, c } of partBadges) {
-          const full = chance >= 0.999;
-          el.className = 'badge ' + (full ? 'ok' : 'mute');
-          el.textContent = full ? t('vehicles.parts.complete') : String(c.parts);
-        }
-      } catch (err) { handleErr(err); }
-    });
-    const partBtns = PARTS.map(([c, k]) => h('button', { class: 'pill', type: 'button', i18n: k, disabled: running, onclick: () => parts(c) }));
-    markParts();
+    // A modded vehicle can be deleted outright (switching it off keeps its
+    // settings); the game's own ones only switched off.
+    const delBtn = isMod(v) ? h('button', { class: 'danger', i18n: 'vehicles.delete', disabled: running,
+      onclick: async (e) => {
+        const btn = e.currentTarget;
+        if (!(await confirmModal(t('vehicles.delete.confirm').replace('{name}', vehicleDisplayName(v.name)), { danger: true, okText: t('vehicles.delete') }))) return;
+        await withBusy(btn, async () => {
+          try {
+            await api.post('/api/vehicles/delete', { event: v.name });
+            dirtyCards.delete(card);
+            toast(t('vehicles.delete.done').replace('{name}', vehicleDisplayName(v.name)), 'ok');
+            await navigate('vehicles');
+          } catch (err) { handleErr(err); }
+        });
+      } }) : null;
 
     const field = (key, el, extra) => h('div', { class: 'veh-field' }, [withHelp(h('label', { i18n: 'vehicles.f.' + key, for: assocId(el) }), 'vehicles.' + key), el, extra || null]);
-    const name = vehicleDisplayName(v.name);
-    card = h('div', { class: 'card veh-card' + (modOff ? ' mod-off' : '') }, [
-      h('div', { class: 'veh-head' }, [
-        h('div', { class: 'veh-title' }, [
-          h('h3', { text: name }),
-          h('span', { class: 'hint mono', text: v.name }),
-        ]),
+    const panel = h('aside', { class: 'card veh-panel' + (modOff ? ' mod-off' : '') }, [
+      art,
+      h('div', { class: 'veh-title' }, [h('h3', { text: vehicleDisplayName(v.name) }), h('span', { class: 'hint mono', text: v.name })]),
+      h('div', { class: 'veh-badges' }, [
         v.mod ? h('span', { class: 'badge ' + (modOff ? 'warn' : 'info') + ' mono', text: v.mod, title: t('vehicles.fromMod').replace('{mod}', v.mod) }) : null,
         v.file && v.file !== 'db/events.xml'
           ? h('span', { class: 'badge mute mono veh-file', text: v.file, title: t('vehicles.definedIn').replace('{file}', v.file) }) : null,
-        h('span', { class: 'grow' }),
-        h('button', { type: 'button', class: 'secondary small', onclick: () => { window._eventmapTarget = v.name; navigate('eventmap'); } }, [
-          h('span', { html: svgIcon('i-eventmap', 14) }),
-          h('span', { text: ' ' + tn('vehicles.positions', { n: v.positions }) }),
-        ]),
       ].filter(Boolean)),
+      h('button', { type: 'button', class: 'secondary small veh-pos-btn', onclick: () => { window._eventmapTarget = v.name; navigate('eventmap'); } }, [
+        h('span', { html: svgIcon('i-eventmap', 14) }),
+        h('span', { text: ' ' + tn('vehicles.positions', { n: v.positions }) }),
+      ]),
       warns.length ? h('div', { class: 'veh-warns' }, warns) : null,
-      h('div', { class: 'veh-body' }, [
-        h('div', { class: 'veh-fields' }, [
-          field('nominal', F.nominal), field('min', F.min), field('max', F.max),
-          field('lifetime', F.lifetime, lifeHint), field('restock', F.restock),
-          h('div', { class: 'veh-field' }, [h('label', { i18n: 'vehicles.f.active' }), h('label', { class: 'veh-active' }, [active, h('span', { i18n: 'vehicles.activeOn' })])]),
+      h('div', { class: 'veh-fields' }, [
+        field('nominal', F.nominal), field('min', F.min), field('max', F.max),
+        field('lifetime', F.lifetime, lifeHint), field('restock', F.restock),
+        h('div', { class: 'veh-field' }, [h('label', { i18n: 'vehicles.f.active' }), h('label', { class: 'veh-active' }, [active, h('span', { i18n: 'vehicles.activeOn' })])]),
+      ]),
+      h('div', { class: 'veh-cond' }, [
+        h('div', { class: 'veh-cond-row' }, [
+          h('span', { class: 'veh-cond-k' }, [h('span', { html: svgIcon('i-fuel', 14) }), h('span', { i18n: 'veh.fuel' }), help('veh.tweaks')]), fuelCtl.el,
         ]),
-        kids.length ? h('div', { class: 'table-scroll veh-kids-wrap' }, h('table', { class: 'veh-kids' }, [
-          h('thead', {}, h('tr', {}, [
-            h('th', { i18n: 'vehicles.col.variant' }), h('th', { class: 'num', i18n: 'vehicles.col.min' }), h('th', { class: 'num', i18n: 'vehicles.col.max' }),
-            hlp(h('th', { class: 'num veh-loot', i18n: 'vehicles.col.lootmin' }), 'vehicles.loot'), h('th', { class: 'num veh-loot', i18n: 'vehicles.col.lootmax' }),
-            h('th', { class: 'num', i18n: 'vehicles.col.parts' }),
-          ])),
-          kidRows,
-        ])) : null,
+        coolCtl ? h('div', { class: 'veh-cond-row' }, [
+          h('span', { class: 'veh-cond-k' }, [h('span', { html: svgIcon('i-drop', 14) }), h('span', { i18n: 'veh.coolant' })]), coolCtl.el,
+        ]) : null,
       ]),
-      h('div', { class: 'veh-foot' }, [
-        h('div', { class: 'veh-parts' }, [h('span', { class: 'hint', i18n: 'vehicles.parts.label' }), ...partBtns]),
-        h('span', { class: 'grow' }),
-        saveBtn,
-      ]),
-    ]);
+      h('div', { class: 'veh-foot' }, [h('span', { class: 'grow' }), delBtn, saveBtn].filter(Boolean)),
+    ].filter(Boolean));
+    const colours = kids.length ? h('section', { class: 'card veh-variants' }, [
+      h('div', { class: 'veh-sec-head' }, [h('h3', { i18n: 'veh.colours' })]),
+      h('p', { class: 'hint', i18n: 'veh.colours.hint' }),
+      h('div', { class: 'table-scroll veh-kids-wrap' }, h('table', { class: 'veh-kids' }, [
+        h('thead', {}, h('tr', {}, [
+          h('th', { i18n: 'vehicles.col.variant' }), h('th', { class: 'num', i18n: 'vehicles.col.min' }), h('th', { class: 'num', i18n: 'vehicles.col.max' }),
+          hlp(h('th', { class: 'num veh-loot', i18n: 'vehicles.col.lootmin' }), 'vehicles.loot'), h('th', { class: 'num veh-loot', i18n: 'vehicles.col.lootmax' }),
+          h('th', { class: 'num', i18n: 'vehicles.col.parts' }),
+        ])),
+        kidRows,
+      ])),
+    ]) : null;
+    card = h('div', { class: 'veh-editor' }, [h('div', { class: 'veh-main' }, [shop.el, colours].filter(Boolean)), panel]);
     card._vehicle = v;
     card._save = save;
+    if (shown) shop.select(shown.type);
+    else shop.empty();
     return card;
   }
 };
+
+// vehicleWorkshop is a vehicle's parts and trunk: a tab per colour variant
+// and that variant's cfgspawnabletypes entry — the parts drawn on the car
+// (seEditor), what is in the trunk listed like the loadout's carried things
+// (seGroupList). Edits stay in memory per variant until save() writes the
+// changed ones, each into the file that defines it (POST
+// /api/vehicles/variants). The variants load on the first select(). ctx:
+// root (the page), setDirty(), onVariant(type) when another colour is shown,
+// onParts() after any change to the parts.
+function vehicleWorkshop(v, kids, kind, ctx) {
+  const models = new Map(); // lower-cased type → { type, file, known, groups, cargo, saved }
+  const tabs = h('div', { class: 'veh-vars', role: 'tablist', 'aria-label': t('veh.colours') });
+  const body = h('div', { class: 'veh-shop-body' });
+  const el = h('section', { class: 'card veh-shop' }, [
+    h('div', { class: 'veh-sec-head' }, [h('span', { class: 'veh-shop-ico', html: svgIcon('i-attach', 15) }), h('h3', { i18n: 'veh.shop' })]),
+    h('p', { class: 'hint', i18n: 'veh.shop.hint' }),
+    tabs, body,
+  ]);
+  let cur = null, cat = null, classLower = null, loading = null, failed = '';
+  const model = (type) => models.get(String(type || '').toLowerCase()) || null;
+  const snap = (m) => JSON.stringify([m.groups, m.cargo]);
+  const changed = (m) => snap(m) !== m.saved;
+
+  function load() {
+    if (!loading) loading = (async () => {
+      try {
+        const [r, c, cl] = await Promise.all([
+          api.get('/api/vehicles/variants?event=' + encodeURIComponent(v.name)), loCatalog(), seLists(ctx.root)]);
+        cat = c;
+        classLower = cl;
+        for (const x of r.variants || []) {
+          const groups = JSON.parse(JSON.stringify((x.entry && x.entry.attachments) || []));
+          const cargo = JSON.parse(JSON.stringify((x.entry && x.entry.cargo) || []));
+          // Edited in place by the group cards, which give an item-less
+          // group its array: given here, so an untouched entry stays unchanged.
+          for (const g of [...groups, ...cargo]) if (typeof g.preset !== 'string') g.items = g.items || [];
+          const m = { type: x.type, file: x.file, known: !!x.entry, groups, cargo };
+          m.saved = snap(m);
+          models.set(x.type.toLowerCase(), m);
+        }
+      } catch (e) { failed = e.message || String(e); }
+      ctx.onParts();
+    })();
+    return loading;
+  }
+
+  // The slot chance every colour's parts share, or null.
+  function shared() {
+    let c = null;
+    for (const m of models.values()) {
+      if (!m.groups.length) continue;
+      const x = seChanceOf(m.groups);
+      if (x === null || (c !== null && Math.abs(c - x) > 0.001)) return null;
+      c = x;
+    }
+    return c;
+  }
+
+  function drawTabs() {
+    tabs.replaceChildren(...kids.map(c => {
+      const m = model(c.type);
+      const on = c.type === cur;
+      const never = !(Number(c.max) || 0) && !(Number(c.min) || 0);
+      return h('button', { type: 'button', role: 'tab', class: 'veh-var' + (on ? ' on' : '') + (never ? ' never' : ''), 'aria-selected': String(on),
+        title: never ? t('vehicles.never') : c.type, onclick: () => select(c.type) }, [
+        h('span', { class: 'veh-dot', style: { background: variantColor(c.type, kind) } }),
+        h('span', { class: 'veh-var-name', text: c.type }),
+        m ? h('span', { class: 'veh-var-n' + (seComplete(m.groups) ? ' full' : ''), text: String(m.groups.length), title: t('vehicles.col.parts') }) : null,
+        m && changed(m) ? h('span', { class: 'veh-var-dirty', text: '•' }) : null,
+      ]);
+    }));
+  }
+
+  function draw(m, det) {
+    const se = seEditor(m.groups, {
+      cls: m.type, det, cat, info: cat ? loItemInfo(cat, m.type) : null, classLower,
+      collapse: m.groups.length > 4,
+      edited: () => { ctx.setDirty(); drawTabs(); ctx.onParts(); },
+      // The chance buttons set every colour of the vehicle at once.
+      bulkLabel: 'veh.shop.bulk',
+      bulkButtons: [[1, t('vehicles.parts.full')], [0.75, t('vehicles.parts.most')], [0.5, t('vehicles.parts.half')], [0.25, t('vehicles.parts.wreck')]],
+      bulkOn: (x) => { const c = shared(); return c !== null && Math.abs(c - x) < 0.01; },
+      bulk: (x) => {
+        for (const o of models.values()) seSetChance(o.groups, x);
+        ctx.setDirty();
+        ctx.onParts();
+        drawTabs();
+        draw(m, det);
+      },
+    });
+    // What is in the trunk: groups that each roll on their own, one thing
+    // out of each by weight — like the loadout's carried things.
+    const onTrunk = () => { ctx.setDirty(); drawTabs(); };
+    const trunk = seGroupList(m.cargo, { kind: 'cargo', cat, classLower, edited: onTrunk, changed: onTrunk,
+      addKey: 'veh.trunk.add', titleKey: 'se.cargoGroup', emptyKey: 'veh.trunk.empty' });
+    body.replaceChildren(...[
+      m.known ? null : h('p', { class: 'hint veh-shop-new', text: t('veh.shop.newEntry').replace('{file}', m.file) }),
+      se.el,
+      h('section', { class: 'veh-trunk' }, [
+        h('div', { class: 'veh-sec-head' }, [h('span', { class: 'veh-shop-ico', html: svgIcon('i-c-box', 15) }), h('h3', { i18n: 'veh.trunk' })]),
+        h('p', { class: 'hint', i18n: 'veh.trunk.hint' }),
+        trunk.el,
+      ]),
+      h('p', { class: 'hint mono veh-shop-file', text: m.file }),
+    ].filter(Boolean));
+    applyI18n();
+  }
+
+  async function select(type) {
+    cur = type;
+    drawTabs();
+    ctx.onVariant(type);
+    if (!loading) body.replaceChildren(h('p', { class: 'hint li-loading', text: t('li.loading') }));
+    await load();
+    if (cur !== type) return;
+    drawTabs();
+    if (failed) { body.replaceChildren(h('p', { class: 'hint', text: failed })); return; }
+    const m = model(type);
+    if (!m) { body.replaceChildren(h('p', { class: 'hint', i18n: 'veh.shop.none' })); applyI18n(); return; }
+    const det = await loDetail(type);
+    if (cur === type) draw(m, det);
+  }
+
+  // save writes the colours whose parts changed. What the server drops — a
+  // part without a name, a group left without parts — goes here too.
+  async function save() {
+    const list = [...models.values()].filter(changed);
+    if (!list.length) return 0;
+    await api.post('/api/vehicles/variants', { event: v.name, variants: list.map(m => ({ type: m.type, attachments: m.groups, cargo: m.cargo })) });
+    for (const m of list) {
+      for (const arr of [m.groups, m.cargo]) {
+        for (let i = arr.length - 1; i >= 0; i--) {
+          const g = arr[i];
+          if (typeof g.preset === 'string') { if (!g.preset.trim()) arr.splice(i, 1); continue; }
+          g.items = g.items.filter(it => String(it.name || '').trim());
+          if (!g.items.length) arr.splice(i, 1);
+        }
+      }
+      m.saved = snap(m);
+      m.known = true;
+    }
+    if (cur && list.includes(model(cur))) select(cur);
+    else drawTabs();
+    return list.length;
+  }
+
+  return {
+    el, select, save, model,
+    empty: () => body.replaceChildren(h('p', { class: 'hint', i18n: 'veh.shop.none' })),
+  };
+}
+
+// ------------------------------------------------------------ vehicle art
+//
+// Side-view drawings of the vehicle kinds (our own simple shapes, no game
+// art), painted in the colour a variant's class name ends with.
+
+const VEH_COLOR = {
+  black: '#2a2e35', blue: '#2f5ea8', wine: '#6e1d2c', red: '#b23a32', white: '#dfe2e7', grey: '#8a9099', gray: '#8a9099',
+  green: '#3e6b42', yellow: '#d8b23a', orange: '#e07a2e', beige: '#c7ae7f', sand: '#c7ae7f', tan: '#b89a66', camo: '#5f6b3c',
+  rust: '#8a4b2a', brown: '#6b4a2f', silver: '#b8bec7', olive: '#5a6236', banana: '#e2c84a', police: '#2b3f6e',
+};
+const VEH_DEFAULT = { sedan: '#8a9099', hatch: '#2f5ea8', sarka: '#c7ae7f', suv: '#3e6b42', humvee: '#5f6b3c', truck: '#4c5a3a', boat: '#e07a2e', moto: '#b23a32', car: '#8a9099' };
+
+// vehicleKind guesses the drawing from the event and its classes.
+function vehicleKind(v) {
+  const s = [v.name, ...(v.children || []).map(c => c.type)].join(' ').toLowerCase();
+  if (/boat/.test(s)) return 'boat';
+  if (/motorbike|motorcycle|bike|moto/.test(s)) return 'moto';
+  if (/truck|v3s|m3s|ural|kamaz/.test(s)) return 'truck';
+  if (/offroad_02|humvee|hmmwv|m1025/.test(s)) return 'humvee';
+  if (/offroadhatchback|niva/.test(s)) return 'suv';
+  if (/hatchback_02|gunter/.test(s)) return 'hatch';
+  if (/sedan_02|sarka/.test(s)) return 'sarka';
+  if (/sedan|olga/.test(s)) return 'sedan';
+  return 'car';
+}
+
+// variantColor reads the colour a class name ends with ("_Black", "_Wine").
+function variantColor(cls, kind) {
+  const m = /_([a-z]+)$/i.exec(cls || '');
+  return (m && VEH_COLOR[m[1].toLowerCase()]) || VEH_DEFAULT[kind] || '#8a9099';
+}
+
+// vehicleArtSVG draws one kind as an inline SVG (viewBox 240 × 110).
+function vehicleArtSVG(kind, color) {
+  const wheel = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" class="va-tyre"/><circle cx="${x}" cy="${y}" r="${(r * 0.45).toFixed(1)}" class="va-rim"/>`;
+  const glass = 'class="va-glass"';
+  const body = (d) => `<path d="${d}" fill="${color}" class="va-body"/>`;
+  let s;
+  switch (kind) {
+    case 'boat':
+      s = `<path d="M4 90 Q30 84 60 90 T120 90 T180 90 T236 90" class="va-water"/>
+        <rect x="8" y="46" width="12" height="30" rx="3" class="va-dark"/>
+        ${body('M16 56 L220 56 Q212 78 186 84 L44 84 Q24 80 16 56 Z')}
+        <path d="M74 56 L88 38 L124 38 L130 56 Z" ${glass}/>
+        <path d="M16 62 L214 62" class="va-line"/>`;
+      break;
+    case 'moto':
+      s = `${wheel(58, 78, 22)}${wheel(178, 78, 22)}
+        <path d="M58 78 L98 52 L150 52 L178 78" class="va-frame"/>
+        ${body('M92 40 Q100 30 124 32 L150 40 L146 52 L98 52 Z')}
+        <path d="M150 40 L166 26 L176 28" class="va-frame"/>
+        <rect x="76" y="40" width="30" height="8" rx="4" class="va-dark"/>`;
+      break;
+    case 'truck':
+      s = `${body('M14 78 L14 52 Q16 42 28 40 L44 40 L52 22 L84 22 Q90 22 90 30 L90 78 Z')}
+        <path d="M56 28 L82 28 L82 44 L52 44 Z" ${glass}/>
+        <path d="M94 30 Q160 18 230 30 L230 72 L94 72 Z" class="va-tarp"/>
+        <path d="M118 26 V72 M146 22 V72 M174 22 V72 M202 24 V72" class="va-line"/>
+        <rect x="14" y="76" width="218" height="6" class="va-dark"/>
+        ${wheel(48, 86, 15)}${wheel(174, 86, 15)}${wheel(206, 86, 15)}`;
+      break;
+    case 'humvee':
+      s = `<path d="M100 28 L94 6" class="va-line"/>
+        ${body('M10 76 L10 54 Q10 48 18 48 L66 46 L74 28 L168 28 L174 46 L222 48 Q230 49 230 56 L230 76 Q230 80 224 80 L210 80 A22 22 0 0 0 166 80 L86 80 A22 22 0 0 0 42 80 L16 80 Q10 80 10 76 Z')}
+        <path d="M80 33 L118 33 L118 46 L76 46 Z M124 33 L162 33 L168 46 L124 46 Z" ${glass}/>
+        <path d="M121 48 V78 M176 50 V78" class="va-line"/>
+        <rect x="224" y="56" width="10" height="16" rx="2" class="va-dark"/>
+        ${wheel(64, 82, 20)}${wheel(188, 82, 20)}`;
+      break;
+    case 'suv':
+      s = `${body('M18 74 L18 52 Q20 46 30 46 L60 44 L74 24 L160 24 Q168 24 170 32 L176 44 Q184 46 184 54 L184 74 Q184 80 178 80 L168 80 A19 19 0 0 0 130 80 L78 80 A19 19 0 0 0 40 80 L24 80 Q18 80 18 74 Z')}
+        <path d="M80 30 L118 30 L118 44 L70 44 Z M124 30 L162 30 L168 44 L124 44 Z" ${glass}/>
+        <path d="M121 46 V78" class="va-line"/>
+        ${wheel(59, 82, 17)}${wheel(149, 82, 17)}`;
+      break;
+    case 'hatch':
+      s = `${body('M16 72 L20 56 Q26 50 46 48 L76 46 L98 28 L158 28 Q168 30 174 40 L186 56 Q190 60 190 72 Q190 78 184 78 L174 78 A18 18 0 0 0 138 78 L86 78 A18 18 0 0 0 50 78 L22 78 Q16 78 16 72 Z')}
+        <path d="M102 33 L130 33 L130 46 L84 46 Z M136 33 L160 33 Q166 36 170 46 L136 46 Z" ${glass}/>
+        <path d="M133 48 V76" class="va-line"/>
+        ${wheel(68, 80, 15)}${wheel(156, 80, 15)}`;
+      break;
+    case 'sarka':
+      s = `${body('M16 72 L18 60 Q22 54 40 52 L70 50 L90 34 L150 34 L170 50 L204 52 Q216 54 220 62 L222 72 Q222 78 216 78 L196 78 A16 16 0 0 0 164 78 L80 78 A16 16 0 0 0 48 78 L22 78 Q16 78 16 72 Z')}
+        <path d="M94 38 L118 38 L118 49 L80 49 Z M124 38 L148 38 L162 49 L124 49 Z" ${glass}/>
+        <path d="M121 51 V76" class="va-line"/>
+        ${wheel(64, 80, 14)}${wheel(180, 80, 14)}`;
+      break;
+    default: // sedan / generic car
+      s = `${body('M10 72 L14 58 Q20 52 40 50 L70 48 L92 30 Q96 28 104 28 L150 28 Q158 28 162 32 L180 48 L210 50 Q226 52 230 60 L232 72 Q232 78 226 78 L200 78 A20 20 0 0 0 160 78 L84 78 A20 20 0 0 0 44 78 L16 78 Q10 78 10 72 Z')}
+        <path d="M98 33 L126 33 L126 47 L82 47 Z M132 33 L154 33 L172 47 L132 47 Z" ${glass}/>
+        <path d="M129 49 V76" class="va-line"/>
+        ${wheel(64, 80, 16)}${wheel(180, 80, 16)}`;
+  }
+  return `<svg viewBox="0 0 240 110" class="va-svg" role="img" aria-hidden="true">${s}</svg>`;
+}
 
 // breakAtUnderscores lets a long class name wrap after an underscore
 // (Hatchback_02_Blue) instead of in the middle of a word.
@@ -1188,9 +1578,11 @@ async function vehiclesFromMods(host, myNav, running, missionVehicles) {
   if (myNav !== _navSeq) return;
   const mods = (r.mods || []).map(m => ({
     mod: m.mod, active: m.active,
-    files: (m.vehicles || []).filter(v => !v.inMission),
+    files: (m.vehicles || []).filter(v => !v.inMission && !v.removed),
+    // Deleted by the admin: not added automatically, but can come back.
+    removed: (m.vehicles || []).filter(v => !v.inMission && v.removed),
     detected: (m.detected || []),
-  })).filter(g => g.files.length || g.detected.length);
+  })).filter(g => g.files.length || g.removed.length || g.detected.length);
   if (!mods.length) return;
 
   const card = h('div', { class: 'card veh-mods' }, [
@@ -1225,6 +1617,21 @@ async function vehiclesFromMods(host, myNav, running, missionVehicles) {
             await navigate('vehicles');
           } catch (err) { handleErr(err); }
         }) })]));
+    }
+    for (const v of g.removed) {
+      group.append(h('div', { class: 'veh-removed' }, [
+        h('span', { class: 'mono', text: v.event }),
+        h('span', { class: 'badge mute', i18n: 'vehicles.mods.removed' }),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'secondary small', i18n: 'vehicles.mods.addAgain', disabled: running,
+          onclick: (e) => withBusy(e.currentTarget, async () => {
+            try {
+              await api.post('/api/vehicles/import', { mod: g.mod, events: [v.event] });
+              toast(t('msg.saved'), 'ok');
+              await navigate('vehicles');
+            } catch (err) { handleErr(err); }
+          }) }),
+      ]));
     }
     // Cars only the mod's configs know about: set up spawning.
     for (const f of g.detected) {
@@ -1275,7 +1682,7 @@ function vehicleSetupDialog(mod, fam, missionVehicles) {
     h('div', { class: 'grid-2' }, [field('vehicles.setup.count', nominal), field('vehicles.setup.model', model, 'vehicles.setup.model.hint')]),
     switchRow(parts, 'vehicles.setup.parts'),
     h('small', { class: 'hint', i18n: 'vehicles.setup.parts.hint' }),
-    models.length ? null : h('p', { class: 'warning-bar', i18n: 'vehicles.setup.noModel' }),
+    ...(models.length ? [] : [h('p', { class: 'warning-bar', i18n: 'vehicles.setup.noModel' })]),
     h('p', { class: 'hint', i18n: 'vehicles.setup.after' }),
     h('div', { class: 'actions' }, [ok, h('button', { i18n: 'action.cancel', onclick: () => m.close() })]),
   );
@@ -1550,7 +1957,7 @@ async function uninstallModFlow(modName, btn) {
 
 // Approximate latitude of each world (° north) — decides how long in-game days
 // are at a given date. Unknown worlds use Chernarus' 45°.
-const WORLD_LAT = { chernarus: 45, livonia: 52, sakhal: 50, namalsk: 60, deerisle: 44, banov: 49, esseker: 44, takistan: 34, pripyat: 51, bitterroot: 46 };
+const WORLD_LAT = { chernarus: 45, livonia: 52, sakhal: 50, nasdara: 35, namalsk: 60, deerisle: 44, banov: 49, esseker: 44, takistan: 34, pripyat: 51, bitterroot: 46 };
 
 // daylightHours: sunrise→sunset length for a latitude and date (standard solar
 // declination formula; good to a few minutes, which is all the planner needs).
@@ -1619,6 +2026,108 @@ function simulateDay(p) {
   return segs;
 }
 
+// gameMinuteAfter walks the in-game clock from startMin for realMin real
+// minutes: day runs at accel, night at accel × nightAccel. Returns 0..1439.
+function gameMinuteAfter(startMin, realMin, p) {
+  let g = startMin;
+  let r = Math.min(realMin, 43200); // a month of uptime is plenty
+  while (r > 0) {
+    const step = Math.min(1, r);
+    const m = ((g % 1440) + 1440) % 1440;
+    g += step * (m >= p.sunrise && m < p.sunset ? p.accel : p.accel * p.nightAccel);
+    r -= step;
+  }
+  return ((g % 1440) + 1440) % 1440;
+}
+
+// restartEvery is the time between restarts in real minutes (0 = none).
+function restartEvery(cfg) {
+  if (cfg.autoRestartEnabled && cfg.autoRestartSeconds > 0) return cfg.autoRestartSeconds / 60;
+  const n = (cfg.scheduledRestarts || []).filter(x => /^\s*\d{1,2}:\d{2}\s*$/.test(x || '')).length;
+  return n ? 1440 / n : 0;
+}
+
+// skySVG draws the sky at in-game minute m: the sun on its arc by day, the
+// moon by night, over a line of hills.
+function skySVG(m, sunrise, sunset) {
+  const day = m >= sunrise && m < sunset;
+  const frac = day ? (m - sunrise) / Math.max(1, sunset - sunrise)
+    : (((m - sunset) % 1440) + 1440) % 1440 / Math.max(1, 1440 - (sunset - sunrise));
+  const x = 70 + 860 * frac, y = 172 - 128 * Math.sin(Math.PI * frac);
+  // Low sun = dawn or dusk colours.
+  const alt = Math.sin(Math.PI * frac);
+  const phase = !day ? 'night' : alt < 0.28 ? 'dusk' : 'day';
+  const stars = [[90, 40], [180, 75], [260, 30], [340, 62], [420, 24], [520, 50], [600, 28], [690, 70], [760, 36], [850, 58], [930, 30], [140, 110], [880, 100]];
+  return `<svg class="dn-sky-svg ${phase}" viewBox="0 0 1000 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="dnSkyDay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a78d4"/><stop offset="1" stop-color="#b9dcf7"/></linearGradient>
+      <linearGradient id="dnSkyDusk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3f78"/><stop offset=".6" stop-color="#d9774a"/><stop offset="1" stop-color="#f6b56b"/></linearGradient>
+      <linearGradient id="dnSkyNight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070b1d"/><stop offset="1" stop-color="#1c2550"/></linearGradient>
+      <radialGradient id="dnGlow"><stop offset="0" stop-color="#ffe7a3" stop-opacity=".85"/><stop offset="1" stop-color="#ffe7a3" stop-opacity="0"/></radialGradient>
+    </defs>
+    <rect width="1000" height="200" fill="url(#${phase === 'day' ? 'dnSkyDay' : phase === 'dusk' ? 'dnSkyDusk' : 'dnSkyNight'})"/>
+    ${!day ? stars.map(([sx, sy]) => `<circle cx="${sx}" cy="${sy}" r="1.6" fill="#fff" opacity=".75"/>`).join('') : ''}
+    <path d="M70 172 Q500 -84 930 172" fill="none" stroke="#fff" stroke-opacity=".22" stroke-dasharray="4 7"/>
+    ${day ? `<circle cx="${x}" cy="${y}" r="46" fill="url(#dnGlow)"/><circle cx="${x}" cy="${y}" r="16" fill="#ffd96b"/>`
+    : `<circle cx="${x}" cy="${y}" r="12" fill="#e7edf7"/><circle cx="${x + 6}" cy="${y - 4}" r="11" fill="#1a2350"/>`}
+    <path d="M0 168 Q110 138 230 158 T470 150 T720 164 T1000 146 V200 H0 Z" fill="#1b2a2a" opacity="${day ? '.55' : '.9'}"/>
+    <path d="M0 184 Q160 160 330 178 T660 176 T1000 170 V200 H0 Z" fill="#0f1a1a" opacity="${day ? '.75' : '1'}"/>
+  </svg>`;
+}
+
+// timeSummary is the Server page's view of serverDZ.cfg's time settings:
+// the sky at the start time, how long a day and a night last in real time
+// (and their share of a whole in-game day), where the clock starts — the
+// Weather & Time page, which changes them, one click away.
+function timeSummary(values, link) {
+  const v = (k, d) => (values[k] ?? '') !== '' ? String(values[k]).trim() : d;
+  const a = Math.min(24, Math.max(0.1, Number(v('serverTimeAcceleration', '1')) || 1));
+  const na = Math.min(64, Math.max(0.1, Number(v('serverNightTimeAcceleration', '1')) || 1));
+  const start = parseServerTime(v('serverTime', 'SystemTime'));
+  const dayH = daylightHours(45, start.date);
+  const sunrise = (12 - dayH / 2) * 60, sunset = (12 + dayH / 2) * 60;
+  const dayReal = dayH * 60 / a, nightReal = (24 - dayH) * 60 / (a * na);
+  const now = new Date();
+  const startMin = start.system ? now.getHours() * 60 + now.getMinutes() : start.minutes;
+  let when = t('dn.start.system');
+  if (!start.system) {
+    let day = '';
+    try { day = start.date.toLocaleDateString(State.lang || undefined, { day: 'numeric', month: 'long' }); } catch {}
+    when = clock(start.minutes) + (day ? ' · ' + day : '');
+  }
+  const x = (n) => '×' + (Math.round(n * 10) / 10);
+  const stat = (cls, icon, k, mult, real) => h('div', { class: 'tsum-stat ' + cls }, [
+    h('span', { class: 'tsum-ico', html: icon }),
+    h('div', {}, [h('div', { class: 'tsum-k' }, [h('span', { i18n: k }), mult ? h('b', { text: ' ' + mult }) : null]), h('div', { class: 'tsum-v', text: real })]),
+  ]);
+  const SUN = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  const MOON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+  const CLOCK = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  const total = dayReal + nightReal;
+  return h('div', { class: 'tsum' }, [
+    h('div', { class: 'tsum-sky', html: skySVG(startMin, sunrise, sunset) }, [
+      h('span', { class: 'tsum-clock', text: start.system ? clock(startMin) : clock(start.minutes) }),
+    ]),
+    h('div', { class: 'tsum-main' }, [
+      h('div', { class: 'tsum-stats' }, [
+        stat('day', SUN, 'dn.dayReal', x(a), fmtHM(dayReal)),
+        stat('night', MOON, 'dn.nightReal', x(a * na), fmtHM(nightReal)),
+        stat('start', CLOCK, 'weather.time.serverTime', '', when),
+      ]),
+      h('div', { class: 'tsum-bar', title: t('dn.cycle') + ': ' + fmtHM(total) }, [
+        h('span', { class: 'tsum-seg day', style: { flex: String(dayReal) } }, h('span', { text: fmtHM(dayReal) })),
+        h('span', { class: 'tsum-seg night', style: { flex: String(nightReal) } }, h('span', { text: fmtHM(nightReal) })),
+      ]),
+      h('div', { class: 'tsum-foot' }, [
+        h('span', { class: 'hint', text: t('dn.cycle') + ': ' + fmtHM(total) }),
+        v('serverTimePersistent', '0') === '1' ? h('span', { class: 'badge mute', text: t('server.time.persistent') }) : null,
+        h('span', { class: 'grow' }),
+        h('button', { class: 'small secondary', type: 'button', i18n: 'server.time.edit', onclick: () => navigate(link) }),
+      ].filter(Boolean)),
+    ]),
+  ]);
+}
+
 // dayNightCard — the Weather page's time section: serverTimeAcceleration,
 // serverNightTimeAcceleration, start time and persistence, with the real-time
 // length of day and night, a planner that works backwards from "I want X
@@ -1635,6 +2144,21 @@ function dayNightCard(tm, map, running) {
   let baseline = snapshot();
 
   const stats = h('div', { class: 'dn-stats' });
+  // The sky at the in-game time: live for a running server, the start time
+  // otherwise; ▶ plays one in-game day (■ stops it sooner), and the white
+  // marker on the bar under it can be dragged to any moment. Built once and updated
+  // in place: a button rebuilt every frame never gets its click.
+  const sky = h('div', { class: 'dn-sky' });
+  const realBar = h('div', { class: 'dn-realbar' });
+  const presetHost = h('div', { class: 'dn-feel' });
+  let anim = null;  // { from: performance.now(), m0 } while playing
+  let scrub = null; // an in-game minute picked on the bar
+  const DAY_MS = 16000; // one in-game day while playing
+  // Sliders next to the number fields (the fields stay for exact values).
+  const accelR = h('input', { type: 'range', min: '0.1', max: '24', step: '0.1', value: accel.value, disabled: running, 'aria-label': t('weather.time.accel') });
+  const nAccelR = h('input', { type: 'range', min: '0.1', max: '64', step: '0.1', value: nAccel.value, disabled: running, 'aria-label': t('weather.time.nightAccel') });
+  accelR.addEventListener('input', () => { accel.value = accelR.value; planTouched = false; render(); });
+  nAccelR.addEventListener('input', () => { nAccel.value = nAccelR.value; planTouched = false; render(); });
   const bar = h('div', { class: 'dn-bar' });
   const axis = h('div', { class: 'dn-axis-row', 'aria-hidden': 'true' });
   const legend = h('div', { class: 'dn-legend' });
@@ -1664,12 +2188,24 @@ function dayNightCard(tm, map, running) {
     stats.innerHTML = '';
     const stat = (k, v, cls, sub) => h('div', { class: 'dn-stat ' + (cls || '') }, [
       h('div', { class: 'k', i18n: k }), h('div', { class: 'v', text: v }), sub ? h('div', { class: 'sub', text: sub }) : null].filter(Boolean));
+    // How much of an in-game day one restart period covers.
+    const every = restartEvery(State.config || {});
+    const share = every ? every / cycle : 0;
     stats.append(
       stat('dn.sun', `${clock(sunrise)} → ${clock(sunset)}`, 'sun'),
       stat('dn.dayReal', fmtHM(dayReal), 'day'),
       stat('dn.nightReal', fmtHM(nightReal), 'night'),
       stat('dn.cycle', fmtHM(cycle), '', tn('dn.perDay', { n: Math.round(1440 / cycle * 10) / 10 })),
+      every
+        ? h('div', { class: 'dn-stat restart' }, [
+          h('div', { class: 'k', text: t('dn.share').replace('{every}', fmtHM(every)) }),
+          h('div', { class: 'v', text: share <= 1 ? t('dn.share.pct').replace('{pct}', Math.round(share * 100)) : t('dn.share.days').replace('{n}', Math.round(share * 10) / 10) }),
+        ])
+        : h('div', { class: 'dn-stat restart' }, [h('div', { class: 'k', i18n: 'dn.share.title' }), h('div', { class: 'v small', i18n: 'dn.share.none' })]),
     );
+    accelR.value = String(a); nAccelR.value = String(na);
+    renderSky({ a, na, sunrise, sunset, start, dayReal, nightReal, cycle });
+    renderFeel(dayH);
     // 24-hour real-time timeline. The SVG only draws the bars (it stretches);
     // the hours are HTML so they keep their shape at any width.
     const cfg = State.config || {};
@@ -1709,6 +2245,165 @@ function dayNightCard(tm, map, running) {
     saveBar.hidden = !card.isDirty();
   }
 
+  // The sky scene and the real-time bar under it.
+  let lastSky = null;
+  const skyArt = h('div', { class: 'dn-sky-art' });
+  const phaseEl = h('div', { class: 'dn-sky-phase' });
+  const clockEl = h('div', { class: 'dn-sky-clock' });
+  const subEl = h('div', { class: 'dn-sky-sub' });
+  const leftEl = h('div', { class: 'dn-sky-sub' });
+  const ICON_PLAY = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 4v16l13-8z" fill="currentColor"/></svg>';
+  const ICON_STOP = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/></svg>';
+  const playBtn = h('button', { type: 'button', class: 'dn-play', onclick: () => {
+    if (anim) { scrub = curMinute(lastSky).m; anim = null; renderSky(lastSky); return; }
+    // keep: the moment picked before playing, shown again once the day is over.
+    anim = { from: performance.now(), m0: curMinute(lastSky).m, keep: scrub };
+    scrub = null;
+    renderSky(lastSky);
+    requestAnimationFrame(tick);
+  } });
+  const backBtn = h('button', { type: 'button', class: 'dn-play dn-back', hidden: true, title: t('dn.sky.back'), 'aria-label': t('dn.sky.back'),
+    html: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    onclick: () => { anim = null; scrub = null; renderSky(lastSky); } });
+  sky.append(skyArt, h('div', { class: 'dn-sky-info' }, [phaseEl, clockEl, subEl, leftEl]), h('div', { class: 'dn-sky-btns' }, [backBtn, playBtn]));
+
+  const rbDayTxt = h('span'), rbNightTxt = h('span');
+  const rbDay = h('span', { class: 'dn-rb-day' }, rbDayTxt);
+  const rbNight = h('span', { class: 'dn-rb-night' }, rbNightTxt);
+  const rbNow = h('span', { class: 'dn-rb-now', role: 'slider', tabindex: '0', 'aria-label': t('dn.sky.scrub'),
+    'aria-valuemin': '0', 'aria-valuemax': '1439' }, h('span', { class: 'dn-rb-knob' }));
+  const rb = h('div', { class: 'dn-rb', title: t('dn.rb.hint') }, [rbDay, rbNight, rbNow]);
+  const rbSunrise = h('span'), rbSunset = h('span'), rbCycle = h('span');
+  realBar.append(rb, h('div', { class: 'dn-rb-legend' }, [rbSunrise, rbSunset, h('span', { class: 'grow' }), rbCycle]));
+
+  // The in-game minute shown: playing, picked on the bar, live for a running
+  // server, or the start time.
+  function curMinute(p) {
+    if (anim) return { m: (anim.m0 + (performance.now() - anim.from) / DAY_MS * 1440) % 1440, mode: 'play' };
+    if (scrub != null) return { m: scrub, mode: 'scrub' };
+    const st = State.serverStatus || {};
+    const now = new Date();
+    const wall = now.getHours() * 60 + now.getMinutes();
+    if (st.running && st.uptimeSec >= 0) {
+      const up = st.uptimeSec / 60;
+      const startMin = p.start.system ? wall - up : p.start.minutes;
+      return { m: gameMinuteAfter(startMin, up, { accel: p.a, nightAccel: p.na, sunrise: p.sunrise, sunset: p.sunset }), mode: 'live' };
+    }
+    return { m: p.start.system ? wall : p.start.minutes, mode: 'start' };
+  }
+  // A point on the bar → the in-game minute: the bar is one in-game day in
+  // real time, day first, then night.
+  function barMinute(frac, p) {
+    const r = frac * p.cycle;
+    const g = r <= p.dayReal ? p.sunrise + r * p.a : p.sunset + (r - p.dayReal) * p.a * p.na;
+    return ((g % 1440) + 1440) % 1440;
+  }
+  function moveTo(m) {
+    // Dragged while playing: the day goes on from here, and ends here.
+    if (anim) anim = { from: performance.now(), m0: m, keep: m }; else scrub = m;
+    renderSky(lastSky);
+  }
+  let dragging = false;
+  const fromPointer = (e) => {
+    const box = rb.getBoundingClientRect();
+    let frac = (e.clientX - box.left) / Math.max(1, box.width);
+    if (getComputedStyle(rb).direction === 'rtl') frac = 1 - frac;
+    moveTo(barMinute(Math.min(1, Math.max(0, frac)), lastSky));
+  };
+  rb.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    dragging = true;
+    rb.classList.add('drag');
+    try { rb.setPointerCapture(e.pointerId); } catch { /* a synthetic event */ }
+    fromPointer(e);
+    rbNow.focus({ preventScroll: true });
+    e.preventDefault();
+  });
+  rb.addEventListener('pointermove', (e) => { if (dragging) fromPointer(e); });
+  const endDrag = () => { dragging = false; rb.classList.remove('drag'); };
+  rb.addEventListener('pointerup', endDrag);
+  rb.addEventListener('pointercancel', endDrag);
+  rbNow.addEventListener('keydown', (e) => {
+    const p = lastSky;
+    if (!p) return;
+    const m = curMinute(p).m;
+    const step = e.shiftKey ? 60 : 15;
+    const keys = { ArrowRight: step, ArrowUp: step, ArrowLeft: -step, ArrowDown: -step };
+    if (keys[e.key] != null) moveTo((((m + keys[e.key]) % 1440) + 1440) % 1440);
+    else if (e.key === 'Home') moveTo(p.sunrise);
+    else if (e.key === 'End') moveTo(p.sunset);
+    else return;
+    e.preventDefault();
+  });
+
+  function renderSky(p) {
+    lastSky = p;
+    const { m, mode } = curMinute(p);
+    const day = m >= p.sunrise && m < p.sunset;
+    // Real time until the phase changes.
+    const left = day ? (p.sunset - m) / p.a : ((((p.sunrise - m) % 1440) + 1440) % 1440) / (p.a * p.na);
+    skyArt.innerHTML = skySVG(m, p.sunrise, p.sunset);
+    phaseEl.textContent = t(day ? 'dn.sky.day' : 'dn.sky.night');
+    clockEl.textContent = clock(m);
+    subEl.textContent = mode === 'start' ? t('dn.sky.atStart') : mode === 'play' ? t('dn.sky.preview')
+      : mode === 'scrub' ? t('dn.sky.scrubbed') : t('dn.sky.live') + (persist.checked ? ' ' + t('dn.sky.approx') : '');
+    leftEl.textContent = t(day ? 'dn.sky.nightIn' : 'dn.sky.dayIn').replace('{t}', fmtHM(left));
+    const playing = !!anim;
+    if (playBtn.dataset.state !== String(playing)) {
+      playBtn.dataset.state = String(playing);
+      playBtn.innerHTML = playing ? ICON_STOP : ICON_PLAY;
+      playBtn.title = t(playing ? 'dn.sky.pause' : 'dn.sky.play');
+      playBtn.setAttribute('aria-label', playBtn.title);
+      playBtn.classList.toggle('on', playing);
+    }
+    backBtn.hidden = mode !== 'play' && mode !== 'scrub';
+    // Real-time bar: one in-game day, day and night to scale, a marker now.
+    const dayPct = p.dayReal / p.cycle * 100;
+    const pos = day ? (m - p.sunrise) / p.a : p.dayReal + ((((m - p.sunset) % 1440) + 1440) % 1440) / (p.a * p.na);
+    rbDay.style.width = dayPct + '%';
+    rbNight.style.width = (100 - dayPct) + '%';
+    rbDayTxt.textContent = t('dn.rb.day') + ' ' + fmtHM(p.dayReal);
+    rbNightTxt.textContent = fmtHM(p.nightReal);
+    rbNow.style.insetInlineStart = Math.min(100, Math.max(0, pos / p.cycle * 100)) + '%';
+    rbNow.setAttribute('aria-valuenow', String(Math.round(m)));
+    rbNow.setAttribute('aria-valuetext', clock(m));
+    rbSunrise.textContent = '☀ ' + t('dn.rb.sunrise').replace('{time}', clock(p.sunrise));
+    rbSunset.textContent = '☾ ' + t('dn.rb.sunset').replace('{time}', clock(p.sunset));
+    rbCycle.textContent = t('dn.rb.cycle').replace('{len}', fmtHM(p.cycle));
+  }
+  function tick() {
+    if (!anim) return;
+    if (!sky.isConnected) { anim = null; return; }
+    // One full day played: back to where it started.
+    if (performance.now() - anim.from >= DAY_MS) { scrub = anim.keep; anim = null; renderSky(lastSky); return; }
+    renderSky(lastSky);
+    requestAnimationFrame(tick);
+  }
+  // A running server's clock moves: refresh the scene every 20 s.
+  const live = setInterval(() => { if (!sky.isConnected) { clearInterval(live); return; } if (!anim && lastSky) renderSky(lastSky); }, 20000);
+
+  // "Aim for a feel": the presets as cards, each with the day/night split it
+  // gives at this date.
+  const FEEL = [
+    ['dn.preset.real', 1, 1], ['dn.preset.relaxed', 4, 4], ['dn.preset.fast', 12, 4],
+    ['dn.preset.shortNights', 6, 16], ['dn.preset.mostlyDay', 8, 64],
+  ];
+  function renderFeel(dayH) {
+    presetHost.innerHTML = '';
+    const ca = Number(accel.value), cn = Number(nAccel.value);
+    for (const [k, a, n] of FEEL) {
+      const d = dayH * 60 / a, nn = (24 - dayH) * 60 / (a * n);
+      const on = Math.abs(ca - a) < 0.05 && Math.abs(cn - n) < 0.05;
+      presetHost.append(h('button', { type: 'button', class: 'dn-feel-card' + (on ? ' on' : ''), disabled: running,
+        onclick: () => { planTouched = false; accel.value = a; nAccel.value = n; render(); } }, [
+        h('b', { i18n: k }),
+        h('span', { class: 'dn-feel-bar' }, [h('span', { class: 'd', style: { width: (d / (d + nn) * 100) + '%' } }), h('span', { class: 'n' })]),
+        h('small', { text: t('dn.feel.split').replace('{day}', fmtHM(d)).replace('{night}', fmtHM(nn)) }),
+      ]));
+    }
+    applyI18n();
+  }
+
   // Planner: work backwards from the real-time day / night length wanted —
   // recalculated as you type.
   let planTouched = false;
@@ -1734,10 +2429,6 @@ function dayNightCard(tm, map, running) {
   wantDay.addEventListener('input', plan);
   wantNight.addEventListener('input', plan);
 
-  const presets = [
-    ['dn.preset.real', 1, 1], ['dn.preset.relaxed', 4, 4], ['dn.preset.fast', 12, 4],
-    ['dn.preset.shortNights', 6, 16], ['dn.preset.mostlyDay', 8, 64],
-  ].map(([k, a, n]) => h('button', { class: 'pill', type: 'button', i18n: k, disabled: running, onclick: () => { planTouched = false; accel.value = a; nAccel.value = n; render(); } }));
   const startQuick = [
     ['weather.time.start.system', 'SystemTime'], ['weather.time.start.morning', '2024/7/1/8/0'],
     ['weather.time.start.noon', '2024/7/1/12/0'], ['weather.time.start.evening', '2024/7/1/19/0'],
@@ -1775,18 +2466,21 @@ function dayNightCard(tm, map, running) {
     h('button', { type: 'button', class: 'primary small', i18n: 'weather.time.save', disabled: running, onclick: (e) => saveTime(e.currentTarget) }),
   ]);
 
-  const fieldRow = (k, el, extra) => h('div', { class: 'dn-field' }, [h('label', { i18n: k, for: assocId(el) }), el, extra || null]);
+  const fieldRow = (k, el, extra, target) => h('div', { class: 'dn-field' }, [h('label', { i18n: k, for: assocId(target || el) }), el, extra || null]);
   const card = h('div', { class: 'card', id: 'daynight' }, [
     h('div', { class: 'card-head' }, [cardTitle('i-clock', 'dn.title', 'weather.accel')]),
     h('p', { class: 'hint', i18n: 'dn.intro' }),
+    sky,
+    realBar,
     stats,
     bar,
     axis,
     legend,
-    h('div', { class: 'pills', style: { marginTop: '12px' } }, presets),
+    h('h4', { class: 'dn-feel-title', i18n: 'dn.feel.title' }),
+    presetHost,
     h('div', { class: 'dn-grid' }, [
-      fieldRow('weather.time.accel', accel, h('small', { class: 'hint', i18n: 'dn.accel.hint' })),
-      fieldRow('weather.time.nightAccel', nAccel, h('small', { class: 'hint', i18n: 'dn.night.hint' })),
+      fieldRow('weather.time.accel', h('div', { class: 'dn-slide' }, [accelR, accel]), h('small', { class: 'hint', i18n: 'dn.accel.hint' }), accel),
+      fieldRow('weather.time.nightAccel', h('div', { class: 'dn-slide' }, [nAccelR, nAccel]), h('small', { class: 'hint', i18n: 'dn.night.hint' }), nAccel),
       fieldRow('weather.time.serverTime', sTime, h('div', {}, [sTimeHint, h('div', { class: 'pills' }, startQuick)])),
       h('div', { class: 'dn-field' }, [h('label', { class: 'inline-switch dn-persist' }, [persist, h('span', { i18n: 'dn.persist.on' })]), h('small', { class: 'hint', i18n: 'dn.persist.hint' })]),
     ]),
@@ -1806,39 +2500,142 @@ function dayNightCard(tm, map, running) {
   return card;
 }
 
-// weatherPreview — a small illustrated sky plus a plain-language summary of
-// what players will experience with the current slider values.
+// weatherScene draws the manual weather: clouds that thicken and darken
+// with overcast, the sun behind them, fog, rain or snow, lightning, and a
+// tree, bushes and grass that lean and sway with the wind (leaves fly off
+// in a gale). Built once; update() moves it with the sliders.
+function weatherScene() {
+  // A fixed pseudo-random spread, so drops and flakes keep their places.
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const drops = [], flakes = [], blades = [];
+  for (let i = 0; i < 70; i++) {
+    const x = Math.round(rnd() * 680) - 40, y = Math.round(rnd() * 260) - 260, d = (0.45 + rnd() * 0.35).toFixed(2), dl = (-rnd() * 2).toFixed(2);
+    drops.push(`<line x1="${x}" y1="${y}" x2="${x}" y2="${y + 16}" style="animation-duration:${d}s;animation-delay:${dl}s" class="wx-drop${i % 3 ? '' : ' far'}"/>`);
+  }
+  for (let i = 0; i < 60; i++) {
+    const x = Math.round(rnd() * 680) - 40, y = Math.round(rnd() * 260) - 260, r = (1.2 + rnd() * 1.8).toFixed(1), d = (3 + rnd() * 3).toFixed(2), dl = (-rnd() * 6).toFixed(2);
+    flakes.push(`<circle cx="${x}" cy="${y}" r="${r}" style="animation-duration:${d}s;animation-delay:${dl}s" class="wx-flake"/>`);
+  }
+  for (let x = 4; x < 600; x += 9) {
+    const hgt = 8 + Math.round(rnd() * 10), dl = (-rnd() * 2).toFixed(2);
+    blades.push(`<path d="M${x} 232 q${2 + Math.round(rnd() * 3)} ${-hgt / 2} ${1 + Math.round(rnd() * 3)} ${-hgt}" style="animation-delay:${dl}s; transform-origin:${x}px 232px" class="wx-blade"/>`);
+  }
+  const cloud = (i, x, y, k) => `<g class="wx-cloud" data-i="${i}" style="--cx:${x}px"><g transform="translate(${x} ${y}) scale(${k})">
+      <ellipse cx="0" cy="18" rx="62" ry="20"/><ellipse cx="-30" cy="8" rx="30" ry="22"/><ellipse cx="14" cy="-2" rx="38" ry="30"/><ellipse cx="46" cy="12" rx="26" ry="18"/></g></g>`;
+  const leaves = [0, 1, 2, 3, 4, 5, 6, 7].map(i => `<path class="wx-leaf" style="animation-delay:${(-i * 0.47).toFixed(2)}s; --ly:${40 + (i * 23) % 120}px" d="M0 0 q5 -5 10 0 q-5 5 -10 0z"/>`).join('');
+  const el = h('div', { class: 'wx-scene', role: 'img', 'aria-label': t('wx.preview') });
+  el.innerHTML = `<svg viewBox="0 0 600 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="wxClear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f7fd8"/><stop offset="1" stop-color="#a9d6ff"/></linearGradient>
+      <linearGradient id="wxGrey" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5d6672"/><stop offset="1" stop-color="#a7aeb7"/></linearGradient>
+      <linearGradient id="wxDark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1f252e"/><stop offset="1" stop-color="#4b525c"/></linearGradient>
+      <radialGradient id="wxSunGlow"><stop offset="0" stop-color="#fff3c4" stop-opacity=".9"/><stop offset="1" stop-color="#fff3c4" stop-opacity="0"/></radialGradient>
+      <linearGradient id="wxFogBand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3e7ec" stop-opacity="0"/><stop offset="1" stop-color="#e3e7ec" stop-opacity="1"/></linearGradient>
+    </defs>
+    <rect width="600" height="260" fill="url(#wxClear)"/>
+    <rect class="wx-grey" width="600" height="260" fill="url(#wxGrey)"/>
+    <rect class="wx-dark" width="600" height="260" fill="url(#wxDark)"/>
+    <g class="wx-sun"><circle cx="478" cy="62" r="64" fill="url(#wxSunGlow)"/><circle cx="478" cy="62" r="24" fill="#ffd866"/></g>
+    <g class="wx-clouds">${cloud(0, 110, 50, 0.9)}${cloud(1, 330, 34, 1.1)}${cloud(2, 520, 70, 0.8)}${cloud(3, 220, 86, 1.25)}${cloud(4, 430, 98, 1.15)}${cloud(5, 40, 104, 1.3)}</g>
+    <path class="wx-bolt" d="M300 70 L282 128 L300 128 L284 184 L330 112 L308 112 L324 70 Z"/>
+    <path class="wx-hill far" d="M0 196 Q90 168 190 186 T400 178 T600 170 V260 H0 Z"/>
+    <path class="wx-hill" d="M0 222 Q140 200 300 216 T600 206 V260 H0 Z"/>
+    <path class="wx-snowcap" d="M0 222 Q140 200 300 216 T600 206 V214 Q450 216 300 224 T0 230 Z"/>
+    <g class="wx-bush" style="transform-origin:84px 226px"><ellipse cx="70" cy="218" rx="26" ry="16"/><ellipse cx="98" cy="214" rx="22" ry="18"/></g>
+    <g class="wx-bush b2" style="transform-origin:520px 222px"><ellipse cx="506" cy="214" rx="24" ry="15"/><ellipse cx="532" cy="211" rx="20" ry="17"/></g>
+    <g class="wx-tree" style="transform-origin:220px 228px">
+      <path class="wx-trunk" d="M213 228 L216 150 Q218 140 222 150 L226 228 Z"/>
+      <g class="wx-crown" style="transform-origin:219px 150px">
+        <circle cx="219" cy="112" r="40"/><circle cx="190" cy="132" r="28"/><circle cx="250" cy="130" r="30"/><circle cx="222" cy="84" r="26"/>
+      </g>
+    </g>
+    <g class="wx-tree small" style="transform-origin:396px 224px">
+      <path class="wx-trunk" d="M392 224 L394 176 Q396 170 398 176 L400 224 Z"/>
+      <g class="wx-crown" style="transform-origin:396px 176px"><circle cx="396" cy="152" r="26"/><circle cx="378" cy="166" r="17"/><circle cx="414" cy="166" r="18"/></g>
+    </g>
+    <g class="wx-grass">${blades.join('')}</g>
+    <g class="wx-leaves">${leaves}</g>
+    <g class="wx-rain">${drops.join('')}</g>
+    <g class="wx-snow">${flakes.join('')}</g>
+    <rect class="wx-fog" width="600" height="260"/>
+    <rect class="wx-fogband" y="140" width="600" height="120" fill="url(#wxFogBand)"/>
+    <rect class="wx-flash" width="600" height="260"/>
+  </svg>
+  <div class="wx-scene-tags"><span class="wx-tag wx-tag-oc"></span><span class="wx-tag wx-tag-wind"></span></div>`;
+  const tagOc = el.querySelector('.wx-tag-oc'), tagWind = el.querySelector('.wx-tag-wind');
+  const clouds = [...el.querySelectorAll('.wx-cloud')];
+  function update(v) {
+    const oc = v.overcast, fog = v.fog, wind = Math.min(20, Math.max(0, v.wind));
+    const raining = v.rain > 0.05 && oc >= 0.6, storming = v.storm > 0.05 && oc >= 0.9, snowing = v.snow > 0.05;
+    const st = el.style;
+    st.setProperty('--oc', oc.toFixed(3));
+    st.setProperty('--fog', fog.toFixed(3));
+    st.setProperty('--rain', (raining ? 0.35 + v.rain * 0.65 : 0).toFixed(3));
+    st.setProperty('--snow', (snowing ? 0.35 + v.snow * 0.65 : 0).toFixed(3));
+    // Wind: a lean the harder it blows, a sway that quickens with it.
+    st.setProperty('--lean', (wind * 1.1).toFixed(2) + 'deg');
+    st.setProperty('--amp', (0.8 + wind * 0.32).toFixed(2) + 'deg');
+    st.setProperty('--glean', (wind * 2.2).toFixed(2) + 'deg');
+    st.setProperty('--gamp', (2 + wind * 0.45).toFixed(2) + 'deg');
+    st.setProperty('--sway', Math.max(0.55, 3.2 - wind * 0.13).toFixed(2) + 's');
+    st.setProperty('--drift', Math.max(14, 120 - wind * 5.5).toFixed(1) + 's');
+    st.setProperty('--slant', (-wind * 1.6).toFixed(2) + 'deg');
+    st.setProperty('--snowdx', (wind * 9).toFixed(1) + 'px');
+    // A cloud more for every step of overcast; they darken as it thickens.
+    clouds.forEach((c, i) => { c.style.opacity = String(Math.max(0, Math.min(1, (oc - i * 0.13) * 3.2)).toFixed(2)); });
+    el.classList.toggle('rain', raining);
+    el.classList.toggle('snow', snowing);
+    el.classList.toggle('storm', storming);
+    el.classList.toggle('windy', wind >= 9);
+    el.classList.toggle('calm', wind < 0.5);
+    tagOc.textContent = '☁ ' + Math.round(oc * 100) + '%';
+    tagWind.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+    tagWind.append(' ' + (Math.round(wind * 10) / 10) + ' ' + t('unit.mps'));
+  }
+  return { el, update };
+}
+
+// weatherPreview — the scene plus a plain-language summary of what players
+// will experience with the current slider values.
 function weatherPreview(get) {
-  const sky = h('div', { class: 'wx-sky' });
+  const scene = weatherScene();
   const text = h('ul', { class: 'wx-notes' });
   function update() {
     const oc = get.overcast(), fog = get.fog(), rain = get.rain(), snow = get.snow(), storm = get.storm(), wind = get.wind();
-    const grey = Math.round(oc * 100);
-    sky.style.setProperty('--oc', oc);
-    sky.style.setProperty('--fog', fog);
     // Thresholds match the cfgweather.xml the manager writes: rain from 60 %
     // overcast, lightning from 90 %.
-    sky.classList.toggle('rain', rain > 0.05 && oc >= 0.6);
-    sky.classList.toggle('snow', snow > 0.05);
-    sky.classList.toggle('storm', storm > 0.05 && oc >= 0.9);
-    sky.dataset.label = grey + '%';
+    scene.update({ overcast: oc, fog, rain, snow, storm, wind });
     text.innerHTML = '';
     const note = (k) => text.append(h('li', { i18n: k }));
     note(oc < 0.3 ? 'wx.sky.clear' : oc < 0.6 ? 'wx.sky.partly' : oc < 0.85 ? 'wx.sky.cloudy' : 'wx.sky.heavy');
     if (rain > 0.05) note(oc >= 0.6 ? 'wx.rain.yes' : 'wx.rain.needsClouds');
     if (storm > 0.05) note(oc >= 0.9 ? 'wx.storm.yes' : 'wx.storm.needsClouds');
     if (fog >= 0.6) note('wx.fog.heavy'); else if (fog >= 0.25) note('wx.fog.some');
-    if (wind >= 12) note('wx.wind.strong'); else if (wind >= 6) note('wx.wind.breeze');
+    if (wind >= 12) note('wx.wind.strong'); else if (wind >= 6) note('wx.wind.breeze'); else if (wind < 0.5) note('wx.wind.calm');
     if (snow > 0.05) note('wx.snow');
   }
   update();
   return {
-    el: h('div', { class: 'wx-preview' }, [sky, h('div', {}, [h('h4', { i18n: 'wx.preview' }), text])]),
+    el: h('div', { class: 'wx-preview' }, [scene.el, h('div', { class: 'wx-side' }, [h('h4', { i18n: 'wx.preview' }), text])]),
     update,
   };
 }
 
 // ------------------------------------------------------------------ validator
+
+// vtext is a validator message or repair in the panel's language: i18n key
+// prefix + key with its args in the {placeholders} ("n" counts, for the plural
+// forms); the English text when the language has no such key.
+function vtext(prefix, key, args, english) {
+  const k = prefix + (key || '');
+  if (!key || !State.i18n[k]) return english || '';
+  const vars = {};
+  for (const [a, v] of Object.entries(args || {})) vars[a] = a === 'n' && /^-?\d+$/.test(v) ? Number(v) : String(v);
+  return tn(k, vars);
+}
+const vIssueText = (is) => vtext('vmsg.', is.key || is.code, is.args, is.message);
+const vFixText = (x) => typeof x === 'string' ? x : vtext('vfix.', x.key, x.args, x.text);
 
 // Validator — problems grouped by kind (stable issue codes), each with a
 // translated title, the affected files (open in the editor at the line, or the
@@ -1864,7 +2661,7 @@ Views.validator = async (root) => {
           toast(tn('validator.fix.done', { n: r.count }), 'ok');
           report.append(h('div', { class: 'card validator-report' }, [
             h('h3', { i18n: 'validator.report' }),
-            h('ul', {}, (r.fixed || []).map(x => h('li', { class: 'mono', text: x }))),
+            h('ul', {}, (r.fixed || []).map(x => h('li', { text: vFixText(x) }))),
           ]));
         }
         await run();
@@ -1895,18 +2692,26 @@ Views.validator = async (root) => {
     const list = [...groups.values()].sort((a, b) => (sevRank[a.sev] - sevRank[b.sev]) || (b.items.length - a.items.length));
     const nErr = issues.filter(i => i.severity === 'error').length;
     const nWarn = issues.filter(i => i.severity === 'warning').length;
+    const nInfo = issues.filter(i => i.severity === 'info').length;
     const fixable = list.filter(g => g.fix);
+    // The whole list as text, to paste into a support chat or a ticket.
+    const copyAll = () => copyText(list.map(g => {
+      const title = State.i18n['vcode.' + g.code] ? t('vcode.' + g.code) : g.code;
+      return '## ' + title + '\n' + g.items.map(is => '- ' + (is.rel || (is.file || '').split(/[\\/]/).pop()) + (is.line ? ':' + is.line : '') + ' — ' + vIssueText(is)).join('\n');
+    }).join('\n\n'));
 
     const summary = h('div', { class: 'card validator-top' }, [
       h('div', { class: 'validator-summary' }, [
         issues.length
-          ? [nErr ? h('span', { class: 'badge err', text: nErr + ' ' + t('validator.severity.error') }) : null,
-             nWarn ? h('span', { class: 'badge warn', text: nWarn + ' ' + t('validator.severity.warning') }) : null,
-             h('span', { class: 'hint', text: t('validator.kinds').replace('{n}', list.length) })].filter(Boolean)
+          ? [nErr ? h('span', { class: 'badge err', text: tn('validator.count.error', { n: nErr }) }) : null,
+             nWarn ? h('span', { class: 'badge warn', text: tn('validator.count.warning', { n: nWarn }) }) : null,
+             nInfo ? h('span', { class: 'badge mute', text: tn('validator.count.info', { n: nInfo }) }) : null,
+             h('span', { class: 'hint', text: tn('validator.kinds2', { n: list.length }) })].filter(Boolean)
           : [h('span', { class: 'validator-ok', i18n: 'validator.none' })],
       ].flat()),
       h('div', { class: 'actions' }, [
         h('button', { class: 'secondary', i18n: 'validator.recheck', onclick: (e) => withBusy(e.currentTarget, run) }),
+        issues.length ? h('button', { class: 'secondary', i18n: 'validator.copy', onclick: copyAll }) : null,
         fixable.length ? h('button', { class: 'primary', disabled: running, text: t('validator.fixAll').replace('{n}', fixable.reduce((s, g) => s + g.items.length, 0)),
           'data-help': 'validator.autofix', onclick: (e) => fix(null, e.currentTarget) }) : null,
       ].filter(Boolean)),
@@ -1932,7 +2737,7 @@ Views.validator = async (root) => {
           if (is.file === 'manager.json') acts.append(h('button', { class: 'secondary', i18n: 'nav.mods', onclick: () => navigate('mods') }));
           body.append(h('div', { class: 'vitem' }, [
             h('span', { class: 'mono vitem-where', text: where, title: is.file || '' }),
-            h('span', { class: 'vitem-msg', text: is.message }),
+            h('span', { class: 'vitem-msg', text: vIssueText(is), title: is.message }),
             acts,
           ]));
         }
@@ -1947,7 +2752,7 @@ Views.validator = async (root) => {
           h('h3', { text: title === 'vcode.' + g.code ? g.code : title }),
           h('span', { class: 'badge mute', text: '×' + g.items.length }),
           h('span', { class: 'grow' }),
-          g.fix ? h('button', { class: 'primary', disabled: running, i18n: 'validator.fixThis', onclick: (e) => fix([g.fix], e.currentTarget) }) : null,
+          g.fix ? h('button', { class: 'primary small', disabled: running, i18n: 'validator.fixThis', onclick: (e) => fix([g.fix], e.currentTarget) }) : null,
         ].filter(Boolean)),
         body,
       ]));
@@ -2067,9 +2872,13 @@ function attachMapLayers(gm, map, opts = {}) {
     const avail = info.layers || {};
     const hasImage = !!(map && map.hasImage);
     // Defaults: without an uploaded image, the real land and buildings from
-    // the mission replace the approximate schematic on every world.
+    // the mission replace the approximate schematic on every world — except
+    // the land mask on a landlocked world (Nasdara, Takistan): it is one flat
+    // square there and would only hide the schematic's relief.
+    const shape = (typeof MAP_SHAPES !== 'undefined' && mapKey) ? MAP_SHAPES[mapKey] : null;
+    const landlocked = !!(shape && shape.coast === false);
     const defaults = {
-      land: !hasImage, tiers: false,
+      land: !hasImage && !landlocked, tiers: false,
       buildings: !hasImage, infected: false, wildlife: false, toxic: false,
     };
     const prefs = layerPrefs();
@@ -2194,8 +3003,10 @@ function setupChecklistCard() {
     let r;
     try { r = await api.get('/api/setup/checklist'); } catch { return; }
     if (!r || !Array.isArray(r.items) || r.done >= r.total) return;
+    if (State.config && State.config.setupDismissed) return; // removed for good
     // A compact strip by default (progress + the next step); the full list on
-    // demand. "Hide" collapses instead of removing it for good.
+    // demand. "Hide" collapses it; "Don't show again" removes it (Settings →
+    // General brings it back).
     let open = false;
     try { open = localStorage.getItem('setupOpen') === '1'; } catch {}
     const pct = Math.round(100 * r.done / r.total);
@@ -2219,6 +3030,14 @@ function setupChecklistCard() {
           try { localStorage.setItem('setupOpen', open ? '1' : '0'); } catch {}
           render();
         } }),
+        h('button', { class: 'icon-x setup-dismiss', type: 'button', text: '×', title: t('setup.dismiss'), 'aria-label': t('setup.dismiss'),
+          onclick: async () => {
+            try {
+              State.config = await api.post('/api/config', { setupDismissed: true });
+              host.innerHTML = '';
+              toast(t('setup.dismissed'), 'ok');
+            } catch (err) { handleErr(err); }
+          } }),
       ]);
       const card = h('div', { class: 'card setup-card' + (open ? '' : ' compact') }, [head, h('div', { class: 'setup-bar' }, [h('span', { style: { width: pct + '%' } })])]);
       if (!open && next) {

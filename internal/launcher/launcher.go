@@ -32,6 +32,7 @@ import (
 
 	"dayzmanager/internal/app"
 	"dayzmanager/internal/i18n"
+	"dayzmanager/internal/rcon"
 	"dayzmanager/internal/web"
 )
 
@@ -67,6 +68,7 @@ type Instance struct {
 	stopServer bool
 	bind       string // the address the panel listens on ("" = all interfaces)
 	port       int
+	life       *lifecycle // run marker, crash log, keep-awake (lifecycle.go)
 }
 
 // ErrAlreadyRunning is returned (with the running manager's URL) when another
@@ -78,6 +80,12 @@ func (e *ErrAlreadyRunning) Error() string { return "the manager is already runn
 // ServerDir picks the DayZ server directory: the working directory when it
 // holds a DayZ server (running from a shortcut / terminal), else the exe's.
 func ServerDir() (string, error) {
+	if dirOverride != "" { // -dir
+		if st, err := os.Stat(dirOverride); err != nil || !st.IsDir() {
+			return "", fmt.Errorf("the server folder %s was not found", dirOverride)
+		}
+		return dirOverride, nil
+	}
 	exePath, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("resolve executable: %w", err)
@@ -192,6 +200,7 @@ func Start(opts Options) (*Instance, error) {
 	}
 	a.Mode = opts.Mode
 	setLogHook(a.Log.Printf)
+	rcon.SetLogf(a.Log.Printf)
 	a.Log.Printf("%s v%s (%s) — server dir: %s", AppName, opts.Version, opts.Mode, serverDir)
 	if err := applyExposure(a, opts.Exposure); err != nil {
 		a.Detach()
@@ -200,6 +209,10 @@ func Start(opts Options) (*Instance, error) {
 	a.Log.Printf("language: %s", i18n.Name(a.Config.Language))
 	a.ShortcutsInstalled = desktopInstalled
 	a.InstallShortcuts = func() ([]string, error) { return InstallDesktop(opts.Mode) }
+	// Start with the computer (Settings → General): the entry re-runs this
+	// exe for this server folder on the port it was started with.
+	a.Autostart = func() app.AutostartInfo { return AutostartInfo(serverDir) }
+	a.SetAutostart = func(on bool) error { return SetAutostart(serverDir, opts.Port, on) }
 
 	bind := opts.Bind
 	if bind == "" {
@@ -251,8 +264,16 @@ func Start(opts Options) (*Instance, error) {
 	if n := len(fleet.Members()); n > 1 {
 		a.Log.Printf("multi-server: %d servers in the panel", n)
 	}
+	// Servers set to start with the manager (e.g. after the computer
+	// restarted and brought the manager up with it).
+	for _, srvApp := range fleet.Apps() {
+		srvApp.StartOnLaunch(5 * time.Second)
+	}
 
 	srv := web.New(fleet, bind, port)
+	if opts.Bind != "" {
+		srv.FixBind() // -bind: the admin's address stays when the access setting changes
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	inst := &Instance{App: a, Fleet: fleet, Server: srv, ctx: ctx, cancel: cancel, done: make(chan struct{}),
 		URL: "http://" + net.JoinHostPort(DisplayHost(bind), strconv.Itoa(port)) + "/", stopServer: true, port: port}
@@ -273,6 +294,8 @@ func Start(opts Options) (*Instance, error) {
 	}()
 	a.Log.Printf("panel: %s", inst.URL)
 	inst.bind = bind
+	inst.startLifecycle(opts.Version)
+	inst.startGuardian(opts)
 	if a.Config.Exposure == "internet" && !srv.LoginEnabled() {
 		a.Log.Printf("WARNING: the panel is set to Internet but has no login — until one is set (Settings → Access & security), only devices on the local network can open it.")
 	}
@@ -309,6 +332,7 @@ func ResetLogin() (string, error) {
 func (i *Instance) RequestExit(stopServer bool) {
 	i.stopOnce.Do(func() {
 		i.stopServer = stopServer
+		i.markExiting()
 		i.cancel()
 	})
 }
@@ -343,6 +367,7 @@ func (i *Instance) Shutdown() {
 		}(a)
 	}
 	wg.Wait()
+	i.endLifecycle()
 }
 
 // RunningServers counts the DayZ servers of the panel that are running.

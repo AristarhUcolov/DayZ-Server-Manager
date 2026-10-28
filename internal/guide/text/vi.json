@@ -11,7 +11,7 @@
     },
     {
      "title": "Chọn nguồn mod",
-     "body": "Lần chạy đầu tiên bạn chọn nguồn mod: DayZ *client* (thư mục !Workshop, nơi Steam tải mod về), một thư mục bất kỳ chứa @mod hoặc workshop/content/221100 của SteamCMD, hoặc Chỉ máy chủ cho máy hosting không có game — khi đó bạn tự tải mod lên và tính năng tự động cập nhật bị tắt. Bạn có thể đổi lại sau trong Cài đặt."
+     "body": "Ở lần chạy đầu tiên, bạn chọn nguồn mod: *client* DayZ (thư mục !Workshop của nó, nơi Steam tải mod), bất kỳ thư mục nào chứa @mod hoặc workshop/content/221100 của SteamCMD, Steam Workshop (tải trực tiếp) — khi đó bảng điều khiển tự tải và cập nhật mod bằng SteamCMD — hoặc Chỉ máy chủ cho máy hosting không cài game, nơi bạn tự tải mod lên và cập nhật tự động bị tắt. Bạn có thể đổi sau trong Cài đặt."
     },
     {
      "title": "Khởi động máy chủ",
@@ -20,7 +20,8 @@
    ],
    "tips": [
     "Chỉ dùng bảng điều khiển trên máy tính này thì không cần mật khẩu. Để mở nó từ điện thoại hoặc từ nơi khác, hãy đặt đăng nhập bảng điều khiển trước — trong phần thiết lập lần đầu hoặc trong Cài đặt → Đăng nhập bảng điều khiển.",
-    "Hầu hết các trình sửa tệp đều không cho lưu khi máy chủ đang chạy — DayZ khóa các tệp của chính nó. Hãy dừng máy chủ trước; bảng điều khiển sẽ báo cho bạn khi đây là nguyên nhân."
+    "Hầu hết các trình sửa tệp đều không cho lưu khi máy chủ đang chạy — DayZ khóa các tệp của chính nó. Hãy dừng máy chủ trước; bảng điều khiển sẽ báo cho bạn khi đây là nguyên nhân.",
+    "Khi máy tính ngủ, máy chủ DayZ và bảng điều khiển cũng dừng theo — trông như trình quản lý tự đóng. Khi máy chủ đang chạy, trình quản lý giữ máy tính luôn thức (Cài đặt → Chung → Giữ máy tính luôn thức); trên máy chủ thuê, hãy đóng cửa sổ từ xa thay vì đăng xuất."
    ]
   },
   {
@@ -29,12 +30,12 @@
    "intro": "Máy chủ cần bản sao riêng của từng mod, cộng với tệp .bikey của mod trong thư mục keys của máy chủ, cộng với việc mod được ghi trong tham số khởi chạy -mod. Manager làm cả ba việc, lấy mod từ nguồn bạn đã chọn: !Workshop của game client, một thư mục mod hoặc SteamCMD, hoặc — ở chế độ Chỉ máy chủ — các mod bạn tự tải lên.",
    "steps": [
     {
-     "title": "Đăng ký trên Steam trước",
-     "body": "Manager sao chép mod chứ không tải mod về. Hãy đăng ký mod trên Steam Workshop và để launcher DayZ kéo mod vào !Workshop — hoặc tải bằng SteamCMD vào thư mục mod của bạn."
+     "title": "Lấy mod",
+     "body": "Có hai cách. Dán liên kết Workshop vào Tải trực tiếp trên trang Mod: SteamCMD riêng của bảng điều khiển sẽ tải chúng thẳng về máy chủ — bạn chỉ đăng nhập một lần bằng tài khoản Steam sở hữu DayZ. Hoặc đăng ký trên Steam Workshop để launcher DayZ tải mod về !Workshop (hoặc tải bằng SteamCMD vào thư mục mod của bạn), rồi cài từ đó."
     },
     {
      "title": "Cài vào máy chủ",
-     "body": "Mở trang Mod — mọi thứ trong !Workshop đều được liệt kê. Nút Cài đặt sẽ sao chép mod vào thư mục máy chủ và tự động đồng bộ .bikey của nó. Nút Cài & cập nhật mod xử lý cả danh sách chỉ bằng một cú bấm."
+     "body": "Mở Mod — mọi thứ trong nguồn mod đều được liệt kê (nếu nguồn là Steam Workshop: các mod bạn đã tải). Cài đặt sao chép mod vào thư mục máy chủ và tự đồng bộ .bikey của nó. “Cài & cập nhật mod” làm cả danh sách chỉ với một lần bấm."
     },
     {
      "title": "Bật mod khi khởi chạy",
@@ -49,7 +50,8 @@
     "Cập nhật sẽ sao chép các tệp mới hơn từ nguồn mod vào máy chủ. Hãy bật Cập nhật mod mỗi lần khởi động lại trong Cài đặt để chúng luôn tự đồng bộ.",
     "Gỡ cài đặt mod chỉ xóa .bikey của nó nếu không có mod đã cài nào khác dùng cùng key, nên các key dùng chung (Expansion) vẫn được giữ nguyên.",
     "Nếu một mod có kèm loot, hãy dùng Thêm loot từ mod trên dòng của nó — tính năng này tìm types.xml của mod và đăng ký giúp bạn.",
-    "Trên Linux, máy chủ chỉ tải những mod có thư mục và tệp viết chữ thường. Manager tự đổi tên khi cài đặt và cập nhật, và trang Mod sẽ đánh dấu những gì còn sai kiểu chữ."
+    "Trên Linux, máy chủ chỉ tải những mod có thư mục và tệp viết chữ thường. Manager tự đổi tên khi cài đặt và cập nhật, và trang Mod sẽ đánh dấu những gì còn sai kiểu chữ.",
+    "Khi nguồn là Steam Workshop, danh sách tải xuống là báo cáo của lần tải gần nhất: bỏ những dòng đã đọc, còn mod đã bị xóa khỏi máy chủ từ đó sẽ có nút Cài lại."
    ]
   },
   {
@@ -99,7 +101,8 @@
    ],
    "tips": [
     "Mỗi bộ phận một ô: một ô cho băng đạn, một ô cho ống ngắm, một ô cho báng súng. Đặt băng đạn và ống ngắm chung một ô nghĩa là vũ khí chỉ nhận được một trong hai, không bao giờ cả hai.",
-    "Chỉ mục bạn sửa được ghi lại — chú thích và định dạng của bạn ở phần còn lại của tệp được giữ nguyên."
+    "Chỉ mục bạn sửa được ghi lại — chú thích và định dạng của bạn ở phần còn lại của tệp được giữ nguyên.",
+    "Vật phẩm được vẽ với mỗi ô một ô vuông, giống trang bị người chơi: nhấp vào ô đã lấp để đổi tỉ lệ hoặc bộ phận, vào ô trống để thêm bộ phận từ danh sách của chính game. Lưỡi lê và ống giảm thanh (hoặc bộ hãm nòng) không bao giờ cùng xuất hiện trên một khẩu súng — DayZ lắp thứ đến trước."
    ]
   },
   {
@@ -109,11 +112,11 @@
    "steps": [
     {
      "title": "Bật hệ thống",
-     "body": "Mở Trang bị người chơi. Nếu mission vẫn spawn người chơi từ init.c, trang sẽ báo và đưa ra một nút để tạo preset khởi đầu, đăng ký nó trong cfggameplay.json và bật công tắc enableCfgGameplayFile — tất cả cùng lúc."
+     "body": "Mở Trang bị người chơi. Nếu người chơi vẫn spawn theo init.c, trang sẽ báo và có một nút duy nhất để bật hệ thống: nó dùng lại các tệp trang bị đã có trong thư mục mission (hoặc tạo preset khởi đầu), đăng ký chúng trong cfggameplay.json và bật enableCfgGameplayFile — tất cả cùng lúc."
     },
     {
      "title": "Sửa quần áo và trang bị",
-     "body": "Mỗi preset liệt kê những gì được mặc theo từng ô (Body, Legs, Feet…) và những gì mang rời. Thêm vật phẩm theo tên class, đặt trọng số spawn khi một ô cần chọn giữa nhiều món, và chọn tình trạng — nguyên vẹn, hao mòn, hư hại hoặc một khoảng tùy chỉnh."
+     "body": "Trình chỉnh sửa hiển thị một người sống sót với mọi ô. Bấm vào một ô để chọn vật phẩm từ danh sách của chính game — có tên, danh mục và những gì vừa ở đâu — rồi đặt tình trạng và số lượng, đặt vào tay hoặc lên thanh phím tắt (phím 1–0). Mỗi vật phẩm được vẽ kèm một ô cho từng khe gắn của nó — ống ngắm, đầu nòng, băng đạn, túi của áo giáp — chỉ gợi ý các bộ phận vừa, cùng những thứ để bên trong (đồ ăn trong ba lô). Một máy chủ có thể có nhiều bộ trang bị; mỗi bộ có trọng số xuất hiện riêng."
     },
     {
      "title": "Thử ngẫu nhiên và chia sẻ",
@@ -122,7 +125,10 @@
    ],
    "tips": [
     "healthMin/healthMax là tỉ lệ độ bền: 1.0 là nguyên vẹn, 0.0 là hỏng hoàn toàn. Hãy để mọi thứ nguyên vẹn để người mới spawn không phải mặc đồ cũ sờn.",
-    "Trang bị được lưu khi máy chủ đã dừng, như mọi thay đổi cấu hình khác — hãy khởi động lại máy chủ sau đó."
+    "Trang bị được lưu khi máy chủ đã dừng, như mọi thay đổi cấu hình khác — hãy khởi động lại máy chủ sau đó.",
+    "Bản cập nhật máy chủ DayZ thay cfggameplay.json và làm mất trang bị của bạn. Manager đăng ký lại chúng và bật lại công tắc trước lần khởi động tiếp theo — và trang hiển thị mọi tệp chưa kết nối.",
+    "Súng có băng đạn xuất hiện đã nạp, có đạn lên nòng — không ai phải nhấn R; nút Nạp đạn làm việc đó chỉ với một cú nhấp. Lưỡi lê và ống giảm thanh loại trừ nhau, còn đèn gắn súng cần ốp tay có ray: trình chỉnh sửa sẽ cảnh báo và đề xuất cách sửa.",
+    "Nhân vật mới ở đầu trang quyết định mỗi nhân vật mới bắt đầu thế nào — no, không khát và ấm áp nếu bạn muốn. Bảng điều khiển áp dụng bằng mod phía máy chủ của riêng nó; người chơi không phải tải gì."
    ]
   },
   {
@@ -147,7 +153,8 @@
     "Cảnh báo khởi động lại cũng dùng RCon. Không có mật khẩu thì máy chủ vẫn khởi động lại — chỉ là người chơi không nhận được đếm ngược.",
     "Mục Người chơi xây dựng lịch sử từ nhật ký admin: tên, ID người chơi, thời gian chơi, số lần hạ gục. Cần tham số khởi động -adminlog (trang Máy chủ → Tham số khởi động).",
     "Cài đặt → Cách khởi động lại có thể kick mọi người trước khi khởi động lại một khoảng thời gian định sẵn và khóa máy chủ để không ai vào lại trong phút cuối. Nhân vật được lưu khi ngắt kết nối nên không mất gì.",
-    "Trang Chat lưu trữ mọi ngày — kể cả tin nhắn gửi từ bảng điều khiển và thông báo theo lịch — có tìm kiếm và tải về dạng .txt. Thời gian lưu giữ được đặt ngay tại đó."
+    "Trang Chat lưu trữ mọi ngày — kể cả tin nhắn gửi từ bảng điều khiển và thông báo theo lịch — có tìm kiếm và tải về dạng .txt. Thời gian lưu giữ được đặt ngay tại đó.",
+    "Trong Người chơi → Đang online, bạn có thể nhắn cho mọi người, kick tất cả (ví dụ trước khi bảo trì) và khóa đăng nhập tới lần khởi động lại tiếp theo. Hồ sơ người chơi liệt kê các tài khoản khác được thấy từ cùng IP và những gì người chơi đã xây hoặc phá."
    ]
   },
   {
@@ -164,8 +171,8 @@
      "body": "Tốc độ chuyển đổi quyết định thời tiết thay đổi từ từ đến mức nào: Mượt chuyển dần trong khoảng nửa giờ với các bước nhỏ, giống bản gốc. Nhanh chuyển hết biên độ trong hai phút — chính điều này khiến thời tiết thay đổi đột ngột như bật tắt công tắc."
     },
     {
-     "title": "Đặt độ dài ngày",
-     "body": "Tăng tốc ngày và đêm nhân tốc độ trôi của thời gian trong game — 12 nghĩa là một ngày trọn vẹn kéo dài hai giờ thực. Tăng tốc ban đêm được đặt riêng để bạn có thể giữ đêm ngắn."
+     "title": "Đặt độ dài ngày và đêm",
+     "body": "Ngày & đêm hiển thị bầu trời, giờ mặt trời mọc và lặn cho bản đồ của bạn, và ngày, đêm kéo dài bao lâu theo thời gian thực — kể cả việc khởi động lại ảnh hưởng thế nào đến đồng hồ trong game. Nhấn ▶ để phát một ngày trong game (và dừng lại), hoặc kéo điểm đánh dấu trắng tới bất kỳ thời điểm nào. Chọn một kiểu có sẵn hoặc nhập độ dài ngày và đêm bạn muốn, bảng điều khiển sẽ tính hệ số tăng tốc."
     }
    ],
    "tips": [
@@ -188,12 +195,13 @@
     },
     {
      "title": "Điều chỉnh phương tiện",
-     "body": "Phương tiện liệt kê mọi sự kiện phương tiện: có thể tồn tại bao nhiêu chiếc, có bao nhiêu điểm spawn và bộ phận đầy đủ đến mức nào — và đặt khả năng mỗi bộ phận spawn trên xe."
+     "body": "Phương tiện hiện mỗi sự kiện xe kèm hình vẽ chiếc xe: có thể có bao nhiêu chiếc, có bao nhiêu điểm xuất hiện, phụ tùng đầy đủ đến đâu — và xe xuất hiện với bao nhiêu nhiên liệu và nước làm mát (do một mod máy chủ tí hon mà bảng điều khiển thêm vào đặt; người chơi không phải tải gì)."
     }
    ],
    "tips": [
     "Không kèm sẵn ảnh bản đồ nào — các lớp được lấy từ tệp mission của bạn. Để có bản đồ giống ảnh chụp, hãy tải ảnh nhìn từ trên xuống của riêng bạn trong phần thiết lập bản đồ.",
-    "Giống các trình sửa khác, các trang này chỉ lưu được khi máy chủ đã dừng."
+    "Giống các trình sửa khác, các trang này chỉ lưu được khi máy chủ đã dừng.",
+    "Mỗi bản đồ có thước đo (đo khoảng cách, sao chép tọa độ) và ghim quản trị viên — ghi chú như căn cứ của một clan hay thương nhân mà mọi quản trị viên máy chủ đều thấy trên mọi bản đồ. Bản đồ nhiệt thêm xây dựng, đột kích và kho giấu từ nhật ký admin; Bản đồ trực tiếp cho thấy mỗi người chơi đã đi đâu."
    ]
   },
   {
@@ -216,7 +224,9 @@
    ],
    "tips": [
     "Wipe xóa trạng thái thế giới đã lưu — người chơi, phương tiện, căn cứ. Bảng loot và cấu hình của bạn không bị động tới. Các thư mục được chuyển sang chỗ khác trước, nên một lần wipe nhầm có thể khôi phục thủ công.",
-    "Bộ giám sát crash khởi động lại máy chủ nếu nó tự thoát. Sau ba lần crash trong năm phút, nó dừng lại và hiện một thông báo — crash liên tục cần con người xử lý, không phải thêm một lần khởi động lại."
+    "Bộ giám sát crash khởi động lại máy chủ nếu nó tự thoát. Sau ba lần crash trong năm phút, nó dừng lại và hiện một thông báo — crash liên tục cần con người xử lý, không phải thêm một lần khởi động lại.",
+    "Cài đặt → Chung → Tự khởi động giúp Manager khởi động cùng máy tính, và mỗi máy chủ có thể khởi động cùng Manager — sau khi mất điện mọi thứ tự quay lại.",
+    "Nếu trình quản lý đóng bất ngờ, trình canh gác sẽ khởi động lại nó trong khay hệ thống (tối đa ba lần trong 15 phút) và bảng điều khiển sẽ báo — kèm bản ghi sự cố của Windows nếu có. Tắt trong Cài đặt → Chung."
    ]
   },
   {
@@ -253,7 +263,7 @@
     },
     {
      "title": "Mở bảng điều khiển ra mạng",
-     "body": "Cài đặt → Phạm vi truy cập bảng điều khiển: Mạng nội bộ cho điện thoại ở nhà, Internet để truy cập từ bất kỳ đâu (chỉ được khi có đăng nhập). Sau đó hãy khởi động lại Manager."
+     "body": "Cài đặt → Phạm vi truy cập bảng điều khiển: Mạng nội bộ cho điện thoại ở nhà, Internet để truy cập từ bất kỳ đâu (chỉ khi có đăng nhập). Thay đổi có hiệu lực ngay — không cần khởi động lại."
     },
     {
      "title": "Cho phép kết nối đi vào",
@@ -407,7 +417,7 @@
   "loadout": "Những gì người chơi mặc và mang theo khi hồi sinh. Đây là các preset trang bị spawn của DayZ, được đăng ký trong cfggameplay.json — thay đổi có hiệu lực sau khi khởi động lại máy chủ. Ở bản gốc, trang bị nằm trong init.c, vì thế một mission mới sẽ không hiện gì ở đây cho đến khi bạn bật hệ thống.",
   "loadout.carried": "Các vật phẩm rời được cho thẳng vào túi đồ của người chơi mới thay vì một ô mặc — giẻ, đồ ăn, một dụng cụ khởi đầu.",
   "loadout.characters": "Các mẫu nhân vật mà preset này áp dụng (SurvivorM_Mirek, SurvivorF_Eva, …). Để trống để áp dụng cho tất cả; mỗi lần spawn sẽ chọn ngẫu nhiên một nhân vật.",
-  "loadout.condition": "Tình trạng của vật phẩm khi spawn. Trong DayZ 1.0 = nguyên vẹn và 0.0 = hỏng hoàn toàn, nên càng cao càng tốt. Nguyên vẹn giữ cho trang bị của người mới spawn luôn mới; chọn Tùy chỉnh để đặt chính xác khoảng độ bền min–max, và vật phẩm sẽ spawn với độ bền nằm trong khoảng đó.",
+  "loadout.condition": "Tình trạng khi đồ vật spawn. Trong DayZ 1.0 = nguyên vẹn và 0.0 = hỏng hoàn toàn, nên càng cao càng tốt. Nguyên vẹn giữ trang bị khi mới spawn luôn mới; chọn Tùy chỉnh để đặt chính xác khoảng độ bền min–max, và đồ vật sẽ spawn ở đâu đó trong khoảng đó. Với đồ mang theo, Nguyên vẹn tạo chúng đúng như game tạo (một miếng giẻ, một quả táo nguyên); mọi tình trạng khác còn cho số lượng đầy, nên một xấp giẻ sẽ spawn đầy.",
   "loadout.weight": "Trọng số của preset này so với các preset khác. DayZ chọn MỘT preset cho mỗi lần spawn, nên preset có trọng số 3 có khả năng được chọn gấp ba lần preset có trọng số 1.",
   "loadout.worn": "Các vật phẩm được mặc lên người, mỗi lần một ô trên cơ thể. Trong một ô, DayZ chọn MỘT vật phẩm theo trọng số, nên liệt kê nhiều biến thể sẽ tạo sự đa dạng giữa các lần spawn.",
   "logs.adm": "Những gì người chơi đã làm: kết nối, chat, hạ gục, vị trí. Cần cờ -adminlog; trang Người chơi được xây dựng từ tệp này.",
@@ -420,7 +430,7 @@
   "mods.scan": "Tìm types.xml bên trong mod và đăng ký nó trong cfgeconomycore.xml, để loot của mod thực sự spawn.",
   "mods.serverSide": "Tải mod bằng -serverMod thay vì -mod: mod chạy trên máy chủ và client không cần cũng không nhận được nó. Chỉ dành cho công cụ admin — mod loot hoặc nội dung đặt ở phía máy chủ sẽ không hoạt động.",
   "mods.uninstall": "Xóa thư mục mod khỏi máy chủ. .bikey của nó chỉ bị xóa nếu không có mod đã cài nào khác dùng cùng key, nên các key dùng chung như của Expansion vẫn được giữ.",
-  "mods.update": "Sao chép các tệp mới hơn từ !Workshop của client vào máy chủ. Manager không thể tải mod về — hãy đăng ký mod trên Steam trước.",
+  "mods.update": "Sao chép các tệp mới hơn từ nguồn mod vào máy chủ. Nếu nguồn là Steam Workshop (tải trực tiếp), trước hết sẽ tải các phiên bản mới bằng SteamCMD.",
   "rcon.password": "Được ghi vào battleye/beserver_x64.cfg. BattlEye chỉ đọc tệp đó khi khởi chạy, nên mật khẩu mới không có tác dụng cho đến lần khởi động lại tiếp theo.",
   "server.forceSameBuild": "Yêu cầu client chạy đúng cùng bản dựng game (1). Ngăn crash do lệch phiên bản.",
   "server.hostname": "Tên máy chủ hiển thị trong danh sách máy chủ DayZ. Hãy đặt ngắn gọn và dễ tìm.",
@@ -443,7 +453,7 @@
   "settings.adminlog": "Bật -adminlog để ghi tệp .ADM. Trang Người chơi và killfeed được xây dựng từ tệp này và sẽ trống nếu không có nó.",
   "settings.backup": "Nén cấu hình và tệp mission thành zip theo lịch và giữ N bản mới nhất. Ngoài ra, mỗi tệp mà bảng điều khiển ghi đè đều được tạo một bản .bak kèm dấu thời gian bên cạnh.",
   "settings.exposure": "Chỉ máy này nghĩa là chỉ máy tính này mở được bảng điều khiển. Mạng nội bộ cho phép điện thoại và các thiết bị khác trong nhà mở nó. Internet cho phép truy cập từ bất kỳ đâu — bắt buộc phải có đăng nhập bảng điều khiển, và Cài đặt → Truy cập từ xa sẽ kiểm tra phần còn lại (router, tường lửa, IP công cộng).",
-  "settings.modSource": "Nơi Manager sao chép mod. Thư mục DayZ client: bản cài game có !Workshop (đăng ký mod trên Steam, Manager sẽ sao chép và cập nhật). Thư mục mod: một thư mục bất kỳ chứa @mod, hoặc workshop/content/221100 của SteamCMD — cách để có mod Workshop trên máy hosting không cài game. Chỉ máy chủ: không có nguồn; các mod bạn tự tải lên vẫn được quản lý, nhưng tính năng tự động cập nhật bị tắt.",
+  "settings.modSource": "Nơi trình quản lý lấy mod. Thư mục client: bản cài DayZ có !Workshop (đăng ký trên Steam, trình quản lý sao chép và cập nhật). Thư mục mod: bất kỳ thư mục nào chứa @mod, hoặc workshop/content/221100 của SteamCMD. Steam Workshop (tải trực tiếp): bảng điều khiển tự tải, kiểm tra và cập nhật mod bằng SteamCMD riêng — không cần game. Chỉ máy chủ: không có nguồn; các mod tải lên thủ công vẫn được quản lý nhưng cập nhật tự động bị tắt.",
   "settings.perf": "CPU affinity ghim DayZServer vào các lõi bạn đánh dấu (các lõi không đánh dấu được để trống cho hệ điều hành, máy chủ thứ hai hoặc chương trình khác). Mức ưu tiên cho hệ điều hành biết nên ưu tiên lập lịch cho nó đến mức nào — Trên mức bình thường là mức tăng an toàn; Cao có thể khiến phần còn lại của máy chạy ì. Cả hai được áp dụng mỗi lần khởi động. Trên Linux, tăng mức ưu tiên cần quyền root.",
   "settings.restart": "Khởi động lại máy chủ theo lịch. Người chơi nhận được cảnh báo qua RCon trước đó, việc này cần đặt mật khẩu RCon.",
   "settings.restartBehaviour": "Những gì người chơi trải qua quanh mỗi lần tự khởi động lại: dòng chữ đếm ngược họ nhìn thấy (hãy viết bằng ngôn ngữ của họ), một khoảng thời gian tùy chọn ngay trước khi khởi động lại, khi máy chủ bị khóa và mọi người bị kick để nhân vật được lưu gọn gàng, và lệnh #shutdown an toàn lưu thế giới trước khi dừng tiến trình. Dòng thời gian bên dưới cho thấy thứ tự chính xác.",
@@ -480,7 +490,14 @@
   "weather.transition": "Thời tiết thay đổi từ từ đến mức nào. Mượt chuyển dần trong khoảng nửa giờ với các bước nhỏ, giống DayZ gốc. Nhanh có thể chuyển hết biên độ trong hai phút — chính điều này khiến thời tiết thay đổi đột ngột như bật tắt công tắc.",
   "weather.wind": "Tốc độ gió tính bằng m/s. Quyết định chuyển động của mây và, khi bật chế độ động, tốc độ thời tiết biến đổi.",
   "wipe": "Xóa trạng thái thế giới đã lưu: người chơi, phương tiện, căn cứ. Bảng loot và cấu hình không bị động tới. Các thư mục được chuyển sang chỗ khác thay vì bị xóa, nên có thể hoàn tác sai sót thủ công.",
-  "wipe.undo": "Wipe chuyển các thư mục thế giới vào .dayz-manager/wipes/<timestamp>/ thay vì xóa chúng, nên vẫn có thể hoàn tác — cho đến khi máy chủ tạo lại trạng thái đó, lúc ấy đưa thế giới cũ trở lại sẽ đè mất thế giới mới."
+  "wipe.undo": "Wipe chuyển các thư mục thế giới vào .dayz-manager/wipes/<timestamp>/ thay vì xóa chúng, nên vẫn có thể hoàn tác — cho đến khi máy chủ tạo lại trạng thái đó, lúc ấy đưa thế giới cũ trở lại sẽ đè mất thế giới mới.",
+  "server.adminLogPlayerList": "Ghi vị trí của mọi người chơi vào nhật ký admin (.ADM) mỗi 5 phút. Bản đồ trực tiếp dùng nó: thiếu nó, chấm của người chơi chỉ di chuyển khi kết nối, giao tranh và chat.",
+  "server.adminLogPlayerHitsOnly": "Chỉ ghi các phát trúng người chơi, bỏ qua các phát trúng người nhiễm và động vật, nên nhật ký admin nhỏ hơn nhiều.",
+  "server.adminLogPlacement": "Ghi việc đặt bẫy, lều và các đồ vật đặt được khác vào nhật ký admin.",
+  "server.adminLogBuildActions": "Ghi việc xây, tháo dỡ và phá hủy bộ phận căn cứ vào nhật ký admin.",
+  "wsdl": "SteamCMD là client Steam dòng lệnh của chính Valve. Bảng điều khiển cài nó vào thư mục riêng, đăng nhập một lần bằng tài khoản Steam của bạn (tệp Workshop của DayZ chỉ được cấp cho tài khoản sở hữu trò chơi) rồi tải các mod bạn dán vào: mỗi mod về thư mục của SteamCMD, được sao chép vào máy chủ thành @Tên cùng khóa của nó và được bật. Cập nhật chính là tải lại lần nữa. Người chơi vẫn cần mod: họ đăng ký trên Workshop như thường lệ.",
+  "veh.tweaks": "Nhiên liệu và két nước khi xuất hiện không cần cài gì: khi máy chủ khởi động, bảng điều khiển tạo một mod phía máy chủ rất nhỏ (@DZM_ServerTweaks) với các thiết lập này và nạp nó bằng -serverMod. Người chơi không phải tải gì. Các giá trị áp dụng cho phương tiện mà nền kinh tế tạo ra sau lần khởi động tiếp theo; những xe đã có trên bản đồ giữ nguyên giá trị của chúng.",
+  "loadout.stats": "Thức ăn và nước là dự trữ năng lượng và nước của nhân vật (0–5000 trong DayZ; nhân vật mới nhận mỗi loại 600, nên biểu tượng đói và khát xuất hiện sớm). Hơi ấm là bộ đệm nhiệt: lượng nhiệt nhân vật tích lũy bên đống lửa, giúp không bị lạnh trong một thời gian. Các giá trị chỉ áp dụng cho nhân vật mới — kể cả sau khi chết —, không áp dụng cho người chơi quay lại nhân vật đã lưu. Bảng điều khiển ghi chúng vào mod phía máy chủ trước mỗi lần khởi động máy chủ."
  },
  "gameplay": {
   "version": "Phiên bản định dạng của tệp. Do DayZ ghi — hãy giữ nguyên.",
@@ -530,7 +547,7 @@
   "shockDepletionSpeed": "Sốc tăng thêm mỗi giây khi đuối nước.",
   "staticMode": "Với tường và vật thể tĩnh: 0 = tắt, 1 = bật (như trong game), 2 = luôn luôn.",
   "dynamicMode": "Với người chơi, phương tiện và vật thể di chuyển khác: 0 = tắt, 1 = bật (như trong game), 2 = luôn luôn.",
-  "lightingConfig": "Độ tối ban đêm: 0 = đêm sáng hơn (như trong game), 1 = đêm tối. Ghi đè cài đặt tương tự trong serverDZ.cfg.",
+  "lightingConfig": "Ánh sáng ban đêm: 0 = đêm sáng hơn (như trong game), 1 = đêm tối, 2 = ánh sáng Sakhal, 3 = ánh sáng Nasdara. Ghi đè thiết lập tương ứng trong serverDZ.cfg.",
   "objectSpawnersArr": "Các tệp JSON (đường dẫn trong mission) đặt thêm vật thể tĩnh vào thế giới.",
   "environmentMinTemps": "Nhiệt độ không khí thấp nhất của mỗi tháng, từ tháng 1 đến tháng 12, °C. Bỏ trống để dùng giá trị của bản đồ.",
   "environmentMaxTemps": "Nhiệt độ không khí cao nhất của mỗi tháng, từ tháng 1 đến tháng 12, °C. Bỏ trống để dùng giá trị của bản đồ.",
@@ -545,7 +562,7 @@
   "disableHeightPlacementCheck": "Vật thể có thể đặt cao hơn chân người chơi so với mức thường được phép.",
   "disableIsUnderwaterCheck": "Vật thể có thể đặt dưới nước.",
   "disableIsInTerrainCheck": "Vật thể có thể chìm vào địa hình.",
-  "disableColdAreaBuildingCheck": "Cho phép xây ở những vùng lạnh mà game thường cấm (Sakhal).",
+  "disableColdAreaBuildingCheck": "Tên cũ của disableColdAreaPlacementCheck. DayZ hiện tại không còn đọc nó — hãy đặt khóa mới thay thế.",
   "disallowedTypesInUnderground": "Các bộ dụng cụ không thể đặt ở khu vực dưới lòng đất (boongke, hang động).",
   "disablePerformRoofCheck": "Có thể xây các phần căn cứ dưới mái và trong nhà.",
   "disableIsCollidingCheck": "Có thể xây các phần căn cứ ngay cả khi có vật cản.",
@@ -563,33 +580,57 @@
   "ignoreNavItemsOwnership": "Bản đồ hiển thị thông tin la bàn và GPS mà không cần mang la bàn hay GPS.",
   "displayPlayerPosition": "Vị trí của chính người chơi được đánh dấu trên bản đồ.",
   "displayNavInfo": "Bản đồ hiển thị thông tin định hướng (lưới và la bàn).",
-  "boatDecayMultiplier": "Thuyền hư hỏng nhanh đến mức nào. 1 = như trong game, thấp hơn = chậm hơn."
+  "boatDecayMultiplier": "Thuyền hư hỏng nhanh đến mức nào. 1 = như trong game, thấp hơn = chậm hơn.",
+  "disableColdAreaPlacementCheck": "Cho phép xây dựng ở những vùng lạnh mà bình thường game cấm đặt bất cứ thứ gì (Sakhal).",
+  "disableItemFalling": "Đồ vật đặt trên một bộ phận căn cứ vẫn ở nguyên chỗ thay vì rơi xuống khi bộ phận bị tháo dỡ hoặc phá hủy.",
+  "disableDropAttachmentsOnFall": "Công trình căn cứ bị sập vẫn giữ phụ kiện và đồ cất bên trong thay vì làm rơi xuống đất.",
+  "disableRefundMaterialsOnFall": "Công trình căn cứ bị sập không hoàn lại vật liệu cho các phần đã xây — nó chỉ biến mất.",
+  "canDetachAttachedCarWheels": "Người chơi có thể tháo bánh ô tô.",
+  "canDamageAttachedCarWheels": "Bánh lắp trên ô tô có thể bị hư hại, ví dụ do trúng đạn.",
+  "canDetachAttachedBikeWheels": "Người chơi có thể tháo bánh xe đạp.",
+  "canDamageAttachedBikeWheels": "Bánh lắp trên xe đạp có thể bị hư hại.",
+  "playerRestrictedAreaFiles": "Tệp JSON (đường dẫn trong mission) chứa các khu vực cấm người chơi — những vùng game không cho người chơi vào, như kho đầu đạn trên Sakhal.",
+  "bunkerBroadcastEnabled": "Phát sóng radio của boongke đang chạy: mã boongke được gửi bằng mã Morse theo cfgbunkerbroadcast.json của mission (Nasdara). Tắt = không phát sóng.",
+  "ExternalLockData": "Bảo vệ khóa mã số khỏi dò mã: sau quá nhiều lần nhập sai, khóa ngừng nhận nhập liệu một lúc.",
+  "protectionCountStageOne": "Số mã sai liên tiếp trước khi khóa mã số chặn nhập lần đầu.",
+  "protectionCountStageTwo": "Số mã sai sau lần chặn đầu, trước khi khóa chặn lại.",
+  "protectionTime": "Số giây khóa mã số từ chối nhập sau quá nhiều mã sai.",
+  "protectionResetTime": "Số giây sau đó khóa mã số quên các mã sai và đếm lại từ 0.",
+  "SandstormData": "Bão cát (Nasdara).",
+  "sandstormFrequency": "Bão cát đến thường xuyên thế nào: 0 = không bao giờ, 1 = như trong game, 2 = gấp đôi."
  },
  "globals": {
   "AnimalMaxCount": "Số động vật tối đa còn sống trên bản đồ cùng lúc.",
-  "CleanupAvoidance": "Hệ số giúp loot vừa spawn không bị dọn dẹp quá sớm.",
-  "CleanupLifetimeDeadAnimal": "Số giây xác động vật còn lại trước khi bị xóa.",
-  "CleanupLifetimeDeadInfected": "Số giây xác zombie còn lại trước khi bị xóa.",
-  "CleanupLifetimeDeadPlayer": "Số giây xác người chơi và trang bị của họ còn lại trước khi bị xóa.",
-  "CleanupLifetimeDefault": "Số giây mặc định một vật phẩm bị rơi còn lại trước khi bị dọn khi loại vật phẩm của nó không đặt lifetime.",
-  "CleanupLifetimeLimit": "Giới hạn dưới (giây) mà việc dọn dẹp dùng cho vật phẩm có lifetime rất ngắn.",
-  "CleanupLifetimeRuined": "Số giây vật phẩm đã hỏng hoàn toàn nằm trên mặt đất trước khi bị dọn.",
-  "FlagRefreshFrequency": "Tần suất (giây) một lá cờ lãnh thổ đã kéo lên làm mới lifetime của các vật phẩm đã đặt gần đó.",
-  "FlagRefreshMaxDuration": "Lifetime tối đa (giây) mà lá cờ có thể làm mới cho vật phẩm — giới hạn mục rữa căn cứ (bản gốc ≈ 45 ngày).",
-  "IdleModeCountdown": "Số giây không có người chơi kết nối trước khi kinh tế chuyển sang chế độ nghỉ và ngừng spawn lại loot.",
-  "IdleModeStartup": "Khởi động kinh tế ở chế độ nghỉ cho đến khi người chơi đầu tiên vào (1 = có).",
-  "InitialSpawn": "Lượng loot ban đầu được spawn khi kinh tế khởi động lần đầu.",
-  "LoginTimeMax": "Thời gian tối đa (giây) cho việc đăng nhập trước khi lượt vào bị hủy.",
+  "CleanupAvoidance": "Khoảng cách (m) từ người chơi mà trong đó không có gì bị dọn, để đồ vật không biến mất trước mắt người chơi.",
+  "CleanupLifetimeDeadAnimal": "Số giây xác động vật chết còn lại trước khi bị xóa.",
+  "CleanupLifetimeDeadInfected": "Số giây xác người nhiễm đã chết còn lại trước khi bị xóa.",
+  "CleanupLifetimeDeadPlayer": "Số giây xác người chơi đã chết cùng trang bị còn lại trước khi bị xóa.",
+  "CleanupLifetimeDefault": "Số giây mặc định đồ bị vứt còn lại trước khi bị dọn, khi loại của nó không đặt tuổi thọ.",
+  "CleanupLifetimeLimit": "Giới hạn dưới (giây) mà việc dọn dẹp dùng cho tuổi thọ rất ngắn.",
+  "CleanupLifetimeRuined": "Số giây đồ vật hỏng hoàn toàn nằm trên đất trước khi bị dọn.",
+  "FlagRefreshFrequency": "Tần suất (giây) cờ lãnh thổ đã kéo lên làm mới tuổi thọ của đồ vật đặt gần đó.",
+  "FlagRefreshMaxDuration": "Tuổi thọ tối đa (giây) mà cờ có thể làm mới cho đồ vật — giới hạn trên của việc căn cứ xuống cấp (vanilla ≈ 45 ngày).",
+  "FoodDecay": "Thức ăn hỏng dần theo thời gian (1 = bật).",
+  "IdleModeCountdown": "Số giây không có người chơi kết nối trước khi nền kinh tế chuyển sang nghỉ và ngừng respawn loot.",
+  "IdleModeStartup": "Khởi động nền kinh tế ở chế độ nghỉ cho đến khi người chơi đầu tiên vào (1 = có).",
+  "InitialSpawn": "Bao nhiêu phần trăm loot danh nghĩa spawn khi nền kinh tế khởi động với kho lưu trữ trống (100 = tất cả).",
+  "LoginTimeMax": "Thời gian tối đa (giây) cho việc đăng nhập trước khi lượt thử bị hủy.",
   "LogoutTimeMax": "Thời gian chờ đăng xuất tối đa (giây).",
-  "RespawnAttempt": "Số lần engine thử lại một lần spawn lại loot thất bại trong mỗi chu kỳ.",
-  "RespawnTypes": "Số loại loot được xử lý spawn lại trong mỗi chu kỳ.",
-  "SpawnInitial": "Lượng loot ban đầu được spawn khi kinh tế khởi động lần đầu.",
-  "TimeHopping": "Độ trễ đăng nhập bổ sung (giây) áp dụng cho người chơi đổi máy chủ liên tục, để hạn chế việc này.",
+  "LootDamageMax": "Hao mòn nhiều nhất của loot vừa spawn, 0–1 (vanilla 0.82). Thấp hơn = loot spawn trong tình trạng tốt hơn.",
+  "LootDamageMin": "Hao mòn ít nhất của loot vừa spawn, 0–1 (0 = nguyên vẹn).",
+  "LootProxyPlacement": "Loot spawn trên kệ, bàn và các chỗ khác trong nhà (1 = bật). Hãy để bật.",
+  "LootSpawnAvoidance": "Khoảng cách (m) từ người chơi mà trong đó không có loot mới xuất hiện, để nó không bao giờ hiện ra trước mắt ai.",
+  "RespawnAttempt": "Số lần mỗi chu kỳ engine thử lại một lần respawn loot thất bại.",
+  "RespawnLimit": "Số đồ vật nhiều nhất của một loại được respawn mỗi chu kỳ.",
+  "RespawnTypes": "Số loại loot được xử lý để respawn mỗi chu kỳ.",
+  "RestartSpawn": "1 = mọi loot spawn lại mỗi lần máy chủ khởi động (reset loot); 0 = giữ loot đã lưu.",
+  "SpawnInitial": "Ngân sách spawn của lượt đầu tiên của nền kinh tế khi khởi động (vanilla 1200).",
+  "TimeHopping": "Độ trễ đăng nhập thêm (giây) cho người chơi nhảy qua lại giữa các máy chủ, để ngăn việc này.",
   "TimeLogin": "Số giây người chơi chờ ở màn hình tải khi đăng nhập.",
-  "TimeLogout": "Số giây người chơi phải ở lại trong thế giới sau khi chọn đăng xuất (chống thoát khi đang giao tranh).",
-  "TimePenalty": "Thời gian chờ thêm (giây) khi đăng xuất ngay sau khi vừa giao tranh.",
-  "WorldWetTempUpdate": "Tần suất (giây) cập nhật độ ẩm và nhiệt độ của vật phẩm trong thế giới.",
-  "ZombieMaxCount": "Số zombie tối đa còn sống trên bản đồ cùng lúc.",
-  "ZoneSpawnDist": "Khoảng cách (m) tính từ người chơi mà tại đó các vùng zombie/động vật động được spawn."
+  "TimeLogout": "Số giây người chơi phải ở lại thế giới sau khi chọn đăng xuất (chống thoát khi giao tranh).",
+  "TimePenalty": "Thời gian chờ thêm (giây) khi đăng xuất ngay sau khi giao tranh.",
+  "WorldWetTempUpdate": "Độ ướt và nhiệt độ của đồ vật nằm trong thế giới được cập nhật (1 = bật).",
+  "ZombieMaxCount": "Số người nhiễm tối đa còn sống trên bản đồ cùng lúc.",
+  "ZoneSpawnDist": "Khoảng cách (m) từ người chơi mà tại đó các vùng động của người nhiễm/động vật spawn."
  }
 }

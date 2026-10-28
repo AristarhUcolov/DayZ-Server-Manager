@@ -11,7 +11,7 @@
     },
     {
      "title": "Kies waar mods vandaan komen",
-     "body": "Bij de eerste start kies je een modbron: de DayZ-*client* (de !Workshop-map waar Steam mods downloadt), elke map met @mods of de SteamCMD-map workshop/content/221100, of Alleen server voor een hostingmachine zonder de game — dan upload je mods zelf en staat automatisch bijwerken uit. Je kunt dit later wijzigen in Instellingen."
+     "body": "Bij de eerste start kies je een modbron: de DayZ-*client* (zijn !Workshop-map, waar Steam mods downloadt), elke map met @mods of workshop/content/221100 van SteamCMD, Steam Workshop (direct downloaden) — dan downloadt en werkt het paneel mods zelf bij met SteamCMD — of Alleen server voor een hostingmachine zonder het spel, waar je mods zelf uploadt en automatisch bijwerken uit staat. Je kunt dit later wijzigen in Instellingen."
     },
     {
      "title": "Start de server",
@@ -20,7 +20,8 @@
    ],
    "tips": [
     "Gebruik je het paneel alleen op deze pc, dan heb je geen wachtwoord nodig. Wil je het vanaf een telefoon of een andere plek openen, stel dan eerst een paneellogin in — bij de eerste installatie of via Instellingen → Paneellogin.",
-    "Bijna elke bestandseditor weigert op te slaan terwijl de server draait — DayZ vergrendelt zijn eigen bestanden. Stop eerst de server; het paneel zegt het als dat de reden is."
+    "Bijna elke bestandseditor weigert op te slaan terwijl de server draait — DayZ vergrendelt zijn eigen bestanden. Stop eerst de server; het paneel zegt het als dat de reden is.",
+    "Als de computer in slaapstand gaat, stoppen de DayZ-server en het paneel mee — het lijkt alsof de manager vanzelf sloot. Zolang er een server draait, houdt de manager de computer wakker (Instellingen → Algemeen → Computer wakker houden); sluit op een gehuurde server het externe venster in plaats van je af te melden."
    ]
   },
   {
@@ -29,12 +30,12 @@
    "intro": "Een server heeft een eigen kopie van elke mod nodig, plus de .bikey van de mod in de keys-map van de server, plus de mod in de startparameter -mod. De manager doet alle drie en haalt mods uit de bron die je koos: de !Workshop van de gameclient, een mod- of SteamCMD-map, of — in de modus Alleen server — de mods die je zelf hebt geüpload.",
    "steps": [
     {
-     "title": "Abonneer eerst in Steam",
-     "body": "De manager kopieert mods, hij downloadt ze niet. Abonneer je in de Steam Workshop en laat de DayZ-launcher de mod naar !Workshop halen — of download hem met SteamCMD naar je modmap."
+     "title": "Haal de mods binnen",
+     "body": "Twee manieren. Plak Workshop-links in Direct downloaden op de pagina Mods: de eigen SteamCMD van het paneel downloadt ze rechtstreeks op de server — je meldt je één keer aan met een Steam-account dat DayZ bezit. Of abonneer je in de Steam Workshop en laat de DayZ-launcher de mod in !Workshop zetten (of download hem met SteamCMD in je modmap) en installeer vanaf daar."
     },
     {
      "title": "Installeer op de server",
-     "body": "Open Mods — alles in !Workshop staat in de lijst. Installeren kopieert de mod naar de servermap en synchroniseert automatisch de .bikey. Alles synchroniseren doet de hele lijst in één klik."
+     "body": "Open Mods — alles in de modbron staat erin (met Steam Workshop als bron: de mods die je hebt gedownload). Installeren kopieert de mod naar de servermap en synchroniseert zijn .bikey automatisch. ‘Mods installeren & bijwerken’ doet de hele lijst in één klik."
     },
     {
      "title": "Schakel hem in voor de start",
@@ -49,7 +50,8 @@
     "Bijwerken kopieert de nieuwere bestanden uit de modbron naar de server. Zet Mods bijwerken bij elke herstart aan in Instellingen om ze automatisch gelijk te houden.",
     "Een mod verwijderen wist zijn .bikey alleen als geen andere geïnstalleerde mod dezelfde sleutel gebruikt, dus gedeelde sleutels (Expansion) blijven intact.",
     "Levert een mod loot, gebruik dan Modloot toevoegen op zijn rij — die vindt de types.xml van de mod en registreert hem voor je.",
-    "Op Linux laadt de server alleen mods waarvan mappen en bestanden in kleine letters staan. De manager hernoemt ze bij installeren en bijwerken, en de pagina Mods markeert alles wat nog verkeerd geschreven is."
+    "Op Linux laadt de server alleen mods waarvan mappen en bestanden in kleine letters staan. De manager hernoemt ze bij installeren en bijwerken, en de pagina Mods markeert alles wat nog verkeerd geschreven is.",
+    "Met Steam Workshop als bron is de downloadlijst een verslag van de laatste download: haal gelezen regels weg, en een mod die sindsdien van de server is verwijderd, biedt Opnieuw installeren."
    ]
   },
   {
@@ -99,7 +101,8 @@
    ],
    "tips": [
     "Eén slot per onderdeel: één voor magazijnen, één voor vizieren, één voor de kolf. Zet je een magazijn en een vizier in hetzelfde slot, dan krijgt het wapen het een of het ander, nooit beide.",
-    "Alleen het item dat je bewerkt wordt herschreven — je opmerkingen en opmaak in de rest van het bestand blijven behouden."
+    "Alleen het item dat je bewerkt wordt herschreven — je opmerkingen en opmaak in de rest van het bestand blijven behouden.",
+    "Het item wordt getekend met een tegel per slot, zoals de spawnuitrusting: klik op een gevuld slot om de kans of de onderdelen te wijzigen, op een leeg slot om een onderdeel uit de eigen lijst van het spel toe te voegen. Een bajonet en een geluiddemper (of mondingsrem) verschijnen nooit samen op één wapen — DayZ monteert wat het eerst komt."
    ]
   },
   {
@@ -109,11 +112,11 @@
    "steps": [
     {
      "title": "Schakel het systeem in",
-     "body": "Open Spawnuitrusting. Spawnt de missie spelers nog vanuit init.c, dan zegt de pagina dat en biedt één knop die een startpreset aanmaakt, hem registreert in cfggameplay.json en de schakelaar enableCfgGameplayFile omzet — alles tegelijk."
+     "body": "Open Spawnuitrusting. Spawnen spelers nog volgens init.c, dan zegt de pagina dat en biedt één knop die het systeem inschakelt: hij hergebruikt de uitrustingsbestanden die al in de missiemap staan (of maakt een startpreset), registreert ze in cfggameplay.json en zet enableCfgGameplayFile aan — alles in één keer."
     },
     {
      "title": "Kleding en uitrusting bewerken",
-     "body": "Elke preset toont wat er per slot gedragen wordt (Body, Legs, Feet…) en wat los wordt meegedragen. Voeg items toe op klassenaam, stel een spawngewicht in als een slot tussen meerdere moet kiezen, en kies een staat — nieuw, versleten, beschadigd of een eigen bereik."
+     "body": "De editor toont een overlevende met alle slots. Klik op een slot om een item uit de lijst van het spel zelf te kiezen — namen, categorieën en wat waar past — stel daarna de staat en de hoeveelheid in en leg het in de handen of op de sneltoetsbalk (toetsen 1–0). Elk item wordt getekend met een tegel voor elk van zijn slots — optiek, loopmonding, magazijn, de zakken van een vest — die alleen passende onderdelen aanbiedt, plus wat erin gaat (eten in de rugzak). Een server kan meerdere uitrustingen hebben; elk heeft een spawngewicht."
     },
     {
      "title": "Testrol en delen",
@@ -122,7 +125,10 @@
    ],
    "tips": [
     "healthMin/healthMax zijn fracties van de gezondheid: 1.0 is nieuw, 0.0 is kapot. Houd alles op nieuw, zodat verse spawns niet in versleten kleding aankomen.",
-    "De uitrusting wordt opgeslagen met de server gestopt, zoals elke configwijziging — start de server daarna opnieuw."
+    "De uitrusting wordt opgeslagen met de server gestopt, zoals elke configwijziging — start de server daarna opnieuw.",
+    "Een DayZ-serverupdate vervangt cfggameplay.json en vergeet je uitrustingen. De manager zet ze vóór de volgende start weer in de lijst en zet de schakelaar weer aan — en de pagina toont elk bestand dat niet gekoppeld is.",
+    "Een wapen met een magazijn verschijnt geladen, met een patroon in de kamer — niemand hoeft op R te drukken; de knop Laden doet het in één klik. Bajonet en geluiddemper sluiten elkaar uit, en een wapenlamp heeft een handguard met rail nodig: de editor waarschuwt en biedt de oplossing aan.",
+    "Nieuw personage, bovenaan de pagina, bepaalt hoe elk nieuw personage begint — verzadigd, zonder dorst en opgewarmd als je wilt. Het paneel past het toe met zijn eigen servermod; spelers downloaden niets."
    ]
   },
   {
@@ -147,7 +153,8 @@
     "Herstartwaarschuwingen gebruiken ook RCon. Zonder wachtwoord gebeurt de herstart toch — spelers krijgen alleen geen aftelling.",
     "De sectie Spelers bouwt een geschiedenis op uit de adminlog: namen, speler-ID's, speeltijd, kills. Daarvoor is de startparameter -adminlog nodig (pagina Server → Startparameters).",
     "Instellingen → Gedrag bij herstart kan iedereen een ingestelde tijd vóór een herstart kicken en de server vergrendelen zodat niemand in de laatste minuut terugkomt. Personages worden bij het verbreken opgeslagen, dus er gaat niets verloren.",
-    "De pagina Chat bewaart een archief van elke dag — inclusief berichten die vanuit het paneel zijn verstuurd en de geplande aankondigingen — met zoeken en een download als .txt. Hoelang het bewaard blijft, stel je daar ook in."
+    "De pagina Chat bewaart een archief van elke dag — inclusief berichten die vanuit het paneel zijn verstuurd en de geplande aankondigingen — met zoeken en een download als .txt. Hoelang het bewaard blijft, stel je daar ook in.",
+    "Bij Spelers → Nu online kun je iedereen een bericht sturen, iedereen kicken (bijvoorbeeld voor onderhoud) en binnenkomen blokkeren tot de volgende herstart. Het profiel van een speler toont andere accounts vanaf hetzelfde IP en wat de speler bouwde of vernielde."
    ]
   },
   {
@@ -164,8 +171,8 @@
      "body": "De overgangssnelheid bepaalt hoe geleidelijk het weer verschuift: Vloeiend loopt in ongeveer een half uur in kleine stappen op, zoals vanilla. Snel doorloopt het hele bereik in twee minuten — daardoor voelt het weer als een lichtschakelaar."
     },
     {
-     "title": "Stel de daglengte in",
-     "body": "Dag- en nachtversnelling vermenigvuldigen het verstrijken van de in-game tijd — 12 betekent dat een volledige dag twee echte uren duurt. De nachtversnelling staat apart, zodat je nachten kort kunt houden."
+     "title": "Stel de lengte van dag en nacht in",
+     "body": "Dag & nacht toont de lucht, zonsopkomst en zonsondergang voor je kaart en hoe lang dag en nacht in echte tijd duren — inclusief wat je herstarts met de speltijd doen. Druk op ▶ om de speldag af te spelen (en weer te stoppen), of sleep de witte markering naar elk moment. Kies een kant-en-klaar gevoel of typ de gewenste dag- en nachtlengte, en het paneel berekent de versnelling."
     }
    ],
    "tips": [
@@ -188,12 +195,13 @@
     },
     {
      "title": "Stem voertuigen af",
-     "body": "Voertuigen toont elk voertuig-event: hoeveel er kunnen bestaan, hoeveel spawnpunten het heeft en hoe compleet de onderdelen zijn — en stelt in hoe waarschijnlijk elk onderdeel op het voertuig spawnt."
+     "body": "Voertuigen toont elk voertuig-event met een tekening van de auto: hoeveel er kunnen bestaan, hoeveel spawnpunten het heeft, hoe compleet de onderdelen zijn — en met hoeveel brandstof en koelvloeistof het spawnt (ingesteld door een piepkleine servermod die het paneel toevoegt; spelers downloaden niets)."
     }
    ],
    "tips": [
     "Er wordt geen kaartafbeelding meegeleverd — de lagen komen uit je missiebestanden. Voor een fotoachtige kaart laad je je eigen afbeelding van bovenaf in de kaartinstellingen.",
-    "Net als de andere editors slaan deze pagina's alleen op als de server gestopt is."
+    "Net als de andere editors slaan deze pagina's alleen op als de server gestopt is.",
+    "Elke kaart heeft een liniaal (afstanden meten, coördinaten kopiëren) en adminmarkeringen — notities zoals een clanbasis of een handelaar die elke admin van de server op elke kaart ziet. De Heatmap voegt bouwen, raids en bergplaatsen uit de adminlog toe; de Live kaart toont waar elke speler is geweest."
    ]
   },
   {
@@ -216,7 +224,9 @@
    ],
    "tips": [
     "Wipe verwijdert de opgeslagen wereldstatus — spelers, voertuigen, bases. Je loottabellen en configs blijven onaangeroerd. Mappen worden eerst opzij gezet, zodat een wipe per ongeluk met de hand kan worden hersteld.",
-    "De crashwatchdog herstart de server als die vanzelf afsluit. Na drie crashes in vijf minuten stopt hij en toont hij in plaats daarvan een banner — een crashlus vraagt om een mens, niet om nog een herstart."
+    "De crashwatchdog herstart de server als die vanzelf afsluit. Na drie crashes in vijf minuten stopt hij en toont hij in plaats daarvan een banner — een crashlus vraagt om een mens, niet om nog een herstart.",
+    "Instellingen → Algemeen → Automatisch starten start de manager samen met de computer, en elke server kan met de manager mee starten — na een stroomstoring komt alles vanzelf terug.",
+    "Sluit de manager onverwacht, dan start de bewaker hem opnieuw in het systeemvak (hooguit drie keer in 15 minuten) en het dashboard meldt het — met de crashregistratie van Windows als die er is. Uitzetten via Instellingen → Algemeen."
    ]
   },
   {
@@ -253,7 +263,7 @@
     },
     {
      "title": "Open het paneel voor het netwerk",
-     "body": "Instellingen → Bereikbaarheid van het paneel: Lokaal netwerk voor telefoons thuis, Internet voor toegang van overal (alleen mogelijk met een login). Herstart daarna de manager."
+     "body": "Instellingen → Bereikbaarheid van het paneel: Lokaal netwerk voor telefoons thuis, Internet voor toegang van overal (alleen met een login). De wijziging geldt meteen — zonder herstart."
     },
     {
      "title": "Laat de verbindingen door",
@@ -407,7 +417,7 @@
   "loadout": "Wat een speler draagt en bij zich heeft als hij respawnt. Dit zijn de spawn-gear-presets van DayZ, geregistreerd in cfggameplay.json — wijzigingen gelden na een serverherstart. In vanilla staat de uitrusting in init.c, daarom toont een verse missie hier niets tot je het systeem inschakelt.",
   "loadout.carried": "Losse items die direct in de inventaris van de nieuwe speler gaan in plaats van in een gedragen slot — lappen, voedsel, een startgereedschap.",
   "loadout.characters": "Op welke overlevendenmodellen deze preset van toepassing is (SurvivorM_Mirek, SurvivorF_Eva, …). Laat leeg voor alle; per spawn wordt er willekeurig één gekozen.",
-  "loadout.condition": "De staat waarin een item spawnt. In DayZ is 1.0 = nieuw en 0.0 = kapot, dus hoger is beter. Nieuw houdt de uitrusting van verse spawns nieuw; kies Aangepast om een exact min–max-gezondheidsbereik in te stellen, en het item spawnt ergens daarbinnen.",
+  "loadout.condition": "De staat waarin een item spawnt. In DayZ is 1.0 = ongeschonden en 0.0 = vernield, dus hoger is beter. Ongeschonden houdt de startuitrusting nieuw; kies Aangepast om een exact gezondheidsbereik min–max in te stellen, en het item spawnt ergens daarbinnen. Bij gedragen items spawnt Ongeschonden ze precies zoals het spel ze maakt (één lap, een hele appel); elke andere staat geeft ze ook de volle hoeveelheid, dus een stapel lappen spawnt vol.",
   "loadout.weight": "Het gewicht van deze preset tegenover de andere. DayZ kiest ÉÉN preset per spawn, dus een preset met gewicht 3 is drie keer zo waarschijnlijk als een met gewicht 1.",
   "loadout.worn": "Items die op het lichaam worden geplaatst, één lichaamsslot tegelijk. Binnen een slot kiest DayZ ÉÉN item op gewicht, dus meerdere varianten opgeven zorgt voor afwisseling tussen spawns.",
   "logs.adm": "Wat spelers deden: verbindingen, chat, kills, posities. Vereist de optie -adminlog; de pagina Spelers wordt eruit opgebouwd.",
@@ -420,7 +430,7 @@
   "mods.scan": "Zoekt in de mod naar een types.xml en registreert die in cfgeconomycore.xml, zodat de loot van de mod echt spawnt.",
   "mods.serverSide": "Laadt de mod met -serverMod in plaats van -mod: hij draait op de server en clients hebben hem niet nodig en krijgen hem niet. Alleen voor admintools — een loot- of contentmod aan serverzijde werkt niet.",
   "mods.uninstall": "Verwijdert de modmap van de server. De .bikey wordt alleen verwijderd als geen andere geïnstalleerde mod dezelfde sleutel gebruikt, dus gedeelde sleutels zoals die van Expansion blijven bestaan.",
-  "mods.update": "Kopieert nieuwere bestanden uit de !Workshop van de client naar de server. De manager kan geen mods downloaden — abonneer eerst in Steam.",
+  "mods.update": "Kopieert de nieuwere bestanden van de modbron naar de server. Met Steam Workshop (direct downloaden) als bron downloadt het eerst de nieuwere versies met SteamCMD.",
   "rcon.password": "Wordt in battleye/beserver_x64.cfg geschreven. BattlEye leest dat bestand alleen bij de start, dus een nieuw wachtwoord doet niets tot de volgende herstart.",
   "server.forceSameBuild": "Vereist dat clients exact dezelfde gamebuild draaien (1). Voorkomt crashes door versieverschillen.",
   "server.hostname": "De servernaam in de DayZ-serverbrowser. Houd hem kort en goed vindbaar.",
@@ -443,7 +453,7 @@
   "settings.adminlog": "Schakelt -adminlog in, dat het .ADM-bestand schrijft. De pagina Spelers en de killfeed worden eruit opgebouwd en blijven zonder leeg.",
   "settings.backup": "Zipt je configs en missiebestanden volgens schema en bewaart de nieuwste N. Daarnaast krijgt elk bestand dat het paneel overschrijft een .bak met tijdstempel ernaast.",
   "settings.exposure": "“Alleen deze pc”: alleen deze computer kan het paneel openen. “Lokaal netwerk”: ook je telefoon en andere apparaten thuis kunnen het openen. “Internet”: overal bereikbaar — daarvoor is een paneellogin nodig, en Instellingen → Toegang op afstand controleert de rest (router, firewall, publiek IP).",
-  "settings.modSource": "Waar de manager mods vandaan kopieert. Clientmap: de DayZ-game-installatie met !Workshop (abonneer in Steam, de manager kopieert en werkt bij). Modmap: elke map met @mods, of de SteamCMD-map workshop/content/221100 — de manier om Workshop-mods op een host zonder game te krijgen. Alleen server: geen bron; mods die je zelf uploadt worden nog steeds beheerd, maar automatisch bijwerken staat uit.",
+  "settings.modSource": "Waar de manager mods vandaan haalt. Clientmap: de DayZ-installatie met !Workshop (abonneer je in Steam, de manager kopieert en werkt bij). Modmap: elke map met @mods, of workshop/content/221100 van SteamCMD. Steam Workshop (direct downloaden): het paneel downloadt, controleert en werkt mods zelf bij met zijn eigen SteamCMD — het spel is niet nodig. Alleen server: geen bron; met de hand geüploade mods worden nog beheerd, maar automatisch bijwerken staat uit.",
   "settings.perf": "CPU-affiniteit bindt DayZServer aan de kernen die je aanvinkt (niet-aangevinkte kernen blijven vrij voor het OS, een tweede server of andere programma's). Prioriteit vertelt het OS hoe gretig het proces ingepland wordt — Hoger dan normaal is een veilige boost; Hoog kan de rest van de machine traag maken. Beide worden bij elke start toegepast. Op Linux vereist een hogere prioriteit root.",
   "settings.restart": "Herstart de server volgens schema. Spelers krijgen vooraf RCon-waarschuwingen, waarvoor een RCon-wachtwoord ingesteld moet zijn.",
   "settings.restartBehaviour": "Wat spelers rond elke automatische herstart meemaken: de aftel-tekst die ze zien (schrijf hem in hun taal), een optioneel venster vlak voor de herstart waarin de server vergrendeld is en iedereen wordt gekickt zodat hun personages netjes worden opgeslagen, en een nette #shutdown die de wereld opslaat voordat het proces stopt. De tijdlijn hieronder toont de exacte volgorde.",
@@ -480,7 +490,14 @@
   "weather.transition": "Hoe geleidelijk het weer verandert. Vloeiend loopt in ongeveer een half uur in kleine stappen op, zoals vanilla DayZ. Snel kan in twee minuten het hele bereik doorlopen — daardoor voelt het weer als een lichtschakelaar.",
   "weather.wind": "Windsnelheid in m/s. Drijft de beweging van wolken aan en, met de dynamische schakelaar, hoe snel het weer verandert.",
   "wipe": "Verwijdert de opgeslagen wereldstatus: spelers, voertuigen, bases. Loottabellen en configs blijven onaangeroerd. Mappen worden opzij gezet in plaats van gewist, dus een vergissing kan met de hand ongedaan worden gemaakt.",
-  "wipe.undo": "Een wipe verplaatst de wereldmappen naar .dayz-manager/wipes/<timestamp>/ in plaats van ze te verwijderen, dus hij blijft omkeerbaar — tot de server die status opnieuw opbouwt; vanaf dan zou het terugzetten van de oude wereld de nieuwe begraven."
+  "wipe.undo": "Een wipe verplaatst de wereldmappen naar .dayz-manager/wipes/<timestamp>/ in plaats van ze te verwijderen, dus hij blijft omkeerbaar — tot de server die status opnieuw opbouwt; vanaf dan zou het terugzetten van de oude wereld de nieuwe begraven.",
+  "server.adminLogPlayerList": "Schrijft elke 5 minuten de positie van elke speler in de adminlog (.ADM). De live kaart gebruikt dit: zonder dit beweegt de stip van een speler alleen bij verbinden, gevechten en chat.",
+  "server.adminLogPlayerHitsOnly": "Logt alleen treffers op spelers en laat treffers op geïnfecteerden en dieren weg, zodat de adminlog veel kleiner blijft.",
+  "server.adminLogPlacement": "Schrijft het plaatsen van vallen, tenten en andere plaatsbare items in de adminlog.",
+  "server.adminLogBuildActions": "Schrijft het bouwen, demonteren en vernielen van basisonderdelen in de adminlog.",
+  "wsdl": "SteamCMD is de eigen opdrachtregel-Steam-client van Valve. Het paneel installeert hem in zijn map, meldt hem één keer aan met je Steam-account (DayZ-Workshop-bestanden worden alleen geleverd aan accounts die het spel bezitten) en downloadt dan de mods die je plakt: elke mod komt in de map van SteamCMD, wordt als @Naam met zijn sleutels naar de server gekopieerd en ingeschakeld. Updaten is dezelfde download opnieuw. Spelers hebben de mods nog steeds nodig: ze abonneren zich zoals gewoonlijk in de Workshop.",
+  "veh.tweaks": "Brandstof en radiateur bij het spawnen vereisen geen installatie: bij het starten van de server bouwt het paneel een piepkleine server-side mod (@DZM_ServerTweaks) met deze instellingen en laadt die met -serverMod. Spelers downloaden niets. De waarden gelden voor voertuigen die de economie na de volgende start laat spawnen; auto's die al op de kaart staan, houden de hunne.",
+  "loadout.stats": "Eten en water zijn de energie- en watervoorraad van het personage (0–5000 in DayZ; een nieuw personage krijgt van elk 600, daarom verschijnen de honger- en dorsticonen al snel). Warmte is de warmtebuffer: de warmtevoorraad die een personage bij een vuur opbouwt en die het een tijd tegen kou beschermt. De waarden gelden alleen voor nieuwe personages — ook na een dood —, niet voor spelers die terugkeren naar hun opgeslagen personage. Het paneel schrijft ze vóór elke serverstart in zijn servermod."
  },
  "gameplay": {
   "version": "Formaatversie van het bestand. DayZ schrijft deze — laat haar zoals ze is.",
@@ -530,7 +547,7 @@
   "shockDepletionSpeed": "Shock die per seconde wordt toegevoegd tijdens verdrinken.",
   "staticMode": "Tegen muren en statische objecten: 0 = uit, 1 = aan (zoals in het spel), 2 = altijd.",
   "dynamicMode": "Tegen spelers, voertuigen en andere bewegende objecten: 0 = uit, 1 = aan (zoals in het spel), 2 = altijd.",
-  "lightingConfig": "Duisternis 's nachts: 0 = lichtere nachten (zoals in het spel), 1 = donkere nachten. Overschrijft dezelfde instelling in serverDZ.cfg.",
+  "lightingConfig": "Nachtverlichting: 0 = lichtere nachten (zoals in het spel), 1 = donkere nachten, 2 = de verlichting van Sakhal, 3 = de verlichting van Nasdara. Overschrijft dezelfde instelling in serverDZ.cfg.",
   "objectSpawnersArr": "JSON-bestanden (paden binnen de missie) die extra statische objecten in de wereld plaatsen.",
   "environmentMinTemps": "Laagste luchttemperatuur van elke maand, januari tot december, °C. Weglaten om die van de kaart zelf te gebruiken.",
   "environmentMaxTemps": "Hoogste luchttemperatuur van elke maand, januari tot december, °C. Weglaten om die van de kaart zelf te gebruiken.",
@@ -545,7 +562,7 @@
   "disableHeightPlacementCheck": "Objecten mogen hoger boven de voeten van de speler worden geplaatst dan normaal is toegestaan.",
   "disableIsUnderwaterCheck": "Objecten mogen onder water worden geplaatst.",
   "disableIsInTerrainCheck": "Objecten mogen in het terrein worden verzonken.",
-  "disableColdAreaBuildingCheck": "Bouwen is toegestaan in de koude gebieden waar het spel het normaal verbiedt (Sakhal).",
+  "disableColdAreaBuildingCheck": "De oude naam van disableColdAreaPlacementCheck. Het huidige DayZ leest hem niet meer — stel in plaats daarvan de nieuwe sleutel in.",
   "disallowedTypesInUnderground": "Kits die niet in ondergrondse gebieden (bunkers, grotten) kunnen worden geplaatst.",
   "disablePerformRoofCheck": "Basisonderdelen mogen onder daken en binnenshuis worden gebouwd.",
   "disableIsCollidingCheck": "Basisonderdelen mogen worden gebouwd, ook als er iets in de weg staat.",
@@ -563,33 +580,57 @@
   "ignoreNavItemsOwnership": "De kaart toont kompas- en gps-info zonder een kompas of gps bij zich te hebben.",
   "displayPlayerPosition": "De eigen positie van de speler wordt op de kaart gemarkeerd.",
   "displayNavInfo": "De kaart toont de navigatie-info (raster en kompas).",
-  "boatDecayMultiplier": "Hoe snel boten vervallen. 1 = zoals in het spel, lager = trager."
+  "boatDecayMultiplier": "Hoe snel boten vervallen. 1 = zoals in het spel, lager = trager.",
+  "disableColdAreaPlacementCheck": "Bouwen is toegestaan in de koude gebieden waar het spel normaal het plaatsen van wat dan ook verbiedt (Sakhal).",
+  "disableItemFalling": "Items die op een basisonderdeel staan blijven op hun plek in plaats van te vallen wanneer het onderdeel wordt gedemonteerd of vernield.",
+  "disableDropAttachmentsOnFall": "Een basisbouwwerk dat instort houdt zijn attachments en opgeslagen items, in plaats van ze op de grond te laten vallen.",
+  "disableRefundMaterialsOnFall": "Een basisbouwwerk dat instort geeft geen materialen terug voor de gebouwde onderdelen — het verdwijnt gewoon.",
+  "canDetachAttachedCarWheels": "Spelers kunnen de wielen van een auto halen.",
+  "canDamageAttachedCarWheels": "Wielen op een auto kunnen beschadigd raken, bijvoorbeeld door geweervuur.",
+  "canDetachAttachedBikeWheels": "Spelers kunnen de wielen van een fiets halen.",
+  "canDamageAttachedBikeWheels": "Wielen op een fiets kunnen beschadigd raken.",
+  "playerRestrictedAreaFiles": "JSON-bestanden (paden in de missie) met verboden gebieden voor spelers — zones waar het spel spelers buiten houdt, zoals de kernkopopslag op Sakhal.",
+  "bunkerBroadcastEnabled": "De radio-uitzending van de bunkers loopt: de bunkercodes worden in morse uitgezonden, zoals ingesteld in cfgbunkerbroadcast.json van de missie (Nasdara). Uit = geen uitzending.",
+  "ExternalLockData": "Bescherming van codesloten tegen raden: na te veel foute codes neemt een slot een tijdje geen invoer aan.",
+  "protectionCountStageOne": "Foute codes op rij voordat een codeslot de invoer voor het eerst blokkeert.",
+  "protectionCountStageTwo": "Foute codes na de eerste blokkade voordat het slot opnieuw blokkeert.",
+  "protectionTime": "Seconden dat een codeslot invoer weigert na te veel foute codes.",
+  "protectionResetTime": "Seconden waarna een codeslot de foute codes vergeet en weer bij nul begint te tellen.",
+  "SandstormData": "Zandstormen (Nasdara).",
+  "sandstormFrequency": "Hoe vaak zandstormen komen: 0 = nooit, 1 = zoals in het spel, 2 = twee keer zo vaak."
  },
  "globals": {
-  "AnimalMaxCount": "Maximaal aantal dieren dat tegelijk op de kaart leeft.",
-  "CleanupAvoidance": "Factor die voorkomt dat vers gespawnde loot te snel wordt opgeruimd.",
-  "CleanupLifetimeDeadAnimal": "Seconden dat een dood dierenkarkas blijft voordat het wordt verwijderd.",
-  "CleanupLifetimeDeadInfected": "Seconden dat een dode geïnfecteerde blijft liggen voordat hij wordt verwijderd.",
-  "CleanupLifetimeDeadPlayer": "Seconden dat het lichaam van een dode speler en zijn uitrusting blijven voordat ze worden verwijderd.",
-  "CleanupLifetimeDefault": "Standaard seconden dat een gevallen item blijft voordat het wordt opgeruimd als zijn type geen levensduur opgeeft.",
-  "CleanupLifetimeLimit": "Ondergrens (s) die het opruimen gebruikt voor items met een zeer korte levensduur.",
-  "CleanupLifetimeRuined": "Seconden dat een kapot item op de grond blijft voordat het wordt opgeruimd.",
-  "FlagRefreshFrequency": "Hoe vaak (s) een gehesen territoriumvlag de levensduur van nabije geplaatste items ververst.",
-  "FlagRefreshMaxDuration": "Maximale levensduur (s) waarnaar een vlag items kan verversen — de limiet voor basisverval (vanilla ≈ 45 dagen).",
-  "IdleModeCountdown": "Seconden zonder verbonden spelers voordat de economie inactief wordt en stopt met loot respawnen.",
-  "IdleModeStartup": "De economie in inactieve modus starten tot de eerste speler verbindt (1 = ja).",
-  "InitialSpawn": "Hoeveelheid initiële loot die wordt gespawnd als de economie voor het eerst start.",
-  "LoginTimeMax": "Maximale tijd (s) die het inloggen mag duren voordat de poging wordt afgebroken.",
+  "AnimalMaxCount": "Maximaal aantal dieren dat tegelijk levend op de kaart is.",
+  "CleanupAvoidance": "Afstand (m) tot een speler waarbinnen niets wordt opgeruimd, zodat items niet voor de ogen van spelers verdwijnen.",
+  "CleanupLifetimeDeadAnimal": "Seconden dat het karkas van een dood dier blijft voordat het wordt verwijderd.",
+  "CleanupLifetimeDeadInfected": "Seconden dat het lichaam van een dode geïnfecteerde blijft voordat het wordt verwijderd.",
+  "CleanupLifetimeDeadPlayer": "Seconden dat het lichaam van een dode speler met uitrusting blijft voordat het wordt verwijderd.",
+  "CleanupLifetimeDefault": "Standaard aantal seconden dat een gevallen item blijft liggen tot het opruimen, als het type geen levensduur instelt.",
+  "CleanupLifetimeLimit": "Ondergrens (s) die het opruimen gebruikt voor zeer korte levensduren.",
+  "CleanupLifetimeRuined": "Seconden dat een vernield item op de grond blijft liggen tot het opruimen.",
+  "FlagRefreshFrequency": "Hoe vaak (s) een gehesen territoriumvlag de levensduur van geplaatste items in de buurt ververst.",
+  "FlagRefreshMaxDuration": "Maximale levensduur (s) waartoe een vlag items kan verversen — het plafond voor het verval van bases (vanilla ≈ 45 dagen).",
+  "FoodDecay": "Eten bederft na verloop van tijd (1 = aan).",
+  "IdleModeCountdown": "Seconden zonder verbonden spelers voordat de economie inactief wordt en geen loot meer laat respawnen.",
+  "IdleModeStartup": "De economie inactief starten tot de eerste speler meedoet (1 = ja).",
+  "InitialSpawn": "Hoeveel van de nominale loot spawnt wanneer de economie met lege opslag start, in procenten (100 = alles).",
+  "LoginTimeMax": "Maximale tijd (s) die het inloggen mag duren voordat de poging vervalt.",
   "LogoutTimeMax": "Maximale wachttijd bij uitloggen (s).",
+  "LootDamageMax": "Meeste slijtage van net gespawnde loot, 0–1 (vanilla 0.82). Lager = loot spawnt in betere staat.",
+  "LootDamageMin": "Minste slijtage van net gespawnde loot, 0–1 (0 = ongeschonden).",
+  "LootProxyPlacement": "Loot spawnt op planken, tafels en andere plekken in gebouwen (1 = aan). Laat het aan staan.",
+  "LootSpawnAvoidance": "Afstand (m) tot een speler waarbinnen geen nieuwe loot verschijnt, zodat het nooit voor iemands neus opduikt.",
   "RespawnAttempt": "Hoe vaak de engine per cyclus een mislukte loot-respawn opnieuw probeert.",
-  "RespawnTypes": "Hoeveel loot-types per cyclus voor respawn worden verwerkt.",
-  "SpawnInitial": "Hoeveelheid initiële loot die wordt gespawnd als de economie voor het eerst start.",
-  "TimeHopping": "Extra inlogvertraging (s) voor spelers die van server wisselen, om dat te ontmoedigen.",
-  "TimeLogin": "Seconden dat een speler op het laadscherm wacht bij het inloggen.",
-  "TimeLogout": "Seconden dat een speler in de wereld moet blijven na het kiezen om uit te loggen (tegen combat-loggen).",
+  "RespawnLimit": "Meeste items van één type die per cyclus respawnen.",
+  "RespawnTypes": "Hoeveel loottypes per cyclus voor respawn worden verwerkt.",
+  "RestartSpawn": "1 = alle loot respawnt bij elke serverstart (een loot-reset); 0 = de opgeslagen loot blijft.",
+  "SpawnInitial": "Spawnbudget van de eerste ronde van de economie bij het opstarten (vanilla 1200).",
+  "TimeHopping": "Extra inlogvertraging (s) voor spelers die tussen servers hoppen, om dat te ontmoedigen.",
+  "TimeLogin": "Seconden die een speler bij het inloggen op het laadscherm wacht.",
+  "TimeLogout": "Seconden die een speler in de wereld moet blijven na het kiezen van uitloggen (tegen combat-loggen).",
   "TimePenalty": "Extra wachttijd (s) bij uitloggen kort na een gevecht.",
-  "WorldWetTempUpdate": "Hoe vaak (s) de natheid en temperatuur van items in de wereld worden bijgewerkt.",
-  "ZombieMaxCount": "Maximaal aantal geïnfecteerden dat tegelijk op de kaart leeft.",
-  "ZoneSpawnDist": "Afstand (m) tot een speler waarop dynamische zones met geïnfecteerden/dieren spawnen."
+  "WorldWetTempUpdate": "Natheid en temperatuur van items die in de wereld liggen worden bijgewerkt (1 = aan).",
+  "ZombieMaxCount": "Maximaal aantal geïnfecteerden dat tegelijk levend op de kaart is.",
+  "ZoneSpawnDist": "Afstand (m) tot een speler waarop dynamische zones met geïnfecteerden en dieren spawnen."
  }
 }

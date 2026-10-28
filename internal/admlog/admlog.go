@@ -11,6 +11,7 @@
 //	Player "<name>" (DEAD) (id=<guid> pos=<x,y,z>) ...          (kills / deaths)
 //	Player "<name>" (id=<guid> pos=<x,y,z>) hit by Player "..."
 //	Player "<name>" (id=<guid> pos=<x,y,z>) Chat("GLOBAL"): msg
+//	Player "<name>" (id=<guid> pos=<x,y,z>)                       (player list, every 5 min)
 //
 // Anything that doesn't match falls into event type "other" with the raw tail.
 package admlog
@@ -28,7 +29,7 @@ import (
 
 type Event struct {
 	Time     string    `json:"time"`               // "HH:MM:SS" as-is from the log
-	Type     string    `json:"type"`               // connect/disconnect/kill/hit/chat/death/other
+	Type     string    `json:"type"`               // connect/disconnect/kill/hit/chat/death/position/other
 	Player   string    `json:"player,omitempty"`   // subject
 	ID       string    `json:"id,omitempty"`       // subject's id= (BE GUID) when present
 	Target   string    `json:"target,omitempty"`   // victim/attacker for hit/kill
@@ -38,7 +39,10 @@ type Event struct {
 	Source   string    `json:"source,omitempty"`   // non-player killer: "ZmbM_HermitSkinny_Beard", "FallDamage"
 	Message  string    `json:"message,omitempty"`  // chat text or raw tail
 	Pos      []float64 `json:"pos,omitempty"`      // [x,y,z]
-	Raw      string    `json:"raw"`
+	// Base is set on base-building lines (type "other"): build, raid or
+	// stash — see BaseAction.
+	Base string `json:"base,omitempty"`
+	Raw  string `json:"raw"`
 }
 
 var (
@@ -140,9 +144,17 @@ func ParseLine(s string) (Event, bool) {
 		ev.Type = "disconnect"
 	case strings.Contains(tail, "connect"):
 		ev.Type = "connect"
+	case tail == "" && ev.Pos != nil:
+		// The periodic player list (serverDZ.cfg adminLogPlayerList = 1)
+		// writes each player as a bare `Player "X" (id=… pos=<…>)` every
+		// five minutes — the steadiest position source the log has.
+		ev.Type = "position"
 	default:
 		ev.Type = "other"
 		ev.Message = tail
+		if b, ok := BaseAction(ev); ok {
+			ev.Base = b.Kind
+		}
 	}
 	return ev, true
 }
@@ -271,7 +283,11 @@ func Recent(path string, limit int, typeFilter, playerFilter string) ([]Event, e
 		if !ok {
 			continue
 		}
-		if typeFilter != "" && typeFilter != "all" && ev.Type != typeFilter {
+		if typeFilter == "base" {
+			if ev.Base == "" {
+				continue
+			}
+		} else if typeFilter != "" && typeFilter != "all" && ev.Type != typeFilter {
 			continue
 		}
 		if playerFilter != "" {

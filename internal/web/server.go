@@ -11,11 +11,14 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"dayzmanager/internal/app"
+	"dayzmanager/internal/items"
 	"dayzmanager/internal/rcon"
 	"dayzmanager/internal/util"
 )
@@ -30,14 +33,31 @@ type Server struct {
 	insts map[string]*instance // by server id
 	ctx   context.Context      // the serve context; servers added later run their loops in it
 
-	httpsOn bool // the listener also speaks TLS (Settings → HTTPS); set by Serve
+	httpsOn atomic.Bool // the listener also speaks TLS (Settings → HTTPS); set by Serve
 	port    int
+
+	// The listener, movable while the panel runs: changing who may open the
+	// panel (Local only / Local network / Internet) or HTTPS re-opens it
+	// on the new address instead of asking for a manager restart.
+	lnMu      sync.Mutex
+	ln        net.Listener      // the plain TCP listener
+	served    net.Listener      // what http.Server accepts from (ln, or the TLS sniffer over it)
+	bind      string            // the host ln listens on ("" = every interface)
+	bindFixed bool              // started with -bind: the address is the admin's, not the setting's
+	switching bool              // Rebind closed the listener on purpose
+	next      chan net.Listener // the listener Serve continues with after a switch
+	installed chan struct{}     // Serve took the listener from next and serves on it
+	accessMu  sync.Mutex        // one access change at a time
 
 	// OnServerAdded is called (by the Servers page) for a server added to the
 	// panel while it runs — the launcher marks it as owned and wires its exit.
 	OnServerAdded func(a *app.App)
 
 	clone cloneJob // Servers page: "create a copy" in progress (servers.go)
+
+	// Mods → Direct download: the panel's SteamCMD (workshop_dl.go).
+	wsOnce sync.Once
+	wsSt   *wsState
 }
 
 // instance is one DayZ server's API: its handlers, routes and background
@@ -55,10 +75,11 @@ const ServerHeader = "X-DZM-Server"
 
 func New(f *app.Fleet, bind string, port int) *Server {
 	a := f.Primary
-	s := &Server{app: a, fleet: f, port: port, insts: map[string]*instance{}}
+	s := &Server{app: a, fleet: f, port: port, bind: bind, insts: map[string]*instance{},
+		next: make(chan net.Listener, 1), installed: make(chan struct{}, 1)}
 	auth := newAuthManager(a.ManagerDir, a.Log)
 	auth.cookie = cookieNameFor(port)
-	s.h = &handlers{app: a, auth: auth, panelPort: port, upnp: &upnpState{}, upnpKick: make(chan struct{}, 1), server: s}
+	s.h = &handlers{app: a, auth: auth, panelPort: port, upnp: &upnpState{}, upnpKick: make(chan struct{}, 1), remoteKick: make(chan struct{}, 1), server: s}
 	for _, srv := range f.Apps() {
 		s.attach(srv)
 	}
@@ -83,7 +104,7 @@ func New(f *app.Fleet, bind string, port int) *Server {
 func (s *Server) attach(a *app.App) *instance {
 	h := s.h
 	if a != s.app {
-		h = &handlers{app: a, auth: s.h.auth, panelPort: s.port, upnp: s.h.upnp, upnpKick: s.h.upnpKick, server: s}
+		h = &handlers{app: a, auth: s.h.auth, panelPort: s.port, upnp: s.h.upnp, upnpKick: s.h.upnpKick, remoteKick: s.h.remoteKick, server: s}
 	}
 	h.chat = newChatArchive(a.ManagerDir, func() int { return a.Cfg().ChatKeepDays }, a.Log)
 	// The live chat feed survives a manager restart: refill it from the
@@ -186,7 +207,8 @@ func panelWideRoute(p string) bool {
 	}
 	switch p {
 	case "/api/i18n", "/api/changelog", "/api/guide", "/api/sponsors", "/api/update/check",
-		"/api/app/exit", "/api/app/show", "/api/app/shortcuts", "/api/network/addresses", "/api/steam/detect",
+		"/api/app/exit", "/api/app/show", "/api/app/shortcuts", "/api/app/autostart", "/api/app/lastexit", "/api/app/keepawake",
+		"/api/network/addresses", "/api/steam/detect",
 		"/api/config/finish-first-run":
 		return true
 	}
@@ -207,27 +229,174 @@ func (s *Server) handlersList() []*handlers {
 }
 
 // Serve runs the panel on an already-open listener (the launcher opens it
-// itself to detect a busy port) until ctx is cancelled.
+// itself to detect a busy port) until ctx is cancelled. When the access
+// settings change, Rebind swaps the listener and Serve carries on with the
+// new one.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
-	if s.app.Cfg().PanelHTTPS {
-		if tlsConf, err := s.panelTLSConfig(); err != nil {
-			s.app.Log.Printf("HTTPS disabled: %v", err)
-		} else {
-			ln = newSniffListener(ln, tlsConf)
-			s.httpsOn = true
-			s.app.Log.Printf("panel HTTPS enabled on the same port (https://…:%d/)", s.port)
+	s.startBackground(ctx)
+	for {
+		s.lnMu.Lock()
+		s.ln = ln
+		s.served = s.wrapTLS(ln)
+		served := s.served
+		s.lnMu.Unlock()
+		err := s.http.Serve(served)
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		s.lnMu.Lock()
+		switching := s.switching
+		s.lnMu.Unlock()
+		if !switching {
+			return err
+		}
+		select {
+		case ln = <-s.next:
+			s.lnMu.Lock()
+			s.switching = false
+			s.lnMu.Unlock()
+			// Tell rebind the new listener is live (installed after the
+			// loop's top sets s.served — rebind only needs Serve past next).
+			select {
+			case s.installed <- struct{}{}:
+			default:
+			}
+		case <-ctx.Done():
+			return nil
 		}
 	}
-	s.startBackground(ctx)
-	err := s.http.Serve(ln)
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
+}
+
+// wrapTLS adds the plain/TLS sniffer when HTTPS is on. Caller holds lnMu.
+func (s *Server) wrapTLS(ln net.Listener) net.Listener {
+	s.httpsOn.Store(false)
+	if !s.app.Cfg().PanelHTTPS {
+		return ln
+	}
+	tlsConf, err := s.panelTLSConfig()
+	if err != nil {
+		s.app.Log.Printf("HTTPS disabled: %v", err)
+		return ln
+	}
+	s.httpsOn.Store(true)
+	s.app.Log.Printf("panel HTTPS enabled on the same port (https://…:%d/)", s.port)
+	return newSniffListener(ln, tlsConf)
+}
+
+// FixBind records that the panel was started with -bind: the address is the
+// admin's choice, so an access change keeps it (only HTTPS follows).
+func (s *Server) FixBind() { s.bindFixed = true }
+
+// AccessChange is what ApplyAccess did, for the page that changed it.
+type AccessChange struct {
+	Applied bool   `json:"applied"`         // the panel now listens as the settings say
+	Bind    string `json:"bind"`            // "" = every interface, else the host
+	HTTPS   bool   `json:"https"`           // TLS is on
+	Error   string `json:"error,omitempty"` // why it could not move (it kept the old address)
+}
+
+// ApplyAccess moves the panel's listener to what the settings ask for — all
+// interfaces for Local network / Internet, loopback for Local only —
+// and turns HTTPS on or off, without a manager restart. Connections that are
+// already open stay open (the page that asked gets its answer); keep-alive
+// connections are recycled so a device that lost access is cut off at once.
+func (s *Server) ApplyAccess() AccessChange {
+	// Two quick saves must not switch over each other: the second would find
+	// the first listener not yet taken by Serve.
+	s.accessMu.Lock()
+	defer s.accessMu.Unlock()
+	cfg := s.app.Cfg()
+	want := "127.0.0.1"
+	if cfg.Exposure == "lan" || cfg.Exposure == "internet" {
+		want = ""
+	}
+	s.lnMu.Lock()
+	if s.bindFixed {
+		want = s.bind
+	}
+	same := want == s.bind && cfg.PanelHTTPS == s.httpsOn.Load()
+	s.lnMu.Unlock()
+	if same {
+		return AccessChange{Applied: true, Bind: want, HTTPS: cfg.PanelHTTPS}
+	}
+	if err := s.rebind(want); err != nil {
+		s.app.Log.Printf("panel access: %v", err)
+		s.lnMu.Lock()
+		defer s.lnMu.Unlock()
+		return AccessChange{Bind: s.bind, HTTPS: s.httpsOn.Load(), Error: err.Error()}
+	}
+	// Idle keep-alive connections opened under the old setting are dropped.
+	s.http.SetKeepAlivesEnabled(false)
+	s.http.SetKeepAlivesEnabled(true)
+	s.lnMu.Lock()
+	defer s.lnMu.Unlock()
+	s.app.Log.Printf("panel access changed: now listening on %s", net.JoinHostPort(displayBind(s.bind), fmt.Sprint(s.port)))
+	return AccessChange{Applied: true, Bind: s.bind, HTTPS: cfg.PanelHTTPS}
+}
+
+func displayBind(b string) string {
+	if b == "" {
+		return "0.0.0.0"
+	}
+	return b
+}
+
+// rebind closes the listener and opens one on bind (same port). When the new
+// address cannot be opened the old one is opened again, so the panel never
+// goes deaf.
+func (s *Server) rebind(bind string) error {
+	err := s.swapListener(bind)
+	// Wait until Serve runs on the new listener (or the old one, reopened),
+	// so the next change finds a live one.
+	select {
+	case <-s.installed:
+	case <-time.After(3 * time.Second):
 	}
 	return err
 }
 
+func (s *Server) swapListener(bind string) error {
+	s.lnMu.Lock()
+	defer s.lnMu.Unlock()
+	if s.served == nil {
+		return errors.New("the panel is not serving yet")
+	}
+	// A stale signal from an earlier switch must not end the wait early.
+	select {
+	case <-s.installed:
+	default:
+	}
+	old := s.bind
+	s.switching = true
+	_ = s.served.Close() // http.Serve returns and waits for s.next
+	listen := func(host string) (net.Listener, error) {
+		var err error
+		for try := 0; try < 10; try++ {
+			var ln net.Listener
+			if ln, err = net.Listen("tcp", net.JoinHostPort(host, fmt.Sprint(s.port))); err == nil {
+				return ln, nil
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		return nil, err
+	}
+	ln, err := listen(bind)
+	if err != nil {
+		back, err2 := listen(old)
+		if err2 != nil {
+			s.switching = false
+			return fmt.Errorf("could not open %s (%v) nor reopen %s (%v)", net.JoinHostPort(displayBind(bind), fmt.Sprint(s.port)), err, displayBind(old), err2)
+		}
+		s.next <- back
+		return fmt.Errorf("could not open %s: %w", net.JoinHostPort(displayBind(bind), fmt.Sprint(s.port)), err)
+	}
+	s.bind = bind
+	s.next <- ln
+	return nil
+}
+
 // HTTPS reports whether the panel listener also serves TLS.
-func (s *Server) HTTPS() bool { return s.httpsOn }
+func (s *Server) HTTPS() bool { return s.httpsOn.Load() }
 
 // LoginEnabled reports whether the panel requires a login.
 func (s *Server) LoginEnabled() bool { return s.h.auth.enabled() }
@@ -247,6 +416,15 @@ func (s *Server) startBackground(ctx context.Context) {
 	go util.SafeLoop(lg, "session flush loop", func() { s.h.sessionFlushLoop(ctx) })
 	// Router port forwards (Settings → Remote access), renewed while running.
 	go util.SafeLoop(lg, "UPnP loop", func() { s.h.upnpLoop(ctx) })
+	// The public address, re-checked while Remote access → "keep checking" is on.
+	go util.SafeLoop(lg, "public address watch", func() { s.h.remoteWatchLoop(ctx) })
+	// The item catalog (Player loadout's pickers) reads every game archive:
+	// keep a copy on disk and build it now, before anyone opens the page.
+	items.SetCacheDir(filepath.Join(s.app.ManagerDir, "cache"))
+	go util.SafeGo(lg, "item catalog", func() {
+		time.Sleep(3 * time.Second)
+		_, _ = s.h.catalogData()
+	})
 	go func() {
 		<-ctx.Done()
 		sdCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -260,6 +438,10 @@ func (s *Server) startBackground(ctx context.Context) {
 func (s *Server) startInstance(ctx context.Context, inst *instance) {
 	ictx, cancel := context.WithCancel(ctx)
 	inst.cancel = cancel
+	// The Steam Workshop mod source: SteamCMD updates for the auto-update,
+	// and the source folder kept on the panel's SteamCMD.
+	inst.h.app.SetWorkshopHooks(inst.h.workshopHooks())
+	inst.h.syncSteamCMDSource()
 	h := inst.h
 	lg := h.app.Log
 	// Scheduled config backups (Settings → Automatic backups). Lives with the

@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -72,10 +73,25 @@ type KillEvent struct {
 	Pos []float64 `json:"pos,omitempty"`
 }
 
+// BaseEvent is one base-building action from the admin log: something
+// placed or built, a part or lock destroyed (a raid), a stash dug in or out,
+// a flag raised or lowered. Pos is where the player stood, next to the object.
+type BaseEvent struct {
+	At     string `json:"at"` // RFC3339
+	Player string `json:"player"`
+	Key    string `json:"key,omitempty"` // the player's key, for their profile
+	admlog.Base
+	Pos []float64 `json:"pos"`
+}
+
 type db struct {
 	Players  map[string]*Player `json:"players"`
 	Killfeed []KillEvent        `json:"killfeed"`
 	Offsets  map[string]int64   `json:"offsets"`
+	Bases    []BaseEvent        `json:"bases,omitempty"`
+	// BasesSeeded is set once the logs read before base events were kept
+	// have been searched for them (an upgrade from an older version).
+	BasesSeeded bool `json:"basesSeeded,omitempty"`
 }
 
 type Store struct {
@@ -92,6 +108,9 @@ type Store struct {
 	// not log positions continuously, so these can be stale between events.
 	lastPos   map[string][]float64
 	lastPosAt map[string]time.Time
+	// The positions before the last one, oldest first — the live map's trail
+	// of where each player went. In-memory, cut at a death or a disconnect.
+	trail map[string][]TrailPt
 	// Recent connects of watch-flagged players — a transient notification feed
 	// for the panel, not persisted (a fresh feed after a restart is fine).
 	watchLog []WatchEvent
@@ -119,7 +138,14 @@ type WatchEvent struct {
 
 const (
 	maxKillfeed = 500
-	maxAliases  = 8
+	maxBases    = 3000
+	// A trail keeps the last two hours, at most 40 points (the 5-minute
+	// player list gives 24 an hour; fights and chat add more).
+	maxTrail    = 40
+	trailWindow = 2 * time.Hour
+	// Searching the old logs for base events reads at most this much.
+	maxSeedParse = 64 * 1024 * 1024
+	maxAliases   = 8
 	// A cold start on a huge ADM only reads the newest chunk — ancient
 	// history isn't worth minutes of parsing.
 	maxColdParse = 16 * 1024 * 1024
@@ -132,6 +158,7 @@ func Open(managerDir string) *Store {
 		open:      map[string]time.Time{},
 		lastPos:   map[string][]float64{},
 		lastPosAt: map[string]time.Time{},
+		trail:     map[string][]TrailPt{},
 		opened:    time.Now(),
 	}
 	if data, err := os.ReadFile(s.path); err == nil {
@@ -183,6 +210,11 @@ func (s *Store) ingestLocked(profilesDir string) []LiveEvent {
 		return nil
 	}
 	changed := false
+	if !s.d.BasesSeeded {
+		s.seedBases(profilesDir, entries)
+		s.d.BasesSeeded = true
+		changed = true
+	}
 	for _, e := range entries {
 		if e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".adm") {
 			continue
@@ -236,22 +268,42 @@ func (s *Store) ingestFile(path string, size int64, mtime time.Time) bool {
 	chunk := data[:last+1]
 	s.d.Offsets[path] = off + int64(last+1)
 
+	changed := false
+	s.eachEvent(path, chunk, off > 0, mtime, func(ev admlog.Event, at time.Time) {
+		if s.apply(ev, at.Format(time.RFC3339), at) {
+			changed = true
+			// Only what happened while the manager runs is news.
+			if s.OnLive != nil && !at.Before(s.opened.Add(-2*time.Minute)) && time.Since(at) < 10*time.Minute {
+				le := LiveEvent{Event: ev, At: at}
+				if p := s.d.Players[keyFor(ev.ID, ev.Player)]; p != nil {
+					le.Player = *p
+				}
+				s.pending = append(s.pending, le)
+			}
+		}
+	})
+	return changed
+}
+
+// eachEvent parses a chunk of an .ADM file and calls fn with every event and
+// the moment it happened. midFile says the chunk starts after a seek, so its
+// first line may be a partial one.
+func (s *Store) eachEvent(path string, chunk []byte, midFile bool, mtime time.Time, fn func(admlog.Event, time.Time)) {
 	// Stamping every event with the file's mtime made a connect and its
 	// disconnect share a timestamp, so every session lasted 0 minutes. Rebuild
 	// the real moment from the log's header date plus each line's HH:MM:SS.
 	day := s.headerDay(path, mtime)
 	prev := time.Duration(-1)
 
-	changed := false
 	sc := bufio.NewScanner(bytes.NewReader(chunk))
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
-	first := off > 0
+	first := midFile
 	for sc.Scan() {
 		line := sc.Text()
 		if first {
 			first = false
 			// After a mid-file seek the first "line" may be a partial one.
-			if off > 0 && !strings.HasPrefix(line, "0") && !strings.HasPrefix(line, "1") && !strings.HasPrefix(line, "2") {
+			if !strings.HasPrefix(line, "0") && !strings.HasPrefix(line, "1") && !strings.HasPrefix(line, "2") {
 				continue
 			}
 		}
@@ -269,19 +321,71 @@ func (s *Store) ingestFile(path string, size int64, mtime time.Time) bool {
 			prev = tod
 			at = day.Add(tod)
 		}
-		if s.apply(ev, at.Format(time.RFC3339), at) {
-			changed = true
-			// Only what happened while the manager runs is news.
-			if s.OnLive != nil && !at.Before(s.opened.Add(-2*time.Minute)) && time.Since(at) < 10*time.Minute {
-				le := LiveEvent{Event: ev, At: at}
-				if p := s.d.Players[keyFor(ev.ID, ev.Player)]; p != nil {
-					le.Player = *p
-				}
-				s.pending = append(s.pending, le)
-			}
-		}
+		fn(ev, at)
 	}
-	return changed
+}
+
+// seedBases searches the part of every log that was read before base events
+// were kept (up to its stored offset — the rest is ingested as usual), newest
+// files first and within maxSeedParse, so an upgrade does not start the
+// bases map empty. Caller holds s.mu.
+func (s *Store) seedBases(profilesDir string, entries []os.DirEntry) {
+	type admFile struct {
+		path  string
+		off   int64
+		mtime time.Time
+	}
+	var files []admFile
+	for _, e := range entries {
+		if e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".adm") {
+			continue
+		}
+		full := filepath.Join(profilesDir, e.Name())
+		info, err := e.Info()
+		if err != nil || s.d.Offsets[full] <= 0 {
+			continue
+		}
+		files = append(files, admFile{full, s.d.Offsets[full], info.ModTime()})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].mtime.After(files[j].mtime) })
+	var found []BaseEvent
+	budget := int64(maxSeedParse)
+	for _, f := range files {
+		if budget <= 0 {
+			break
+		}
+		from := f.off - budget
+		if from < 0 {
+			from = 0
+		}
+		budget -= f.off - from
+		fh, err := os.Open(f.path)
+		if err != nil {
+			continue
+		}
+		data := make([]byte, f.off-from)
+		n, _ := fh.ReadAt(data, from)
+		fh.Close()
+		s.eachEvent(f.path, data[:n], from > 0, f.mtime, func(ev admlog.Event, at time.Time) {
+			if b, ok := baseEvent(ev, at); ok {
+				found = append(found, b)
+			}
+		})
+	}
+	sort.SliceStable(found, func(i, j int) bool { return found[i].At < found[j].At })
+	s.d.Bases = append(found, s.d.Bases...)
+	if len(s.d.Bases) > maxBases {
+		s.d.Bases = s.d.Bases[len(s.d.Bases)-maxBases:]
+	}
+}
+
+// baseEvent turns a base-building line into a BaseEvent.
+func baseEvent(ev admlog.Event, at time.Time) (BaseEvent, bool) {
+	b, ok := admlog.BaseAction(ev)
+	if !ok || len(ev.Pos) < 2 {
+		return BaseEvent{}, false
+	}
+	return BaseEvent{At: at.Format(time.RFC3339), Player: ev.Player, Key: keyFor(ev.ID, ev.Player), Base: b, Pos: xz(ev.Pos)}, true
 }
 
 func keyFor(id, name string) string {
@@ -343,12 +447,15 @@ func (s *Store) apply(ev admlog.Event, stamp string, at time.Time) bool {
 			}
 			delete(s.open, p.Key)
 		}
+		// Gone from the world: no last-known dot where they logged out.
+		s.dropPos(p.Key)
 		return true
 	case "kill":
 		// Line shape: Player "Victim" (DEAD) ... killed by Player "Killer".
 		victim := s.player(ev.ID, ev.Player, stamp)
 		if victim != nil {
 			victim.Deaths++
+			s.dropPos(victim.Key) // the body stays, the player respawns elsewhere
 		}
 		var killerName string
 		if ev.Target != "" {
@@ -380,6 +487,7 @@ func (s *Store) apply(ev admlog.Event, stamp string, at time.Time) bool {
 			return false
 		}
 		p.Deaths++
+		s.dropPos(p.Key)
 		// A bare death line is bleeding, starvation, hypothermia — environment,
 		// not a suicide, unless the log says so.
 		kind := "env"
@@ -397,15 +505,60 @@ func (s *Store) apply(ev admlog.Event, stamp string, at time.Time) bool {
 		}
 		s.recordPos(p.Key, xz(ev.Pos), at)
 		return true
+	case "position", "other":
+		// The 5-minute player list, and every other line about a player that
+		// carries a position (placing, building, emotes, unconsciousness):
+		// all of them say where the player is now.
+		if ev.Player == "" || ev.Pos == nil {
+			return false
+		}
+		p := s.player(ev.ID, ev.Player, stamp)
+		if p == nil {
+			return false
+		}
+		s.recordPos(p.Key, xz(ev.Pos), at)
+		if b, ok := baseEvent(ev, at); ok {
+			b.Key = p.Key
+			s.d.Bases = append(s.d.Bases, b)
+			if len(s.d.Bases) > maxBases {
+				s.d.Bases = s.d.Bases[len(s.d.Bases)-maxBases:]
+			}
+		}
+		return true
 	}
 	return false
 }
 
+// dropPos forgets a player's last-known position and trail. Caller holds s.mu.
+func (s *Store) dropPos(key string) {
+	delete(s.lastPos, key)
+	delete(s.lastPosAt, key)
+	delete(s.trail, key)
+}
+
+// TrailPt is one earlier position of a player on the live map.
+type TrailPt struct {
+	X  float64   `json:"x"`
+	Z  float64   `json:"z"`
+	At time.Time `json:"-"`
+}
+
 // recordPos stores a player's last-known ground position. Caller holds s.mu.
 // A nil position (line without pos=<…>) is ignored so the previous fix stands.
+// The position it replaces joins the player's trail.
 func (s *Store) recordPos(key string, pos []float64, at time.Time) {
 	if pos == nil {
 		return
+	}
+	if old := s.lastPos[key]; len(old) >= 2 {
+		// Standing still (or a burst of lines from one spot) adds nothing.
+		if math.Hypot(old[0]-pos[0], old[1]-pos[1]) >= 5 {
+			tr := append(s.trail[key], TrailPt{X: old[0], Z: old[1], At: s.lastPosAt[key]})
+			if len(tr) > maxTrail {
+				tr = tr[len(tr)-maxTrail:]
+			}
+			s.trail[key] = tr
+		}
 	}
 	s.lastPos[key] = pos
 	s.lastPosAt[key] = at
@@ -418,6 +571,9 @@ type LivePos struct {
 	X      float64 `json:"x"`
 	Z      float64 `json:"z"`
 	AgeSec int     `json:"ageSec"` // seconds since the position was logged
+	// Trail is where the player was before, oldest first, over the two hours
+	// before the last position: [x, z] pairs.
+	Trail [][2]float64 `json:"trail,omitempty"`
 }
 
 // LivePositions returns the last-known location of every player the store has
@@ -439,8 +595,23 @@ func (s *Store) LivePositions() []LivePos {
 		if age < 0 {
 			age = 0
 		}
-		out = append(out, LivePos{Key: k, Name: name, X: pos[0], Z: pos[1], AgeSec: age})
+		lp := LivePos{Key: k, Name: name, X: pos[0], Z: pos[1], AgeSec: age}
+		for _, t := range s.trail[k] {
+			if s.lastPosAt[k].Sub(t.At) <= trailWindow {
+				lp.Trail = append(lp.Trail, [2]float64{t.X, t.Z})
+			}
+		}
+		out = append(out, lp)
 	}
+	return out
+}
+
+// Bases returns the kept base-building events, oldest first.
+func (s *Store) Bases() []BaseEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]BaseEvent, len(s.d.Bases))
+	copy(out, s.d.Bases)
 	return out
 }
 

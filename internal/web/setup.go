@@ -31,7 +31,8 @@ func (h *handlers) setupChecklist(w http.ResponseWriter, r *http.Request) {
 	unq := func(s string) string { return strings.TrimSpace(strings.Trim(strings.TrimSpace(s), `";`)) }
 	hostname, adminPass = unq(hostname), unq(adminPass)
 
-	srcOK := c.EffectiveModSource() == config.ModSourceServer
+	// Server-only needs no source; SteamCMD installs itself on first use.
+	srcOK := c.EffectiveModSource() == config.ModSourceServer || c.EffectiveModSource() == config.ModSourceSteamCMD
 	if dir := c.ModSourceDir(); dir != "" {
 		if st, err := os.Stat(dir); err == nil && st.IsDir() {
 			srcOK = true
