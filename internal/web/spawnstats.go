@@ -4,6 +4,7 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"dayzmanager/internal/app"
 	"dayzmanager/internal/config"
@@ -45,13 +46,74 @@ func (h *handlers) spawnStats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	applied := false
-	if !h.app.ServerIsRunning() {
-		if err := h.app.SyncServerTweaks(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		applied = true
+	applied, err := h.applyTweaks()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	writeJSON(w, map[string]interface{}{"ok": true, "applied": applied})
+}
+
+// applyTweaks rewrites the server tweaks mod now when the server is stopped
+// (it holds the archive open while it runs; the next start writes it then).
+func (h *handlers) applyTweaks() (bool, error) {
+	if h.app.ServerIsRunning() {
+		return false, nil
+	}
+	return true, h.app.SyncServerTweaks()
+}
+
+// spawnChamber is the loadout's "round in the chamber" switch: the weapon
+// classes a fresh character's spawn gear loads without one
+// (config.Unchambered). GET lists them; POST {"class", "chambered"} sets one
+// class. Like the stats, the server tweaks mod applies it.
+func (h *handlers) spawnChamber(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		writeJSON(w, map[string]interface{}{"unchambered": orEmpty(app.ChamberClasses(h.app.Cfg().Unchambered))})
+		return
+	}
+	var req struct {
+		Class     string `json:"class"`
+		Chambered bool   `json:"chambered"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	cls := strings.ToLower(strings.TrimSpace(req.Class))
+	if cls == "" || len(cls) > 128 || strings.ContainsAny(cls, "\"\\\r\n<>&") {
+		http.Error(w, "invalid weapon class", http.StatusBadRequest)
+		return
+	}
+	var list []string
+	if err := h.app.MutateConfig(func(c *config.Manager) error {
+		kept := []string{}
+		for _, x := range app.ChamberClasses(c.Unchambered) {
+			if x != cls {
+				kept = append(kept, x)
+			}
+		}
+		if !req.Chambered {
+			kept = append(kept, cls)
+		}
+		c.Unchambered = app.ChamberClasses(kept)
+		list = c.Unchambered
+		return nil
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	applied, err := h.applyTweaks()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"ok": true, "applied": applied, "unchambered": orEmpty(list)})
+}
+
+func orEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

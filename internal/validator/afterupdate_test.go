@@ -87,6 +87,62 @@ func TestHealKeepsAnEmptiedList(t *testing.T) {
 	}
 }
 
+// A loadout saved by an older panel: a rifle's attachments without a
+// condition block, which DayZ spawned ruined. The validator reports it, and
+// the start-up repair gives every item a pristine, full block once — with a
+// backup — leaving the condition the admin chose alone.
+func TestLoadoutGapsHealedBeforeStart(t *testing.T) {
+	o, m := updatedServer(t)
+	path := filepath.Join(m, "fresh_spawn.json")
+	os.WriteFile(path, []byte(`{
+    "spawnWeight": 1, "name": "Old", "characterTypes": [],
+    "attachmentSlotItemSets": [
+        { "slotName": "Shoulder", "discreteItemSets": [
+            { "itemType": "M4A1", "spawnWeight": 1, "quickBarSlot": 0,
+              "attributes": { "healthMin": 0.5, "healthMax": 0.6, "quantityMin": 1, "quantityMax": 1 },
+              "complexChildrenTypes": [
+                { "itemType": "M4_RISHndgrd", "quickBarSlot": -1 },
+                { "itemType": "M4_Suppressor", "quickBarSlot": -1 } ] } ] }
+    ],
+    "discreteUnsortedItemSets": []
+}`), 0o644)
+	if err := dztypes.SetRegisteredGearFiles(filepath.Join(m, "cfggameplay.json"), []string{"fresh_spawn.json"}); err != nil {
+		t.Fatal(err)
+	}
+	var gaps *Issue
+	for _, is := range checkAfterUpdate(o) {
+		if is.Code == "gear.gaps" {
+			is := is
+			gaps = &is
+		}
+	}
+	if gaps == nil || gaps.Args["n"] != "2" || gaps.Args["files"] != "fresh_spawn.json" {
+		t.Fatalf("gear.gaps = %+v, want 2 items in fresh_spawn.json", gaps)
+	}
+	if _, err := HealAfterUpdate(o); err != nil {
+		t.Fatal(err)
+	}
+	p, err := dztypes.LoadGearPreset(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gun := p.AttachmentSlotItemSets[0].DiscreteItemSets[0]
+	if *gun.Attributes.HealthMin != 0.5 {
+		t.Errorf("the rifle's chosen condition changed: %v", *gun.Attributes.HealthMin)
+	}
+	for _, c := range gun.ComplexChildrenTypes {
+		if c.Attributes == nil || *c.Attributes.HealthMin != 1 || *c.Attributes.HealthMax != 1 {
+			t.Errorf("%s still has no pristine condition: %+v", c.ItemType, c.Attributes)
+		}
+	}
+	if codes(checkAfterUpdate(o))["gear.gaps"] != 0 {
+		t.Error("still reported after the repair")
+	}
+	if baks, _ := filepath.Glob(path + ".bak.*"); len(baks) != 1 {
+		t.Errorf("backups of the old file = %v, want one", baks)
+	}
+}
+
 // A listed loadout file that is gone switches every loadout off; the fix
 // drops the entry, and with the rest still listed turns the switch on.
 func TestBrokenLoadoutEntry(t *testing.T) {

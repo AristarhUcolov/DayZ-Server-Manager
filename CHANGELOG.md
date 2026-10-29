@@ -12,7 +12,7 @@ list under **What's new**; older versions are on the
 
 [Русская версия ↓](#русский)
 
-## 1.1.0 — “The Halloween Update” (2026-10-28)
+## 1.1.0 — “The Halloween Update” (2026-10-29)
 
 ### Vehicles, attachments and presets — like the player loadout
 
@@ -22,7 +22,10 @@ list under **What's new**; older versions are on the
   A click on a part opens it in a dialog; empty slots add parts from the game's
   own list; “All colours” sets how complete every colour spawns; “Fill empty
   slots” puts the right part in each. **What's in the trunk** is edited the same
-  way. Boats, trucks and motorbikes have their own drawings.
+  way, and a weapon in the trunk gets attachments just like in the loadout: the
+  “Attachments” button on its row edits the weapon's own entry, which DayZ uses
+  wherever that weapon spawns. Boats, trucks and motorbikes have their own
+  drawings.
 - **Attachments** draws the item with its slots too, and every group — on the
   item and inside it — is a list of rows with the item's icon, name and class,
   its weight and real chance, added and swapped from the catalog instead of
@@ -32,10 +35,18 @@ list under **What's new**; older versions are on the
 
 ### Player loadout
 
+- **Attachments no longer spawn ruined**: the panel saved the parts on a
+  weapon or a vest without a condition, and DayZ made them ruined. Every item
+  now has its own — pristine and full unless you choose otherwise — and
+  loadouts saved earlier are fixed by themselves before the next server start
+  (with a backup; the validator lists them too).
 - **Hotbar keys for nested items**: a pistol in a vest's holster (or anything
   attached to clothing) can sit on a hotbar key — DayZ sets keys at any depth.
 - **Loaded weapons**: a weapon with a magazine spawns loaded, a round in the
   chamber — nobody presses R. A Load button and “loaded / empty” marks show it.
+- **Round in the chamber — your choice**: a switch under every loaded weapon.
+  Off, the magazine goes in full and the player chambers a round with R. It
+  applies to that weapon in every loadout, through the panel's server-side mod.
 - **DayZ's attachment rules**: a bayonet and a suppressor or muzzle brake
   exclude each other, and a weapon light needs a handguard with a rail. The
   editor warns on the tile, offers to replace or to add the rail handguard, and
@@ -58,6 +69,13 @@ list under **What's new**; older versions are on the
 
 ### Also new
 
+- **Globals — “At a glance”**: sliders with pictures for the main numbers —
+  infected and animals on the map, the condition loot spawns in, how far from
+  players infected appear, how long a character stays after leaving, how often
+  a base flag must be raised. The field below follows the slider.
+- **Gameplay → Interface** is picked from pictures too: the hit indicator's
+  look and behaviour (in the colour you set), the map (full screen or in the
+  hands) and the glow around players.
 - **Night lighting** on the Gameplay page is picked from four pictures of the
   same night, a candle showing how dark each one is.
 - **Time of day** on the Server page is drawn: the sky at the start time, how
@@ -178,7 +196,7 @@ list under **What's new**; older versions are on the
 
 [English version ↑](#english)
 
-## 1.1.0 — «Хэллуинское обновление» (28.10.2026)
+## 1.1.0 — «Хэллуинское обновление» (29.10.2026)
 
 ### Транспорт, обвесы и пресеты — как «Набор игрока»
 
@@ -188,8 +206,10 @@ list under **What's new**; older versions are on the
   настройки рядом. Клик по детали открывает её в окне; пустые слоты добавляют
   детали из списка самой игры; «Все цвета» задаёт комплектность всех цветов
   сразу; «Заполнить пустые слоты» ставит подходящую деталь в каждый. **Что в
-  багажнике** редактируется так же. У лодок, грузовиков и мотоциклов свои
-  рисунки.
+  багажнике** редактируется так же, а оружию в багажнике обвесы задаются как в
+  наборе игрока: кнопка «Обвесы» в его строке открывает собственную запись
+  оружия, которую DayZ применяет везде, где это оружие появляется. У лодок,
+  грузовиков и мотоциклов свои рисунки.
 - **Обвесы** тоже рисуют предмет со слотами, а каждая группа — на предмете и
   внутри него — это строки с иконкой, названием и классом, весом и реальным
   шансом; вещи добавляются и заменяются из каталога, а не вводом классов.
@@ -199,12 +219,20 @@ list under **What's new**; older versions are on the
 
 ### Набор игрока
 
+- **Обвесы больше не появляются испорченными**: панель сохраняла детали на
+  оружии и жилете без состояния, и DayZ создавал их испорченными. Теперь у
+  каждой вещи своё состояние — новое и полное, если не выбрано другое, — а
+  сохранённые раньше наборы исправляются сами перед следующим запуском сервера
+  (с резервной копией; валидатор тоже их показывает).
 - **Клавиши для вложенных вещей**: пистолет в кобуре бронежилета (и всё, что
   висит на одежде) можно назначить на клавишу — DayZ ставит их на любой
   глубине.
 - **Заряженное оружие**: оружие с магазином появляется заряженным, с патроном
   в патроннике, — нажимать R не нужно. Кнопка «Зарядить» и отметки
   «заряжено / не заряжено».
+- **Патрон в патроннике — на выбор**: переключатель у каждого заряженного
+  оружия. Если выключить, магазин вставлен полным, а патрон игрок досылает сам
+  (R). Действует для этого оружия во всех наборах, через серверный мод панели.
 - **Правила обвесов DayZ**: штык-нож и глушитель или дульное устройство
   исключают друг друга, а фонарю нужно цевьё с планкой. Редактор предупреждает
   на плитке, предлагает заменить или поставить цевьё с планкой и сохраняет
@@ -228,6 +256,14 @@ list under **What's new**; older versions are on the
 
 ### Ещё
 
+- **«Глобальные» — блок «Наглядно»**: ползунки с рисунками для главных чисел —
+  заражённые и животные на карте, состояние появляющегося лута, на каком
+  расстоянии от игроков появляются заражённые, сколько персонаж остаётся в мире
+  после выхода, как часто поднимать флаг базы. Поле ниже меняется вместе с
+  ползунком.
+- **«Геймплей» → «Интерфейс»** тоже выбирается по картинкам: вид и поведение
+  индикатора попаданий (в заданном цвете), карта (на весь экран или в руках) и
+  свечение вокруг игрока.
 - **Освещение ночью** в «Геймплее» выбирается по четырём картинкам одной и
   той же ночи — свеча показывает, насколько темно в каждом режиме.
 - **Время суток** на странице «Сервер» нарисовано: небо в момент старта,

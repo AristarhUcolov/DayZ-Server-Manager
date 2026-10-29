@@ -114,6 +114,9 @@ func LoadGearPreset(path string) (*GearPreset, error) {
 //     healthMin..healthMax and quantityMin..quantityMax, and a missing bound
 //     reads as 0: no health means a RUINED item, no quantity an empty canteen
 //     or magazine;
+//   - an attachment or content item written without "attributes" came out
+//     ruined on live servers too (the JSON reader evidently hands it an empty
+//     block, all zeros), so every item gets its own;
 //   - a missing quickBarSlot reads as 0, binding the item to quick-bar slot 1;
 //   - simpleChildrenUseDefaultAttributes = true spawns the loose children as
 //     the game makes them (pristine, normal amount); false hands them the
@@ -123,13 +126,23 @@ func LoadGearPreset(path string) (*GearPreset, error) {
 // quick-bar slot, children as new. Values the user chose are never touched.
 func (p *GearPreset) Normalize() {
 	full := func() *float64 { v := 1.0; return &v }
+	// A range with one bound missing takes the other one (DayZ would read
+	// the missing bound as 0); with none, it is full.
+	pair := func(lo, hi **float64) {
+		switch {
+		case *lo == nil && *hi == nil:
+			*lo, *hi = full(), full()
+		case *lo == nil:
+			v := **hi
+			*lo = &v
+		case *hi == nil:
+			v := **lo
+			*hi = &v
+		}
+	}
 	fillAttrs := func(a *GearAttributes) {
-		if a.HealthMin == nil && a.HealthMax == nil {
-			a.HealthMin, a.HealthMax = full(), full()
-		}
-		if a.QuantityMin == nil && a.QuantityMax == nil {
-			a.QuantityMin, a.QuantityMax = full(), full()
-		}
+		pair(&a.HealthMin, &a.HealthMax)
+		pair(&a.QuantityMin, &a.QuantityMax)
 	}
 	var fill func(it *GearItem, needAttrs, quickBar bool)
 	fill = func(it *GearItem, needAttrs, quickBar bool) {
@@ -148,9 +161,7 @@ func (p *GearPreset) Normalize() {
 			it.SimpleChildrenUseDefault = &asNew
 		}
 		for i := range it.ComplexChildrenTypes {
-			// A child without attributes already spawns as new; one with
-			// attributes needs both ranges.
-			fill(&it.ComplexChildrenTypes[i], false, true)
+			fill(&it.ComplexChildrenTypes[i], true, true)
 		}
 	}
 	for si := range p.AttachmentSlotItemSets {
@@ -162,6 +173,32 @@ func (p *GearPreset) Normalize() {
 		// Cargo sets have no quick-bar slot of their own.
 		fill(&p.DiscreteUnsortedItemSets[i], true, false)
 	}
+}
+
+// Gaps counts the items DayZ would not spawn the way the editor shows them:
+// no "attributes" block, or one missing a health bound (ruined) or an amount
+// bound (empty). Normalize fills them.
+func (p *GearPreset) Gaps() int {
+	n := 0
+	var visit func(it *GearItem)
+	visit = func(it *GearItem) {
+		a := it.Attributes
+		if a == nil || a.HealthMin == nil || a.HealthMax == nil || a.QuantityMin == nil || a.QuantityMax == nil {
+			n++
+		}
+		for i := range it.ComplexChildrenTypes {
+			visit(&it.ComplexChildrenTypes[i])
+		}
+	}
+	for si := range p.AttachmentSlotItemSets {
+		for ii := range p.AttachmentSlotItemSets[si].DiscreteItemSets {
+			visit(&p.AttachmentSlotItemSets[si].DiscreteItemSets[ii])
+		}
+	}
+	for i := range p.DiscreteUnsortedItemSets {
+		visit(&p.DiscreteUnsortedItemSets[i])
+	}
+	return n
 }
 
 // LooksLikeGearPreset reports whether JSON data is a spawn-gear preset rather

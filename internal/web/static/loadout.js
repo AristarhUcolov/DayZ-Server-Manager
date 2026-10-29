@@ -46,8 +46,9 @@ const LO_CATS = ['clothing', 'weapons', 'medical', 'food', 'tools', 'containers'
 const LO_CAT_ICON = { clothing: 'i-s-top', weapons: 'i-s-shoulder', magazines: 'i-c-mag', ammo: 'i-c-ammo', attachments: 'i-c-scope',
   medical: 'i-c-med', food: 'i-c-food', tools: 'i-c-tool', containers: 'i-c-box', explosives: 'i-c-boom', other: 'i-c-other' };
 // Named condition ranges (healthMin/healthMax are health fractions, 1 =
-// pristine). "default" (children only) writes no attributes: as the game
-// makes the item.
+// pristine). Every item gets its own: attachments written without one
+// spawned ruined, so an unset condition is pristine (the server fills it in,
+// types.GearPreset.Normalize).
 const LO_COND = [
   { id: 'pristine', min: 1.0, max: 1.0 },
   { id: 'worn', min: 0.7, max: 0.9 },
@@ -191,9 +192,10 @@ function loToPreset(kit) {
   return p;
 }
 
+const loFullAttrs = () => ({ healthMin: 1, healthMax: 1, quantityMin: 1, quantityMax: 1 });
 const loNewItem = (cls, withAttrs) => {
   const it = { itemType: cls, spawnWeight: 1, quickBarSlot: -1, complexChildrenTypes: [] };
-  if (withAttrs) it.attributes = { healthMin: 1, healthMax: 1, quantityMin: 1, quantityMax: 1 };
+  if (withAttrs) it.attributes = loFullAttrs();
   return it;
 };
 
@@ -327,15 +329,14 @@ async function loPick({ title, slot, only, single, onAdd }) {
 
 // ---------------------------------------------------- attribute controls
 
-// loCondSel binds a condition select to obj.attributes. allowDefault (for
-// contents) adds "as the game makes it" = no attributes at all.
-function loCondSel(obj, allowDefault, onChange) {
-  const opts = [...(allowDefault ? ['default'] : []), ...LO_COND.map(c => c.id), 'custom'];
+// loCondSel binds a condition select to obj.attributes (none yet = pristine).
+function loCondSel(obj, onChange) {
+  const opts = [...LO_COND.map(c => c.id), 'custom'];
   const sel = h('select', { class: 'lo-sel', 'aria-label': t('loadout.condition') },
-    opts.map(id => h('option', { value: id, text: id === 'default' ? t('lo.cond.default') : t('loadout.cond.' + id) })));
+    opts.map(id => h('option', { value: id, text: t('loadout.cond.' + id) })));
   const a = obj.attributes;
   let cur = 'custom';
-  if (!a || a.healthMin == null) cur = allowDefault && !a ? 'default' : 'pristine';
+  if (!a || a.healthMin == null) cur = 'pristine';
   else for (const c of LO_COND) if (loNear(a.healthMin, c.min) && loNear(a.healthMax, c.max)) cur = c.id;
   sel.value = cur;
   const minIn = h('input', { type: 'number', min: '0', max: '1', step: '0.05', class: 'lo-num', 'aria-label': 'min' });
@@ -346,7 +347,6 @@ function loCondSel(obj, allowDefault, onChange) {
   const ensure = () => (obj.attributes || (obj.attributes = { quantityMin: 1, quantityMax: 1 }));
   sel.onchange = () => {
     custom.style.display = sel.value === 'custom' ? '' : 'none';
-    if (sel.value === 'default') { delete obj.attributes; onChange(); return; }
     if (sel.value === 'custom') { ensure().healthMin = parseFloat(minIn.value) || 0; ensure().healthMax = parseFloat(maxIn.value) || 0; onChange(); return; }
     const c = LO_COND.find(x => x.id === sel.value);
     ensure().healthMin = c.min; ensure().healthMax = c.max;
@@ -359,15 +359,14 @@ function loCondSel(obj, allowDefault, onChange) {
 }
 
 // loQtySel binds an amount select (items with a quantity: stacks, liquids,
-// magazines' rounds) to obj.attributes.quantity{Min,Max}.
-function loQtySel(obj, onChange, allowDefault) {
-  const ids = [...(allowDefault && !obj.attributes ? ['default'] : []), ...LO_QTY.map(q => q.id), 'custom'];
+// magazines' rounds) to obj.attributes.quantity{Min,Max} (none yet = full).
+function loQtySel(obj, onChange) {
+  const ids = [...LO_QTY.map(q => q.id), 'custom'];
   const sel = h('select', { class: 'lo-sel', 'aria-label': t('lo.qty') },
-    ids.map(id => h('option', { value: id, text: id === 'default' ? t('lo.cond.default') : t('lo.qty.' + id) })));
+    ids.map(id => h('option', { value: id, text: t('lo.qty.' + id) })));
   const a = obj.attributes || {};
   let cur = 'custom';
-  if (!obj.attributes && allowDefault) cur = 'default';
-  else if (a.quantityMin == null && a.quantityMax == null) cur = 'full';
+  if (a.quantityMin == null && a.quantityMax == null) cur = 'full';
   else for (const q of LO_QTY) if (loNear(a.quantityMin, q.min) && loNear(a.quantityMax, q.max)) cur = q.id;
   sel.value = cur;
   const minIn = h('input', { type: 'number', min: '0', max: '1', step: '0.05', class: 'lo-num', 'aria-label': 'min' });
@@ -378,7 +377,6 @@ function loQtySel(obj, onChange, allowDefault) {
   const ensure = () => (obj.attributes || (obj.attributes = { healthMin: 1, healthMax: 1 }));
   sel.onchange = () => {
     custom.style.display = sel.value === 'custom' ? '' : 'none';
-    if (sel.value === 'default') { delete obj.attributes; onChange(); return; }
     if (sel.value === 'custom') { ensure().quantityMin = parseFloat(minIn.value) || 0; ensure().quantityMax = parseFloat(maxIn.value) || 0; onChange(); return; }
     const q = LO_QTY.find(x => x.id === sel.value);
     ensure().quantityMin = q.min; ensure().quantityMax = q.max;
@@ -785,7 +783,7 @@ Views.loadout = async (root) => {
             h('span', { class: 'lo-pick-name' }, [h('b', { text: info.n }), h('code', { text: v.itemType }),
               info.unknown ? h('span', { class: 'lo-unknown', text: t('lo.unknownItem') }) : null]),
             items.length > 1 ? h('label', { class: 'lo-mini' }, [h('span', { i18n: 'lo.weight' }), wIn, pct]) : null,
-            loCondSel(v, false, changed),
+            loCondSel(v, changed),
             info.q ? loQtySel(v, changed) : null,
             holdable ? loHotbarSel(v, changed) : null,
             h('button', { type: 'button', class: 'icon-x', text: '×', title: t('action.delete'), 'aria-label': t('action.delete'),
@@ -814,32 +812,27 @@ Views.loadout = async (root) => {
     applyI18n();
   }
 
-  // A content item (inside a worn item, or carried): no attributes means as
-  // the game makes it; items with an amount get a full one.
+  // A content item (inside a worn item, or carried): pristine and full.
   function loNewChild(it) {
-    const c = { itemType: it.c, quickBarSlot: -1, complexChildrenTypes: [] };
-    if (it.q) c.attributes = { healthMin: 1, healthMax: 1, quantityMin: 1, quantityMax: 1 };
-    return c;
+    return { itemType: it.c, quickBarSlot: -1, attributes: loFullAttrs(), complexChildrenTypes: [] };
   }
 
   // itemRow is one carried / contained item: name, condition, amount, hotbar
   // and — when things go on or into it — a button to its attachments and
   // contents. opts.noHotbar: an attached part (it cannot sit on the hotbar);
   // opts.noInside: the row heads that item's own dialog.
-  function itemRow(c, allowDefault, onRemove, compact, opts = {}) {
+  function itemRow(c, onRemove, compact, opts = {}) {
     const info = loItemInfo(cat, c.itemType);
     const row = h('div', { class: 'lo-row' + (compact ? ' compact' : '') });
     const render = () => {
-      const had = !!c.attributes;
-      const onAttr = () => { changed(); if (!!c.attributes !== had) render(); };
       const n = (c.complexChildrenTypes || []).length;
       const weapon = info.k === 'weapons';
       row.replaceChildren(
         h('span', { class: 'lo-pick-ico' }, loIcon(loIconFor(info), 16)),
         h('span', { class: 'lo-pick-name' }, [h('b', { text: info.n }), h('code', { text: c.itemType }),
           info.unknown ? h('span', { class: 'lo-unknown', text: t('lo.unknownItem') }) : null, weapon ? loAmmoBadge(c) : null]),
-        loCondSel(c, allowDefault, onAttr),
-        info.q ? loQtySel(c, onAttr, allowDefault) : h('span'),
+        loCondSel(c, changed),
+        info.q ? loQtySel(c, changed) : h('span'),
         opts.noHotbar ? h('span') : loHotbarSel(c, changed),
         (info.i || n) && !opts.noInside
           ? h('button', { type: 'button', class: 'lo-inside-btn' + (n ? ' on' : ''), title: t(weapon ? 'li.open.weapon' : 'li.open'),
@@ -862,7 +855,7 @@ Views.loadout = async (root) => {
     const parts = [];
     // Anything a player carries can sit on the hotbar, a pistol in a vest's
     // holster too (DayZ sets the key at any depth), but not a weapon's parts.
-    if (opts.row) parts.push(itemRow(c, true, () => { if (opts.onRemove) opts.onRemove(); m.close(); }, true,
+    if (opts.row) parts.push(itemRow(c, () => { if (opts.onRemove) opts.onRemove(); m.close(); }, true,
       { noHotbar: !!(opts.parent && opts.parent.k === 'weapons'), noInside: true }));
     parts.push(info.i || info.unknown || (c.complexChildrenTypes || []).length
       ? loItemEditor(c, info, liCtx) : h('p', { class: 'hint', i18n: 'li.nothing' }));
@@ -875,7 +868,7 @@ Views.loadout = async (root) => {
   // What the item editor needs from the page.
   const liCtx = {
     info: (cls) => loItemInfo(cat, cls),
-    row: (c, onRemove, opts) => itemRow(c, true, onRemove, true, opts),
+    row: (c, onRemove, opts) => itemRow(c, onRemove, true, opts),
     open: openInside,
     changed: () => changed(),
   };
@@ -899,7 +892,7 @@ Views.loadout = async (root) => {
       }
       if (!b.items.length) box.append(h('p', { class: 'hint', i18n: 'lo.carry.empty' }));
       for (const c of b.items) {
-        box.append(itemRow(c, true, () => { b.items = b.items.filter(x => x !== c); renderCarry(); changed(); }));
+        box.append(itemRow(c, () => { b.items = b.items.filter(x => x !== c); renderCarry(); changed(); }));
       }
       box.append(h('button', { type: 'button', class: 'lo-add', text: '+ ' + t('lo.carry.addItem'), onclick: () =>
         loPick({ title: t('lo.carry.addItem'), onAdd: (it) => { b.items.push(loNewChild(it)); renderCarry(); changed(); } }) }));

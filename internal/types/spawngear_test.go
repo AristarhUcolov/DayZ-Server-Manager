@@ -218,9 +218,10 @@ func TestNormalizeFillsMissingConditionWithPristine(t *testing.T) {
 	}
 }
 
-// Children inside an item (a magazine in a weapon) that carry attributes get
-// the missing bounds filled too; ones without attributes stay as they are
-// (DayZ then spawns them new).
+// Children inside an item (a magazine in a weapon, a suppressor on it) get
+// the missing bounds filled too, and one without attributes gets a pristine,
+// full block: written without one, attachments spawned ruined on live
+// servers.
 func TestNormalizeComplexChildren(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "p.json")
@@ -231,12 +232,19 @@ func TestNormalizeComplexChildren(t *testing.T) {
             { "itemType": "M4A1", "spawnWeight": 1, "attributes": { "healthMin": 0.5, "healthMax": 0.6 },
               "complexChildrenTypes": [
                 { "itemType": "Mag_STANAG_30Rnd", "attributes": { "healthMin": 1, "healthMax": 1 } },
-                { "itemType": "M4_Suppressor" } ] } ] }
+                { "itemType": "M4_Suppressor" },
+                { "itemType": "M4_OEBttstck", "attributes": { "healthMax": 0.8, "quantityMin": 0.5 } } ] } ] }
     ],
     "discreteUnsortedItemSets": []
 }`), 0o644)
 	p, _ := LoadGearPreset(path)
+	if g := p.Gaps(); g != 4 {
+		t.Errorf("Gaps() = %d before Normalize, want 4 (gun without amount, magazine without amount, bare suppressor, half-set stock)", g)
+	}
 	p.Normalize()
+	if g := p.Gaps(); g != 0 {
+		t.Errorf("Gaps() = %d after Normalize, want 0", g)
+	}
 	gun := p.AttachmentSlotItemSets[0].DiscreteItemSets[0]
 	if *gun.Attributes.HealthMin != 0.5 || gun.Attributes.QuantityMax == nil {
 		t.Errorf("weapon attributes: %+v", gun.Attributes)
@@ -248,8 +256,14 @@ func TestNormalizeComplexChildren(t *testing.T) {
 	if mag.QuickBarSlot == nil || *mag.QuickBarSlot != -1 {
 		t.Error("a child without quickBarSlot was left bound to slot 1")
 	}
-	if gun.ComplexChildrenTypes[1].Attributes != nil {
-		t.Error("a child without attributes must stay that way (it spawns new)")
+	sup := gun.ComplexChildrenTypes[1].Attributes
+	if sup == nil || sup.HealthMin == nil || *sup.HealthMin != 1 || *sup.HealthMax != 1 || *sup.QuantityMax != 1 {
+		t.Errorf("an attachment without attributes must get a pristine, full block, got %+v", sup)
+	}
+	stock := gun.ComplexChildrenTypes[2].Attributes
+	if *stock.HealthMin != 0.8 || *stock.HealthMax != 0.8 || *stock.QuantityMin != 0.5 || *stock.QuantityMax != 0.5 {
+		t.Errorf("a range with one bound must take the other, got %v-%v / %v-%v",
+			*stock.HealthMin, *stock.HealthMax, *stock.QuantityMin, *stock.QuantityMax)
 	}
 }
 

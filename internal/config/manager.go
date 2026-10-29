@@ -253,6 +253,12 @@ type Manager struct {
 	// Player loadout page). Vanilla sets them in script too, so the same
 	// server-side mod applies them. nil: the game's own start values.
 	SpawnStats *SpawnStats `json:"spawnStats,omitempty"`
+
+	// Unchambered are the weapon classes (lower case) a fresh character's
+	// spawn gear loads without a round in the chamber: the magazine goes in,
+	// the player chambers a round. DayZ always chambers one, so the same mod
+	// changes that.
+	Unchambered []string `json:"unchambered,omitempty"`
 }
 
 // SpawnStats is a fresh character's food, water and warmth, each a fraction
@@ -442,6 +448,9 @@ func (m Manager) Clone() Manager {
 			}
 		}
 		c.SpawnStats = &st
+	}
+	if m.Unchambered != nil {
+		c.Unchambered = append([]string(nil), m.Unchambered...)
 	}
 	if m.MapSizes != nil {
 		c.MapSizes = make(map[string]int, len(m.MapSizes))

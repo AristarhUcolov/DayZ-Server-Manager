@@ -8696,6 +8696,7 @@ Views.globals = async (root) => {
   const search = h('input', { type: 'search', placeholder: t('globals.search'), 'aria-label': t('globals.search') });
   const noMatch = h('p', { class: 'hint', i18n: 'gameplay.nothing', hidden: true });
   const groupsHost = h('div', { class: 'gl-groups' });
+  let vis = null;
   for (const [g, icon] of GLOBALS_GROUPS) {
     const mine = vars.filter(v => ((GLOBALS_META[v.name] || {}).g || 'other') === g);
     if (!mine.length) continue;
@@ -8712,6 +8713,9 @@ Views.globals = async (root) => {
     sec._count = count;
     groupsHost.append(sec);
   }
+
+  // The main numbers as pictures with sliders, tied to the rows above.
+  vis = glVisuals(rows, () => changed(), running, label);
 
   function recount() {
     groupsHost.querySelectorAll('details.gl-group').forEach(sec => {
@@ -8755,6 +8759,7 @@ Views.globals = async (root) => {
     bar.hidden = n === 0;
     barText.textContent = tn('server.cfg.unsaved', { n });
     recount();
+    if (vis) vis.paint();
   }
   async function save() {
     const list = edits().map(r => ({ name: r.name, value: r.read() }));
@@ -8770,6 +8775,13 @@ Views.globals = async (root) => {
   root._isDirty = () => edits().length > 0;
 
   const changedTotal = rows.filter(r => r.meta.d != null && !same(r.orig, r.meta.d)).length;
+  if (vis.count) {
+    root.append(h('div', { class: 'card gl-vis-card' }, [
+      cardTitle('i-globals', 'gl.vis.title'),
+      h('p', { class: 'hint', i18n: 'gl.vis.hint' }),
+      vis.el,
+    ]));
+  }
   root.append(h('div', { class: 'card gl-card' }, [
     h('div', { class: 'players-toolbar gp2-toolbar' }, [
       search,
@@ -9407,6 +9419,11 @@ function gpNightSVG(n) {
 </svg>`;
 }
 
+// Settings the Gameplay page shows as pictures to pick from (visuals.js);
+// the yes/no ones among them leave the switch list for the grid.
+const GP_PICTURE_KEYS = ['lightingConfig', 'hitDirectionStyle', 'hitDirectionBehaviour', 'use3DMap', 'disablePersonalLight'];
+const GP_PICTURE_BOOLS = ['use3DMap', 'disablePersonalLight'];
+
 // gpNightPicker shows lightingConfig as the four nights to pick from.
 function gpNightPicker(cur, onPick, disabled) {
   const wrap = h('div', { class: 'gp-night', role: 'radiogroup', 'aria-label': t('gp.light.title') });
@@ -9529,7 +9546,7 @@ Views.gameplay = async (root) => {
     const keyLine = h('span', { class: 'gp2-keyline' }, [h('code', { class: 'cfg-key', text: key }), chip, resetBtn]);
     let block;
 
-    if (typeof val === 'boolean') {
+    if (typeof val === 'boolean' && !GP_PICTURE_BOOLS.includes(key)) {
       const cb = h('input', { type: 'checkbox', class: 'switch', disabled: running });
       cb.checked = val;
       cb.onchange = () => write(cb.checked);
@@ -9538,8 +9555,19 @@ Views.gameplay = async (root) => {
         conflict(key, val)].filter(Boolean))]);
     } else {
       let control;
+      const hitColour = () => (get(path) || {}).hitDirectionIndicatorColorStr;
       if (key === 'lightingConfig') {
         control = gpNightPicker(Number(val), (n) => write(n), running);
+      } else if (key === 'hitDirectionStyle') {
+        control = gpHitStylePicker(Number(val), (n) => write(n), running, hitColour);
+        control.classList.add('gp-hit');
+      } else if (key === 'hitDirectionBehaviour') {
+        control = gpHitBehaviourPicker(Number(val), (n) => write(n), running, hitColour);
+        control.classList.add('gp-hit');
+      } else if (key === 'use3DMap') {
+        control = gpMapPicker(!!val, (b) => write(b), running);
+      } else if (key === 'disablePersonalLight') {
+        control = gpLightPicker(!!val, (b) => write(b), running);
       } else if (typeof val === 'number') {
         control = h('input', { type: 'number', step: 'any', value: String(val), disabled: running });
         control.oninput = () => { const n = Number(control.value); if (control.value.trim() !== '' && !Number.isNaN(n)) write(n); };
@@ -9551,7 +9579,8 @@ Views.gameplay = async (root) => {
           sw.style.opacity = m ? String(Math.max(0.15, parseInt(m[1], 16) / 255)) : '1';
         };
         const inp = h('input', { type: 'text', class: 'mono', value: val, spellcheck: 'false', disabled: running });
-        inp.oninput = () => { write(inp.value.trim()); paint(inp.value); };
+        // The hit indicator pictures are drawn in this colour.
+        inp.oninput = () => { write(inp.value.trim()); paint(inp.value); formHost.querySelectorAll('.gp-hit').forEach(w => w._redraw && w._redraw()); };
         paint(val);
         control = h('div', { class: 'gp2-color' }, [sw, inp]);
       } else if (typeof val === 'string') {
@@ -9592,7 +9621,7 @@ Views.gameplay = async (root) => {
           try { write(JSON.parse(control.value)); control.classList.remove('bad'); } catch { control.classList.add('bad'); }
         };
       }
-      const wide = Array.isArray(val) || key === 'spawnGearPresetFiles' || key === 'lightingConfig';
+      const wide = Array.isArray(val) || key === 'spawnGearPresetFiles' || GP_PICTURE_KEYS.includes(key);
       const lab = h('label', { text: label(key) });
       if (control.tagName === 'INPUT') lab.setAttribute('for', assocId(control));
       const hm = gpHelp(key);
@@ -9619,7 +9648,7 @@ Views.gameplay = async (root) => {
     for (const k of keysOf(fileObj, defObj)) {
       const v = (fileObj && typeof fileObj === 'object' && k in fileObj) ? fileObj[k] : defObj[k];
       if (v && typeof v === 'object' && !Array.isArray(v)) subs.push(group(here, k, defObj[k], depth + 1));
-      else (typeof v === 'boolean' ? bools : grid).append(leaf(here, k, defObj[k]));
+      else (typeof v === 'boolean' && !GP_PICTURE_BOOLS.includes(k) ? bools : grid).append(leaf(here, k, defObj[k]));
     }
     const body = [grid.childElementCount ? grid : null, bools.childElementCount ? bools : null, ...subs].filter(Boolean);
     if (depth === 0) {

@@ -144,6 +144,72 @@ func TestServerTweaksSpawnStats(t *testing.T) {
 	}
 }
 
+// Weapons listed to spawn without a round in the chamber: a 4_World script
+// drops SpawnAmmo's chamber flags for them, only while MissionServer equips a
+// new character, so the mod carries both modules.
+func TestServerTweaksChamber(t *testing.T) {
+	a := newPrimary(t)
+	if err := a.MutateConfig(func(c *config.Manager) error {
+		c.Unchambered = []string{" M4A1 ", "mosin9130", "m4a1", `bad"name`}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SyncServerTweaks(); err != nil {
+		t.Fatal(err)
+	}
+	f, err := pbo.Open(filepath.Join(a.ServerDir, TweaksMod, "addons", "dzm_servertweaks.pbo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{}
+	for _, e := range f.Entries {
+		data, _ := f.Read(e)
+		files[strings.ReplaceAll(e.Name, "\\", "/")] = string(data)
+	}
+	world := files["Scripts/4_World/DZM_Chamber.c"]
+	for _, want := range []string{
+		"modded class Weapon_Base",
+		"override bool SpawnAmmo( string magazineType = \"\", int flags = WeaponWithAmmoFlags.CHAMBER )",
+		"if (DZM_Chamber.s_Spawning && DZM_Chamber.Listed(GetType()))",
+		"flags &= ~dzmChamberFlags;",
+		"return super.SpawnAmmo(magazineType, flags);",
+		"if (type == \"m4a1\") return true;",
+		"if (type == \"mosin9130\") return true;",
+	} {
+		if !strings.Contains(world, want) {
+			t.Errorf("chamber script lacks %q:\n%s", want, world)
+		}
+	}
+	if strings.Count(world, "m4a1") != 1 || strings.Contains(world, "bad") || strings.Count(world, "{") != strings.Count(world, "}") {
+		t.Errorf("duplicates, an unsafe class or unbalanced braces:\n%s", world)
+	}
+	mission := files["Scripts/5_Mission/DZM_SpawnStats.c"]
+	for _, want := range []string{"DZM_Chamber.s_Spawning = true;", "DZM_Chamber.s_Spawning = false;", "DZM_SpawnStats.Apply(player);"} {
+		if !strings.Contains(mission, want) {
+			t.Errorf("mission script lacks %q:\n%s", want, mission)
+		}
+	}
+	if strings.Contains(mission, "GetStatEnergy") || strings.Count(mission, "{") != strings.Count(mission, "}") {
+		t.Errorf("stats written without settings or unbalanced braces:\n%s", mission)
+	}
+	cfg := files["config.cpp"]
+	if !strings.Contains(cfg, "worldScriptModule") || !strings.Contains(cfg, "missionScriptModule") || !strings.Contains(cfg, `dependencies[] = {"World", "Mission"};`) {
+		t.Errorf("config.cpp modules:\n%s", cfg)
+	}
+
+	// Nothing listed any more: the mod goes away with the setting.
+	if err := a.MutateConfig(func(c *config.Manager) error { c.Unchambered = nil; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SyncServerTweaks(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(a.ServerDir, TweaksMod)); !os.IsNotExist(err) {
+		t.Error("the mod is still there with nothing to do")
+	}
+}
+
 // A folder with the mod's name that this code did not make is never deleted.
 func TestServerTweaksKeepsForeignFolder(t *testing.T) {
 	a := newPrimary(t)

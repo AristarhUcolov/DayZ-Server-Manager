@@ -180,13 +180,16 @@ function loPlace(slots) {
   return pos;
 }
 
-// loLoaded: whether a kit's weapon spawns loaded, a magazine (or rounds for
-// an internal magazine) among its children. null: it takes none.
+// loLoaded: whether a kit's weapon spawns loaded — 'mag' (a magazine among
+// its children), 'ammo' (rounds for an internal magazine) or false. null: it
+// takes none.
 async function loLoaded(c) {
   const det = await loDetail(c.itemType);
-  const feed = new Set([...(det.mags || []), ...(det.ammo || [])].map(x => String(x.c).toLowerCase()));
-  if (!feed.size) return null;
-  return (c.complexChildrenTypes || []).some(k => feed.has(String(k.itemType || '').toLowerCase()));
+  const set = (list) => new Set((list || []).map(x => String(x.c).toLowerCase()));
+  const mags = set(det.mags), ammo = set(det.ammo);
+  if (!mags.size && !ammo.size) return null;
+  const kids = (c.complexChildrenTypes || []).map(k => String(k.itemType || '').toLowerCase());
+  return kids.some(k => mags.has(k)) ? 'mag' : kids.some(k => ammo.has(k)) ? 'ammo' : false;
 }
 
 // loAmmoBadge marks a weapon loaded or empty once its details are known.
@@ -197,9 +200,61 @@ function loAmmoBadge(c) {
     el.hidden = false;
     el.className = 'lo-ammo ' + (v ? 'on' : 'off');
     el.textContent = t(v ? 'li.loaded.short' : 'li.empty.short');
-    el.title = t(v ? 'li.loaded.mag' : 'li.empty');
+    el.title = t(v === 'ammo' ? 'li.feed.ammo' : v ? 'li.feed.mag' : 'li.empty');
   });
   return el;
+}
+
+// The weapon classes that spawn without a round in the chamber
+// (/api/spawngear/chamber), as a Set of lower-case classes; fetched once.
+let _loChamber = null;
+function loChamberList() {
+  if (!_loChamber) {
+    _loChamber = api.get('/api/spawngear/chamber')
+      .then(d => new Set((d.unchambered || []).map(c => String(c).toLowerCase())))
+      .catch(() => { _loChamber = null; return null; });
+  }
+  return _loChamber;
+}
+
+// loChamberRow is a loaded weapon's "round in the chamber" switch. DayZ
+// chambers a round in every spawn-gear weapon (Weapon_Base.SpawnAmmo); off,
+// the panel's server mod leaves the chamber empty for this weapon class in
+// every loadout (app.ChamberScript). Saved at once, like the fresh-character
+// stats. ammo: an internal magazine — a single-shot weapon then spawns empty.
+function loChamberRow(item, info, ammo) {
+  const cls = String(item.itemType || '');
+  const sw = h('input', { type: 'checkbox', class: 'switch', disabled: true, 'aria-label': t('li.chamber') });
+  sw.checked = true;
+  const note = h('span', { class: 'hint li-chamber-note' });
+  const say = () => {
+    note.textContent = (sw.checked ? t('li.chamber.on') : t('li.chamber.off') + (ammo ? ' ' + t('li.chamber.single') : ''))
+      + ' ' + t('li.chamber.all').replace('{item}', info.n || cls);
+  };
+  loChamberList().then((set) => {
+    if (!set) return;
+    sw.checked = !set.has(cls.toLowerCase());
+    sw.disabled = false;
+    say();
+  });
+  sw.onchange = async () => {
+    sw.disabled = true;
+    try {
+      const r = await api.post('/api/spawngear/chamber', { class: cls, chambered: sw.checked });
+      _loChamber = Promise.resolve(new Set((r.unchambered || []).map(c => String(c).toLowerCase())));
+      toast(r.applied ? t('msg.saved') : t('lo.stats.nextStart'), 'ok');
+    } catch (e) {
+      sw.checked = !sw.checked;
+      handleErr(e);
+    }
+    sw.disabled = false;
+    say();
+  };
+  say();
+  return h('label', { class: 'li-chamber' }, [
+    sw,
+    h('span', { class: 'li-chamber-main' }, [h('b', { text: t('li.chamber') }), note]),
+  ]);
 }
 
 // DayZ's attach rules the game files do not show: a part's script decides
@@ -296,10 +351,10 @@ function loItemEditor(item, info, ctx) {
     }
     const edited = () => { render(); ctx.changed(); };
 
-    // put sets what is in slot s (replacing c): a magazine comes full,
-    // anything else as the game makes it. A part DayZ will not attach next to
-    // one already on (a bayonet and a suppressor) asks which to keep; a
-    // weapon light without a rail handguard offers the handguard.
+    // put sets what is in slot s (replacing c), pristine and full — a part
+    // written without a condition spawned ruined. A part DayZ will not
+    // attach next to one already on (a bayonet and a suppressor) asks which
+    // to keep; a weapon light without a rail handguard offers the handguard.
     const put = async (s, c, it) => {
       const cls = String(it.c).toLowerCase();
       const placed = loSimulate(kids().filter(k => k !== c), slots);
@@ -314,9 +369,7 @@ function loItemEditor(item, info, ctx) {
         for (const k of clash) drop(k);
       }
       if (c) drop(c);
-      const nc = { itemType: it.c, quickBarSlot: -1, complexChildrenTypes: [] };
-      if (s.mag) nc.attributes = { healthMin: 1, healthMax: 1, quantityMin: 1, quantityMax: 1 };
-      kids().push(nc);
+      kids().push({ itemType: it.c, quickBarSlot: -1, attributes: loFullAttrs(), complexChildrenTypes: [] });
       if (loNeedsRail(cls)) {
         const guardSlot = slots.find(x => /handguard/i.test(x.slot));
         const rail = guardSlot && guardSlot.items.find(r => loIsRail(r.c));
@@ -324,7 +377,7 @@ function loItemEditor(item, info, ctx) {
         if (rail && !(guard && loIsRail(guard.itemType)) &&
             await confirmModal(t('li.rail.ask').replace('{item}', it.n || it.c).replace('{rail}', rail.n || rail.c), { okText: t('li.rail.add') })) {
           if (guard) drop(guard);
-          kids().unshift({ itemType: rail.c, quickBarSlot: -1, complexChildrenTypes: [] });
+          kids().unshift({ itemType: rail.c, quickBarSlot: -1, attributes: loFullAttrs(), complexChildrenTypes: [] });
         }
       }
       edited();
@@ -376,17 +429,19 @@ function loItemEditor(item, info, ctx) {
         host.append(h('p', { class: 'hint li-count', text: tn('li.filled', { n: bySlot.size, total: slots.length }) }));
       }
       // A weapon given a magazine (or rounds) spawns loaded: DayZ attaches the
-      // magazine and chambers a round (Weapon_Base.SpawnAmmo), nobody has to
-      // press R. Load fills the feed at once when one thing fits.
+      // magazine and chambers a round (Weapon_Base.SpawnAmmo) unless the
+      // switch below says otherwise. Load fills the feed at once when one
+      // thing fits.
       const feed = slots.find(s => s.mag || s.ammo);
       if (feed) {
         const loaded = bySlot.has(feed);
         host.append(h('div', { class: 'li-loaded' + (loaded ? ' on' : '') }, [
           loIcon(loaded ? 'i-c-ammo' : 'i-c-mag', 16),
-          h('span', { class: 'grow', text: t(loaded ? (feed.mag ? 'li.loaded.mag' : 'li.loaded.ammo') : 'li.empty') }),
+          h('span', { class: 'grow', text: t(loaded ? (feed.mag ? 'li.feed.mag' : 'li.feed.ammo') : 'li.empty') }),
           loaded ? null : h('button', { type: 'button', class: 'primary small', text: t('li.load'), disabled: !feed.items.length,
             onclick: () => (feed.items.length === 1 ? put(feed, null, feed.items[0]) : choose(feed, null)) }),
         ]));
+        if (loaded) host.append(loChamberRow(item, info, !!feed.ammo));
       }
       // What else goes inside: its cargo, or parts the game files do not
       // name (a mod's) — DayZ still attaches them where they fit.
@@ -398,9 +453,7 @@ function loItemEditor(item, info, ctx) {
       box.append(h('button', { type: 'button', class: 'lo-add-inside',
         text: '+ ' + t(det.cargo || !slots.length ? 'lo.inside.add' : 'li.addOther'), onclick: () =>
           loPick({ title: t('lo.inside') + ' — ' + info.n, onAdd: (it) => {
-            const c = { itemType: it.c, quickBarSlot: -1, complexChildrenTypes: [] };
-            if (it.q) c.attributes = { healthMin: 1, healthMax: 1, quantityMin: 1, quantityMax: 1 };
-            kids().push(c);
+            kids().push({ itemType: it.c, quickBarSlot: -1, attributes: loFullAttrs(), complexChildrenTypes: [] });
             edited();
           } }) }));
       host.append(box);

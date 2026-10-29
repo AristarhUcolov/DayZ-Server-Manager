@@ -66,13 +66,15 @@ DayZ Server и превращает обычный сервер в удобну�
 ## Последнее обновление — 1.1 «Хэллуинское»
 
 Раздел **Транспорт** теперь устроен как «Набор игрока»: машина нарисована
-сверху, у каждой детали своя плитка, у каждого цвета — свои детали и багажник.
-**Обвесы** и **Пресеты** получили тот же вид — рисунок предмета и строки с
-иконками вместо голых классов. В «Наборе игрока» — клавиши для вложенных
-вещей, заряженное оружие (патрон уже в патроннике), сытость, вода и тепло
-нового персонажа, а также правила DayZ для обвесов (штык-нож и глушитель,
-фонарь и цевьё с планкой). Менеджер сам поднимается после сбоя, а моды из
-Steam Workshop скачиваются напрямую через SteamCMD.
+сверху, у каждой детали своя плитка, у каждого цвета — свои детали и багажник,
+а оружию в багажнике можно задать обвесы. **Обвесы** и **Пресеты** получили
+тот же вид — рисунок предмета и строки с иконками вместо голых классов. В
+«Наборе игрока» — клавиши для вложенных вещей, заряженное оружие с
+переключателем «Патрон в патроннике», сытость, вода и тепло нового персонажа,
+правила DayZ для обвесов (штык-нож и глушитель, фонарь и цевьё с планкой), а
+обвесы больше не появляются испорченными. **Глобальные** и **Геймплей**
+получили ползунки и выбор по картинкам. Менеджер сам поднимается после сбоя,
+а моды из Steam Workshop скачиваются напрямую через SteamCMD.
 
 Полный список изменений по версиям — в [CHANGELOG.md](CHANGELOG.md#русский).
 
@@ -604,13 +606,16 @@ It comes in two builds that share the same settings — pick either:
 ## Latest update — 1.1, “The Halloween Update”
 
 **Vehicles** now work like the player loadout: the car drawn from above with a
-tile per part, each colour with its own parts and trunk. **Attachments** and
-**Presets** share that look — the item drawn, rows with icons instead of bare
-class names. The **player loadout** gains hotbar keys for nested items, loaded
-weapons (a round already chambered), a fresh character's food, water and
-warmth, and DayZ's attachment rules (bayonet vs suppressor, a weapon light and
-its rail handguard). The manager comes back by itself after a crash, and Steam
-Workshop mods download straight to the server with SteamCMD.
+tile per part, each colour with its own parts and trunk — and a weapon in the
+trunk gets attachments too. **Attachments** and **Presets** share that look —
+the item drawn, rows with icons instead of bare class names. The **player
+loadout** gains hotbar keys for nested items, loaded weapons with a “Round in
+the chamber” switch, a fresh character's food, water and warmth, DayZ's
+attachment rules (bayonet vs suppressor, a weapon light and its rail
+handguard) — and attachments no longer spawn ruined. **Globals** and
+**Gameplay** get sliders and choices drawn as pictures. The manager comes back
+by itself after a crash, and Steam Workshop mods download straight to the
+server with SteamCMD.
 
 The full list of changes, version by version, is in [CHANGELOG.md](CHANGELOG.md#english).
 

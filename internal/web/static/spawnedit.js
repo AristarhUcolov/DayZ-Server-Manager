@@ -322,6 +322,9 @@ function seGroupCard(g, ctx) {
         unknown ? h('span', { class: 'se-row-warn', text: '⚠ ' + t('attach.unknownClass') })
           : nofit ? h('span', { class: 'se-row-warn', text: '⚠ ' + t('se.noFit') }) : null,
       ]),
+      // A weapon (or anything with slots or room inside) carries its own
+      // attachments: DayZ puts them on it wherever it spawns — open them.
+      info && info.i ? seOwnButton(cls, info, ctx) : h('span'),
       h('span', { class: 'se-row-w' }, [h('span', { class: 'se-row-k', i18n: 'attach.col.weight' }), wIn]),
       pctBadge,
       h('button', { type: 'button', class: 'icon-x', text: '×', disabled: off, title: t('attach.removeItem'),
@@ -345,6 +348,79 @@ function seGroupCard(g, ctx) {
     ].filter(Boolean)),
   );
   return el;
+}
+
+// What each class's own entry holds, per page load: the count on its button.
+const _seOwn = new Map(); // lower-cased class → Promise<{entry, file}>
+function seOwnEntry(cls, fresh) {
+  const k = String(cls).toLowerCase();
+  if (fresh || !_seOwn.has(k)) _seOwn.set(k, api.get('/api/spawnable/entry?name=' + encodeURIComponent(cls)).catch(() => null));
+  return _seOwn.get(k);
+}
+
+// seOwnButton is a row's way into its item's own entry: "Attachments · 3",
+// like the loadout's button on a carried weapon.
+function seOwnButton(cls, info, ctx) {
+  const weapon = info.k === 'weapons';
+  const label = h('span', { text: t(weapon ? 'li.btn.weapon' : 'li.btn') });
+  const btn = h('button', { type: 'button', class: 'lo-inside-btn se-own', title: t('se.own.title'),
+    onclick: () => seEntryDialog(cls, { classLower: ctx.classLower, onSaved: () => paint(true) }) },
+  [loIcon(weapon ? 'i-c-scope' : 'i-c-box', 14), label]);
+  const paint = (fresh) => seOwnEntry(cls, fresh).then((r) => {
+    const e = r && r.entry;
+    const n = e ? (e.attachments || []).length + (e.cargo || []).length : 0;
+    label.textContent = t(weapon ? 'li.btn.weapon' : 'li.btn') + (n ? ' · ' + n : '');
+    btn.classList.toggle('on', n > 0);
+  });
+  paint(false);
+  return btn;
+}
+
+// seEntryDialog opens an item's own cfgspawnabletypes entry — what DayZ puts
+// on and into this item wherever the economy spawns it (loot, a car's trunk,
+// an infected) — drawn like the Attachments editor, and saves it into the
+// file that defines it (/api/spawnable/entry). onSaved() after a save.
+async function seEntryDialog(cls, opts = {}) {
+  let r, cat, det;
+  try {
+    [r, cat, det] = await Promise.all([api.get('/api/spawnable/entry?name=' + encodeURIComponent(cls)), loCatalog(), loDetail(cls)]);
+  } catch (e) { handleErr(e); return; }
+  const norm = (list) => {
+    const out = JSON.parse(JSON.stringify(list || []));
+    for (const g of out) if (typeof g.preset !== 'string') g.items = g.items || [];
+    return out;
+  };
+  const entry = r.entry || {};
+  const model = { attachments: norm(entry.attachments), cargo: norm(entry.cargo) };
+  const snap = () => JSON.stringify(model);
+  const saved = snap();
+  let done = false;
+  const info = loItemInfo(cat, cls);
+  const m = openModal({ title: info.n || cls, wide: true, isDirty: () => !done && snap() !== saved });
+  const edited = () => {};
+  const se = seEditor(model.attachments, { cls, det, cat, info, classLower: opts.classLower, edited });
+  const roomy = (det && det.cargo) || model.cargo.length;
+  const cargo = roomy ? seGroupList(model.cargo, { kind: 'cargo', cat, classLower: opts.classLower, edited, changed: edited,
+    addKey: 'se.addCargo', titleKey: 'se.cargoGroup', emptyKey: 'attach.noCargo' }) : null;
+  const save = (e) => withBusy(e.currentTarget, async () => {
+    try {
+      await api.post('/api/spawnable/entry', { name: cls, attachments: model.attachments, cargo: model.cargo });
+      done = true;
+      toast(t('msg.saved'), 'ok');
+      if (opts.onSaved) opts.onSaved();
+      m.close();
+    } catch (err) { handleErr(err); }
+  });
+  m.body.append(...[
+    h('p', { class: 'hint se-own-hint', text: t('se.own.hint') }),
+    h('div', { class: 'attach-section' }, [h('h3', { i18n: 'attach.section.attachments' }), se.el]),
+    cargo ? h('div', { class: 'attach-section' }, [h('h3', { i18n: 'attach.section.cargo' }), cargo.el]) : null,
+    h('p', { class: 'hint mono', text: r.file }),
+    h('div', { class: 'actions' }, [h('span', { class: 'grow' }),
+      h('button', { type: 'button', class: 'secondary', i18n: 'action.cancel', onclick: () => m.close() }),
+      h('button', { type: 'button', class: 'primary', i18n: 'action.save', onclick: save })]),
+  ].filter(Boolean));
+  applyI18n();
 }
 
 // seGroupList is a list of groups edited in place — an item's cargo, a

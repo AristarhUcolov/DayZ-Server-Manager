@@ -55,3 +55,45 @@ func TestSpawnStatsWritesMod(t *testing.T) {
 		t.Fatalf("after clearing: stats %+v, mods %v", cfg.SpawnStats, cfg.ServerMods)
 	}
 }
+
+// The "round in the chamber" switch: turning it off lists the weapon class
+// (lower case, once) and writes the tweaks mod; turning it back on removes
+// it, and the mod with it; a class that could break the script is refused.
+func TestSpawnChamberSwitch(t *testing.T) {
+	h, a := profileApp(t)
+	post := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.spawnChamber(rec, httptest.NewRequest("POST", "/api/spawngear/chamber", strings.NewReader(body)))
+		return rec
+	}
+	if rec := post(`{"class":"M4\"A1","chambered":false}`); rec.Code != 400 {
+		t.Fatalf("unsafe class accepted: %d", rec.Code)
+	}
+	for _, body := range []string{`{"class":"M4A1","chambered":false}`, `{"class":"m4a1","chambered":false}`, `{"class":"Mosin9130","chambered":false}`} {
+		if rec := post(body); rec.Code != 200 {
+			t.Fatalf("%s: %d %s", body, rec.Code, rec.Body.String())
+		}
+	}
+	if got := h.app.Cfg().Unchambered; len(got) != 2 || got[0] != "m4a1" || got[1] != "mosin9130" {
+		t.Fatalf("unchambered %v", got)
+	}
+	if _, err := os.Stat(filepath.Join(a.ServerDir, app.TweaksMod, "addons", "dzm_servertweaks.pbo")); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	h.spawnChamber(rec, httptest.NewRequest("GET", "/api/spawngear/chamber", nil))
+	var got struct {
+		Unchambered []string `json:"unchambered"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || len(got.Unchambered) != 2 {
+		t.Fatalf("GET: %s", rec.Body.String())
+	}
+	post(`{"class":"M4A1","chambered":true}`)
+	post(`{"class":"mosin9130","chambered":true}`)
+	if cfg := h.app.Cfg(); len(cfg.Unchambered) != 0 || len(cfg.ServerMods) != 0 {
+		t.Fatalf("after turning both back on: %v, mods %v", cfg.Unchambered, cfg.ServerMods)
+	}
+	if _, err := os.Stat(filepath.Join(a.ServerDir, app.TweaksMod)); !os.IsNotExist(err) {
+		t.Error("the mod is still there with nothing to do")
+	}
+}

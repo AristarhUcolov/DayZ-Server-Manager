@@ -778,7 +778,7 @@ func AutoFixWith(o Options, only []string) ([]Fixed, error) {
 		{[]string{"eventspawns.bounds"}, func() ([]Fixed, error) { return fixSpawnBounds(o) }},
 		{[]string{"mods.keys"}, func() ([]Fixed, error) { return fixModKeys(o) }},
 		{[]string{"mods.linuxcase"}, func() ([]Fixed, error) { return fixLinuxCase(o) }},
-		{[]string{"dzm.unregistered", "gear.broken", "gear.unlinked", "gear.flagOff"}, func() ([]Fixed, error) { return fixAfterUpdate(o, do) }},
+		{[]string{"dzm.unregistered", "gear.broken", "gear.gaps", "gear.unlinked", "gear.flagOff"}, func() ([]Fixed, error) { return fixAfterUpdate(o, do) }},
 	}
 	for _, st := range steps {
 		run := false

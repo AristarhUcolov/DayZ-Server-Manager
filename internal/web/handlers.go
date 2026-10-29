@@ -257,6 +257,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/spawnable/item", methods(h.spawnableItem, http.MethodGet, http.MethodPost, http.MethodDelete))
 	mux.HandleFunc("/api/spawnable/presets", methods(h.spawnablePresets, http.MethodGet))
 	mux.HandleFunc("/api/spawnable/classnames", methods(h.spawnableClassNames, http.MethodGet))
+	mux.HandleFunc("/api/spawnable/entry", methods(h.spawnableEntry, http.MethodGet, http.MethodPost))
 	mux.HandleFunc("/api/items/catalog", methods(h.itemsCatalog, http.MethodGet))
 	mux.HandleFunc("/api/items/detail", methods(h.itemsDetail, http.MethodGet))
 	mux.HandleFunc("/api/guide", methods(h.guideGet, http.MethodGet))
@@ -279,6 +280,7 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/spawngear/enable", methods(h.spawnGearEnable, http.MethodPost))
 	mux.HandleFunc("/api/spawngear/register", methods(h.spawnGearRegister, http.MethodPost))
 	mux.HandleFunc("/api/spawngear/stats", methods(h.spawnStats, http.MethodGet, http.MethodPost))
+	mux.HandleFunc("/api/spawngear/chamber", methods(h.spawnChamber, http.MethodGet, http.MethodPost))
 
 	// Dashboard live metrics.
 	mux.HandleFunc("/api/dashboard/metrics", methods(h.dashboardMetrics, http.MethodGet))

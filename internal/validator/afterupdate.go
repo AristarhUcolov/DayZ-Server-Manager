@@ -19,6 +19,7 @@ import (
 
 	"dayzmanager/internal/config"
 	dztypes "dayzmanager/internal/types"
+	"dayzmanager/internal/util"
 )
 
 // dzmFolder is where the panel keeps the mod vehicles it imported.
@@ -93,6 +94,23 @@ func readGear(missionDir string) gearState {
 	return g
 }
 
+// gearGaps lists the registered loadout files holding items DayZ would not
+// spawn the way the panel shows them — no condition (ruined) or no amount
+// (empty) — and how many such items there are.
+func gearGaps(missionDir string, registered []string) (files []string, items int) {
+	for _, rel := range registered {
+		p, err := dztypes.LoadGearPreset(filepath.Join(missionDir, filepath.FromSlash(rel)))
+		if err != nil {
+			continue
+		}
+		if n := p.Gaps(); n > 0 {
+			files = append(files, rel)
+			items += n
+		}
+	}
+	return files, items
+}
+
 // gameplayOn reports whether serverDZ.cfg has enableCfgGameplayFile = 1 (a
 // missing line counts as off, as in DayZ).
 func (o Options) gameplayOn() (bool, string) {
@@ -133,6 +151,11 @@ func checkAfterUpdate(o Options) []Issue {
 			Message: fmt.Sprintf("cfggameplay.json lists loadout files DayZ cannot read (%s) — DayZ then ignores every loadout", strings.Join(g.broken, ", ")),
 			Args:    A("files", strings.Join(g.broken, ", "))})
 	}
+	if files, n := gearGaps(md, g.registered); n > 0 {
+		out = append(out, Issue{File: filepath.Join(md, filepath.FromSlash(files[0])), Severity: SevWarning, Code: "gear.gaps", Fix: "gear.gaps",
+			Message: fmt.Sprintf("%d loadout items have no condition or amount set (%s) — DayZ spawns them ruined or empty", n, strings.Join(files, ", ")),
+			Args:    A("n", n, "files", strings.Join(files, ", "))})
+	}
 	if len(g.registered) == 0 && len(g.unlinked) > 0 {
 		out = append(out, Issue{File: g.gameplay, Severity: SevWarning, Code: "gear.unlinked", Fix: "gear.unlinked",
 			Message: fmt.Sprintf("loadout files are in the mission folder but cfggameplay.json does not list them (%s) — players spawn from init.c", strings.Join(g.unlinked, ", ")),
@@ -149,7 +172,7 @@ func checkAfterUpdate(o Options) []Issue {
 }
 
 // fixAfterUpdate repairs the given kinds (dzm.unregistered, gear.broken,
-// gear.unlinked, gear.flagOff) and returns what it did.
+// gear.gaps, gear.unlinked, gear.flagOff) and returns what it did.
 func fixAfterUpdate(o Options, do func(string) bool) ([]Fixed, error) {
 	md := o.missionDir()
 	if md == "" {
@@ -169,6 +192,24 @@ func fixAfterUpdate(o Options, do func(string) bool) ([]Fixed, error) {
 	g := readGear(md)
 	if g.parseErr != nil {
 		return out, nil
+	}
+	if do("gear.gaps") {
+		files, _ := gearGaps(md, g.registered)
+		for _, rel := range files {
+			path := filepath.Join(md, filepath.FromSlash(rel))
+			p, err := dztypes.LoadGearPreset(path)
+			if err != nil {
+				continue
+			}
+			n := p.Gaps()
+			if err := util.BackupBeforeWrite(path); err != nil {
+				return out, err
+			}
+			if err := p.Save(path); err != nil { // Save normalizes
+				return out, err
+			}
+			out = append(out, F("gearFilled", fmt.Sprintf("set the condition and amount of %d items in %s (pristine, full)", n, rel), "n", n, "file", rel))
+		}
 	}
 	list := g.registered
 	changed := false
@@ -218,13 +259,15 @@ func fixAfterUpdate(o Options, do func(string) bool) ([]Fixed, error) {
 // mod vehicles, and — when cfggameplay.json came back as the stock file, with
 // no loadout list at all — the loadout files that are still in the mission
 // folder (plus the enableCfgGameplayFile switch they need). A list the admin
-// emptied on purpose is left alone: only the validator mentions it.
+// emptied on purpose is left alone: only the validator mentions it. Loadout
+// items saved without a condition or amount (older panels wrote attachments
+// that way, and DayZ spawned them ruined) get pristine and full.
 func HealAfterUpdate(o Options) ([]string, error) {
 	md := o.missionDir()
 	if md == "" {
 		return nil, nil
 	}
-	codes := map[string]bool{"dzm.unregistered": true}
+	codes := map[string]bool{"dzm.unregistered": true, "gear.gaps": true}
 	if g := readGear(md); g.parseErr == nil && !g.listed && len(g.unlinked) > 0 {
 		codes["gear.unlinked"] = true
 	}
