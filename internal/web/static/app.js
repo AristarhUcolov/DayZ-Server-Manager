@@ -1582,6 +1582,23 @@ function confirmModal(message, opts = {}) {
   });
 }
 
+// choiceModal asks a question with several answers: choices are
+// { value, text, cls }. Resolves to the chosen value, or null on Esc /
+// backdrop / Cancel.
+function choiceModal(message, choices, opts = {}) {
+  return new Promise((resolve) => {
+    let result = null;
+    const m = openModal({ title: opts.title || t('confirm.title'), onClose: () => resolve(result) });
+    const done = (v) => { result = v; m.close(); };
+    const btns = choices.map(c => h('button', { class: c.cls || '', text: c.text, onclick: () => done(c.value) }));
+    m.body.append(
+      h('p', { text: message, style: { marginBottom: '4px' } }),
+      h('div', { class: 'actions' }, [...btns, h('button', { i18n: 'action.cancel', onclick: () => done(null) })]),
+    );
+    setTimeout(() => btns[0] && btns[0].focus(), 0);
+  });
+}
+
 // promptModal replaces the native prompt(): a styled single-input dialog.
 // Resolves to the trimmed value on confirm, or null on Esc / backdrop / Cancel /
 // empty. Enter in the field confirms.
@@ -1838,9 +1855,20 @@ Views.mods = async (root) => {
       if (State.serverStatus.running) { activeCb.disabled = true; activeCb.title = t('mods.toggleRunning'); }
       activeCb.onchange = async () => {
         const prev = !activeCb.checked; // value before this toggle
+        // A server-side mod switched on for players too: move it, or load it
+        // both ways (some mods ask for -mod and -serverMod).
+        let keepOther = false;
+        if (activeCb.checked && (State.config.serverMods || []).includes(m.name)) {
+          const v = await choiceModal(t('mods.clientMod.both.ask').replace('{mod}', m.name), [
+            { value: 'move', text: t('mods.clientMod.only'), cls: 'primary' },
+            { value: 'both', text: t('mods.both') },
+          ]);
+          if (!v) { activeCb.checked = prev; return; }
+          keepOther = v === 'both';
+        }
         activeCb.disabled = true;
         try {
-          const r = await api.post('/api/mods/enable', { mod: m.name, enabled: activeCb.checked });
+          const r = await api.post('/api/mods/enable', { mod: m.name, enabled: activeCb.checked, keepOther });
           // Keep State.config in sync so a later config POST (language switch,
           // Settings save) can never send a stale mod list back (hotfix).
           if (r) { State.config.mods = r.active; State.config.serverMods = r.server; syncRowSwitches(); }
@@ -1857,19 +1885,30 @@ Views.mods = async (root) => {
       });
     }
 
-    // Server-side toggle (-serverMod=). Independent of Active (-mod=). Confirmed
-    // on enable so nobody flags a client mod as server-only by accident.
+    // Server-side toggle (-serverMod=). Confirmed on enable so nobody flags a
+    // client mod as server-only by accident; a mod loaded for players asks
+    // whether to move it or to load it both ways.
     let serverControl;
     if (m.installedInServer) {
       const srvCb = h('input', { type: 'checkbox', class: 'switch' });
       srvCb.checked = (d.serverMods || []).includes(m.name);
       if (State.serverStatus.running) { srvCb.disabled = true; srvCb.title = t('mods.toggleRunning'); }
       srvCb.onchange = async () => {
-        if (srvCb.checked && !(await confirmModal(t('mods.serverMod.confirm'), { danger: true, okText: t('action.save') }))) { srvCb.checked = false; return; }
+        let keepOther = false;
+        if (srvCb.checked) {
+          if ((State.config.mods || []).includes(m.name)) {
+            const v = await choiceModal(t('mods.serverMod.both.ask').replace('{mod}', m.name), [
+              { value: 'move', text: t('mods.serverMod.only'), cls: 'primary' },
+              { value: 'both', text: t('mods.both') },
+            ]);
+            if (!v) { srvCb.checked = false; return; }
+            keepOther = v === 'both';
+          } else if (!(await confirmModal(t('mods.serverMod.confirm'), { danger: true, okText: t('action.save') }))) { srvCb.checked = false; return; }
+        }
         const prev = !srvCb.checked;
         srvCb.disabled = true;
         try {
-          const r = await api.post('/api/mods/enable', { mod: m.name, enabled: srvCb.checked, serverSide: true });
+          const r = await api.post('/api/mods/enable', { mod: m.name, enabled: srvCb.checked, serverSide: true, keepOther });
           if (r) { State.config.mods = r.active; State.config.serverMods = r.server; syncRowSwitches(); }
           reportModVehicles(r);
           toast(t('msg.saved'), 'ok');
@@ -1886,15 +1925,30 @@ Views.mods = async (root) => {
       actions.append(h('button', { class: 'primary', i18n: 'action.install',
         onclick: (e) => withBusy(e.currentTarget, async () => { try { const r = await api.post('/api/mods/install', { mod: m.name }); toast(t('msg.installed'),'ok'); await navigate('mods'); reportModMissions(r); } catch (err) { handleErr(err); } })}));
     }
-    if (m.installedInServer && m.availableInWorkshop) {
-      actions.append(h('button', {
+    // With the Steam Workshop source an installed Workshop mod updates
+    // straight from Steam: SteamCMD downloads the current version and it is
+    // copied over the server's folder (progress in the Direct download card).
+    const viaSteam = d.modSource === 'steamcmd' && m.installedInServer && !!m.publishedId;
+    let updateBtn = null;
+    if (viaSteam || (m.installedInServer && m.availableInWorkshop)) {
+      updateBtn = h('button', {
         class: m.updateAvailable ? 'primary' : '',
         i18n: 'action.update',
-        onclick: (e) => withBusy(e.currentTarget, async () => {
-          try { const r = await api.post('/api/mods/update', { mod: m.name }); toast(t('msg.updated'),'ok'); await navigate('mods'); reportModMissions(r); }
-          catch (err) { handleErr(err); }
-        })
-      }));
+        title: viaSteam ? t('mods.update.viaSteam') : '',
+        disabled: viaSteam && !!State.serverStatus.running,
+        onclick: (e) => {
+          if (viaSteam && wsCard) {
+            wsCard._update([m.publishedId]);
+            wsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+          }
+          return withBusy(e.currentTarget, async () => {
+            try { const r = await api.post('/api/mods/update', { mod: m.name }); toast(t('msg.updated'),'ok'); await navigate('mods'); reportModMissions(r); }
+            catch (err) { handleErr(err); }
+          });
+        }
+      });
+      actions.append(updateBtn);
     }
     if (m.installedInServer) {
       actions.append(h('button', { i18n: 'modtypes.scan',
@@ -1921,8 +1975,11 @@ Views.mods = async (root) => {
       statusBadge = h('span', { class: 'badge ok', i18n: 'mods.upToDate' });
     }
 
+    // On both lists: loaded for players and by the server (some mods ask so).
+    const bothTag = h('span', { class: 'badge info mods-both', text: t('mods.both.tag'), title: t('mods.both.hint'),
+      hidden: !((d.activeMods || []).includes(m.name) && (d.serverMods || []).includes(m.name)) });
     const nameCell = h('td', {}, [
-      h('div', { text: m.name, style: { fontWeight: '600' } }),
+      h('div', { class: 'mods-name' }, [h('span', { text: m.name, style: { fontWeight: '600' } }), bothTag]),
       m.displayName ? h('div', { class: 'hint', text: m.displayName }) : null,
       m.publishedId ? h('div', { class: 'hint' }, h('a', {
         href: `https://steamcommunity.com/sharedfiles/filedetails/?id=${m.publishedId}`,
@@ -1947,17 +2004,21 @@ Views.mods = async (root) => {
       m.updateAvailable ? 'update' : '',
       m.installedInServer ? '' : 'notinstalled',
     ].filter(Boolean).join(' ');
-    tr._switches = { mod: m.name, active: activeControl, server: serverControl };
+    tr._switches = { mod: m.name, active: activeControl, server: serverControl, both: bothTag };
+    tr._updateBtn = updateBtn;
     tbody.append(tr);
   }
   // After a toggle the server may have moved the mod from one list to the
-  // other (a mod is either for everyone or server-only): mirror that.
+  // other (unless it was asked to load it both ways): mirror that.
   function syncRowSwitches() {
     for (const tr of tbody.querySelectorAll('tr')) {
       const sw = tr._switches;
       if (!sw) continue;
-      if (sw.active && sw.active.type === 'checkbox') sw.active.checked = (State.config.mods || []).includes(sw.mod);
-      if (sw.server && sw.server.type === 'checkbox') sw.server.checked = (State.config.serverMods || []).includes(sw.mod);
+      const onClient = (State.config.mods || []).includes(sw.mod);
+      const onServer = (State.config.serverMods || []).includes(sw.mod);
+      if (sw.active && sw.active.type === 'checkbox') sw.active.checked = onClient;
+      if (sw.server && sw.server.type === 'checkbox') sw.server.checked = onServer;
+      if (sw.both) sw.both.hidden = !(onClient && onServer);
     }
   }
   // Empty state: a fresh setup with zero mods otherwise renders a bare header
@@ -1987,12 +2048,19 @@ Views.mods = async (root) => {
       name.querySelectorAll('.steam-row').forEach(n => n.remove());
       if (!r) return;
       let cls = 'mute', label = t('mods.steam.unknown') || 'Steam: unknown';
+      if (tr._updateBtn) tr._updateBtn.classList.toggle('primary', r.status === 'outdated' || r.status === 'update');
       if (r.status === 'outdated') {
         cls = 'warn';
         outdated++;
-        const ms = new Date(r.remoteUpdated).getTime() - new Date(r.localUpdated || 0).getTime();
-        const days = Math.max(1, Math.round(ms / (24 * 3600 * 1000)));
-        label = t('mods.steam.outdated') + ` (~${days} ${t('unit.days')})`;
+        label = t('mods.steam.outdated');
+        if (r.localUpdated && r.remoteUpdated) {
+          const ms = new Date(r.remoteUpdated).getTime() - new Date(r.localUpdated).getTime();
+          if (ms > 0) label += ` (~${Math.max(1, Math.round(ms / (24 * 3600 * 1000)))} ${t('unit.days')})`;
+        }
+      } else if (r.status === 'update') {
+        cls = 'warn';
+        outdated++;
+        label = t('mods.steam.update');
       } else if (r.status === 'ok') {
         cls = 'ok'; label = t('mods.steam.ok') || 'Steam: up-to-date';
       } else if (r.status === 'missing') {
@@ -5464,24 +5532,52 @@ Views.wipe = async (root) => {
     list.append(tbl);
   }
 
+  // What goes: everything, or the world only — bases, vehicles, tents and
+  // the economy's state (storage_N/data) while players keep their characters
+  // (players.db). New vehicle numbers, for one, show at once after it.
+  let mode = 'all';
+  const sizeAll = folders.reduce((s, f) => s + (f.sizeBytes || 0), 0);
+  const sizeWorld = folders.reduce((s, f) => s + (f.worldBytes || 0), 0);
+  const canWorld = folders.some(f => f.worldBytes > 0 || f.hasPlayers);
+  const modeCard = (id, icon, size) => {
+    const radio = h('input', { type: 'radio', name: 'wipe-mode', value: id });
+    radio.checked = mode === id;
+    radio.onchange = () => { mode = id; refreshBtnState(); };
+    return h('label', { class: 'wipe-mode' }, [
+      radio,
+      h('span', { class: 'wipe-mode-ico', html: svgIcon(icon, 22) }),
+      h('span', { class: 'wipe-mode-main' }, [
+        h('b', { i18n: 'wipe.mode.' + id }),
+        h('span', { class: 'hint', i18n: 'wipe.mode.' + id + '.sub' }),
+      ]),
+      h('span', { class: 'wipe-mode-size mono', text: bytes(size) }),
+    ]);
+  };
+  const modes = canWorld ? h('div', { class: 'wipe-modes', role: 'radiogroup' }, [
+    modeCard('all', 'i-wipe', sizeAll),
+    modeCard('world', 'i-globals', sizeWorld),
+  ]) : null;
+
   const confirm = h('input', { type: 'checkbox' });
-  const wipeBtn = h('button', { class: 'danger', i18n: 'wipe.button',
+  const wipeBtn = h('button', { class: 'danger',
     disabled: true,
     onclick: async (e) => {
       const btn = e.currentTarget; // before the await — null afterwards
       // Checkbox + button + THIS modal: an irreversible multi-folder delete
       // deserves the same danger confirm as deleting a single event.
-      if (!(await confirmModal(t('wipe.warning'), { danger: true, okText: t('wipe.button') }))) return;
+      const world = mode === 'world';
+      if (!(await confirmModal(t(world ? 'wipe.world.warning' : 'wipe.warning'), { danger: true, okText: wipeBtn.textContent }))) return;
       await withBusy(btn, async () => {
         try {
-          await api.post('/api/wipe', {});
-          toast(t('wipe.done'), 'ok');
+          await api.post('/api/wipe', { mode });
+          toast(t(world ? 'wipe.world.done' : 'wipe.done'), 'ok');
           await navigate('wipe');
         } catch (err) { handleErr(err); }
       });
     } });
   const refreshBtnState = () => {
-    wipeBtn.disabled = !(confirm.checked && !d.serverRunning && folders.length > 0);
+    wipeBtn.textContent = t(mode === 'world' ? 'wipe.world.button' : 'wipe.button');
+    wipeBtn.disabled = !(confirm.checked && !d.serverRunning && folders.length > 0 && (mode !== 'world' || sizeWorld > 0));
   };
   confirm.onchange = refreshBtnState;
   refreshBtnState();
@@ -5494,6 +5590,7 @@ Views.wipe = async (root) => {
     d.instanceId ? h('p', { class: 'hint', text: 'instanceId: ' + d.instanceId }) : null,
     h('h4', { i18n: 'wipe.preview.title' }),
     list,
+    modes,
     d.serverRunning ? h('p', { class: 'hint', i18n: 'wipe.serverRunning' }) : null,
     folders.length ? h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '10px 0' } }, [confirm, h('span', { i18n: 'wipe.confirm' })]) : null,
     folders.length ? h('div', { class: 'actions' }, [wipeBtn]) : null,
@@ -5527,6 +5624,7 @@ Views.wipe = async (root) => {
       undoCard.append(h('div', { class: 'wipe-set' + (blocked ? ' blocked' : '') }, [
         h('div', { class: 'grow' }, [
           h('strong', { text: when }),
+          set.world ? h('span', { class: 'badge info wipe-world-tag', i18n: 'wipe.mode.world' }) : null,
           h('div', { class: 'hint', text: (set.folders || []).join(', ') + ' · ' + bytes(set.size || 0) }),
           blocked ? h('div', { class: 'wipe-blocked', text: t('wipe.undo.blocked').replace('{names}', set.blocked.join(', ')) }) : null,
         ]),
@@ -7061,14 +7159,26 @@ function drawPoi(parent, poi, w2s) {
   // reads data-sx/sy to rebuild the transform. Cities / airfields / military are
   // "major" (labelled at any zoom); towns and landmarks are "minor" (labelled
   // only once zoomed in — see the gm-lod-in toggle) so the overview stays clean.
-  const major = type === 'city' || type === 'air' || type === 'mil';
-  const g = svgEl('g', { class: 'gm-poi-g gm-tier-' + (major ? 'major' : 'minor') + ' gm-t-' + type,
+  // capital (a world's main city), hill (a named height) and sea (a bay) are
+  // the place names of a map drawn from the world's files.
+  // poi.detail: shown only when zoomed in further (a drawn world's hills,
+  // bays and landmarks would crowd the towns).
+  const major = type === 'city' || type === 'capital' || type === 'air' || type === 'mil';
+  const tier = major ? 'major' : poi.detail ? 'detail' : 'minor';
+  const g = svgEl('g', { class: 'gm-poi-g gm-tier-' + tier + ' gm-t-' + (type === 'capital' ? 'city gm-t-capital' : type),
     'data-sx': sx, 'data-sy': sy, transform: `translate(${sx} ${sy})` }, parent);
   const tri = (r) => `M 0 ${-r} L ${r} ${r * 0.85} L ${-r} ${r * 0.85} Z`;
   const dia = (r) => `M 0 ${-r} L ${r} 0 L 0 ${r} L ${-r} 0 Z`;
-  if (type === 'city') {
-    svgEl('circle', { cx: 0, cy: 0, r: 3.4, class: 'gm-city' }, g);
-    svgEl('circle', { cx: 0, cy: 0, r: 1.4, class: 'gm-city-core' }, g);
+  if (type === 'sea') {
+    // A bay's name only, centred on the water.
+    svgEl('text', { x: 0, y: 3, class: 'gm-town-label gm-sea-label', 'text-anchor': 'middle' }, g).textContent = poi.n;
+    return;
+  }
+  if (type === 'city' || type === 'capital') {
+    svgEl('circle', { cx: 0, cy: 0, r: type === 'capital' ? 4.2 : 3.4, class: 'gm-city' }, g);
+    svgEl('circle', { cx: 0, cy: 0, r: type === 'capital' ? 1.8 : 1.4, class: 'gm-city-core' }, g);
+  } else if (type === 'hill') {
+    svgEl('path', { d: tri(2.6), class: 'gm-hill' }, g);
   } else if (type === 'mil') {
     svgEl('path', { d: tri(3.4), class: 'gm-mil' }, g);
   } else if (type === 'air') {
@@ -7078,8 +7188,10 @@ function drawPoi(parent, poi, w2s) {
   } else {
     svgEl('circle', { cx: 0, cy: 0, r: 2, class: 'gm-town' }, g);
   }
-  const cls = type === 'city' ? 'gm-town-label gm-city-label' : 'gm-town-label';
-  svgEl('text', { x: 4.8, y: 3, class: cls }, g).textContent = poi.n;
+  const cls = type === 'capital' ? 'gm-town-label gm-city-label gm-capital-label'
+    : type === 'city' ? 'gm-town-label gm-city-label'
+      : type === 'hill' ? 'gm-town-label gm-hill-label' : 'gm-town-label';
+  svgEl('text', { x: type === 'capital' ? 6 : 4.8, y: 3, class: cls }, g).textContent = poi.n;
 }
 
 // buildGameMap draws a correctly-scaled, license-safe schematic map: a 1 km
@@ -7103,15 +7215,20 @@ function buildGameMap(map, opts = {}) {
   const s2w = (sx, sy) => [sx / S * size, (S - sy) / S * size];  // inverse
 
   const hasImage = !!(map && map.hasImage);
-  const svg = svgEl('svg', { viewBox: `0 0 ${S} ${S}`, class: 'game-map' + (hasImage ? ' has-img' : ''), preserveAspectRatio: 'xMidYMid meet' });
+  const svg = svgEl('svg', { viewBox: `0 0 ${S} ${S}`, class: 'game-map' + (hasImage ? ' has-img' : '') + (hasImage && map.terrain ? ' gm-has-terrain' : ''), preserveAspectRatio: 'xMidYMid meet' });
   svgEl('rect', { x: 0, y: 0, width: S, height: S, class: 'gm-bg' }, svg);
+  // The picture, schematic or placeholder under everything else: gm.useImage
+  // swaps it for a picture drawn meanwhile without rebuilding the page.
+  const base = svgEl('g', { class: 'gm-base' }, svg);
+  const putImage = (m) => {
+    const img = svgEl('image', { x: 0, y: 0, width: S, height: S, preserveAspectRatio: 'none' }, base);
+    img.setAttribute('href', srvUrl('/api/map/image?map=' + encodeURIComponent(m.key) + (m.imageVer ? '&v=' + m.imageVer : '')));
+  };
 
-  // Admin-supplied background image, stretched to the world square so positions
-  // line up. The version param busts the cache after a re-upload.
-  if (hasImage) {
-    const img = svgEl('image', { x: 0, y: 0, width: S, height: S, preserveAspectRatio: 'none' }, svg);
-    img.setAttribute('href', srvUrl('/api/map/image?map=' + encodeURIComponent(map.key) + (map.imageVer ? '&v=' + map.imageVer : '')));
-  }
+  // The world's picture (drawn from the server's files, or the admin's own),
+  // stretched to the world square so positions line up. The version param
+  // busts the cache after a change.
+  if (hasImage) putImage(map);
 
   // Built-in schematic landmass (when there's no uploaded image).
   const shape = (!hasImage && map) ? MAP_SHAPES[map.key] : null;
@@ -7122,23 +7239,23 @@ function buildGameMap(map, opts = {}) {
     const toLine = (pts) => pts.map((p, i) => (i ? 'L' : 'M') + w2s(p[0], p[1]).join(' ')).join(' ');
     const isCoast = shape.coast !== false;
     // Base: sea for coastal/island worlds, land tint for landlocked ones.
-    svgEl('rect', { x: 0, y: 0, width: S, height: S, class: isCoast ? 'gm-water' : 'gm-land' }, svg);
-    if (shape.land) svgEl('path', { d: toPath(shape.land), class: 'gm-land' }, svg);
-    for (const isl of (shape.islands || [])) svgEl('path', { d: toPath(isl), class: 'gm-land' }, svg);
+    svgEl('rect', { x: 0, y: 0, width: S, height: S, class: isCoast ? 'gm-water' : 'gm-land' }, base);
+    if (shape.land) svgEl('path', { d: toPath(shape.land), class: 'gm-land' }, base);
+    for (const isl of (shape.islands || [])) svgEl('path', { d: toPath(isl), class: 'gm-land' }, base);
     // Elevation: graduated hypsometric fills (lowland → peak, lowest drawn first),
     // then the same outlines as topographic contour lines. Original stylised
     // relief, not a trace of any real map.
     const bands = (shape.terrain || []).slice().sort((a, b) => (a.level || 1) - (b.level || 1));
-    for (const band of bands) svgEl('path', { d: toPath(band.poly), class: 'gm-hi gm-hi' + (band.level || 1) }, svg);
-    if (isCoast && shape.land) svgEl('path', { d: toPath(shape.land), class: 'gm-contour gm-shore' }, svg);
-    for (const isl of (isCoast ? (shape.islands || []) : [])) svgEl('path', { d: toPath(isl), class: 'gm-contour gm-shore' }, svg);
-    for (const band of bands) svgEl('path', { d: toPath(band.poly), class: 'gm-contour' }, svg);
-    for (const lake of (shape.lakes || [])) svgEl('path', { d: toPath(lake), class: 'gm-water gm-lake' }, svg);
+    for (const band of bands) svgEl('path', { d: toPath(band.poly), class: 'gm-hi gm-hi' + (band.level || 1) }, base);
+    if (isCoast && shape.land) svgEl('path', { d: toPath(shape.land), class: 'gm-contour gm-shore' }, base);
+    for (const isl of (isCoast ? (shape.islands || []) : [])) svgEl('path', { d: toPath(isl), class: 'gm-contour gm-shore' }, base);
+    for (const band of bands) svgEl('path', { d: toPath(band.poly), class: 'gm-contour' }, base);
+    for (const lake of (shape.lakes || [])) svgEl('path', { d: toPath(lake), class: 'gm-water gm-lake' }, base);
     // Rivers: open polylines (stroked, not filled), drawn over the land.
-    for (const river of (shape.rivers || [])) svgEl('path', { d: toLine(river), class: 'gm-river' }, svg);
+    for (const river of (shape.rivers || [])) svgEl('path', { d: toLine(river), class: 'gm-river' }, base);
     // Main roads — light strokes; major arteries a touch heavier.
     for (const road of (shape.roads || [])) {
-      svgEl('path', { d: toLine(road.pts || road), class: 'gm-road' + (road.major ? ' gm-road-major' : '') }, svg);
+      svgEl('path', { d: toLine(road.pts || road), class: 'gm-road' + (road.major ? ' gm-road-major' : '') }, base);
     }
   } else if (!hasImage) {
     // No schematic and no real image (Livonia/Sakhal have shapes; modded and
@@ -7146,7 +7263,7 @@ function buildGameMap(map, opts = {}) {
     // the page never looks broken. A centred CTA (added after the grid) invites
     // uploading a real top-down map for accurate placement.
     svg.classList.add('gm-placeholder');
-    svgEl('rect', { x: 0, y: 0, width: S, height: S, class: 'gm-land-soft' }, svg);
+    svgEl('rect', { x: 0, y: 0, width: S, height: S, class: 'gm-land-soft' }, base);
   }
 
   // Real-data overlays (land, loot tiers, buildings, zones) from the mission's
@@ -7173,7 +7290,7 @@ function buildGameMap(map, opts = {}) {
   // Placeholder call-to-action: only when there's neither a real image nor a
   // built-in schematic — invites the admin to upload a top-down map image.
   if (!hasImage && !shape) {
-    const cta = svgEl('g', { class: 'gm-cta' }, svg);
+    const cta = svgEl('g', { class: 'gm-cta' }, base);
     const title = svgEl('text', { x: S / 2, y: S / 2 - 10, class: 'gm-cta-title', 'text-anchor': 'middle' }, cta);
     title.textContent = (map && map.key && map.key !== 'unknown') ? (map.name || map.key) : t('map.unknownWorld');
     const hint = svgEl('text', { x: S / 2, y: S / 2 + 16, class: 'gm-cta-hint', 'text-anchor': 'middle' }, cta);
@@ -7192,7 +7309,7 @@ function buildGameMap(map, opts = {}) {
   const LOD_PX = REF_W / (S * 0.55); // screen px per unit at which minor labels show
   let widthPx = 0;
   const gm = {
-    svg, w2s, s2w, size, layer, S, overlay,
+    svg, w2s, s2w, size, layer, S, overlay, marks,
     onView: null,
     // Shared tools (maptools.js) re-plot on zoom too: onView belongs to the page.
     viewHooks: [],
@@ -7226,6 +7343,7 @@ function buildGameMap(map, opts = {}) {
   function updatePois() {
     const w = widthPx || REF_W;
     marks.classList.toggle('gm-lod-in', w / view.w > LOD_PX);
+    marks.classList.toggle('gm-lod-in2', w / view.w > LOD_PX * 1.9);
     svg.classList.toggle('gm-narrow', w < 500);
     const sc = view.w / w * REF_W / S;
     if (Math.abs(sc - lastPoiK) < 0.0005) return; // only rescale when it changed
@@ -7264,6 +7382,19 @@ function buildGameMap(map, opts = {}) {
     applyView();
   }
   gm.resetView = () => { view.x = 0; view.y = 0; view.w = S; view.h = S; applyView(); };
+  // Labels added later (the world's place names) take the current zoom.
+  gm.refreshPois = () => { lastPoiK = -1; updatePois(); };
+  // useImage shows a picture that appeared since the map was built (the one
+  // drawn from the world's files) instead of the schematic or placeholder.
+  gm.useImage = (m) => {
+    base.replaceChildren();
+    putImage(m);
+    marks.replaceChildren();
+    svg.classList.remove('gm-has-shape', 'gm-arid', 'gm-placeholder');
+    svg.classList.add('has-img');
+    svg.classList.toggle('gm-has-terrain', !!m.terrain);
+    if (map) Object.assign(map, { hasImage: true, imageVer: m.imageVer, terrain: !!m.terrain });
+  };
   // Centre on a world point, zooming in to width w (user units) if wider.
   gm.focus = (x, z, w = S / 6) => {
     const [sx, sy] = w2s(x, z);
@@ -9602,6 +9733,17 @@ Views.gameplay = async (root) => {
             inp.oninput = () => { const n = Number(inp.value); if (inp.value.trim() !== '' && !Number.isNaN(n)) { arr[i] = n; write(arr.slice()); } };
             return h('label', { class: 'gp2-month' }, [h('span', { text: m }), inp]);
           }));
+          // The year drawn above the first of the two rows (visuals.js).
+          if (key === 'environmentMinTemps' && typeof gpTempChart === 'function') {
+            const cur = (k) => {
+              const p = get(path);
+              if (p && Array.isArray(p[k])) return p[k];
+              let dd = defaults;
+              for (const step of path) dd = dd && dd[step];
+              return dd && Array.isArray(dd[k]) ? dd[k] : null;
+            };
+            control = h('div', { class: 'gp2-temps-wrap' }, [gpTempChart(() => [cur('environmentMinTemps'), cur('environmentMaxTemps')], monthNames), control]);
+          }
         }
       } else if (Array.isArray(val) && val.every(x => typeof x === 'string' || typeof x === 'number')) {
         const numeric = (Array.isArray(def) && def.length ? def : val).every(x => typeof x === 'number') && (val.length || (Array.isArray(def) && def.length));
@@ -9651,6 +9793,13 @@ Views.gameplay = async (root) => {
       else (typeof v === 'boolean' && !GP_PICTURE_BOOLS.includes(k) ? bools : grid).append(leaf(here, k, defObj[k]));
     }
     const body = [grid.childElementCount ? grid : null, bools.childElementCount ? bools : null, ...subs].filter(Boolean);
+    // How long a player sprints with these numbers (visuals.js).
+    if (key === 'StaminaData' && typeof gpStaminaTile === 'function') {
+      body.unshift(gpStaminaTile((k) => {
+        const p = get(here);
+        return (p && typeof p === 'object' && k in p) ? p[k] : defObj[k];
+      }));
+    }
     if (depth === 0) {
       const count = h('span', { class: 'gp2-count' });
       const sec = h('details', { class: 'gp2-group', open: true }, [
@@ -9731,7 +9880,12 @@ Views.gameplay = async (root) => {
     h('button', { type: 'button', class: 'secondary small', i18n: 'action.discard', onclick: () => { root._isDirty = null; navigate('gameplay'); } }),
     h('button', { type: 'button', class: 'primary small', i18n: 'action.save', disabled: running, onclick: (e) => withBusy(e.currentTarget, doSave) }),
   ]);
-  function changed() { bar.hidden = !isDirty(); recount(); }
+  function changed() {
+    bar.hidden = !isDirty();
+    recount();
+    // Pictures drawn from the numbers follow every edit.
+    formHost.querySelectorAll('[data-gpvis]').forEach(el => el._redraw && el._redraw());
+  }
   rawHost.addEventListener('input', changed);
 
   const modeBtn = h('button', { type: 'button', class: 'secondary' });
@@ -10479,3 +10633,12 @@ function fmtPct(v) {
 // file), so the first navigation can never race a view that isn't defined yet.
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', main);
 else main();
+
+// In the desktop window the panel's watchdog (internal/desktop) listens for
+// this heartbeat: a page that goes silent while the window is in front — a
+// crashed page shows as a white window — is reloaded.
+if (typeof window.dzmAlive === 'function') {
+  const beat = () => { try { window.dzmAlive(); } catch {} };
+  beat();
+  setInterval(beat, 10000);
+}

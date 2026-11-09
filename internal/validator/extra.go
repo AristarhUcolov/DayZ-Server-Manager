@@ -615,12 +615,23 @@ func checkMods(o Options) []Issue {
 	}
 	linux := o.Linux || runtime.GOOS == "linux"
 	var missingKeys []string
-	for _, m := range o.activeMods() {
+	// A mod twice in one list is a mistake; once in each (-mod and
+	// -serverMod) is a choice some mods ask for.
+	inList := map[string]bool{}
+	for i, m := range o.activeMods() {
 		k := strings.ToLower(m)
-		if seen[k] {
+		list := "mod:"
+		if i >= len(o.Mods) {
+			list = "server:"
+		}
+		if inList[list+k] {
 			out = append(out, Issue{File: cfgFile, Severity: SevWarning, Code: "mods.duplicate", Fix: "mods.duplicate",
 				Message: fmt.Sprintf("%s is in the launch list twice", m), Args: A("mod", m)})
 			continue
+		}
+		inList[list+k] = true
+		if seen[k] {
+			continue // on both lists: checked once
 		}
 		seen[k] = true
 		dir := o.modDir(m)

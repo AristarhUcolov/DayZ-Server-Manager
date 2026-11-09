@@ -76,7 +76,10 @@ function workshopDownloadCard() {
 
     // 2 — the Steam account.
     const s2 = [];
-    const signedIn = st.user && st.loggedIn === true;
+    // SteamCMD keeps its own sign-in: after a panel restart (the login not
+    // tried yet) its saved login counts — no password and no Steam Guard
+    // code every time. A download it turns down asks for them again.
+    const signedIn = !!st.user && (st.loggedIn === true || (st.loggedIn == null && !!st.saved));
     if (!st.installed) {
       s2.push(h('p', { class: 'hint', i18n: 'wsdl.login.afterTool' }));
     } else if (signedIn && !codeNeed) {
@@ -108,7 +111,11 @@ function workshopDownloadCard() {
         s2.push(h('div', { class: 'row wsdl-row' }, [code, h('button', { class: 'primary', i18n: 'wsdl.code.send', disabled: busy || !st.secure, onclick: go }),
           h('button', { class: 'linkish', i18n: 'action.cancel', onclick: () => { codeNeed = ''; lastPass = ''; render(); } })]));
       } else {
-        s2.push(h('div', { class: 'row wsdl-row' }, [user, pass, h('button', { class: 'primary', i18n: 'wsdl.login.signin', disabled: busy || !st.secure, onclick: go })]));
+        s2.push(h('div', { class: 'row wsdl-row' }, [user, pass, h('button', { class: 'primary', i18n: 'wsdl.login.signin', disabled: busy || !st.secure, onclick: go }),
+          // An account was used before: SteamCMD may still have its login.
+          st.user && st.loggedIn == null ? h('button', { class: 'secondary', i18n: 'wsdl.login.check', disabled: busy,
+            onclick: (e) => withBusy(e.currentTarget, () => watch(api.post('/api/workshop/dl/check', {}))) }) : null,
+        ].filter(Boolean)));
       }
       s2.push(h('small', { class: 'hint', i18n: 'wsdl.login.why' }));
     }
@@ -141,42 +148,57 @@ function workshopDownloadCard() {
       h('button', { class: 'secondary', i18n: 'wsdl.updates', disabled: busy, onclick: (e) => withBusy(e.currentTarget, async () => {
         try {
           const r = await api.post('/api/workshop/dl/updates', {});
-          found = (r.mods || []).map(m => ({ id: m.id, title: m.title, size: m.size, updated: m.updated, found: true, dayz: true, installed: m.mod, newer: m.newer }));
+          found = (r.mods || []).map(m => ({ id: m.id, title: m.title, size: m.size, updated: m.updated, found: true, dayz: true,
+            installed: m.mod, newer: m.newer, copy: m.copy }));
           picked.clear();
-          for (const it of found) if (it.newer) picked.add(it.id);
-          if (!found.some(f => f.newer)) toast(t('wsdl.updates.none'), 'ok');
+          for (const it of found) if (it.newer || it.copy) picked.add(it.id);
+          if (!found.some(f => f.newer || f.copy)) toast(t('wsdl.updates.none'), 'ok');
           render();
         } catch (err) { handleErr(err); }
       }) }),
     ]));
     if (found.length) {
+      const titleOf = new Map(found.map(f => [f.id, f.title || f.id]));
       const list = h('div', { class: 'wsdl-list' });
       for (const it of found) {
         const cb = h('input', { type: 'checkbox', disabled: !it.found || !it.dayz });
         cb.checked = picked.has(it.id);
         cb.onchange = () => { if (cb.checked) picked.add(it.id); else picked.delete(it.id); render(); };
-        list.append(h('label', { class: 'wsdl-item' + (!it.found || !it.dayz ? ' bad' : '') }, [
+        // Required by a pasted mod: it would not load without this one.
+        const needs = (it.requiredBy || []).map(id => titleOf.get(id) || id);
+        const missing = (it.requires || []).filter(id => { const f = found.find(x => x.id === id); return f && !f.installed; });
+        list.append(h('label', { class: 'wsdl-item' + (!it.found || !it.dayz ? ' bad' : '') + (needs.length ? ' needed' : '') }, [
           cb,
           h('span', { class: 'wsdl-item-main' }, [
             h('b', { text: it.found ? it.title : t('wsdl.item.notFound') }),
             h('span', { class: 'hint mono', text: it.id + (it.size ? ' · ' + fmtB(it.size) : '') + (it.updated ? ' · ' + fmtDateTime(it.updated) : '') }),
+            needs.length ? h('span', { class: 'wsdl-item-note', text: t('wsdl.item.neededBy').replace('{mods}', needs.join(', ')) }) : null,
+            missing.length ? h('span', { class: 'wsdl-item-note', text: tn('wsdl.item.needs', { n: missing.length }) }) : null,
           ]),
-          it.installed ? h('span', { class: 'badge ' + (it.newer ? 'warn' : 'mute'), text: (it.newer ? t('wsdl.item.newer') + ' · ' : '') + it.installed }) : null,
+          it.collection ? h('span', { class: 'badge info wsdl-col', text: it.collection, title: t('wsdl.item.collection') }) : null,
+          it.installed ? h('span', { class: 'badge ' + (it.newer || it.copy ? 'warn' : 'mute'),
+            text: (it.newer ? t('wsdl.item.newer') + ' · ' : it.copy ? t('wsdl.item.copy') + ' · ' : '') + it.installed }) : null,
           it.found && !it.dayz ? h('span', { class: 'badge err', i18n: 'wsdl.item.notDayz' }) : null,
         ]));
       }
       s3.push(list);
       const total = found.filter(f => picked.has(f.id)).reduce((s, f) => s + (f.size || 0), 0);
+      const sel = found.filter(f => picked.has(f.id));
+      // Installed mods update in their own folders (and keep their place in
+      // the mod lists); new ones are downloaded and switched on.
+      const onlyInstalled = sel.length && sel.every(f => f.installed);
       s3.push(h('div', { class: 'row wsdl-row' }, [
-        h('label', { class: 'inline-switch' }, [serverSide, h('span', { i18n: 'wsdl.serverSide' })]),
+        onlyInstalled ? h('span') : h('label', { class: 'inline-switch' }, [serverSide, h('span', { i18n: 'wsdl.serverSide' })]),
         h('span', { class: 'grow' }),
         h('button', { class: 'linkish', i18n: 'wsdl.list.clear', disabled: busy, onclick: () => { found = []; picked.clear(); render(); } }),
         h('button', { class: 'primary', disabled: busy || !picked.size || !signedIn || st.running,
-          text: tn('wsdl.download', { n: picked.size }) + (total ? ' · ' + bytes(total) : ''),
-          onclick: (e) => withBusy(e.currentTarget, () => watch(api.post('/api/workshop/dl/download', {
-            items: found.filter(f => picked.has(f.id)).map(f => ({ id: f.id, title: f.title, size: f.size })),
-            serverSide: serverSide.checked,
-          }))) }),
+          text: (onlyInstalled ? tn('wsdl.updateN', { n: picked.size }) : tn('wsdl.download', { n: picked.size })) + (total ? ' · ' + bytes(total) : ''),
+          onclick: (e) => withBusy(e.currentTarget, () => watch(onlyInstalled
+            ? api.post('/api/workshop/dl/update', { ids: sel.map(f => f.id) })
+            : api.post('/api/workshop/dl/download', {
+              items: sel.map(f => ({ id: f.id, title: f.title, size: f.size })),
+              serverSide: serverSide.checked,
+            }))) }),
       ]));
       if (!signedIn) s3.push(h('small', { class: 'hint', i18n: 'wsdl.needLogin' }));
       if (st.running) s3.push(h('small', { class: 'hint warn-text', i18n: 'wsdl.stopFirst' }));
@@ -219,6 +241,8 @@ function workshopDownloadCard() {
 
   // "Install & update mods" of the Steam Workshop source.
   card._sync = () => watch(api.post('/api/workshop/dl/sync', {}));
+  // The Mods table's Update button: these installed mods, now.
+  card._update = (ids) => watch(api.post('/api/workshop/dl/update', { ids }));
   load();
   return card;
 }

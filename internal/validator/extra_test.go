@@ -131,6 +131,11 @@ func TestCheckModsAndFixKeys(t *testing.T) {
 	if c["mods.missing"] != 1 || c["mods.duplicate"] != 1 || c["mods.keys"] != 1 {
 		t.Fatalf("codes = %v", c)
 	}
+	// Loaded both ways (-mod and -serverMod) on purpose: not a duplicate.
+	both := Options{ServerDir: dir, Mods: []string{"@A"}, ServerMods: []string{"@A"}}
+	if c := codes(checkMods(both)); c["mods.duplicate"] != 0 || c["mods.keys"] != 1 {
+		t.Fatalf("both lists: codes = %v", c)
+	}
 	if _, err := fixModKeys(o); err != nil {
 		t.Fatal(err)
 	}

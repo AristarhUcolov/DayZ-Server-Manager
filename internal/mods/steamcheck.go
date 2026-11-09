@@ -29,6 +29,10 @@ type WorkshopRemote struct {
 	FileSize    int64     `json:"fileSize,omitempty"`
 	AppID       int       `json:"appId,omitempty"` // the game it belongs to: 221100 for DayZ
 	Preview     string    `json:"preview,omitempty"`
+	// Manifest is Steam's content id of the current version (hcontent_file):
+	// it changes only when the files do, unlike TimeUpdated, which also moves
+	// when the author edits the description or the picture.
+	Manifest string `json:"manifest,omitempty"`
 }
 
 // flexInt reads a number Steam sends either bare or as a string.
@@ -46,6 +50,19 @@ func (f *flexInt) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 	*f = flexInt(v)
+	return nil
+}
+
+// flexStr reads an id Steam sends either as a string or as a bare number
+// (too big for a float64, so never decoded through one); "0" counts as none.
+type flexStr string
+
+func (f *flexStr) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "null" || s == "0" {
+		s = ""
+	}
+	*f = flexStr(s)
 	return nil
 }
 
@@ -131,6 +148,7 @@ func fetchBatch(ctx context.Context, ids []string, out map[string]WorkshopRemote
 				FileSize        flexInt `json:"file_size"`
 				ConsumerAppID   flexInt `json:"consumer_app_id"`
 				PreviewURL      string  `json:"preview_url"`
+				HContentFile    flexStr `json:"hcontent_file"`
 			} `json:"publishedfiledetails"`
 		} `json:"response"`
 	}
@@ -150,6 +168,7 @@ func fetchBatch(ctx context.Context, ids []string, out map[string]WorkshopRemote
 			FileSize:    int64(d.FileSize),
 			AppID:       int(d.ConsumerAppID),
 			Preview:     d.PreviewURL,
+			Manifest:    string(d.HContentFile),
 		}
 	}
 	return nil

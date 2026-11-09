@@ -209,7 +209,15 @@ func (h *handlers) weatherTime(w http.ResponseWriter, r *http.Request) {
 type wipeFolder struct {
 	Name      string `json:"name"`
 	SizeBytes int64  `json:"sizeBytes"`
+	// WorldBytes is the world part, <storage>/data — bases, vehicles, tents
+	// and the economy's state. Players' characters are players.db, beside it.
+	WorldBytes int64 `json:"worldBytes"`
+	HasPlayers bool  `json:"hasPlayers"`
 }
+
+// worldWipeMarker marks a backup of a world-only wipe: its storage folders
+// hold just the data folder, players.db stayed in the mission.
+const worldWipeMarker = "world-only"
 
 func (h *handlers) wipeStorageFolders(missionDir string) []string {
 	var names []string
@@ -233,8 +241,11 @@ func (h *handlers) wipePreview(w http.ResponseWriter, r *http.Request) {
 	folders := []wipeFolder{}
 	var total int64
 	for _, name := range h.wipeStorageFolders(missionDir) {
-		sz := dirSizeWalk(filepath.Join(missionDir, name))
-		folders = append(folders, wipeFolder{Name: name, SizeBytes: sz})
+		dir := filepath.Join(missionDir, name)
+		sz := dirSizeWalk(dir)
+		_, perr := os.Stat(filepath.Join(dir, "players.db"))
+		folders = append(folders, wipeFolder{Name: name, SizeBytes: sz,
+			WorldBytes: dirSizeWalk(filepath.Join(dir, "data")), HasPlayers: perr == nil})
 		total += sz
 	}
 
@@ -260,6 +271,15 @@ func (h *handlers) wipeApply(w http.ResponseWriter, r *http.Request) {
 	}
 	defer unlock()
 
+	// mode "world": only the world — bases, vehicles, tents, the economy's
+	// state (<storage>/data) — while players keep their characters
+	// (players.db). Anything else: everything.
+	var req struct {
+		Mode string `json:"mode"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	world := req.Mode == "world"
+
 	mission, err := h.missionTemplate()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -267,6 +287,15 @@ func (h *handlers) wipeApply(w http.ResponseWriter, r *http.Request) {
 	}
 	missionDir := dztypes.MissionDir(h.app.ServerDir, mission)
 	targets := h.wipeStorageFolders(missionDir)
+	if world {
+		kept := targets[:0:0]
+		for _, name := range targets {
+			if dirExists(filepath.Join(missionDir, name, "data")) {
+				kept = append(kept, name)
+			}
+		}
+		targets = kept
+	}
 	if len(targets) == 0 {
 		writeJSON(w, map[string]interface{}{"wiped": 0, "message": "no persistence to wipe"})
 		return
@@ -278,22 +307,37 @@ func (h *handlers) wipeApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if world {
+		_ = os.WriteFile(filepath.Join(backupDir, worldWipeMarker), []byte("players.db kept in the mission\n"), 0o644)
+	}
 	moved := []string{}
 	for _, name := range targets {
 		src := filepath.Join(missionDir, name)
 		dst := filepath.Join(backupDir, name)
+		if world {
+			if err := os.MkdirAll(dst, 0o755); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			src, dst = filepath.Join(src, "data"), filepath.Join(dst, "data")
+		}
 		if err := os.Rename(src, dst); err != nil {
 			http.Error(w, fmt.Sprintf("move %s: %v", name, err), http.StatusInternalServerError)
 			return
 		}
 		moved = append(moved, name)
 	}
-	h.app.Log.Printf("server wipe: moved %d storage folder(s) to %s", len(moved), backupDir)
+	if world {
+		h.app.Log.Printf("server wipe (world only, players kept): moved the data of %d storage folder(s) to %s", len(moved), backupDir)
+	} else {
+		h.app.Log.Printf("server wipe: moved %d storage folder(s) to %s", len(moved), backupDir)
+	}
 	h.app.Notify("wipe", strings.Join(moved, ", "))
 	writeJSON(w, map[string]interface{}{
 		"wiped":     len(moved),
 		"folders":   moved,
 		"backupDir": backupDir,
+		"world":     world,
 	})
 }
 

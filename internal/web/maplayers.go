@@ -262,6 +262,11 @@ func (h *handlers) mapLayersInfo(w http.ResponseWriter, r *http.Request) {
 	out["layers"] = map[string]bool{"land": af, "tiers": af, "buildings": mg, "infected": env, "wildlife": env, "toxic": eff}
 	out["ver"] = map[string]int64{"areaflags": afV, "buildings": mgV}
 	out["tierNames"] = missionValueNames(md)
+	lang := r.URL.Query().Get("lang")
+	if lang == "" {
+		lang = h.app.Cfg().Language
+	}
+	out["terrain"] = h.terrainStatus(lang)
 	writeJSON(w, out)
 }
 

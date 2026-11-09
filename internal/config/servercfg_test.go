@@ -193,3 +193,28 @@ func TestSaveKeepsCRLF(t *testing.T) {
 		t.Fatalf("got %q\nwant %q", data, want)
 	}
 }
+
+func TestDeleteRemovesEveryLineOfTheKey(t *testing.T) {
+	src := "hostname = \"x\";\ndisable3rdPerson = 1; // old\nDISABLE3RDPERSON=0;\nthirdPersonView=1;\n"
+	p := filepath.Join(t.TempDir(), "serverDZ.cfg")
+	if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := LoadServerCfg(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Delete("disable3rdPerson") {
+		t.Fatal("Delete must report the key it removed")
+	}
+	if c.Delete("disable3rdPerson") {
+		t.Fatal("nothing left to remove")
+	}
+	if err := c.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(p)
+	if strings.Contains(strings.ToLower(string(got)), "disable3rdperson") || !strings.Contains(string(got), "thirdPersonView=1;") || !strings.Contains(string(got), "hostname = \"x\";") {
+		t.Fatalf("after delete:\n%s", got)
+	}
+}

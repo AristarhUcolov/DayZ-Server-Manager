@@ -566,20 +566,42 @@ func gzipper(h http.Handler) http.Handler {
 
 type gzipResponseWriter struct {
 	http.ResponseWriter
-	gz   *gzip.Writer
-	skip bool // 204/304 — never compress
-	used bool // at least one compressed Write happened
+	gz      *gzip.Writer
+	skip    bool // 204/304, or data that is compressed already
+	decided bool
+	used    bool // at least one compressed Write happened
 }
 
-func (g *gzipResponseWriter) WriteHeader(code int) {
-	if code == http.StatusNoContent || code == http.StatusNotModified {
+// decide looks at the response once, before its first byte: pictures,
+// archives and fonts are compressed already — gzip would only burn CPU on
+// them (a drawn map is 3 MB) and break range requests.
+func (g *gzipResponseWriter) decide(code int) {
+	if g.decided {
+		return
+	}
+	g.decided = true
+	ct := strings.ToLower(g.Header().Get("Content-Type"))
+	precompressed := (strings.HasPrefix(ct, "image/") && !strings.HasPrefix(ct, "image/svg")) ||
+		strings.HasPrefix(ct, "video/") || strings.HasPrefix(ct, "audio/") || strings.HasPrefix(ct, "font/woff") ||
+		strings.Contains(ct, "zip") || strings.Contains(ct, "gzip")
+	if code == http.StatusNoContent || code == http.StatusNotModified || code == http.StatusPartialContent || precompressed {
 		g.skip = true
 		g.Header().Del("Content-Encoding")
 	}
+}
+
+func (g *gzipResponseWriter) WriteHeader(code int) {
+	g.decide(code)
 	g.ResponseWriter.WriteHeader(code)
 }
 
 func (g *gzipResponseWriter) Write(b []byte) (int, error) {
+	if !g.decided {
+		if g.Header().Get("Content-Type") == "" {
+			g.Header().Set("Content-Type", http.DetectContentType(b))
+		}
+		g.decide(http.StatusOK)
+	}
 	if g.skip {
 		return g.ResponseWriter.Write(b)
 	}

@@ -116,6 +116,17 @@ func List(serverDir, srcDir string) ([]Mod, error) {
 		}
 		m.DisplayName = meta.Name
 		m.PublishedID = meta.PublishedID
+		if !isNumeric(m.PublishedID) || m.PublishedID == "0" {
+			// meta.cpp without an id: the panel's note of what it installed,
+			// or the SteamCMD download folder's name.
+			m.PublishedID = ""
+			if m.InstalledInServer {
+				m.PublishedID = ReadMarker(m.ServerPath).PublishedID
+			}
+			if m.PublishedID == "" && m.WorkshopPath != "" {
+				m.PublishedID = PublishedIDOf(m.WorkshopPath)
+			}
+		}
 		m.MetaTimestamp = meta.Timestamp
 		if runtime.GOOS == "linux" && m.InstalledInServer {
 			m.CaseProblems = CaseProblems(m.ServerPath)
@@ -146,24 +157,43 @@ func updateAvailable(m *Mod, srcMeta, srvMeta modMeta) bool {
 	return newest.After(m.ServerModifiedAt.Add(2 * time.Second))
 }
 
+// SourceNewer reports whether the mod copy at src is newer than the one at
+// srv — the same test List makes for a source and server copy of one name,
+// for two copies that are called differently.
+func SourceNewer(src, srv string) bool {
+	m := &Mod{ServerPath: srv, WorkshopPath: src}
+	_, _, m.ServerModifiedAt = scanTreeCached(srv)
+	return updateAvailable(m, readMeta(src), readMeta(srv))
+}
+
 // Install copies @ModName from the mod source into the server directory and
 // merges its .bikey files into <serverDir>/keys.
 func Install(serverDir, srcDir, modName string) error {
 	if err := ValidName(modName); err != nil {
 		return err
 	}
-	if !strings.HasPrefix(modName, "@") {
-		return fmt.Errorf("mod name must start with '@'")
-	}
 	src, err := SourcePath(srcDir, modName)
 	if err != nil {
 		return err
+	}
+	return InstallFrom(serverDir, src, modName)
+}
+
+// InstallFrom copies the mod folder src (a source folder, a !Workshop
+// junction, a SteamCMD download) into the server as modName — whatever src
+// is called — and merges its keys.
+func InstallFrom(serverDir, src, modName string) error {
+	if err := ValidName(modName); err != nil {
+		return err
+	}
+	if st, err := os.Stat(src); err != nil || !st.IsDir() {
+		return fmt.Errorf("mod source %s not found", src)
 	}
 	dst := filepath.Join(serverDir, modName)
 	if _, err := os.Stat(dst); err == nil {
 		// Reinstalling over an existing copy: swap it like an update, so files
 		// the new version dropped do not linger next to the new ones.
-		return Update(serverDir, srcDir, modName)
+		return updateFrom(serverDir, src, modName)
 	}
 	if err := checkDiskSpace(serverDir, src); err != nil {
 		return err
@@ -182,6 +212,7 @@ func Install(serverDir, srcDir, modName string) error {
 		return fmt.Errorf("install mod: %w", err)
 	}
 	afterCopy(dst)
+	recordSource(dst, src)
 	if err := SyncKeys(serverDir, []string{modName}); err != nil {
 		return fmt.Errorf("sync keys: %w", err)
 	}
@@ -230,13 +261,14 @@ func Update(serverDir, srcDir, modName string) error {
 	if err := ValidName(modName); err != nil {
 		return err
 	}
-	if !strings.HasPrefix(modName, "@") {
-		return fmt.Errorf("mod name must start with '@'")
-	}
 	src, err := SourcePath(srcDir, modName)
 	if err != nil {
 		return err
 	}
+	return updateFrom(serverDir, src, modName)
+}
+
+func updateFrom(serverDir, src, modName string) error {
 	dst := filepath.Join(serverDir, modName)
 	staging := dst + ".updating"
 	_ = os.RemoveAll(staging)
@@ -265,6 +297,7 @@ func Update(serverDir, srcDir, modName string) error {
 	}
 	_ = os.RemoveAll(backup)
 	afterCopy(dst)
+	recordSource(dst, src)
 
 	// Idempotent — this re-pushes all installed mods' keys into /keys.
 	return SyncKeys(serverDir, nil)

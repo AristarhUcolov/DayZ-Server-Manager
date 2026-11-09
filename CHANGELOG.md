@@ -12,6 +12,101 @@ list under **What's new**; older versions are on the
 
 [Русская версия ↓](#русский)
 
+## 1.2.0 — “The November Update” (2026-11-09)
+
+### Maps drawn from your server's own files
+
+- **Every map page shows the real world**: relief with contour lines, sea
+  depths, lakes and rivers, forests, roads by class, railways, power lines and
+  the outline of every building — with the world's place names (towns,
+  villages, hills, bays) in the panel's language.
+- It is drawn **once, on this computer, by itself** the first time a map page
+  opens (about 15 seconds), from the world file the server loads anyway; a
+  game update draws it again. Nothing is downloaded, shared or shipped with
+  the panel. The layers panel has “Draw again”, and your own picture still
+  replaces it if you prefer one.
+- Works for Chernarus, Livonia and modded maps that come as normal PBOs;
+  encrypted DLC worlds (Sakhal, Nasdara) keep the mission's land and buildings
+  layers. Mission cards on the Server and Missions pages show the drawn map.
+
+### Steam Workshop and SteamCMD
+
+- **SteamCMD keeps its sign-in for real.** After the panel restarted it asked
+  for the password — and a Steam Guard code — again, although SteamCMD still
+  had the login; the saved sign-in now counts, so downloads and updates just
+  run. The panel asks again only if Steam ends that sign-in.
+
+- **A pasted link downloads that mod — not others.** The panel took every item
+  linked on a mod's page (its required items, the author's other mods) as if
+  the page were a collection, so pasting one mod could download a different
+  one. Steam's own API now says what a collection is.
+- **Required items come along**: CF and other mods a mod needs are added to
+  the list, marked “needed by …”. Links copied from the Steam app
+  (`steam://url/CommunityFilePage/…`) work too.
+- **“Outdated” means outdated.** The update check compares Steam's content id,
+  which changes only with the files, with what Steam, SteamCMD and the panel
+  noted when the mod was downloaded and installed. An edited description or a
+  slow upload no longer flags a mod that is current.
+- **Updates land in the right folder**: the folder the server already has for
+  that mod (`@CF` stays `@CF`) instead of a second copy nothing loads; a
+  different mod with the same name is never overwritten. Big downloads that
+  time out are tried again.
+- **Update from the mods table**: with the Steam Workshop source, Update on a
+  Workshop mod downloads its current version with SteamCMD and installs it in
+  place. “Check Steam” also says when a newer copy is already downloaded.
+
+### Mods
+
+- **Loaded both ways**: a mod can be loaded for players (`-mod`) and by the
+  server (`-serverMod`) when it asks for that. Switching one on asks whether
+  to move the mod or keep both; such mods carry a “mod + server mod” tag, and
+  the validator no longer calls them duplicates.
+
+### Contaminated zones (new page under Maps)
+
+- The gas zones of `cfgeffectarea.json` on the map: click to add, drag to
+  move, drag the edge to resize, every setting of a zone editable (fields the
+  page does not know are kept).
+- Safe positions — where a player who logs in inside a zone is moved to.
+- The dynamic gas zones: their event (how many, how long) and their spots.
+- The loot inside the zones: the items with the `ContaminatedArea` usage, how
+  many of each, added or removed.
+
+### Vehicles and wipes
+
+- **The numbers explained** as they are typed: the economy keeps “On the map”
+  of each vehicle, “Respawn below” only says when it tops up (lowering it
+  removes nothing), and the colours' Min and Max must leave room — with a
+  warning when they contradict each other.
+- **Wipe → World only**: bases, vehicles, tents and loot reset while players
+  keep their characters (`players.db` stays). Cars already spawned stay until
+  destroyed — this applies new vehicle numbers at once. Undo works for it too.
+
+### Desktop window
+
+- A page that stops responding (a white window) is reloaded, then the window
+  is replaced by a new one, by itself.
+- The tray icon comes back after Windows Explorer restarts — a window hidden
+  in the tray used to be lost with it. The tray menu has “Reload the window”.
+
+### Server and Gameplay
+
+- **DayZ 1.30 third person**: the game replaced `disable3rdPerson` with
+  `thirdPersonView`, which adds a third choice — third person in vehicles
+  only. The panel offers and writes the new setting when the server knows it,
+  and removes the old one so the two never disagree.
+- **Pictures**: the camera (third person, first person, vehicles only), the
+  crosshair, the nights, voice chat with its quality slider and the login
+  queue are drawings on the Server page; Gameplay draws the year's
+  temperatures as a chart and how long a player sprints carrying 0–30 kg.
+- **Validator**: `cfggameplay.json` settings DayZ does not read — a typo, a
+  retired key (Bohemia's own template has one) — are listed with the setting
+  meant. The list comes from the server's own game scripts, so it follows
+  every game update.
+- Map pages load faster: pictures are no longer compressed a second time on
+  their way to the browser.
+- All 23 languages updated.
+
 ## 1.1.0 — “The Halloween Update” (2026-10-29)
 
 ### Vehicles, attachments and presets — like the player loadout
@@ -195,6 +290,105 @@ list under **What's new**; older versions are on the
 # Русский
 
 [English version ↑](#english)
+
+## 1.2.0 — «Ноябрьское обновление» (09.11.2026)
+
+### Карты, нарисованные по файлам самого сервера
+
+- **На каждой странице с картой — настоящий мир**: рельеф с горизонталями,
+  глубины моря, озёра и реки, леса, дороги по классам, железные дороги, ЛЭП и
+  контур каждого здания — с названиями мест мира (города, деревни, высоты,
+  заливы) на языке панели.
+- Карта рисуется **один раз, на этом компьютере, сама** при первом открытии
+  страницы с картой (около 15 секунд) — по файлу мира, который сервер и так
+  загружает; после обновления игры рисуется заново. Ничего не скачивается, не
+  отправляется и не поставляется с панелью. В панели слоёв есть «Нарисовать
+  заново», а свою картинку по-прежнему можно поставить вместо неё.
+- Работает для Черноруси, Ливонии и модовых карт в обычных PBO; зашифрованные
+  миры DLC (Сахал, Насдара) остаются со слоями суши и зданий из миссии.
+  Карточки миссий на страницах «Сервер» и «Миссии» показывают нарисованную
+  карту.
+
+### Steam Workshop и SteamCMD
+
+- **SteamCMD по-настоящему помнит вход.** После перезапуска панели он снова
+  спрашивал пароль — и код Steam Guard, — хотя вход у SteamCMD был сохранён;
+  теперь сохранённый вход засчитывается, и загрузки с обновлениями просто
+  идут. Панель спросит снова, только если Steam завершит этот вход.
+
+- **Ссылка скачивает именно этот мод, а не другие.** Панель принимала все
+  предметы, на которые ссылается страница мода (обязательные предметы, другие
+  моды автора), за коллекцию — поэтому ссылка на один мод могла скачать
+  другой. Теперь, что является коллекцией, говорит API самого Steam.
+- **Обязательные предметы добавляются вместе с модом**: CF и другие нужные
+  моду моды попадают в список с пометкой «нужен для …». Ссылки, скопированные
+  из приложения Steam (`steam://url/CommunityFilePage/…`), тоже работают.
+- **«Устарел» значит устарел.** Проверка обновлений сравнивает идентификатор
+  содержимого в Steam — он меняется только вместе с файлами — с тем, что
+  записали Steam, SteamCMD и панель при скачивании и установке. Правка описания
+  или долгая загрузка больше не помечают актуальный мод.
+- **Обновления ставятся в нужную папку** — туда, где мод уже лежит на сервере
+  (`@CF` остаётся `@CF`), а не во вторую копию, которую никто не загружает;
+  другой мод с таким же именем никогда не перезаписывается. Большие загрузки,
+  оборвавшиеся по таймауту, повторяются.
+- **Обновление прямо из таблицы модов**: с источником Steam Workshop кнопка
+  «Обновить» у мода из мастерской скачивает его актуальную версию через
+  SteamCMD и ставит на место. «Проверить Steam» также показывает, когда новая
+  версия уже скачана.
+
+### Моды
+
+- **Двумя способами**: мод можно загружать и для игроков (`-mod`), и сервером
+  (`-serverMod`), если ему это нужно. При включении панель спрашивает,
+  перенести мод или оставить оба варианта; такие моды помечены «мод +
+  серверный», и валидатор больше не считает их дубликатами.
+
+### Заражённые зоны (новая страница в разделе «Карты»)
+
+- Газовые зоны из `cfgeffectarea.json` на карте: клик добавляет, перетаскивание
+  двигает, край меняет размер, все настройки зоны редактируются (поля, которых
+  страница не знает, сохраняются).
+- Безопасные точки — куда переносит игрока, зашедшего в игру внутри зоны.
+- Динамические газовые зоны: их событие (сколько, как долго) и точки.
+- Лут внутри зон: предметы с использованием `ContaminatedArea`, сколько
+  каждого, добавить или убрать.
+
+### Транспорт и вайпы
+
+- **Числа объяснены** прямо при вводе: экономика держит «На карте» каждой
+  машины, «Досоздавать ниже» говорит лишь, когда досоздавать (его снижение
+  ничего не убирает), а «Мин.» и «Макс.» цветов должны оставлять место, — с
+  предупреждением, когда числа противоречат друг другу.
+- **Вайп → «Только мир»**: сбрасываются базы, машины, палатки и лут, а игроки
+  сохраняют персонажей (`players.db` остаётся). Машины, которые уже появились,
+  остаются, пока их не уничтожат, — так новые числа транспорта действуют сразу.
+  Отмена работает и для него.
+
+### Окно приложения
+
+- Страница, которая перестала отвечать (белое окно), сама перезагружается, а
+  затем окно заменяется новым.
+- Значок в трее возвращается после перезапуска Проводника Windows — раньше
+  вместе с ним терялось спрятанное в трей окно. В меню трея есть
+  «Перезагрузить окно».
+
+### Сервер и геймплей
+
+- **Третье лицо в DayZ 1.30**: игра заменила `disable3rdPerson` на
+  `thirdPersonView` с третьим вариантом — третье лицо только в транспорте.
+  Панель показывает и пишет новый параметр, когда сервер его знает, и убирает
+  старый, чтобы они не спорили.
+- **Картинки**: камера (третье лицо, первое лицо, только в транспорте), прицел,
+  ночи, голосовой чат с ползунком качества и очередь входа на странице
+  «Сервер» — рисунками; «Геймплей» рисует температуру по месяцам и сколько
+  игрок бежит с грузом 0–30 кг.
+- **Валидатор**: настройки `cfggameplay.json`, которые DayZ не читает, —
+  опечатка или устаревший ключ (такой есть даже в шаблоне Bohemia), —
+  показываются с подсказкой нужной. Список берётся из скриптов самой игры на
+  сервере, поэтому сам следует за обновлениями.
+- Страницы с картами открываются быстрее: картинки больше не сжимаются второй
+  раз по пути в браузер.
+- Обновлены все 23 языка.
 
 ## 1.1.0 — «Хэллуинское обновление» (29.10.2026)
 

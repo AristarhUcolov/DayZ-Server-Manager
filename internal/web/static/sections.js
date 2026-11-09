@@ -103,9 +103,18 @@ function switchRow(el, labelKey, helpKey) {
 // mapThumb draws a small, label-free picture of a world from its built-in
 // schematic (land, relief, lakes, rivers) — or a neutral tile with the
 // world's initial for maps without one.
-function mapThumb(key, size, name) {
+function mapThumb(key, size, name, imageVer) {
   const shape = (typeof MAP_SHAPES !== 'undefined' && key) ? MAP_SHAPES[key] : null;
   const wrap = h('div', { class: 'map-thumb' });
+  // The world's own picture (drawn from its files, or uploaded), small.
+  if (imageVer && key) {
+    const img = h('img', { class: 'map-thumb-img', alt: '', loading: 'lazy', decoding: 'async',
+      src: srvUrl('/api/map/image?map=' + encodeURIComponent(key) + '&thumb=1&v=' + imageVer) });
+    // A picture that cannot be shown falls back to the schematic.
+    img.onerror = () => wrap.replaceWith(mapThumb(key, size, name));
+    wrap.append(img);
+    return wrap;
+  }
   if (!shape) {
     wrap.classList.add('placeholder');
     wrap.append(h('span', { class: 'map-thumb-initial', text: String(name || '?').trim().charAt(0).toUpperCase() || '?' }));
@@ -177,7 +186,7 @@ function missionTile(m, opts = {}) {
   } }));
   for (const b of (opts.extra || [])) if (b) actions.append(b);
   return h('div', { class: 'map-tile' + (m.active ? ' active' : '') + (m.valid ? '' : ' invalid') }, [
-    mapThumb(m.worldKey, m.worldSize, m.world),
+    mapThumb(m.worldKey, m.worldSize, m.world, m.imageVer),
     h('div', { class: 'map-tile-body' }, [
       h('div', { class: 'map-tile-world', text: m.world || m.name }),
       h('div', { class: 'map-tile-name mono', text: m.name, title: m.name }),
@@ -246,7 +255,10 @@ const CFG_GROUPS = [
     { k: 'steamQueryPort', kind: 'number', min: 1, max: 65535, help: 'server.steamQueryPort' },
   ] },
   { id: 'gameplay', icon: 'i-gameplay', fields: [
-    { k: 'disable3rdPerson', kind: 'bool', help: 'server.thirdPerson' },
+    // DayZ 1.30 replaced disable3rdPerson by thirdPersonView (1 on, 0 off,
+    // 2 in vehicles only): the one the server reads is shown (features).
+    { k: 'thirdPersonView', kind: 'select', options: ['1', '0', '2'], needs: 'thirdPersonView' },
+    { k: 'disable3rdPerson', kind: 'bool', help: 'server.thirdPerson', unless: 'thirdPersonView' },
     { k: 'disableCrosshair', kind: 'bool' },
     { k: 'disablePersonalLight', kind: 'bool', gameplay: true },
     // 2 and 3 load the Sakhal and Nasdara lighting (WorldLighting.c).
@@ -283,7 +295,13 @@ const CFG_GROUPS = [
 ];
 
 function serverCfgCard(data) {
-  const values = (data && data.values) || {};
+  const values = { ...((data && data.values) || {}) };
+  const feats = (data && data.features) || {};
+  // A config from before 1.30 has only disable3rdPerson: the new field
+  // starts from it (and is written only when changed).
+  if (feats.thirdPersonView && (values.thirdPersonView ?? '') === '') {
+    values.thirdPersonView = String(values.disable3rdPerson ?? '').trim() === '1' ? '0' : '1';
+  }
   const bag = {};
   // The backend saves into whatever file is configured at request time, so the
   // card must never save once the config file it was loaded from has changed.
@@ -315,6 +333,7 @@ function serverCfgCard(data) {
     const grid = h('div', { class: 'cfg-grid' });
     const bools = h('div', { class: 'cfg-bools' });
     for (const f of g.fields) {
+      if ((f.needs && !feats[f.needs]) || (f.unless && feats[f.unless])) continue;
       const raw = values[f.k] ?? '';
       let input, cell;
       const keyTag = h('code', { class: 'cfg-key', text: f.k });
@@ -365,12 +384,17 @@ function serverCfgCard(data) {
       }
       grid.append(cell);
     }
-    card.append(h('section', { class: 'cfg-group' }, [
+    card.append(h('section', { class: 'cfg-group', 'data-group': g.id }, [
       h('h4', { class: 'cfg-group-title' }, [h('span', { class: 'card-title-icon', html: svgIcon(g.icon, 15) }), h('span', { i18n: 'server.group.' + g.id })]),
       g.hint ? h('p', { class: 'hint cfg-group-hint', i18n: g.hint }) : null,
       grid.childElementCount ? grid : null,
       bools.childElementCount ? bools : null,
     ].filter(Boolean)));
+  }
+  // Pictures for the camera, crosshair, nights, voice chat and the login
+  // queue (visuals.js), tied to the fields above.
+  if (typeof srvVisuals === 'function') {
+    for (const sec of card.querySelectorAll('section.cfg-group[data-group]')) srvVisuals(card, sec.dataset.group, sec, gameplayOn);
   }
   const NUMERIC = new Set(CFG_GROUPS.flatMap(g => g.fields.filter(f => f.kind !== 'text' && f.kind !== 'secret').map(f => f.k)));
   // What the file holds now — edits are what differs from it.

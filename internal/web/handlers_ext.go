@@ -650,26 +650,16 @@ func (h *handlers) modsCheckUpdates(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// localUpdated is when the local copy was published on the Workshop: meta.cpp's
-// timestamp when present (exact), else the source copy's newest file, else the
-// server copy's.
-func localUpdated(m *mods.Mod) time.Time {
-	if t := mods.MetaTime(m.MetaTimestamp); !t.IsZero() {
-		return t
-	}
-	if !m.WorkshopModifiedAt.IsZero() {
-		return m.WorkshopModifiedAt
-	}
-	return m.ServerModifiedAt
-}
-
+// buildCheckResults compares each mod with Steam (mods.CompareWithSteam: by
+// content id where Steam's or the panel's notes know it, else by time):
+// ok | update (the source copy is newer: Update copies it) | outdated (Steam
+// has a newer version than was downloaded) | missing | unknown.
 func buildCheckResults(idToMod map[string]*mods.Mod, remote map[string]mods.WorkshopRemote) []map[string]interface{} {
 	out := make([]map[string]interface{}, 0, len(idToMod))
 	for id, m := range idToMod {
 		row := map[string]interface{}{
-			"name":         m.Name,
-			"publishedId":  id,
-			"localUpdated": localUpdated(m),
+			"name":        m.Name,
+			"publishedId": id,
 		}
 		r, ok := remote[id]
 		if !ok {
@@ -677,20 +667,14 @@ func buildCheckResults(idToMod map[string]*mods.Mod, remote map[string]mods.Work
 			out = append(out, row)
 			continue
 		}
+		st := mods.CompareWithSteam(*m, r)
 		row["title"] = r.Title
 		row["remoteUpdated"] = r.TimeUpdated
 		row["remoteResult"] = r.Result
-		switch {
-		case r.Result != 1:
-			row["status"] = "missing" // ID was removed/private on Steam
-		case r.TimeUpdated.IsZero():
-			row["status"] = "unknown"
-		case localUpdated(m).IsZero():
-			row["status"] = "unknown"
-		case r.TimeUpdated.After(localUpdated(m).Add(2 * time.Minute)):
-			row["status"] = "outdated"
-		default:
-			row["status"] = "ok"
+		row["status"] = st.Status
+		row["exact"] = st.Exact
+		if !st.Local.IsZero() {
+			row["localUpdated"] = st.Local
 		}
 		out = append(out, row)
 	}

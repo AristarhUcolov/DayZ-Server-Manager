@@ -184,6 +184,7 @@ type wipeSet struct {
 	When    string   `json:"when"` // RFC3339, parsed from the folder name
 	Folders []string `json:"folders"`
 	Size    int64    `json:"size"`
+	World   bool     `json:"world,omitempty"` // a world-only wipe: the characters stayed
 	// Blocked names folders that already exist in the mission again, which is
 	// what makes a restore unsafe: it would overwrite a world players have
 	// been building on since the wipe.
@@ -208,12 +209,21 @@ func (h *handlers) wipeList(w http.ResponseWriter, r *http.Request) {
 		if ts, err := time.ParseInLocation("20060102-150405", e.Name(), time.Local); err == nil {
 			set.When = ts.Format(time.RFC3339)
 		}
+		_, werr := os.Stat(filepath.Join(h.wipesDir(), e.Name(), worldWipeMarker))
+		set.World = werr == nil
 		sub, _ := os.ReadDir(filepath.Join(h.wipesDir(), e.Name()))
 		for _, f := range sub {
-			set.Folders = append(set.Folders, f.Name())
+			if !f.IsDir() {
+				continue
+			}
+			name := f.Name()
+			if set.World {
+				name += "/data" // only the world was taken; players.db stayed
+			}
+			set.Folders = append(set.Folders, name)
 			if missionDir != "" {
-				if _, err := os.Stat(filepath.Join(missionDir, f.Name())); err == nil {
-					set.Blocked = append(set.Blocked, f.Name())
+				if _, err := os.Stat(filepath.Join(missionDir, filepath.FromSlash(name))); err == nil {
+					set.Blocked = append(set.Blocked, name)
 				}
 			}
 		}
@@ -256,17 +266,31 @@ func (h *handlers) wipeRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	missionDir := dztypes.MissionDir(h.app.ServerDir, mission)
 
-	entries, err := os.ReadDir(src)
+	all, err := os.ReadDir(src)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// A world-only wipe took <storage>/data and left players.db: the data
+	// folders go back into the storage folders still there.
+	_, werr := os.Stat(filepath.Join(src, worldWipeMarker))
+	world := werr == nil
+	var entries []string
+	for _, e := range all {
+		if e.IsDir() {
+			name := e.Name()
+			if world {
+				name = filepath.Join(name, "data")
+			}
+			entries = append(entries, name)
+		}
+	}
 	// Check every destination BEFORE moving anything: a half-restored world is
 	// worse than either state on its own.
 	var blocked []string
-	for _, e := range entries {
-		if _, err := os.Stat(filepath.Join(missionDir, e.Name())); err == nil {
-			blocked = append(blocked, e.Name())
+	for _, name := range entries {
+		if _, err := os.Stat(filepath.Join(missionDir, name)); err == nil {
+			blocked = append(blocked, filepath.ToSlash(name))
 		}
 	}
 	if len(blocked) > 0 {
@@ -277,17 +301,26 @@ func (h *handlers) wipeRestore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var restored []string
-	for _, e := range entries {
-		from := filepath.Join(src, e.Name())
-		to := filepath.Join(missionDir, e.Name())
-		if err := os.Rename(from, to); err != nil {
-			http.Error(w, fmt.Sprintf("restore %s: %v", e.Name(), err), http.StatusInternalServerError)
+	for _, name := range entries {
+		from := filepath.Join(src, name)
+		to := filepath.Join(missionDir, name)
+		if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		restored = append(restored, e.Name())
+		if err := os.Rename(from, to); err != nil {
+			http.Error(w, fmt.Sprintf("restore %s: %v", name, err), http.StatusInternalServerError)
+			return
+		}
+		restored = append(restored, filepath.ToSlash(name))
 	}
-	// The folder is now empty; leaving it behind would clutter the list.
-	_ = os.Remove(src)
+	// The folder is now empty (a world-only set keeps its empty storage
+	// folders and the marker); leaving it behind would clutter the list.
+	if world {
+		_ = os.RemoveAll(src)
+	} else {
+		_ = os.Remove(src)
+	}
 
 	h.app.Log.Printf("wipe %s undone: restored %d storage folder(s)", req.ID, len(restored))
 	writeJSON(w, map[string]interface{}{"restored": restored, "count": len(restored)})

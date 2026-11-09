@@ -23,12 +23,15 @@ import (
 )
 
 type mapInfo struct {
-	Key      string  `json:"key"`                // "chernarus" | "livonia" | "sakhal" | "nasdara" | <world name>
-	Name     string  `json:"name"`               // display name
-	Size     float64 `json:"size"`               // world edge length in metres (maps are square)
-	Official bool    `json:"official"`           // one of the three shipped worlds (size is known)
-	HasImage bool    `json:"hasImage"`           // an admin-supplied background image exists
-	ImageVer int64   `json:"imageVer,omitempty"` // its mtime, used to bust the browser cache
+	Key      string  `json:"key"`      // "chernarus" | "livonia" | "sakhal" | "nasdara" | <world name>
+	Name     string  `json:"name"`     // display name
+	Size     float64 `json:"size"`     // world edge length in metres (maps are square)
+	Official bool    `json:"official"` // one of the three shipped worlds (size is known)
+	HasImage bool    `json:"hasImage"` // an admin-supplied background image exists
+	// Terrain: the picture is the one drawn from the world's own files
+	// (terrainmap.go) — its place names come from /api/map/terrain.
+	Terrain  bool  `json:"terrain,omitempty"`
+	ImageVer int64 `json:"imageVer,omitempty"` // its mtime, used to bust the browser cache
 	// SizeFromMission: Size was read from the mission's areaflags.map header.
 	SizeFromMission bool `json:"sizeFromMission,omitempty"`
 	// sizeKnown: Size is real (registry, areaflags.map or admin override), not
@@ -213,6 +216,14 @@ func (h *handlers) currentMap() mapInfo {
 		if st, err := os.Stat(p); err == nil {
 			mi.ImageVer = st.ModTime().Unix()
 		}
+		// A picture drawn from the world covers exactly the world's edge.
+		if m := h.readTerrainMeta(mi.Key); m != nil {
+			mi.Terrain = true
+			if m.World >= 1000 && h.app.Cfg().MapSizes[mi.Key] <= 0 {
+				mi.Size = m.World
+				mi.sizeKnown = true
+			}
+		}
 	}
 	return mi
 }
@@ -258,10 +269,17 @@ func (h *handlers) mapImage(w http.ResponseWriter, r *http.Request) {
 		h.mapImageUpload(w, r)
 		return
 	}
-	p := h.mapImageFile(h.mapImageKey(r))
+	key := h.mapImageKey(r)
+	p := h.mapImageFile(key)
 	if p == "" {
 		http.NotFound(w, r)
 		return
+	}
+	// ?thumb=1: a small copy for the mission cards (mapthumb.go).
+	if r.URL.Query().Get("thumb") != "" {
+		if t := h.mapThumbFile(key, p); t != "" {
+			p = t
+		}
 	}
 	// Long cache — the URL carries an mtime version, so a new upload busts it.
 	w.Header().Set("Cache-Control", "public, max-age=86400")
@@ -313,6 +331,8 @@ func (h *handlers) storeMapImage(key, ext string, data []byte) error {
 	for _, e := range mapImageExts {
 		_ = os.Remove(filepath.Join(h.mapImageDir(), key+e))
 	}
+	// The admin's own picture now: not the one drawn from the world.
+	_ = os.Remove(h.terrainMetaPath(key))
 	return os.WriteFile(filepath.Join(h.mapImageDir(), key+ext), data, 0o644)
 }
 
@@ -445,6 +465,8 @@ func (h *handlers) mapImageDelete(w http.ResponseWriter, r *http.Request) {
 	for _, e := range mapImageExts {
 		_ = os.Remove(filepath.Join(h.mapImageDir(), key+e))
 	}
+	// A drawn picture removed stays removed (terrainAutoPath remains).
+	_ = os.Remove(h.terrainMetaPath(key))
 	writeJSON(w, map[string]string{"status": "deleted"})
 }
 

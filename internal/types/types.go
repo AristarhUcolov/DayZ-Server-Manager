@@ -175,6 +175,33 @@ type BulkFieldPatch struct {
 	Category *string `json:"category,omitempty"`
 }
 
+// SetUsage adds (on) or removes a usage flag of the entry named name and
+// reports whether the entry is in this file.
+func (d *TypesDoc) SetUsage(name, usage string, on bool) bool {
+	for i := range d.Types {
+		t := &d.Types[i]
+		if !strings.EqualFold(t.Name, name) {
+			continue
+		}
+		has := -1
+		for j, u := range t.Usages {
+			if strings.EqualFold(u.Name, usage) {
+				has = j
+			}
+		}
+		switch {
+		case on && has < 0:
+			t.Usages = append(t.Usages, NamedRef{Name: usage})
+			d.markDirty(t.Name)
+		case !on && has >= 0:
+			t.Usages = append(t.Usages[:has:has], t.Usages[has+1:]...)
+			d.markDirty(t.Name)
+		}
+		return true
+	}
+	return false
+}
+
 func (d *TypesDoc) BulkPatch(names []string, patch BulkFieldPatch) int {
 	want := map[string]struct{}{}
 	for _, n := range names {

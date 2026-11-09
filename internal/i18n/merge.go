@@ -10,7 +10,7 @@ package i18n
 type tr map[string]string
 
 // mergedSets lists every side-by-side key set to fold into the bundles.
-var mergedSets = []map[string]tr{v100, v100b, v100c, v110}
+var mergedSets = []map[string]tr{v100, v100b, v100c, v110, v120, v120b}
 
 func init() {
 	for _, set := range mergedSets {

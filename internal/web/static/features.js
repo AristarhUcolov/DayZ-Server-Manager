@@ -1131,7 +1131,7 @@ Views.vehicles = async (root) => {
     kids.forEach(c => {
       const cell = (field, cls) => {
         const inp = h('input', { type: 'number', class: 'inline-cell', value: c[field] ?? 0, disabled: running, 'aria-label': c.type + ' ' + field });
-        inp.addEventListener('input', () => { c[field] = Number(inp.value) || 0; setDirty(); tr.classList.toggle('never', !c.max && !c.min); });
+        inp.addEventListener('input', () => { c[field] = Number(inp.value) || 0; setDirty(); tr.classList.toggle('never', !c.max && !c.min); updateCount(); });
         return h('td', { class: 'num' + (cls ? ' ' + cls : '') }, inp);
       };
       const badge = h('span', { class: 'badge' });
@@ -1211,6 +1211,31 @@ Views.vehicles = async (root) => {
     const tweakKey = () => JSON.stringify([fuelCtl.get(), coolCtl ? coolCtl.get() : null]);
     let tweakSaved = tweakKey();
 
+    // What the numbers do, said as they are typed: the economy keeps
+    // "On the map" of them, "Respawn below" only says when to top up (so
+    // lowering it never removes cars), and the colours' Min/Max must leave
+    // room for that number. Cars already spawned stay until destroyed.
+    const countNote = h('div', { class: 'veh-count' });
+    function updateCount() {
+      const n = Number(F.nominal.value) || 0, lo = Number(F.min.value) || 0, hi = Number(F.max.value) || 0;
+      const used = kids.filter(c => (Number(c.max) || 0) > 0 || (Number(c.min) || 0) > 0);
+      const kidsMax = used.reduce((s, c) => s + (Number(c.max) || 0), 0);
+      const kidsMin = used.reduce((s, c) => s + (Number(c.min) || 0), 0);
+      const lines = [h('div', { class: 'veh-count-main', text: tn('veh.count.keep', { n }) })];
+      const warn = (text) => lines.push(h('div', { class: 'veh-count-warn', text: '⚠ ' + text }));
+      if (lo > n) warn(t('veh.count.minHigh').replace('{min}', lo).replace(/\{n\}/g, n));
+      if (hi && n > hi) warn(t('veh.count.overMax').replace('{n}', n).replace(/\{max\}/g, hi));
+      if (used.length && kidsMax < n) warn(t('veh.count.kidsMax').replace('{sum}', kidsMax).replace('{n}', n));
+      if (used.length && kidsMin > n) warn(t('veh.count.kidsMin').replace('{sum}', kidsMin).replace('{n}', n));
+      lines.push(h('div', { class: 'hint veh-count-persist' }, [
+        h('span', { text: t('veh.count.persist') + ' ' }),
+        h('a', { href: '#wipe', text: t('veh.count.wipe') }),
+      ]));
+      countNote.replaceChildren(...lines);
+    }
+    for (const el of [F.nominal, F.min, F.max]) el.addEventListener('input', updateCount);
+    updateCount();
+
     const warns = [];
     const nominal = Number(v.nominal) || 0;
     if (modOff) warns.push(h('div', { class: 'badge warn', text: t('vehicles.warn.modOff').replace('{mod}', v.mod) }));
@@ -1278,6 +1303,7 @@ Views.vehicles = async (root) => {
         field('lifetime', F.lifetime, lifeHint), field('restock', F.restock),
         h('div', { class: 'veh-field' }, [h('label', { i18n: 'vehicles.f.active' }), h('label', { class: 'veh-active' }, [active, h('span', { i18n: 'vehicles.activeOn' })])]),
       ]),
+      countNote,
       h('div', { class: 'veh-cond' }, [
         h('div', { class: 'veh-cond-row' }, [
           h('span', { class: 'veh-cond-k' }, [h('span', { html: svgIcon('i-fuel', 14) }), h('span', { i18n: 'veh.fuel' }), help('veh.tweaks')]), fuelCtl.el,
@@ -2797,16 +2823,24 @@ function saveLayerPref(k, on) {
 // buildGameMap and draws the enabled layers into gm.overlay. The panel also
 // holds the map background (picture upload / URL / remove, modded map size):
 // a one-time setting per world, not a toolbar button on every map page.
+// PLACE_KIND: a world's place types (its config's Names) as map labels.
+const PLACE_KIND = { Capital: 'capital', City: 'city', Village: 'town', Local: 'poi', LocalOffice: 'poi', Camp: 'poi',
+  RailroadStation: 'poi', Ruin: 'poi', Hill: 'hill', Marine: 'sea' };
+
 function attachMapLayers(gm, map, opts = {}) {
   const mapKey = (map && map.key) || '';
   const btn = h('button', { class: 'gm-zbtn gm-layers-btn', type: 'button', title: t('layers.title'), 'aria-label': t('layers.title') });
   btn.innerHTML = svgIcon('i-layers', 16);
   const layersHost = h('div');
+  // The picture drawn from the world's own files (terrainmap.go).
+  const terrainBox = h('div', { class: 'gm-terrain-ctl' });
+  let imgCtl = mapImageControls(map, opts.onImageChange);
   const panel = h('div', { class: 'gm-layers-panel', hidden: true }, [
     layersHost,
     h('div', { class: 'gm-bg-sec' }, [
       h('div', { class: 'gm-layers-title', i18n: 'map.bg.title' }),
-      mapImageControls(map, opts.onImageChange),
+      terrainBox,
+      imgCtl,
     ]),
   ]);
   gm.controls.append(btn, panel);
@@ -2867,9 +2901,109 @@ function attachMapLayers(gm, map, opts = {}) {
     for (const kk of LAYER_KEYS) if (groups[kk]) gm.overlay.append(groups[kk]);
   }
 
+  // ---- the world's own picture: place names, drawing, Draw again --------
+  let namesG = null;
+  const showNames = (places, on) => {
+    if (namesG) { namesG.remove(); namesG = null; }
+    if (!on || !(places || []).length) return;
+    namesG = svgEl('g', { class: 'gm-places' });
+    for (const p of places) {
+      const kind = PLACE_KIND[p[1]];
+      if (kind && p[0]) drawPoi(namesG, { n: p[0], t: kind, x: p[2], z: p[3], detail: kind === 'poi' || kind === 'hill' || kind === 'sea' }, gm.w2s);
+    }
+    gm.marks.append(namesG);
+    gm.refreshPois();
+  };
+  let note = null;
+  const drawingNote = (phase) => {
+    if (phase == null) { if (note) { note.remove(); note = null; } return; }
+    if (!note) {
+      note = h('div', { class: 'gm-terrain-note', role: 'status' });
+      (gm.svg.parentElement || gm.controls).append(note);
+    }
+    note.textContent = t('map.terrain.drawing') + (phase ? ' · ' + t('map.terrain.phase.' + phase) : '');
+  };
+  let watching = false;
+  let namesRow = null;
+  const namesRowFor = (places) => {
+    if (namesRow) namesRow.remove();
+    namesRow = null;
+    if (!(places || []).length) return;
+    const cb = h('input', { type: 'checkbox' });
+    const prefs = layerPrefs();
+    cb.checked = 'names' in prefs ? !!prefs.names : true;
+    cb.addEventListener('change', () => { saveLayerPref('names', cb.checked); showNames(places, cb.checked); });
+    namesRow = h('label', { class: 'gm-layer-row' }, [cb, h('span', { class: 'gm-layer-swatch sw-names' }), h('span', { text: t('layers.names') })]);
+    const hint = layersHost.querySelector('.gm-layers-hint');
+    if (hint) layersHost.insertBefore(namesRow, hint); else layersHost.append(namesRow);
+    showNames(places, cb.checked);
+  };
+  // Waits for a drawing to finish, then shows the picture in place.
+  const watchDrawing = async () => {
+    if (watching) return;
+    watching = true;
+    try {
+      for (;;) {
+        await new Promise(r => setTimeout(r, 2500));
+        if (!gm.svg.isConnected) return;
+        let st;
+        try { st = await api.get('/api/map/terrain'); } catch { continue; }
+        if (st.state === 'drawing') { drawingNote(st.phase || ''); continue; }
+        drawingNote(null);
+        renderTerrain(st);
+        if (!st.generated) { if (st.error) toast(t('map.terrain.failed').replace('{err}', st.error), 'error'); return; }
+        _mapDataCache = null;
+        const info2 = await mapLayerData('info', mapKey);
+        if (info2.map && info2.map.hasImage) {
+          gm.useImage(info2.map);
+          const ctl = mapImageControls(info2.map, opts.onImageChange);
+          imgCtl.replaceWith(ctl);
+          imgCtl = ctl;
+          // The mission's land and building squares stood in for a picture.
+          const prefs = layerPrefs();
+          for (const k of ['land', 'buildings']) {
+            if (k in prefs) continue;
+            const cb = layersHost.querySelector('input[data-layer="' + k + '"]');
+            if (cb && cb.checked) { cb.checked = false; setLayer(k, false, info2); }
+          }
+        }
+        namesRowFor(st.places);
+        toast(t('map.terrain.done'), 'ok');
+        return;
+      }
+    } finally { watching = false; }
+  };
+  const renderTerrain = (tr) => {
+    terrainBox.replaceChildren();
+    if (!tr || tr.state === 'none') return;
+    if (tr.state === 'encrypted' && !tr.generated) {
+      terrainBox.append(h('p', { class: 'hint', text: t('map.terrain.encrypted') }));
+      return;
+    }
+    const drawing = tr.state === 'drawing';
+    terrainBox.append(
+      h('button', { type: 'button', class: 'secondary small', disabled: drawing,
+        text: t(drawing ? 'map.terrain.drawingShort' : tr.generated ? 'map.terrain.redraw' : 'map.terrain.draw'),
+        onclick: (e) => withBusy(e.currentTarget, async () => {
+          if (map && map.hasImage && !tr.generated && !(await confirmModal(t('map.terrain.replaceConfirm'), { okText: t('map.terrain.draw') }))) return;
+          try {
+            await api.post('/api/map/terrain/draw', {});
+            renderTerrain({ ...tr, state: 'drawing', error: '' });
+            drawingNote('read');
+            watchDrawing();
+          } catch (err) { handleErr(err); }
+        }) }),
+      h('small', { class: 'hint', text: t(tr.generated ? 'map.terrain.from' : 'map.terrain.hint') }),
+    );
+    if (tr.error && !drawing) terrainBox.append(h('small', { class: 'hint warn-text', text: t('map.terrain.failed').replace('{err}', tr.error) }));
+  };
+
   (async () => {
     const info = await mapLayerData('info', mapKey);
     const avail = info.layers || {};
+    const tr = info.terrain || {};
+    renderTerrain(tr);
+    if (tr.state === 'drawing') { drawingNote(tr.phase || ''); watchDrawing(); }
     const hasImage = !!(map && map.hasImage);
     // Defaults: without an uploaded image, the real land and buildings from
     // the mission replace the approximate schematic on every world — except
@@ -2886,12 +3020,13 @@ function attachMapLayers(gm, map, opts = {}) {
     layersHost.append(h('div', { class: 'gm-layers-title', i18n: 'layers.title' }));
     if (!any) {
       layersHost.append(h('p', { class: 'hint', i18n: 'layers.none' }));
+      if (map && map.terrain && tr.generated) namesRowFor(tr.places);
       applyI18n();
       return;
     }
     for (const key of LAYER_KEYS) {
       if (!avail[key]) continue;
-      const cb = h('input', { type: 'checkbox' });
+      const cb = h('input', { type: 'checkbox', 'data-layer': key });
       cb.checked = key in prefs ? !!prefs[key] : defaults[key];
       cb.addEventListener('change', () => { saveLayerPref(key, cb.checked); setLayer(key, cb.checked, info); });
       layersHost.append(h('label', { class: 'gm-layer-row' }, [cb, h('span', { class: 'gm-layer-swatch sw-' + key }), h('span', { i18n: 'layers.' + key })]));
@@ -2901,6 +3036,8 @@ function attachMapLayers(gm, map, opts = {}) {
       if (cb.checked) setLayer(key, true, info);
     }
     layersHost.append(h('p', { class: 'hint gm-layers-hint', i18n: 'layers.hint' }));
+    // The world's place names, over a picture drawn from its files.
+    if (map && map.terrain && tr.generated) namesRowFor(tr.places);
     applyI18n();
   })();
 }

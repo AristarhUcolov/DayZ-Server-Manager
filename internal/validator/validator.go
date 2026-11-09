@@ -285,6 +285,8 @@ func ValidateWith(o Options) ([]Issue, error) {
 	issues = append(issues, checkEncoding(o)...)
 	issues = append(issues, checkServerCfg(o)...)
 	issues = append(issues, checkMods(o)...)
+	// cfggameplay.json keys the game does not read (gameplay.go).
+	issues = append(issues, checkGameplayKeys(o)...)
 	// What a server update replaced: the panel's mod vehicles, the loadouts.
 	issues = append(issues, checkAfterUpdate(o)...)
 

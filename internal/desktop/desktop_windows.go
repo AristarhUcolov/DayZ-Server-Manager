@@ -56,7 +56,19 @@ var (
 	pMonitorFromRect     = user32.NewProc("MonitorFromRect")
 	pSetAppUserModelID   = shell32.NewProc("SetCurrentProcessExplicitAppUserModelID")
 	pIsWindowVisible     = user32.NewProc("IsWindowVisible")
+	pGetForegroundWindow = user32.NewProc("GetForegroundWindow")
+	pRegisterWindowMsg   = user32.NewProc("RegisterWindowMessageW")
+	pChangeMsgFilterEx   = user32.NewProc("ChangeWindowMessageFilterEx")
 )
+
+// wmTaskbarCreated is broadcast when Explorer (re)starts — after a crash, an
+// update or a remote session reconnecting: every tray icon must be added
+// again or it is gone, and a window hidden in the tray with it.
+var wmTaskbarCreated uintptr
+
+// mainProcCB is the window procedure callback, made once (Go keeps a limited
+// number of them) and reused by every window the panel opens.
+var mainProcCB = syscall.NewCallback(mainWndProc)
 
 // appUserModelID groups the panel's windows and its pinned taskbar icon as one
 // app, whichever folder the exe runs from.
@@ -102,6 +114,7 @@ const (
 	cmdOpen    = 1
 	cmdBrowser = 2
 	cmdExit    = 3
+	cmdReload  = 4
 )
 
 type notifyIconData struct {
@@ -191,18 +204,29 @@ func appIcon() uintptr {
 	return h
 }
 
-// shell is the desktop runtime state (all touched on the UI thread).
+// shell is the desktop runtime state (touched on the UI thread unless noted).
 type shell struct {
 	inst     *launcher.Instance
 	url      string
+	scale    float64
+	mu       sync.Mutex // guards w for other goroutines (dispatch)
 	w        webview2.WebView
-	hwnd     uintptr // main window
+	hwnd     uintptr        // main window
+	hwndA    atomic.Uintptr // the same, for the watchdog goroutine
 	origProc uintptr
 	trayWnd  uintptr
 	trayOn   bool
 	tipShown bool
 	quitOnce sync.Once
 	gone     atomic.Bool // the window's message loop has ended
+
+	// The page calls dzmAlive every 10 s (app.js). A window in front of the
+	// user whose page stays silent has a dead page — a crashed renderer
+	// shows as a white window: it is reloaded, then replaced.
+	lastBeat atomic.Int64
+	beatSeen bool // the page of this load has called in (logged once)
+	reloads  int  // reloads since the last heartbeat
+	recreate bool // the window is being replaced by a new one
 }
 
 var theShell *shell
@@ -229,41 +253,90 @@ func Run(inst *launcher.Instance, attachURL string) error {
 	if pSetAppUserModelID.Find() == nil {
 		pSetAppUserModelID.Call(uintptr(unsafe.Pointer(u16(appUserModelID))))
 	}
+	s := &shell{inst: inst, url: url, scale: scale}
+	theShell = s
+	stop := make(chan struct{})
+	defer close(stop)
+	for n := 0; ; n++ {
+		w := s.newWindow()
+		if w == nil {
+			if n == 0 {
+				return runWithoutWebView(inst, url)
+			}
+			s.logf("the panel window could not be opened again")
+			break
+		}
+		if n == 0 {
+			s.started(stop)
+		}
+		w.Run()
+		if !s.recreate || (inst != nil && inst.Context().Err() != nil) {
+			break
+		}
+		s.recreate = false
+		s.logf("the panel page had stopped responding: opened a new window")
+	}
+	s.gone.Store(true)
+	s.removeTray()
+	return nil
+}
+
+// newWindow opens the WebView2 window on the panel (UI thread).
+func (s *shell) newWindow() webview2.WebView {
 	dataDir := ""
-	if inst != nil {
-		dataDir = inst.App.ManagerDir + `\webview2`
+	if s.inst != nil {
+		dataDir = s.inst.App.ManagerDir + `\webview2`
 	}
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath:  dataDir,
 		AutoFocus: true,
 		WindowOptions: webview2.WindowOptions{
 			Title:  launcher.AppName + " v" + launcher.Version,
-			Width:  uint(1360 * scale),
-			Height: uint(880 * scale),
+			Width:  uint(1360 * s.scale),
+			Height: uint(880 * s.scale),
 			IconId: 1,
 			Center: true,
 		},
 	})
 	if w == nil {
-		return runWithoutWebView(inst, url)
+		return nil
 	}
-	s := &shell{inst: inst, url: url, w: w, hwnd: uintptr(w.Window())}
-	theShell = s
+	s.mu.Lock()
+	s.w = w
+	s.mu.Unlock()
+	s.hwnd = uintptr(w.Window())
+	s.hwndA.Store(s.hwnd)
 	w.SetSize(1000, 640, webview2.HintMin)
 	s.restorePlacement()
-	w.Navigate(url)
+	s.lastBeat.Store(time.Now().UnixNano())
+	s.reloads = 0
+	s.beatSeen = false
+	_ = w.Bind("dzmAlive", func() {
+		s.lastBeat.Store(time.Now().UnixNano())
+		s.reloads = 0
+		if !s.beatSeen {
+			s.beatSeen = true
+			s.logf("the panel page is up")
+		}
+	})
+	w.Navigate(s.url)
+	// Intercept the window's close button.
+	s.origProc, _, _ = pSetWindowLongPtrW.Call(s.hwnd, gwlpWndProc, mainProcCB)
+	return w
+}
+
+// started sets up, once, what outlives a window: the tray icon, the
+// shortcuts offer, the hooks of the manager and the page watchdog.
+func (s *shell) started(stop chan struct{}) {
+	inst := s.inst
 	if inst != nil && !StartHidden && !launcher.ShortcutsInstalled() && !s.flag("shortcuts-offered") {
 		// Once: put the panel in the Start menu and on the desktop, like an
 		// installed program. Asked after the page is up, not over a blank window.
 		go func() {
 			time.Sleep(5 * time.Second)
-			w.Dispatch(s.offerShortcuts)
+			s.dispatch(s.offerShortcuts)
 		}()
 	}
-
-	// Intercept the window's close button.
-	s.origProc, _, _ = pSetWindowLongPtrW.Call(s.hwnd, gwlpWndProc, syscall.NewCallback(mainWndProc))
-
 	if inst != nil {
 		s.addTray()
 		if StartHidden {
@@ -277,19 +350,86 @@ func Run(inst *launcher.Instance, attachURL string) error {
 			if s.gone.Load() {
 				return false // no window any more: the caller opens a new one
 			}
-			w.Dispatch(s.show)
+			s.dispatch(s.show)
 			return true
 		}
 		// Any exit (tray, dialog, the panel's own Exit button) ends here.
 		go func() {
 			<-inst.Context().Done()
-			w.Dispatch(s.quit)
+			s.dispatch(s.quit)
 		}()
 	}
-	w.Run()
-	s.gone.Store(true)
-	s.removeTray()
-	return nil
+	go s.watchdog(stop)
+}
+
+// dispatch runs f on the UI thread of the current window.
+func (s *shell) dispatch(f func()) {
+	s.mu.Lock()
+	w := s.w
+	s.mu.Unlock()
+	if w != nil {
+		w.Dispatch(f)
+	}
+}
+
+func (s *shell) logf(format string, args ...interface{}) {
+	if s.inst != nil {
+		s.inst.App.Log.Printf("desktop: "+format, args...)
+	}
+}
+
+// watchdog looks for a dead page: the window is in front of the user (so the
+// page's timers are not throttled) and the page has not called for a
+// minute. Then the page is reloaded; twice in vain, the window is replaced.
+func (s *shell) watchdog(stop chan struct{}) {
+	t := time.NewTicker(10 * time.Second)
+	defer t.Stop()
+	var front int64 // when the window last came to the front
+	for {
+		select {
+		case <-stop:
+			return
+		case <-t.C:
+		}
+		hwnd := s.hwndA.Load()
+		fg, _, _ := pGetForegroundWindow.Call()
+		if s.gone.Load() || hwnd == 0 || fg != hwnd || !isWindowVisible(hwnd) {
+			front = 0
+			continue
+		}
+		now := time.Now().UnixNano()
+		if front == 0 {
+			front = now
+		}
+		last := s.lastBeat.Load()
+		if front > last {
+			last = front
+		}
+		if now-last < int64(time.Minute) {
+			continue
+		}
+		front = now // give the next try a minute too
+		s.dispatch(s.revive)
+	}
+}
+
+// revive brings a dead page back (UI thread): reload it, and if that does not
+// help twice, replace the whole window — a dead browser process cannot load.
+func (s *shell) revive() {
+	if s.w == nil || s.gone.Load() {
+		return
+	}
+	s.reloads++
+	if s.reloads <= 2 {
+		s.logf("the panel page stopped responding (a white window?) — reloading it")
+		s.beatSeen = false
+		s.w.Navigate(s.url)
+		return
+	}
+	s.logf("the panel page still does not respond — replacing the window")
+	s.recreate = true
+	s.savePlacement()
+	pDestroyWindow.Call(s.hwnd) // WM_DESTROY ends the loop; Run opens a new window
 }
 
 func (s *shell) show() {
@@ -466,6 +606,12 @@ func mainWndProc(hwnd, m, wp, lp uintptr) uintptr {
 
 func trayWndProc(hwnd, m, wp, lp uintptr) uintptr {
 	s := theShell
+	if s != nil && wmTaskbarCreated != 0 && m == wmTaskbarCreated {
+		// Explorer restarted and forgot every tray icon: put ours back.
+		s.trayOn = false
+		s.addIcon()
+		return 0
+	}
 	if s != nil && m == wmTray {
 		switch lp & 0xffff {
 		case wmLButtonUp, wmLButtonDbl:
@@ -492,6 +638,18 @@ func (s *shell) addTray() {
 	if s.trayWnd == 0 {
 		return
 	}
+	if wmTaskbarCreated == 0 {
+		wmTaskbarCreated, _, _ = pRegisterWindowMsg.Call(uintptr(unsafe.Pointer(u16("TaskbarCreated"))))
+	}
+	if wmTaskbarCreated != 0 && pChangeMsgFilterEx.Find() == nil {
+		// Run as administrator, Windows would filter Explorer's broadcast out.
+		pChangeMsgFilterEx.Call(s.trayWnd, wmTaskbarCreated, 1, 0) // MSGFLT_ALLOW
+	}
+	s.addIcon()
+}
+
+// addIcon puts the icon in the tray (again, after Explorer restarted).
+func (s *shell) addIcon() {
 	nid := s.nid()
 	nid.UFlags = nifMessage | nifIcon | nifTip
 	nid.UCallbackMessage = wmTray
@@ -544,6 +702,9 @@ func (s *shell) menu() {
 		pAppendMenuW.Call(hm, mfString, id, uintptr(unsafe.Pointer(u16(label))))
 	}
 	add(cmdOpen, text(s.inst, "desktop.tray.open"))
+	if s.w != nil {
+		add(cmdReload, text(s.inst, "desktop.tray.reload"))
+	}
 	add(cmdBrowser, text(s.inst, "desktop.tray.browser"))
 	pAppendMenuW.Call(hm, mfSeparator, 0, 0)
 	add(cmdExit, text(s.inst, "desktop.tray.exit"))
@@ -555,6 +716,11 @@ func (s *shell) menu() {
 	switch cmd {
 	case cmdOpen:
 		s.show()
+	case cmdReload:
+		// A white or frozen window, by hand: reload the page, and when that
+		// already failed, open a new window.
+		s.show()
+		s.revive()
 	case cmdBrowser:
 		launcher.OpenBrowser(panelURL(s.inst, s.url))
 	case cmdExit:

@@ -234,6 +234,22 @@ func (c *ServerCfg) Set(key string, val interface{}) {
 	c.setRendered(key, renderValue(val))
 }
 
+// Delete removes every key=value line of key (any case); false when there
+// was none.
+func (c *ServerCfg) Delete(key string) bool {
+	out := c.Entries[:0]
+	gone := false
+	for _, e := range c.Entries {
+		if e.Kind == EntryKV && strings.EqualFold(e.Key, key) {
+			gone = true
+			continue
+		}
+		out = append(out, e)
+	}
+	c.Entries = out
+	return gone
+}
+
 // setRendered updates EVERY entry with this key (a file that defines a key
 // twice used to keep the second, stale definition, which is the one the server
 // actually reads) and appends only when there is none.

@@ -9,6 +9,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"dayzmanager/internal/config"
+	"dayzmanager/internal/mods"
 )
 
 func TestWorkshopIDs(t *testing.T) {
@@ -17,6 +20,71 @@ func TestWorkshopIDs(t *testing.T) {
 	want := []string{"1559212036", "2116151222", "1828439124"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
+	}
+	// The Steam client's "Copy page URL" and an item's changelog page.
+	got = workshopIDs("steam://url/CommunityFilePage/1564026768\nhttps://steamcommunity.com/sharedfiles/filedetails/changelog/2545327648")
+	if !reflect.DeepEqual(got, []string{"1564026768", "2545327648"}) {
+		t.Fatalf("got %v", got)
+	}
+}
+
+// writeWorkshopItem lays out one SteamCMD download.
+func writeWorkshopItem(t *testing.T, content, id, meta string) {
+	t.Helper()
+	for _, f := range []struct{ p, data string }{{"meta.cpp", meta}, {"addons/a.pbo", id}} {
+		p := filepath.Join(content, id, filepath.FromSlash(f.p))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(f.data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// An update goes into the folder the server already has for that Workshop
+// id (here @CF from the DayZ Launcher), not into a second copy named after
+// meta.cpp that nothing loads; and it never overwrites a different mod that
+// happens to have the same name.
+func TestWorkshopUpdateKeepsServerFolder(t *testing.T) {
+	h, a := profileApp(t)
+	content := filepath.Join(t.TempDir(), "221100")
+	writeWorkshopItem(t, content, "1559212036", "protocol = 1;\npublishedid = 1559212036;\nname = \"Community Framework\";\n")
+	old := filepath.Join(a.ServerDir, "@CF")
+	os.MkdirAll(filepath.Join(old, "addons"), 0o755)
+	os.WriteFile(filepath.Join(old, "meta.cpp"), []byte("publishedid = 1559212036;\nname = \"CF\";\n"), 0o644)
+	os.WriteFile(filepath.Join(old, "addons", "old.pbo"), []byte("old"), 0o644)
+	if err := a.MutateConfig(func(c *config.Manager) error { c.Mods = []string{"@CF"}; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	name, err := h.wsInstall(content, "1559212036", false)
+	if err != nil || name != "@CF" {
+		t.Fatalf("installed as %q (%v), want @CF", name, err)
+	}
+	if _, err := os.Stat(filepath.Join(old, "addons", "a.pbo")); err != nil {
+		t.Fatal("the new version is not in @CF")
+	}
+	if _, err := os.Stat(filepath.Join(old, "addons", "old.pbo")); !os.IsNotExist(err) {
+		t.Fatal("files of the old version linger")
+	}
+	if _, err := os.Stat(filepath.Join(a.ServerDir, "@Community Framework")); !os.IsNotExist(err) {
+		t.Fatal("a second copy was made")
+	}
+	if cfg := a.Cfg(); len(cfg.Mods) != 1 || cfg.Mods[0] != "@CF" {
+		t.Fatalf("mods %v", cfg.Mods)
+	}
+
+	// Another mod already called @Trader: the new one gets its own folder.
+	other := filepath.Join(a.ServerDir, "@Trader")
+	os.MkdirAll(filepath.Join(other, "addons"), 0o755)
+	os.WriteFile(filepath.Join(other, "meta.cpp"), []byte("publishedid = 1111111;\nname = \"Trader\";\n"), 0o644)
+	writeWorkshopItem(t, content, "2222222", "protocol = 1;\nname = \"Trader\";\n")
+	name, err = h.wsInstall(content, "2222222", false)
+	if err != nil || name != "@2222222" {
+		t.Fatalf("clash installed as %q (%v), want @2222222", name, err)
+	}
+	if mods.PublishedIDOf(other) != "1111111" {
+		t.Fatal("the other @Trader was overwritten")
 	}
 }
 

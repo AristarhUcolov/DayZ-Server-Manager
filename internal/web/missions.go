@@ -134,6 +134,9 @@ type missionRow struct {
 	ModActive bool   `json:"modActive"`
 	WorldKey  string `json:"worldKey"`  // map key (schematic / map image lookup)
 	WorldSize int    `json:"worldSize"` // edge length in metres
+	// ImageVer: the world has a map picture (drawn or uploaded), its time —
+	// the card shows it instead of the schematic.
+	ImageVer int64 `json:"imageVer,omitempty"`
 }
 
 func (h *handlers) missionsFull(w http.ResponseWriter, r *http.Request) {
@@ -162,6 +165,11 @@ func (h *handlers) missionsFull(w http.ResponseWriter, r *http.Request) {
 			WorldKey: wi.Key, WorldSize: int(wi.Size)}
 		if row.FromMod != "" {
 			row.ModActive = activeMods[strings.ToLower(row.FromMod)]
+		}
+		if img := h.mapImageFile(wi.Key); img != "" {
+			if st, err := os.Stat(img); err == nil {
+				row.ImageVer = st.ModTime().Unix()
+			}
 		}
 		out = append(out, row)
 	}

@@ -201,6 +201,9 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/events/item", methods(h.eventsItem, http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete))
 
 	// Event spawn-point editor (cfgeventspawns.xml on the map).
+	mux.HandleFunc("/api/zones", methods(h.zonesGet, http.MethodGet))
+	mux.HandleFunc("/api/zones/save", methods(h.zonesSave, http.MethodPost))
+	mux.HandleFunc("/api/zones/loot", methods(h.zonesLoot, http.MethodPost))
 	mux.HandleFunc("/api/eventspawns", methods(h.eventSpawnsList, http.MethodGet))
 	mux.HandleFunc("/api/eventspawns/save", methods(h.eventSpawnsSave, http.MethodPost))
 	// Player spawn-point editor (cfgplayerspawnpoints.xml on the map).
@@ -250,6 +253,8 @@ func (h *handlers) register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/map/image", methods(h.mapImage, http.MethodGet, http.MethodPost))
 	mux.HandleFunc("/api/map/image/fetch", methods(h.mapImageFetch, http.MethodPost))
 	mux.HandleFunc("/api/map/image/delete", methods(h.mapImageDelete, http.MethodPost))
+	mux.HandleFunc("/api/map/terrain", methods(h.mapTerrain, http.MethodGet))
+	mux.HandleFunc("/api/map/terrain/draw", methods(h.mapTerrainDraw, http.MethodPost))
 	mux.HandleFunc("/api/map/size", methods(h.mapSize, http.MethodPost))
 	mux.HandleFunc("/api/gameplay", methods(h.gameplay, http.MethodGet, http.MethodPost))
 	mux.HandleFunc("/api/metrics/history", methods(h.metricsHistory, http.MethodGet))
@@ -779,6 +784,8 @@ func (h *handlers) serverCfg(w http.ResponseWriter, r *http.Request) {
 			"path":    cfgPath,
 			"values":  cfg.AsMap(),
 			"mission": cfg.MissionTemplate(),
+			// What this DayZ build reads (serverexe.go).
+			"features": map[string]bool{"thirdPersonView": serverKnows(h.app.ServerDir, "thirdPersonView")},
 		})
 		return
 	}
@@ -818,6 +825,12 @@ func (h *handlers) serverCfg(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		cfg.Set(k, v)
+	}
+	// DayZ 1.30 replaced disable3rdPerson by thirdPersonView (0 off, 1 on,
+	// 2 in vehicles only): with the new key written the old one goes, so the
+	// two can never disagree.
+	if _, ok := patch["thirdPersonView"]; ok {
+		cfg.Delete("disable3rdPerson")
 	}
 	if err := cfg.Save(cfgPath); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1111,6 +1124,9 @@ func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
 		Mod        string `json:"mod"`
 		Enabled    bool   `json:"enabled"`
 		ServerSide bool   `json:"serverSide"`
+		// KeepOther: switching it on keeps it on the other list too — loaded
+		// for players (-mod) and by the server (-serverMod), as some mods ask.
+		KeepOther bool `json:"keepOther"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Mod == "" {
 		http.Error(w, "mod required", http.StatusBadRequest)
@@ -1142,9 +1158,12 @@ func (h *handlers) modsEnable(w http.ResponseWriter, r *http.Request) {
 			if !contains(*target, req.Mod) {
 				*target = append(append([]string(nil), *target...), req.Mod)
 			}
-			// A mod is loaded either for everyone (-mod) or by the server
-			// alone (-serverMod) — on both lists DayZ loads it twice.
-			*other = removeOnce(*other, req.Mod)
+			// Usually a mod is loaded either for everyone (-mod) or by the
+			// server alone (-serverMod): switching one on moves it. Some
+			// mods ask for both; the admin says so explicitly.
+			if !req.KeepOther {
+				*other = removeOnce(*other, req.Mod)
+			}
 		} else {
 			*target = removeOnce(*target, req.Mod)
 		}

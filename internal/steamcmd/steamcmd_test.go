@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -68,5 +69,64 @@ func TestUnzipStaysInside(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "evil.txt")); err == nil {
 		t.Fatal("evil.txt was written outside")
+	}
+}
+
+func TestSavedLogin(t *testing.T) {
+	cfg := `"InstallConfigStore"
+{
+	"Software"
+	{
+		"valve"
+		{
+			"Steam"
+			{
+				"CellID"		"14"
+				"Accounts"
+				{
+					"MyAdmin"
+					{
+						"SteamID"		"76561190000000000"
+					}
+				}
+				"ConnectCache"
+				{
+					"2fa3b2c41"		"0200000011aa"
+				}
+			}
+		}
+	}
+}`
+	if !savedLoginIn(cfg, "myadmin", false) {
+		t.Fatal("the account with a login token must count as signed in (names match case-insensitively)")
+	}
+	if savedLoginIn(cfg, "someoneelse", false) {
+		t.Fatal("another account has no saved login")
+	}
+	noToken := strings.Replace(cfg, `"2fa3b2c41"		"0200000011aa"`, "", 1)
+	if savedLoginIn(noToken, "myadmin", false) {
+		t.Fatal("no login token: the password is needed")
+	}
+	if !savedLoginIn(noToken, "myadmin", true) {
+		t.Fatal("an ssfn sentry file is the older SteamCMD's saved login")
+	}
+
+	dir := t.TempDir()
+	tool := New(dir)
+	if tool.SavedLogin("myadmin") {
+		t.Fatal("no SteamCMD, no saved login")
+	}
+	exe := tool.Exe()
+	if err := os.WriteFile(exe, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config", "config.vdf"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !tool.SavedLogin("MyAdmin") {
+		t.Fatal("SavedLogin must read SteamCMD's config.vdf")
 	}
 }

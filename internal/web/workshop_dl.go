@@ -83,6 +83,7 @@ func (h *handlers) registerWorkshopDL(mux *http.ServeMux) {
 	mux.HandleFunc("/api/workshop/dl/sync", methods(h.wsSync, http.MethodPost))
 	mux.HandleFunc("/api/workshop/dl/download", methods(h.wsDownload, http.MethodPost))
 	mux.HandleFunc("/api/workshop/dl/updates", methods(h.wsUpdates, http.MethodPost))
+	mux.HandleFunc("/api/workshop/dl/update", methods(h.wsUpdateMods, http.MethodPost))
 	mux.HandleFunc("/api/workshop/dl/clear", methods(h.wsClear, http.MethodPost))
 }
 
@@ -150,15 +151,19 @@ func (h *handlers) wsStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	user := h.app.Cfg().SteamUser
 	out := map[string]interface{}{
 		"installed": st.tool.Installed(),
-		"user":      h.app.Cfg().SteamUser,
+		"user":      user,
 		"loggedIn":  st.loggedIn,
-		"checked":   st.checked,
-		"job":       job,
-		"secure":    isLoopback(r) || (h.server != nil && h.server.httpsOn.Load()),
-		"running":   h.app.ServerIsRunning(),
-		"dir":       st.tool.Dir,
+		// SteamCMD keeps its own sign-in: after a panel restart (loggedIn
+		// unknown) downloads go ahead with it, no password asked.
+		"saved":   validSteamUser(user) && st.tool.SavedLogin(user),
+		"checked": st.checked,
+		"job":     job,
+		"secure":  isLoopback(r) || (h.server != nil && h.server.httpsOn.Load()),
+		"running": h.app.ServerIsRunning(),
+		"dir":     st.tool.Dir,
 	}
 	st.mu.Unlock()
 	writeJSON(w, out)
@@ -288,18 +293,26 @@ var (
 	reSteamUser = regexp.MustCompile(`^[A-Za-z0-9_.@-]{2,64}$`)
 	reCode      = regexp.MustCompile(`^[A-Za-z0-9]{0,10}$`)
 	reWSID      = regexp.MustCompile(`(?:[?&]id=|^)(\d{6,20})`)
+	// The Steam client's "Copy page URL" (steam://url/CommunityFilePage/123)
+	// and an item's sub-pages (…/filedetails/changelog/123).
+	reWSIDPath = regexp.MustCompile(`(?i)(?:CommunityFilePage|filedetails/(?:changelog|comments|discussions))/(\d{6,20})`)
 )
 
 func validSteamUser(u string) bool { return reSteamUser.MatchString(u) }
 func validCode(c string) bool      { return reCode.MatchString(c) }
 
 // workshopIDs pulls Workshop item ids out of pasted text: links
-// (…/filedetails/?id=123), bare ids, one per line or comma separated.
+// (…/filedetails/?id=123, steam://url/CommunityFilePage/123), bare ids, one
+// per line or comma separated.
 func workshopIDs(text string) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, f := range strings.FieldsFunc(text, func(r rune) bool { return r == '\n' || r == '\r' || r == ',' || r == ' ' || r == ';' || r == '\t' }) {
-		m := reWSID.FindStringSubmatch(strings.TrimSpace(f))
+		f = strings.TrimSpace(f)
+		m := reWSID.FindStringSubmatch(f)
+		if m == nil {
+			m = reWSIDPath.FindStringSubmatch(f)
+		}
 		if m != nil && !seen[m[1]] {
 			seen[m[1]] = true
 			out = append(out, m[1])
@@ -320,7 +333,26 @@ func (h *handlers) installedByID() map[string]string {
 	return out
 }
 
-// wsLookup resolves pasted links (collections expand to their items).
+// wsLookupRow is one pasted (or required) Workshop item.
+type wsLookupRow struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Size       int64  `json:"size"`
+	Updated    int64  `json:"updated"`
+	Found      bool   `json:"found"`
+	DayZ       bool   `json:"dayz"`
+	Installed  string `json:"installed,omitempty"`
+	Preview    string `json:"preview,omitempty"`
+	Collection string `json:"collection,omitempty"` // the pasted collection it came from
+	// Requires: the items this one needs (its page's Required items);
+	// RequiredBy marks an item added because another one needs it.
+	Requires   []string `json:"requires,omitempty"`
+	RequiredBy []string `json:"requiredBy,omitempty"`
+}
+
+// wsLookup resolves pasted links: collections expand to their items (Steam's
+// API says which links are collections), and every mod's required items come
+// along, marked, so nothing it needs is forgotten.
 func (h *handlers) wsLookup(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Text string `json:"text"`
@@ -337,47 +369,57 @@ func (h *handlers) wsLookup(w http.ResponseWriter, r *http.Request) {
 	if len(ids) > 200 {
 		ids = ids[:200]
 	}
-	// A collection link looks like an item link: ask for its children.
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	cols, _ := mods.FetchCollections(ctx, ids) // on failure every link counts as an item
 	var all []string
+	from := map[string]string{} // item → the collection it came from
 	seen := map[string]bool{}
-	for _, id := range ids {
-		kids, err := mods.FetchCollectionChildren(id)
-		if err == nil && len(kids) > 0 {
-			for _, k := range kids {
-				if !seen[k] {
-					seen[k] = true
-					all = append(all, k)
-				}
-			}
-			continue
-		}
-		if !seen[id] {
+	add := func(id string) {
+		if !seen[id] && len(all) < 300 {
 			seen[id] = true
 			all = append(all, id)
 		}
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	meta, err := mods.FetchWorkshopMeta(ctx, all)
+	for _, id := range ids {
+		if kids, ok := cols[id]; ok {
+			for _, k := range kids {
+				if _, dup := from[k]; !dup {
+					from[k] = id
+				}
+				add(k)
+			}
+			continue
+		}
+		add(id)
+	}
+	// Required items of the mods (a few pages at a time; best effort).
+	requires := h.wsRequiredItems(ctx, all)
+	direct := len(all)
+	requiredBy := map[string][]string{}
+	for _, id := range all[:direct] {
+		for _, need := range requires[id] {
+			requiredBy[need] = append(requiredBy[need], id)
+			add(need)
+		}
+	}
+	lookup := append(append([]string(nil), all...), mapKeys(cols)...)
+	meta, err := mods.FetchWorkshopMeta(ctx, lookup)
 	if err != nil && len(meta) == 0 {
 		http.Error(w, "Steam: "+err.Error(), http.StatusBadGateway)
 		return
 	}
 	inst := h.installedByID()
-	type row struct {
-		ID        string `json:"id"`
-		Title     string `json:"title"`
-		Size      int64  `json:"size"`
-		Updated   int64  `json:"updated"`
-		Found     bool   `json:"found"`
-		DayZ      bool   `json:"dayz"`
-		Installed string `json:"installed,omitempty"`
-		Preview   string `json:"preview,omitempty"`
-	}
-	out := make([]row, 0, len(all))
+	out := make([]wsLookupRow, 0, len(all))
 	for _, id := range all {
 		m, ok := meta[id]
-		rr := row{ID: id, Installed: inst[id]}
+		rr := wsLookupRow{ID: id, Installed: inst[id], Requires: requires[id], RequiredBy: requiredBy[id]}
+		if c := from[id]; c != "" {
+			rr.Collection = c
+			if cm, ok := meta[c]; ok && cm.Title != "" {
+				rr.Collection = cm.Title
+			}
+		}
 		if ok && m.Result == 1 {
 			rr.Found, rr.Title, rr.Size, rr.Preview = true, m.Title, m.FileSize, m.Preview
 			rr.DayZ = m.AppID == 0 || m.AppID == 221100
@@ -388,6 +430,42 @@ func (h *handlers) wsLookup(w http.ResponseWriter, r *http.Request) {
 		out = append(out, rr)
 	}
 	writeJSON(w, map[string]interface{}{"items": out})
+}
+
+func mapKeys(m map[string][]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+// wsRequiredItems reads the Required items of each item, four pages at a
+// time, giving up quietly on any it cannot read.
+func (h *handlers) wsRequiredItems(ctx context.Context, ids []string) map[string][]string {
+	out := map[string][]string{}
+	if len(ids) > 60 {
+		ids = ids[:60] // a whole modpack: its collection lists what it needs
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			req, err := mods.FetchRequiredItems(ctx, id)
+			if err == nil && len(req) > 0 {
+				mu.Lock()
+				out[id] = req
+				mu.Unlock()
+			}
+		}(id)
+	}
+	wg.Wait()
+	return out
 }
 
 // wsDownload downloads items with SteamCMD and installs them into this
@@ -512,16 +590,33 @@ func (h *handlers) wsDownload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// wsTarget is the server folder a downloaded item goes into: the one already
+// holding that Workshop id (so an update replaces it, whatever it is called),
+// else @Name from its meta.cpp — unless another mod already uses that name.
+func (h *handlers) wsTarget(contentDir, id string, installed map[string]string) string {
+	if name := installed[id]; name != "" {
+		return name
+	}
+	name := mods.SourceName(contentDir, id)
+	if name == "" {
+		return ""
+	}
+	if other := mods.PublishedIDOf(filepath.Join(h.app.ServerDir, name)); other != "" && other != id {
+		return "@" + id // two different mods with one name: never overwrite the other
+	}
+	return name
+}
+
 // wsInstall copies one downloaded item into the server as @Name, merges its
 // keys and switches it on (client mod, or server-side when asked).
 func (h *handlers) wsInstall(contentDir, id string, serverSide bool) (string, error) {
-	name := mods.SourceName(contentDir, id)
+	h.app.WriteMu.Lock()
+	defer h.app.WriteMu.Unlock()
+	name := h.wsTarget(contentDir, id, h.installedByID())
 	if name == "" {
 		return "", errNotAMod
 	}
-	h.app.WriteMu.Lock()
-	defer h.app.WriteMu.Unlock()
-	if err := mods.Install(h.app.ServerDir, contentDir, name); err != nil {
+	if err := mods.InstallFrom(h.app.ServerDir, filepath.Join(contentDir, id), name); err != nil {
 		return "", err
 	}
 	err := h.app.MutateConfig(func(c *config.Manager) error {

@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"dayzmanager/internal/util"
+	"dayzmanager/internal/vdf"
 )
 
 // DayZApp is DayZ's Steam app id; its Workshop items download under it.
@@ -184,6 +185,51 @@ func (t *Tool) Forget() error {
 	return nil
 }
 
+// SavedLogin reports whether SteamCMD keeps a sign-in for user: the account
+// in its config.vdf with a login token ("ConnectCache"; SteamCMD before 2023
+// kept an ssfn* file instead). Then downloads and updates sign in with the
+// account name alone — no password, no Steam Guard code — until Steam ends
+// that sign-in (a password change, months without use); the download then
+// reports the login problem and the panel asks for the password again.
+func (t *Tool) SavedLogin(user string) bool {
+	if user == "" || !t.Installed() {
+		return false
+	}
+	ssfn, _ := filepath.Glob(filepath.Join(t.Dir, "ssfn*"))
+	for _, p := range t.configFiles() {
+		data, err := os.ReadFile(p)
+		if err == nil && savedLoginIn(string(data), user, len(ssfn) > 0) {
+			return true
+		}
+	}
+	return false
+}
+
+// configFiles are where SteamCMD may keep config.vdf: its own folder, and on
+// Linux the Steam folder in the home directory some builds use.
+func (t *Tool) configFiles() []string {
+	out := []string{filepath.Join(t.Dir, "config", "config.vdf")}
+	if runtime.GOOS != "windows" {
+		if home, err := os.UserHomeDir(); err == nil {
+			out = append(out, filepath.Join(home, "Steam", "config", "config.vdf"),
+				filepath.Join(home, ".steam", "steam", "config", "config.vdf"))
+		}
+	}
+	return out
+}
+
+func savedLoginIn(cfg, user string, sentry bool) bool {
+	steam := vdf.Block(vdf.Parse(cfg), "InstallConfigStore", "Software", "Valve", "Steam")
+	known := false
+	for name := range vdf.Block(steam, "Accounts") {
+		if strings.EqualFold(name, user) {
+			known = true
+			break
+		}
+	}
+	return known && (len(vdf.Block(steam, "ConnectCache")) > 0 || sentry)
+}
+
 var (
 	reLoginOK   = regexp.MustCompile(`(?i)(Logging in user .*\.\.\.OK|Waiting for user info\.\.\.OK)`)
 	reFailed    = regexp.MustCompile(`(?i)FAILED[ :]*\(([^)]+)\)`)
@@ -281,9 +327,53 @@ func ParseDownloads(out string, ids []string) []ItemResult {
 }
 
 // Download fetches Workshop items with user's saved login. The login result
-// tells a sign-in problem apart from a failed item.
+// tells a sign-in problem apart from a failed item. Items that time out or
+// fail on the way — common with big mods — are tried again (SteamCMD
+// carries on from what it already has), up to three runs in all.
 func (t *Tool) Download(ctx context.Context, user string, ids []string) ([]ItemResult, LoginResult, error) {
-	args := []string{"+@ShutdownOnFailedCommand", "0", "+@NoPromptForPassword", "1", "+login", user}
+	final := map[string]ItemResult{}
+	var lr LoginResult
+	var err error
+	todo := ids
+	for attempt := 0; attempt < 3 && len(todo) > 0; attempt++ {
+		var res []ItemResult
+		res, lr, err = t.downloadOnce(ctx, user, todo)
+		var again []string
+		for _, r := range res {
+			final[r.ID] = r
+			if !r.OK && lr.OK && retryable(r.Error) {
+				again = append(again, r.ID)
+			}
+		}
+		if !lr.OK || ctx.Err() != nil {
+			break
+		}
+		todo = again
+	}
+	out := make([]ItemResult, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, final[id])
+	}
+	return out, lr, err
+}
+
+// retryable tells a download failure worth another run (a timeout, a broken
+// connection) from one that will not change (no such item, no access).
+func retryable(e string) bool {
+	low := strings.ToLower(e)
+	for _, s := range []string{"timeout", "failure", "no result", "no connection", "busy", "service unavailable"} {
+		if strings.Contains(low, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *Tool) downloadOnce(ctx context.Context, user string, ids []string) ([]ItemResult, LoginResult, error) {
+	// force_install_dir before the login keeps the downloads in this folder
+	// on every system (on Linux SteamCMD otherwise uses ~/Steam).
+	args := []string{"+@ShutdownOnFailedCommand", "0", "+@NoPromptForPassword", "1",
+		"+force_install_dir", t.Dir, "+login", user}
 	for _, id := range ids {
 		args = append(args, "+workshop_download_item", DayZApp, id, "validate")
 	}

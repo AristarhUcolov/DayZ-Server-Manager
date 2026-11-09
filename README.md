@@ -61,20 +61,31 @@ DayZ Server и превращает обычный сервер в удобну�
     <td><img src="docs/img/ru/loadout.webp" alt="Набор игрока"><br>
       <b>Набор игрока</b> — персонаж со слотами, обвесы, клавиши быстрого доступа, сытость и тепло при появлении</td>
   </tr>
+  <tr>
+    <td><img src="docs/img/ru/zones.webp" alt="Карта, нарисованная по файлам сервера"><br>
+      <b>Карты</b> — мир нарисован по файлам самого сервера: рельеф, вода, леса, дороги, здания и названия; заражённые зоны, точки событий и спавна правятся прямо на нём</td>
+    <td><img src="docs/img/ru/server.webp" alt="Настройки сервера картинками"><br>
+      <b>Сервер</b> — камера, прицел, голосовой чат и очередь входа картинками; третье лицо DayZ 1.30</td>
+  </tr>
 </table>
 
-## Последнее обновление — 1.1 «Хэллуинское»
+## Последнее обновление — 1.2 «Ноябрьское»
 
-Раздел **Транспорт** теперь устроен как «Набор игрока»: машина нарисована
-сверху, у каждой детали своя плитка, у каждого цвета — свои детали и багажник,
-а оружию в багажнике можно задать обвесы. **Обвесы** и **Пресеты** получили
-тот же вид — рисунок предмета и строки с иконками вместо голых классов. В
-«Наборе игрока» — клавиши для вложенных вещей, заряженное оружие с
-переключателем «Патрон в патроннике», сытость, вода и тепло нового персонажа,
-правила DayZ для обвесов (штык-нож и глушитель, фонарь и цевьё с планкой), а
-обвесы больше не появляются испорченными. **Глобальные** и **Геймплей**
-получили ползунки и выбор по картинкам. Менеджер сам поднимается после сбоя,
-а моды из Steam Workshop скачиваются напрямую через SteamCMD.
+**Настоящие карты**: панель сама рисует мир по файлам вашего сервера — рельеф
+с горизонталями, воду, леса, дороги, железные дороги и каждое здание — с
+названиями мест на языке панели; ничего не скачивается и не распространяется.
+Новая страница **Заражённые зоны**: газовые зоны на карте (добавить, сдвинуть,
+изменить размер и все настройки), безопасные точки, динамические зоны и лут
+внутри зон. **Steam Workshop** исправлен: ссылка скачивает именно этот мод,
+обязательные моды (CF и т. п.) добавляются сами, проверка обновлений больше не
+путает актуальные моды с устаревшими, обновление ставится в папку, где мод уже
+лежит, кнопка «Обновить» в таблице модов обновляет мод прямо из Steam, а
+SteamCMD больше не просит пароль после каждого перезапуска панели. Моды можно
+загружать **двумя способами** (-mod и -serverMod), третье лицо **DayZ 1.30**
+(в том числе «только в транспорте»), новые картинки на страницах «Сервер» и
+«Геймплей», **Транспорт** объясняет, что делают числа, у **Вайпа** появился
+вариант «Только мир» (персонажи остаются), а окно приложения само
+восстанавливается после «белого экрана».
 
 Полный список изменений по версиям — в [CHANGELOG.md](CHANGELOG.md#русский).
 
@@ -601,21 +612,30 @@ It comes in two builds that share the same settings — pick either:
     <td><img src="docs/img/en/loadout.webp" alt="Player loadout"><br>
       <b>Player loadout</b> — a survivor with every slot, attachments, hotbar keys, food and warmth at spawn</td>
   </tr>
+  <tr>
+    <td><img src="docs/img/en/zones.webp" alt="A map drawn from the server's files"><br>
+      <b>Maps</b> — the world drawn from your server's own files: relief, water, forests, roads, buildings and names; contaminated zones, event and spawn points are edited right on it</td>
+    <td><img src="docs/img/en/server.webp" alt="Server settings as pictures"><br>
+      <b>Server</b> — camera, crosshair, voice chat and login queue as pictures; DayZ 1.30 third person</td>
+  </tr>
 </table>
 
-## Latest update — 1.1, “The Halloween Update”
+## Latest update — 1.2, “The November Update”
 
-**Vehicles** now work like the player loadout: the car drawn from above with a
-tile per part, each colour with its own parts and trunk — and a weapon in the
-trunk gets attachments too. **Attachments** and **Presets** share that look —
-the item drawn, rows with icons instead of bare class names. The **player
-loadout** gains hotbar keys for nested items, loaded weapons with a “Round in
-the chamber” switch, a fresh character's food, water and warmth, DayZ's
-attachment rules (bayonet vs suppressor, a weapon light and its rail
-handguard) — and attachments no longer spawn ruined. **Globals** and
-**Gameplay** get sliders and choices drawn as pictures. The manager comes back
-by itself after a crash, and Steam Workshop mods download straight to the
-server with SteamCMD.
+**Real maps**: the panel draws the world from your server's own files — relief
+with contour lines, water, forests, roads, railways and every building — with
+the place names in the panel's language; nothing is downloaded or shared.
+A new **Contaminated zones** page: the gas zones on the map (add, move, resize,
+every setting), safe positions, the dynamic zones and the loot inside.
+**Steam Workshop** fixed: a pasted link downloads that mod, required mods (CF
+and the like) come along, the update check no longer mistakes current mods for
+outdated ones, an update goes into the folder the mod already has, Update in
+the mods table updates a mod straight from Steam, and SteamCMD no longer asks
+for the password after every panel restart. Mods can be loaded **both ways**
+(-mod and -serverMod), **DayZ 1.30** third person is supported (vehicles only
+too), the Server and Gameplay pages gain pictures, **Vehicles** explains what
+its numbers do, **Wipe** gains “World only” (characters stay), and the desktop
+window recovers from a white screen by itself.
 
 The full list of changes, version by version, is in [CHANGELOG.md](CHANGELOG.md#english).
 

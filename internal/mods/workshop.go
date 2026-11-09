@@ -1,12 +1,10 @@
 // Copyright (c) 2026 Aristarh Ucolov.
 //
-// Steam Workshop Collection parser.
+// Steam Workshop collections and required items.
 //
-// A Steam Workshop collection page is a plain HTML listing of child items.
-// Each child item has a filedetails link of the form
-// `/sharedfiles/filedetails/?id=<publishedid>`. We do not need a full parser
-// — a regex over the HTML is both sufficient and far smaller than pulling
-// in an HTML tree.
+// Whether a link is a collection, and what is in it, comes from Steam's
+// public GetCollectionDetails API. A mod's "Required items" are only on its
+// web page: that one box of the page is read, never the page's other links.
 //
 // Network call is opt-in and isolated to this file so the rest of the mod
 // package stays offline-friendly.
@@ -14,6 +12,7 @@ package mods
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,7 +25,8 @@ import (
 
 var (
 	reCollectionID = regexp.MustCompile(`[?&]id=(\d+)`)
-	reChildIDs     = regexp.MustCompile(`sharedfiles/filedetails/\?id=(\d+)`)
+	// An item link: …/sharedfiles/filedetails/?id= or …/workshop/filedetails/?id=.
+	reItemLink = regexp.MustCompile(`filedetails/\?id=(\d+)`)
 )
 
 type CollectionResolution struct {
@@ -72,47 +72,181 @@ func ParseCollectionURL(input string) (string, error) {
 	return "", fmt.Errorf("could not find collection id in URL")
 }
 
-// FetchCollectionChildren downloads the public collection page and extracts
-// all contained workshop item IDs. We deliberately do not authenticate —
-// the collection page is public HTML, and anything more would require API
-// keys users are unlikely to have.
+// FetchCollectionChildren returns the items of a Workshop collection, or
+// [id] when id is an ordinary item: the import takes either. Steam's own
+// GetCollectionDetails says which it is. (The panel used to collect every
+// item link on the item's web page — a mod page links its required items,
+// the author's other mods and popular ones, so pasting one mod downloaded
+// others instead.)
 func FetchCollectionChildren(collectionID string) ([]string, error) {
 	if collectionID == "" {
 		return nil, fmt.Errorf("collection id required")
 	}
-	u := "https://steamcommunity.com/sharedfiles/filedetails/?id=" + url.QueryEscape(collectionID)
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest("GET", u, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	cols, err := FetchCollections(ctx, []string{collectionID})
+	if err != nil {
+		return nil, fmt.Errorf("fetch collection: %w", err)
+	}
+	if kids, ok := cols[collectionID]; ok {
+		return kids, nil
+	}
+	return []string{collectionID}, nil
+}
+
+// FetchCollections asks Steam which of ids are collections and returns their
+// items (a collection inside a collection is opened too); ids missing from
+// the map are ordinary items.
+func FetchCollections(ctx context.Context, ids []string) (map[string][]string, error) {
+	out := map[string][]string{}
+	top, err := collectionDetails(ctx, ids)
+	if err != nil {
+		return out, err
+	}
+	var nested []string
+	for _, kids := range top {
+		nested = append(nested, kids...)
+	}
+	inner, _ := collectionDetails(ctx, nested) // best effort
+	for id, kids := range top {
+		seen := map[string]bool{id: true}
+		var list []string
+		for _, k := range kids {
+			sub, isCol := inner[k]
+			if !isCol {
+				sub = []string{k}
+			}
+			for _, s := range sub {
+				if !seen[s] {
+					seen[s] = true
+					list = append(list, s)
+				}
+			}
+		}
+		out[id] = list
+	}
+	return out, nil
+}
+
+// collectionDetails is ISteamRemoteStorage/GetCollectionDetails: collection
+// id → its children, for the ids that are collections.
+func collectionDetails(ctx context.Context, ids []string) (map[string][]string, error) {
+	out := map[string][]string{}
+	var clean []string
+	for _, id := range ids {
+		if isNumeric(id) {
+			clean = append(clean, id)
+		}
+	}
+	for i := 0; i < len(clean); i += 100 {
+		batch := clean[i:min(i+100, len(clean))]
+		form := url.Values{}
+		form.Set("collectioncount", fmt.Sprint(len(batch)))
+		for j, id := range batch {
+			form.Set(fmt.Sprintf("publishedfileids[%d]", j), id)
+		}
+		rctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		req, err := http.NewRequestWithContext(rctx, http.MethodPost,
+			"https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/", strings.NewReader(form.Encode()))
+		if err != nil {
+			cancel()
+			return out, err
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("User-Agent", "DayZ-Server-Manager (workshop-check)")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			cancel()
+			return out, err
+		}
+		var raw struct {
+			Response struct {
+				Details []struct {
+					ID       string `json:"publishedfileid"`
+					Result   int    `json:"result"`
+					Children []struct {
+						ID string `json:"publishedfileid"`
+					} `json:"children"`
+				} `json:"collectiondetails"`
+			} `json:"response"`
+		}
+		err = json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&raw)
+		resp.Body.Close()
+		cancel()
+		if resp.StatusCode != http.StatusOK {
+			return out, fmt.Errorf("steam: HTTP %d", resp.StatusCode)
+		}
+		if err != nil {
+			return out, fmt.Errorf("steam: decode: %w", err)
+		}
+		for _, d := range raw.Response.Details {
+			if d.Result != 1 || len(d.Children) == 0 {
+				continue // 9: not a collection
+			}
+			var kids []string
+			for _, c := range d.Children {
+				if isNumeric(c.ID) {
+					kids = append(kids, c.ID)
+				}
+			}
+			out[d.ID] = kids
+		}
+	}
+	return out, nil
+}
+
+// FetchRequiredItems reads the "Required items" box of an item's public page
+// (the mods it needs, CF for most). Only that box: the rest of the page links
+// unrelated items. Steam's web API does not list them.
+func FetchRequiredItems(ctx context.Context, id string) ([]string, error) {
+	if !isNumeric(id) {
+		return nil, fmt.Errorf("bad id %q", id)
+	}
+	rctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(rctx, http.MethodGet, "https://steamcommunity.com/sharedfiles/filedetails/?id="+id, nil)
 	if err != nil {
 		return nil, err
 	}
-	// Steam serves a cut-down page to unidentified UAs; a browser-like UA
-	// returns the full list.
+	// Steam serves a cut-down page to unidentified clients.
 	req.Header.Set("User-Agent", "Mozilla/5.0 (dayz-manager; +https://github.com/)")
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch collection: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("steam returned %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		return nil, err
 	}
+	return requiredItemsIn(string(body), id), nil
+}
 
-	seen := map[string]bool{collectionID: true} // don't include the collection itself
-	var out []string
-	for _, m := range reChildIDs.FindAllStringSubmatch(string(body), -1) {
-		id := m[1]
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		out = append(out, id)
+// requiredItemsIn picks the item links out of a page's RequiredItems box.
+func requiredItemsIn(page, self string) []string {
+	i := strings.Index(page, `id="RequiredItems"`)
+	if i < 0 {
+		return nil
 	}
-	return out, nil
+	box := page[i:]
+	// The box ends where the next panel of the side bar starts.
+	for _, end := range []string{"<!--", `class="panel"`, `rightSectionTopTitle`} {
+		if j := strings.Index(box, end); j > 0 && j < len(box) {
+			box = box[:j]
+		}
+	}
+	seen := map[string]bool{self: true}
+	var out []string
+	for _, m := range reItemLink.FindAllStringSubmatch(box, -1) {
+		if !seen[m[1]] {
+			seen[m[1]] = true
+			out = append(out, m[1])
+		}
+	}
+	return out
 }
 
 // ResolveCollection matches a list of publishedids to @Mod directories in
