@@ -41,7 +41,9 @@ func TestLaunchTellsFailureHandOffAndWindowApart(t *testing.T) {
 	if _, err := Launch(helper("fail"), 2*time.Second); err == nil || !strings.Contains(err.Error(), "--no-sandbox") {
 		t.Fatalf("a failing browser must be an error carrying its message, got %v", err)
 	}
-	l, err := Launch(helper("handoff"), 2*time.Second)
+	// Launch returns as soon as the helper exits; the long wait only covers a
+	// slow start (the race detector's instrumented binary takes seconds).
+	l, err := Launch(helper("handoff"), 15*time.Second)
 	if err != nil || !l.HandedOff {
 		t.Fatalf("a clean quick exit is a hand-off: %+v %v", l, err)
 	}

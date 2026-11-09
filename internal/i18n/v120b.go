@@ -618,4 +618,17 @@ var v120b = map[string]tr{
 		"ja": "cfggameplay.json：{key} はこのバージョンの DayZ が読む設定ではないため、DayZ は無視します。{meant} のことですか？",
 		"ko": "cfggameplay.json: {key}은(는) 이 DayZ 버전이 읽는 설정이 아니라서 DayZ가 무시합니다. {meant}을(를) 뜻한 건가요?",
 	},
+	"map.terrain.fromNav": {
+		"en": "Drawn from the world's navigation mesh and the mission's files (the world itself comes encrypted or in a format the panel does not read): relief, water, forests, dirt roads and buildings — without asphalt roads or place names.",
+		"ru": "Нарисовано по навигационной сетке мира и файлам миссии (сам мир зашифрован или в формате, который панель не читает): рельеф, вода, леса, грунтовые дороги и здания — без асфальтовых дорог и названий.",
+		"es": "Dibujado con la malla de navegación del mundo y los archivos de la misión (el mundo viene cifrado o en un formato que el panel no lee): relieve, agua, bosques, caminos de tierra y edificios, sin carreteras asfaltadas ni nombres de lugares.",
+		"fr": "Dessinée d'après le maillage de navigation du monde et les fichiers de la mission (le monde est chiffré ou dans un format que le panneau ne lit pas) : relief, eau, forêts, chemins de terre et bâtiments — sans routes goudronnées ni noms de lieux.",
+		"de": "Aus dem Navigationsnetz der Welt und den Dateien der Mission gezeichnet (die Welt selbst ist verschlüsselt oder in einem Format, das das Panel nicht liest): Relief, Wasser, Wälder, Feldwege und Gebäude — ohne Asphaltstraßen und Ortsnamen.",
+		"it": "Disegnata dalla mesh di navigazione del mondo e dai file della missione (il mondo è cifrato o in un formato che il pannello non legge): rilievo, acqua, boschi, strade sterrate ed edifici, senza strade asfaltate né nomi dei luoghi.",
+		"pt": "Desenhado a partir da malha de navegação do mundo e dos ficheiros da missão (o mundo vem encriptado ou num formato que o painel não lê): relevo, água, florestas, caminhos de terra e edifícios — sem estradas asfaltadas nem nomes de lugares.",
+		"md": "Desenată din plasa de navigare a lumii și fișierele misiunii (lumea însăși e criptată sau într-un format pe care panoul nu îl citește): relief, apă, păduri, drumuri de pământ și clădiri — fără drumuri asfaltate și fără numele locurilor.",
+		"zh": "根据世界的导航网格和任务文件绘制（世界本身已加密，或格式面板无法读取）：地形起伏、水域、森林、土路和建筑——没有柏油路和地名。",
+		"ja": "ワールドのナビゲーションメッシュとミッションのファイルから描画しました（ワールド自体が暗号化されているか、パネルが読めない形式です）：起伏、水辺、森、未舗装路、建物。舗装路と地名はありません。",
+		"ko": "월드의 내비게이션 메시와 미션 파일로 그렸습니다(월드 자체가 암호화되어 있거나 패널이 읽지 못하는 형식입니다): 지형, 물, 숲, 비포장도로와 건물 — 포장도로와 지명은 없습니다.",
+	},
 }

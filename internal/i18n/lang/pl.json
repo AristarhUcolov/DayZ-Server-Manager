@@ -1454,6 +1454,7 @@
   "map.terrain.encrypted": "Ten świat jest zaszyfrowany (mapa z DLC), więc panel nie może go narysować z plików: zamiast tego pokazują go warstwy lądu i budynków z misji.",
   "map.terrain.failed": "Nie udało się narysować mapy: {err}",
   "map.terrain.from": "Narysowano z własnych plików serwera. Po aktualizacji gry zostanie narysowana ponownie sama.",
+  "map.terrain.fromNav": "Narysowano z siatki nawigacyjnej świata i plików misji (sam świat jest zaszyfrowany lub w formacie, którego panel nie czyta): rzeźba terenu, woda, lasy, drogi gruntowe i budynki — bez dróg asfaltowych i nazw miejsc.",
   "map.terrain.hint": "Rzeźba terenu, woda, lasy, drogi i każdy budynek, rysowane na tym komputerze ze świata, który wczytuje twój serwer. Nic nie jest pobierane ani udostępniane.",
   "map.terrain.notFound": "Nie znaleziono plików tego świata na serwerze (czy mod mapy jest zainstalowany?).",
   "map.terrain.phase.draw": "rysowanie",

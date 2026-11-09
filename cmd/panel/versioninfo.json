@@ -3,13 +3,13 @@
     "FileVersion": {
       "Major": 1,
       "Minor": 2,
-      "Patch": 0,
+      "Patch": 1,
       "Build": 0
     },
     "ProductVersion": {
       "Major": 1,
       "Minor": 2,
-      "Patch": 0,
+      "Patch": 1,
       "Build": 0
     },
     "FileFlagsMask": "3f",
@@ -24,8 +24,8 @@
     "FileDescription": "DayZ Server Manager (desktop app) — control panel for a DayZ dedicated server",
     "InternalName": "dayz-manager-panel",
     "OriginalFilename": "dayz-manager-panel.exe",
-    "FileVersion": "1.2.0",
-    "ProductVersion": "1.2.0",
+    "FileVersion": "1.2.1",
+    "ProductVersion": "1.2.1",
     "LegalCopyright": "Copyright (c) 2026 Aristarh Ucolov. All rights reserved."
   },
   "VarFileInfo": {

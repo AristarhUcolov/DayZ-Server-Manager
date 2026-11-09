@@ -12,6 +12,23 @@ list under **What's new**; older versions are on the
 
 [Русская версия ↓](#русский)
 
+## 1.2.1 — every map drawn (2026-11-09)
+
+- **Sakhal and Nasdara are drawn too.** Their world files come encrypted (the
+  DLC maps ship as `.ebo`, which the panel never opens), so they are drawn
+  from what the server has in the open: the **navigation mesh** the AI walks
+  on — relief, sea depths, rivers and ponds, the floor of every building —
+  and the **mission's files** — forests from the stumps and fallen trees of
+  `mapgroupcluster*.xml`, gravel and dirt roads from its road pieces, land
+  from `areaflags.map`. No asphalt roads or place names on these maps: they
+  exist only inside the encrypted world.
+- **Modded maps**: a terrain file of a version the panel cannot read falls
+  back to the navigation mesh, so every map with one gets its drawing by
+  itself; a modded map with tree models of its own gets its forests from the
+  mission's clusters.
+- Audit: the whole code base passes Go's race detector (`go test -race`); a
+  launcher test no longer depends on how fast a helper process starts.
+
 ## 1.2.0 — “The November Update” (2026-11-09)
 
 ### Maps drawn from your server's own files
@@ -290,6 +307,23 @@ list under **What's new**; older versions are on the
 # Русский
 
 [English version ↑](#english)
+
+## 1.2.1 — все карты рисуются (09.11.2026)
+
+- **Сахал и Насдара тоже рисуются.** Их файлы мира зашифрованы (карты DLC
+  поставляются как `.ebo`, панель их никогда не открывает), поэтому они
+  рисуются по тому, что у сервера открыто: по **навигационной сетке**, по
+  которой ходит ИИ, — рельеф, глубины моря, реки и пруды, пол каждого
+  здания, — и по **файлам миссии**: леса по пням и поваленным деревьям из
+  `mapgroupcluster*.xml`, гравийные и грунтовые дороги по их участкам, суша по
+  `areaflags.map`. Асфальтовых дорог и названий мест на таких картах нет: они
+  есть только внутри зашифрованного мира.
+- **Модовые карты**: если файл рельефа в версии, которую панель не читает,
+  карта рисуется по навигационной сетке — так свой рисунок сам получает
+  каждый мир, у которого она есть; модовая карта со своими моделями деревьев
+  получает леса по кластерам миссии.
+- Аудит: весь код проходит детектор гонок Go (`go test -race`); тест запуска
+  браузера больше не зависит от скорости старта вспомогательного процесса.
 
 ## 1.2.0 — «Ноябрьское обновление» (09.11.2026)
 

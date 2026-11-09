@@ -1454,6 +1454,7 @@
   "map.terrain.encrypted": "Thế giới này được mã hóa (bản đồ DLC) nên bảng điều khiển không vẽ được từ tệp: thay vào đó, các lớp đất liền và công trình của nhiệm vụ sẽ hiển thị nó.",
   "map.terrain.failed": "Không thể vẽ bản đồ: {err}",
   "map.terrain.from": "Được vẽ từ chính các tệp của máy chủ. Sau khi trò chơi cập nhật, bản đồ tự vẽ lại.",
+  "map.terrain.fromNav": "Được vẽ từ lưới điều hướng của thế giới và các tệp của nhiệm vụ (bản thân thế giới được mã hóa hoặc ở định dạng bảng điều khiển không đọc được): địa hình, mặt nước, rừng, đường đất và công trình — không có đường nhựa và tên địa danh.",
   "map.terrain.hint": "Địa hình, mặt nước, rừng, đường và từng công trình, được vẽ trên máy tính này từ thế giới mà máy chủ của bạn tải. Không có gì được tải xuống hay chia sẻ.",
   "map.terrain.notFound": "Không tìm thấy tệp của thế giới này trên máy chủ (mod bản đồ đã được cài chưa?).",
   "map.terrain.phase.draw": "đang vẽ",

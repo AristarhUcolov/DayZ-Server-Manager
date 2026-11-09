@@ -1454,6 +1454,7 @@
   "map.terrain.encrypted": "Dunia ini terenkripsi (peta DLC), jadi panel tidak bisa menggambarnya dari file: sebagai gantinya ditampilkan oleh lapisan daratan dan bangunan dari misi.",
   "map.terrain.failed": "Peta tidak bisa digambar: {err}",
   "map.terrain.from": "Digambar dari file server itu sendiri. Setelah pembaruan game, peta digambar ulang dengan sendirinya.",
+  "map.terrain.fromNav": "Digambar dari mesh navigasi dunia dan file misi (dunianya sendiri terenkripsi atau dalam format yang tidak dibaca panel): relief, perairan, hutan, jalan tanah, dan bangunan — tanpa jalan aspal dan nama tempat.",
   "map.terrain.hint": "Relief, perairan, hutan, jalan, dan setiap bangunan, digambar di komputer ini dari dunia yang dimuat server Anda. Tidak ada yang diunduh atau dibagikan.",
   "map.terrain.notFound": "File dunia ini tidak ditemukan di server (apakah mod petanya terpasang?).",
   "map.terrain.phase.draw": "menggambar",

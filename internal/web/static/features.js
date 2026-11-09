@@ -2993,7 +2993,7 @@ function attachMapLayers(gm, map, opts = {}) {
             watchDrawing();
           } catch (err) { handleErr(err); }
         }) }),
-      h('small', { class: 'hint', text: t(tr.generated ? 'map.terrain.from' : 'map.terrain.hint') }),
+      h('small', { class: 'hint', text: t(tr.generated ? (tr.mode === 'navmesh' ? 'map.terrain.fromNav' : 'map.terrain.from') : 'map.terrain.hint') }),
     );
     if (tr.error && !drawing) terrainBox.append(h('small', { class: 'hint warn-text', text: t('map.terrain.failed').replace('{err}', tr.error) }));
   };

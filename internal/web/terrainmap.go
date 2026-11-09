@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"dayzmanager/internal/pbo"
 	"dayzmanager/internal/terrain"
 	"dayzmanager/internal/util"
 )
@@ -45,14 +46,18 @@ type terrainMeta struct {
 	At      int64           `json:"at"`
 	Places  []terrain.Place `json:"places,omitempty"`
 	StrPBO  string          `json:"strPbo,omitempty"` // the game's stringtable
+	Mode    string          `json:"mode,omitempty"`   // "navmesh": drawn from the navigation mesh
 }
 
 // terrainFound is where the active mission's world is.
 type terrainFound struct {
 	World     string
-	Src       terrain.Source
-	Found     bool
-	Encrypted bool // only an .ebo holds it
+	Src       terrain.Source // the terrain file (.wrp)
+	Nav       terrain.Source // the navigation mesh (navmesh.nm)
+	HasWRP    bool
+	HasNav    bool
+	Found     bool // either: the world can be drawn
+	Encrypted bool // the terrain file comes only as an .ebo
 	StrPBO    string
 	at        time.Time
 }
@@ -202,23 +207,49 @@ func findWorld(serverDir, world string, deep bool) terrainFound {
 			}
 		}
 	}
-	try := func(list []string, budget time.Duration) bool {
+	// The terrain file is the world itself; the navigation mesh (in a
+	// "…nav…" archive) draws a world whose terrain file is encrypted or of a
+	// version this panel does not read.
+	// named: the archives named after the world; any other archive's mesh
+	// must say it is this world's in its prefix (DZ\worlds\sakhal\navmesh).
+	try := func(list []string, budget time.Duration, named bool) {
 		start := time.Now()
 		for _, p := range list {
-			if time.Since(start) > budget {
-				return false
+			if time.Since(start) > budget || (out.HasWRP && out.HasNav) {
+				return
 			}
-			if src, err := terrain.Locate(p, world); err == nil {
-				out.Src, out.Found, out.Encrypted = src, true, false
-				return true
+			base := strings.ToLower(filepath.Base(p))
+			if !out.HasNav && strings.Contains(base, "nav") && (named || pboPrefixHas(p, world)) {
+				if src, err := terrain.LocateNavmesh(p); err == nil {
+					out.Nav, out.HasNav = src, true
+					continue
+				}
+			}
+			if !out.HasWRP {
+				if src, err := terrain.Locate(p, world); err == nil {
+					out.Src, out.HasWRP = src, true
+				}
 			}
 		}
-		return false
 	}
-	if !try(named, 20*time.Second) && deep {
-		try(others, 2*time.Minute)
+	try(named, 20*time.Second, true)
+	if !out.HasWRP && !out.HasNav && deep {
+		try(others, 2*time.Minute, false)
+	}
+	out.Found = out.HasWRP || out.HasNav
+	if out.HasWRP {
+		out.Encrypted = false
 	}
 	return out
+}
+
+// pboPrefixHas reports whether a PBO's prefix names the world.
+func pboPrefixHas(path, world string) bool {
+	f, err := pbo.Open(path)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(f.Properties["prefix"]), world)
 }
 
 // addonsDir is dir/addons in whatever case it is written ("" if none).
@@ -267,6 +298,7 @@ func (h *handlers) terrainStatus(lang string) map[string]interface{} {
 	if meta != nil {
 		out["generated"] = true
 		out["at"] = meta.At
+		out["mode"] = meta.Mode
 		out["places"] = h.terrainPlaces(meta, lang)
 	}
 	// Drawn by itself: the first time a world without a picture is shown,
@@ -276,7 +308,7 @@ func (h *handlers) terrainStatus(lang string) map[string]interface{} {
 		switch {
 		case meta == nil && h.mapImageFile(key) == "" && !fileExists(h.terrainAutoPath(key)):
 			auto = true
-		case meta != nil && (meta.V < terrainRenderVersion || sourceChanged(meta, f.Src)) && (jc == nil || jc.State != "error"):
+		case meta != nil && (meta.V < terrainRenderVersion || sourceChanged(meta, f)) && (jc == nil || jc.State != "error"):
 			auto = true
 		}
 		if auto && h.startTerrainDraw(key, f, false) {
@@ -287,12 +319,16 @@ func (h *handlers) terrainStatus(lang string) map[string]interface{} {
 	return out
 }
 
-func sourceChanged(m *terrainMeta, src terrain.Source) bool {
-	st, err := os.Stat(src.PBO)
+func sourceChanged(m *terrainMeta, f terrainFound) bool {
+	src := f.Src.PBO
+	if m.Mode == "navmesh" || !f.HasWRP {
+		src = f.Nav.PBO
+	}
+	st, err := os.Stat(src)
 	if err != nil {
 		return false
 	}
-	return !strings.EqualFold(m.PBO, src.PBO) || m.PBOSize != st.Size() || m.PBOTime != st.ModTime().Unix()
+	return !strings.EqualFold(m.PBO, src) || m.PBOSize != st.Size() || m.PBOTime != st.ModTime().Unix()
 }
 
 // terrainPlaces are the world's names for the panel language, compact:
@@ -373,11 +409,27 @@ func (h *handlers) drawTerrain(key string, f terrainFound, manual bool, phase fu
 	defer terrainDrawMu.Unlock()
 	defer debug.FreeOSMemory() // hand the drawing's memory back at once
 	start := time.Now()
-	w, err := terrain.Read(f.Src)
-	if err != nil {
-		return err
+	var w *terrain.World
+	var err error
+	var places []terrain.Place
+	mode, from := "wrp", f.Src.PBO
+	if f.HasWRP {
+		if w, err = terrain.Read(f.Src); err == nil {
+			places, _ = terrain.ReadPlaces(f.Src.PBO, f.World)
+			terrain.AddClusterForests(w, h.activeMissionDir())
+		} else if !f.HasNav {
+			return err
+		} else {
+			h.app.Log.Printf("map: %s: %v — drawing from the navigation mesh instead", filepath.Base(f.Src.PBO), err)
+		}
 	}
-	places, _ := terrain.ReadPlaces(f.Src.PBO, f.World)
+	if w == nil {
+		// The world's navigation mesh and the mission's files (navmesh.go).
+		mode, from = "navmesh", f.Nav.PBO
+		if w, err = terrain.ReadNavmesh(f.Nav, h.activeMissionDir(), h.areaFlagsWorldSize()); err != nil {
+			return err
+		}
+	}
 	phase("draw")
 	px := terrain.RenderSize(w.Size)
 	img := w.Render(px)
@@ -387,7 +439,7 @@ func (h *handlers) drawTerrain(key string, f terrainFound, manual bool, phase fu
 		return err
 	}
 	img = nil
-	st, err := os.Stat(f.Src.PBO)
+	st, err := os.Stat(from)
 	if err != nil {
 		return err
 	}
@@ -408,13 +460,17 @@ func (h *handlers) drawTerrain(key string, f terrainFound, manual bool, phase fu
 	if err := writeFileAtomic(filepath.Join(dir, key+".jpg"), buf.Bytes()); err != nil {
 		return err
 	}
-	meta := terrainMeta{V: terrainRenderVersion, PBO: f.Src.PBO, Entry: f.Src.Entry, PBOSize: st.Size(), PBOTime: st.ModTime().Unix(),
-		Pixels: px, World: w.Size, At: time.Now().Unix(), Places: places, StrPBO: f.StrPBO}
+	entry := f.Src.Entry
+	if mode == "navmesh" {
+		entry = f.Nav.Entry
+	}
+	meta := terrainMeta{V: terrainRenderVersion, PBO: from, Entry: entry, PBOSize: st.Size(), PBOTime: st.ModTime().Unix(),
+		Pixels: px, World: w.Size, At: time.Now().Unix(), Places: places, StrPBO: f.StrPBO, Mode: mode}
 	data, _ := json.Marshal(meta)
 	if err := writeFileAtomic(h.terrainMetaPath(key), data); err != nil {
 		return err
 	}
-	h.app.Log.Printf("map: drew %s from %s (%d px, %.0f m) in %v", key, filepath.Base(f.Src.PBO), px, w.Size, time.Since(start).Round(time.Second/10))
+	h.app.Log.Printf("map: drew %s from %s (%d px, %.0f m) in %v", key, filepath.Base(from), px, w.Size, time.Since(start).Round(time.Second/10))
 	return nil
 }
 

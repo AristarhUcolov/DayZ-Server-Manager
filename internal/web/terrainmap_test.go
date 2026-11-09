@@ -70,6 +70,16 @@ func TestFindWorld(t *testing.T) {
 	if f := findWorld(dir, "sakhal", true); f.Found || !f.Encrypted {
 		t.Fatalf("sakhal: %+v", f)
 	}
+	// The DLC world's navigation mesh (a plain PBO) draws it after all.
+	writeWorldPBO(t, filepath.Join(dir, "sakhal", "addons", "worlds_sakhal_nav.pbo"), "navmesh.nm")
+	if f := findWorld(dir, "sakhal", false); !f.Found || !f.HasNav || f.HasWRP || !f.Encrypted {
+		t.Fatalf("sakhal with its navmesh: %+v", f)
+	}
+	// Chernarus keeps its terrain file even with a navmesh beside it.
+	writeWorldPBO(t, filepath.Join(dir, "addons", "worlds_chernarusplus_nav.pbo"), "navmesh.nm")
+	if f := findWorld(dir, "chernarusplus", false); !f.HasWRP || !f.HasNav {
+		t.Fatalf("chernarus with both: %+v", f)
+	}
 	if f := findWorld(dir, "nowhere", true); f.Found || f.Encrypted {
 		t.Fatalf("nowhere: %+v", f)
 	}

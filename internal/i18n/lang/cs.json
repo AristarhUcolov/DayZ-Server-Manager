@@ -1454,6 +1454,7 @@
   "map.terrain.encrypted": "Tento svět je šifrovaný (mapa z DLC), takže ho panel nemůže nakreslit ze souborů: místo toho ho ukazují vrstvy pevniny a budov z mise.",
   "map.terrain.failed": "Mapu se nepodařilo nakreslit: {err}",
   "map.terrain.from": "Nakresleno z vlastních souborů serveru. Po aktualizaci hry se nakreslí znovu samo.",
+  "map.terrain.fromNav": "Nakresleno z navigační sítě světa a souborů mise (samotný svět je šifrovaný nebo ve formátu, který panel nečte): reliéf, voda, lesy, polní cesty a budovy — bez asfaltových silnic a názvů míst.",
   "map.terrain.hint": "Reliéf, voda, lesy, silnice a každá budova, nakreslené na tomto počítači ze světa, který načítá váš server. Nic se nestahuje ani nesdílí.",
   "map.terrain.notFound": "Soubory tohoto světa se na serveru nenašly (je nainstalovaný mód mapy?).",
   "map.terrain.phase.draw": "kreslení",

@@ -27,6 +27,19 @@ type changelogRelease struct {
 // changelog is the release history, newest first.
 var changelog = []changelogRelease{
 	{
+		Version: "1.2.1", Date: "2026-11-09",
+		EN: []string{
+			"Every map is drawn now. Sakhal and Nasdara — whose world files come encrypted — are drawn from their navigation mesh and the mission's files: relief, sea depths, rivers and ponds, forests, gravel and dirt roads and the outline of every building. A modded map whose terrain file the panel cannot read is drawn the same way, so every map with a navigation mesh gets its drawing by itself. (No asphalt roads or place names on those: they exist only inside the encrypted world.)",
+			"Modded maps with tree models of their own get their forests from the mission's tree clusters.",
+			"Audit: the whole code base passes Go's race detector.",
+		},
+		RU: []string{
+			"Теперь рисуются все карты. Сахал и Насдара, чьи файлы мира зашифрованы, рисуются по их навигационной сетке и файлам миссии: рельеф, глубины моря, реки и пруды, леса, гравийные и грунтовые дороги и контур каждого здания. Модовая карта, файл рельефа которой панель не может прочитать, рисуется так же — значит, каждая карта с навигационной сеткой получает свой рисунок сама. (Асфальтовых дорог и названий мест на таких картах нет: они есть только внутри зашифрованного мира.)",
+			"Модовые карты со своими моделями деревьев получают леса по кластерам деревьев из миссии.",
+			"Аудит: весь код проходит детектор гонок Go.",
+		},
+	},
+	{
 		Version: "1.2.0", Date: "2026-11-09",
 		EN: []string{
 			"The November Update. Steam Workshop fixed: pasting a mod's link no longer downloads other mods. The panel took every item linked on the mod's page — its required items, the author's other mods — as if it were a collection; now Steam's own API says what a collection is. A mod's required items (CF and the like) come along, marked “needed by …”, and links copied from the Steam app (steam://…) work too.",

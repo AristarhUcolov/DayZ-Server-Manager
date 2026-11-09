@@ -1454,6 +1454,7 @@
   "map.terrain.encrypted": "Den här världen är krypterad (en DLC-karta), så panelen kan inte rita den från filerna: i stället visas den av uppdragets land- och byggnadslager.",
   "map.terrain.failed": "Kunde inte rita kartan: {err}",
   "map.terrain.from": "Ritad från serverns egna filer. Efter en speluppdatering ritas den om av sig själv.",
+  "map.terrain.fromNav": "Ritad från världens navigationsnät och uppdragets filer (själva världen är krypterad eller i ett format som panelen inte läser): terräng, vatten, skogar, grusvägar och byggnader — utan asfaltvägar och ortnamn.",
   "map.terrain.hint": "Terräng, vatten, skogar, vägar och varje byggnad, ritade på den här datorn från världen som din server laddar. Inget laddas ned eller delas.",
   "map.terrain.notFound": "Världens filer hittades inte på servern (är kartmodden installerad?).",
   "map.terrain.phase.draw": "ritar",

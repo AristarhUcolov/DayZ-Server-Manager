@@ -152,3 +152,35 @@ func TestHalveGrid(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderNavmesh draws a world from its navigation mesh when
+// DZM_NAV_PBO names a _nav PBO (and DZM_NAV_MISSION its mission folder).
+func TestRenderNavmesh(t *testing.T) {
+	pboPath := os.Getenv("DZM_NAV_PBO")
+	if pboPath == "" {
+		t.Skip("set DZM_NAV_PBO to a world's _nav PBO")
+	}
+	src, err := LocateNavmesh(pboPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Now()
+	w, err := ReadNavmesh(src, os.Getenv("DZM_NAV_MISSION"), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("read in %v: %.0f m, floors %d, roads %d/%d", time.Since(t0), w.Size, len(w.Floors), len(w.Roads[RoadPaved]), len(w.Roads[RoadTrack]))
+	t1 := time.Now()
+	size := RenderSize(w.Size)
+	img := w.Render(size)
+	t.Logf("rendered %d px in %v", size, time.Since(t1))
+	if out := os.Getenv("DZM_TERRAIN_OUT"); out != "" {
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 88}); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(out, buf.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

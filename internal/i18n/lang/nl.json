@@ -1454,6 +1454,7 @@
   "map.terrain.encrypted": "Deze wereld is versleuteld (een DLC-kaart), dus het paneel kan hem niet uit de bestanden tekenen: in plaats daarvan tonen de land- en gebouwlagen van de missie hem.",
   "map.terrain.failed": "Kon de kaart niet tekenen: {err}",
   "map.terrain.from": "Getekend uit de eigen bestanden van de server. Na een game-update wordt hij vanzelf opnieuw getekend.",
+  "map.terrain.fromNav": "Getekend uit het navigatienet van de wereld en de bestanden van de missie (de wereld zelf is versleuteld of in een formaat dat het paneel niet leest): reliëf, water, bossen, onverharde wegen en gebouwen — zonder asfaltwegen en plaatsnamen.",
   "map.terrain.hint": "Reliëf, water, bossen, wegen en elk gebouw, op deze computer getekend uit de wereld die je server laadt. Er wordt niets gedownload of gedeeld.",
   "map.terrain.notFound": "De bestanden van deze wereld zijn niet gevonden op de server (is de kaartmod geïnstalleerd?).",
   "map.terrain.phase.draw": "tekenen",

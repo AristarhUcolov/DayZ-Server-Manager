@@ -106,8 +106,9 @@ func (w *World) Render(size int) *image.RGBA {
 	for i, c := range w.Trees {
 		dens[i] = float32(c)
 	}
-	dens = boxBlur(dens, n, 1)
-	dens = boxBlur(dens, n, 1)
+	blur := max(w.ForestBlur, 1)
+	dens = boxBlur(dens, n, blur)
+	dens = boxBlur(dens, n, blur)
 	// Water surfaces (ponds, rivers, streams) per pixel: which surface covers
 	// it (the highest when several do); the water shows where the ground is
 	// below it, as in the game.
@@ -182,6 +183,9 @@ func (w *World) Render(size int) *image.RGBA {
 					lv := math.NaN()
 					if k := waterAt[py*size+px]; k > 0 {
 						lv = float64(w.Water[k-1].Level)
+					} else if w.WaterLevel != nil {
+						ci := min(max(int(gz+0.5), 0), n-1)*n + min(max(int(gx+0.5), 0), n-1)
+						lv = float64(w.WaterLevel[ci])
 					}
 					var c rgb
 					switch {
@@ -274,6 +278,9 @@ func (w *World) Render(size int) *image.RGBA {
 		strokeLine(img, l, toPx, 1.1, color.RGBA{60, 60, 66, 230})
 	}
 	draw(layer{w.Buildings[BuildWall], color.RGBA{120, 116, 110, 150}, 0})
+	if len(w.Floors) > 0 {
+		drawFloors(img, w.Floors, toPx)
+	}
 	outline := color.RGBA{86, 72, 62, 235}
 	draw(
 		layer{w.Buildings[BuildHouse], outline, 0.55},
@@ -490,4 +497,84 @@ func (w *World) settleBakedWater() {
 		wt.Level = float32(lo + 1.5)
 		wt.Baked = false
 	}
+}
+
+// drawFloors paints the buildings of a navigation mesh world: the floor
+// polygons inside each building (many to a building) are merged in a
+// coverage mask first, so a building gets one outline round it, not one per
+// polygon.
+func drawFloors(img *image.RGBA, floors [][][2]float32, toPx func([2]float32) [2]float64) {
+	size := img.Rect.Dx()
+	cov := make([]uint8, size*size)
+	pts := make([][2]float64, 0, 6)
+	for _, poly := range floors {
+		pts = pts[:0]
+		minX, minY, maxX, maxY := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+		for _, p := range poly {
+			q := toPx(p)
+			pts = append(pts, q)
+			minX, maxX = math.Min(minX, q[0]), math.Max(maxX, q[0])
+			minY, maxY = math.Min(minY, q[1]), math.Max(maxY, q[1])
+		}
+		x0, x1 := max(int(math.Floor(minX)), 0), min(int(math.Ceil(maxX)), size-1)
+		y0, y1 := max(int(math.Floor(minY)), 0), min(int(math.Ceil(maxY)), size-1)
+		if x1 < x0 || y1 < y0 || x1-x0 > 400 || y1-y0 > 400 {
+			continue
+		}
+		for y := y0; y <= y1; y++ {
+			for x := x0; x <= x1; x++ {
+				hit := 0
+				for sy := 0; sy < 4; sy++ {
+					for sx := 0; sx < 4; sx++ {
+						if insidePoly(pts, float64(x)+(float64(sx)+0.5)/4, float64(y)+(float64(sy)+0.5)/4) {
+							hit++
+						}
+					}
+				}
+				if c := uint8(hit * 255 / 16); c > cov[y*size+x] {
+					cov[y*size+x] = c
+				}
+			}
+		}
+	}
+	fill := color.RGBA{172, 150, 132, 255}
+	edge := color.RGBA{86, 72, 62, 235}
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			c := cov[y*size+x]
+			if c == 0 {
+				// A pixel next to a building is its outline.
+				m := uint8(0)
+				for _, d := range [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
+					xx, yy := x+d[0], y+d[1]
+					if xx >= 0 && yy >= 0 && xx < size && yy < size && cov[yy*size+xx] > m {
+						m = cov[yy*size+xx]
+					}
+				}
+				if m > 0 {
+					blend(img, x, y, edge, float64(m)/255*0.85)
+				}
+				continue
+			}
+			blend(img, x, y, fill, float64(c)/255)
+		}
+	}
+}
+
+// insidePoly tests a point against a convex polygon (either winding).
+func insidePoly(p [][2]float64, x, y float64) bool {
+	sign := 0.0
+	for k := range p {
+		a, b := p[k], p[(k+1)%len(p)]
+		c := (b[0]-a[0])*(y-a[1]) - (b[1]-a[1])*(x-a[0])
+		if c == 0 {
+			continue
+		}
+		if sign == 0 {
+			sign = c
+		} else if (c > 0) != (sign > 0) {
+			return false
+		}
+	}
+	return sign != 0
 }

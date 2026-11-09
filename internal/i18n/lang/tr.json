@@ -1454,6 +1454,7 @@
   "map.terrain.encrypted": "Bu dünya şifreli (bir DLC haritası), bu yüzden panel onu dosyalardan çizemez: onun yerine görevin kara ve bina katmanları gösterir.",
   "map.terrain.failed": "Harita çizilemedi: {err}",
   "map.terrain.from": "Sunucunun kendi dosyalarından çizildi. Oyun güncellemesinden sonra kendiliğinden yeniden çizilir.",
+  "map.terrain.fromNav": "Dünyanın navigasyon ağından ve görevin dosyalarından çizildi (dünyanın kendisi şifreli ya da panelin okumadığı bir biçimde): yükselti, su, ormanlar, toprak yollar ve binalar — asfalt yollar ve yer adları olmadan.",
   "map.terrain.hint": "Yükselti, su, ormanlar, yollar ve her bina, sunucunuzun yüklediği dünyadan bu bilgisayarda çizilir. Hiçbir şey indirilmez veya paylaşılmaz.",
   "map.terrain.notFound": "Bu dünyanın dosyaları sunucuda bulunamadı (haritanın modu kurulu mu?).",
   "map.terrain.phase.draw": "çiziliyor",

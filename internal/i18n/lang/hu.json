@@ -1454,6 +1454,7 @@
   "map.terrain.encrypted": "Ez a világ titkosított (DLC-térkép), ezért a panel nem tudja a fájlokból megrajzolni: helyette a küldetés szárazföld- és épületrétegei mutatják.",
   "map.terrain.failed": "A térképet nem sikerült megrajzolni: {err}",
   "map.terrain.from": "A szerver saját fájljaiból rajzolva. Egy játékfrissítés után magától újra elkészül.",
+  "map.terrain.fromNav": "A világ navigációs hálójából és a küldetés fájljaiból rajzolva (maga a világ titkosított, vagy olyan formátumú, amelyet a panel nem olvas): domborzat, víz, erdők, földutak és épületek – aszfaltutak és helynevek nélkül.",
   "map.terrain.hint": "Domborzat, víz, erdők, utak és minden épület, ezen a gépen rajzolva abból a világból, amelyet a szerver betölt. Semmi sem töltődik le, és semmi sincs megosztva.",
   "map.terrain.notFound": "A világ fájljai nem találhatók a szerveren (telepítve van a térkép modja?).",
   "map.terrain.phase.draw": "rajzolás",

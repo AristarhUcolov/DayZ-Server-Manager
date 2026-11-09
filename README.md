@@ -74,6 +74,8 @@ DayZ Server и превращает обычный сервер в удобну�
 **Настоящие карты**: панель сама рисует мир по файлам вашего сервера — рельеф
 с горизонталями, воду, леса, дороги, железные дороги и каждое здание — с
 названиями мест на языке панели; ничего не скачивается и не распространяется.
+С 1.2.1 рисуются **все карты**: Сахал, Насдара и модовые — по навигационной
+сетке мира и файлам миссии.
 Новая страница **Заражённые зоны**: газовые зоны на карте (добавить, сдвинуть,
 изменить размер и все настройки), безопасные точки, динамические зоны и лут
 внутри зон. **Steam Workshop** исправлен: ссылка скачивает именно этот мод,
@@ -625,6 +627,8 @@ It comes in two builds that share the same settings — pick either:
 **Real maps**: the panel draws the world from your server's own files — relief
 with contour lines, water, forests, roads, railways and every building — with
 the place names in the panel's language; nothing is downloaded or shared.
+Since 1.2.1 **every map** is drawn: Sakhal, Nasdara and modded maps from the
+world's navigation mesh and the mission's files.
 A new **Contaminated zones** page: the gas zones on the map (add, move, resize,
 every setting), safe positions, the dynamic zones and the loot inside.
 **Steam Workshop** fixed: a pasted link downloads that mod, required mods (CF

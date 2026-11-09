@@ -100,6 +100,16 @@ type World struct {
 
 	// Trees counted per terrain cell (bushes count a third).
 	Trees []uint16
+	// ForestBlur: how far (in cells) tree counts are smoothed; sparse counts
+	// (a navigation mesh world's) need more. 0 means 1.
+	ForestBlur int
+
+	// A world read from its navigation mesh (navmesh.go): the floors of its
+	// buildings as polygons, and the water level per grid point (NaN where
+	// there is no inland water).
+	FromNavmesh bool
+	Floors      [][][2]float32
+	WaterLevel  []float32
 
 	Models int
 	Places []Place // filled by ReadPlaces
@@ -626,6 +636,14 @@ func (w *World) readMapInfo(sr io.Reader) error {
 // Locate finds the world's terrain in a PBO: the entry <world>.wrp (any .wrp
 // when world is ""), stored unpacked (worlds always are).
 func Locate(pboPath, world string) (Source, error) {
+	return locateAny(pboPath, func(name string) bool {
+		return strings.HasSuffix(name, ".wrp") && (world == "" || strings.EqualFold(strings.TrimSuffix(name, ".wrp"), world))
+	})
+}
+
+// locateAny finds the first entry of a PBO whose lower-case base name passes
+// match; it must be stored unpacked.
+func locateAny(pboPath string, match func(name string) bool) (Source, error) {
 	f, err := pbo.Open(pboPath)
 	if err != nil {
 		return Source{}, err
@@ -635,14 +653,11 @@ func Locate(pboPath, world string) (Source, error) {
 		if i := strings.LastIndexAny(name, `\/`); i >= 0 {
 			name = name[i+1:]
 		}
-		if !strings.HasSuffix(name, ".wrp") {
-			continue
-		}
-		if world != "" && !strings.EqualFold(strings.TrimSuffix(name, ".wrp"), world) {
+		if !match(name) {
 			continue
 		}
 		if e.Original != 0 && e.Original != e.Size {
-			return Source{}, fmt.Errorf("%w (packed terrain)", ErrUnsupported)
+			return Source{}, fmt.Errorf("%w (packed entry)", ErrUnsupported)
 		}
 		return Source{PBO: pboPath, Entry: e.Name, Offset: e.Offset, Size: int64(e.Size)}, nil
 	}
